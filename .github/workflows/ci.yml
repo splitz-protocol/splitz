@@ -74,6 +74,16 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 tools/spec/claims.py
 
+  oracle:
+    # Every other lane compares implementations written from one
+    # specification by one author; they can agree and be wrong together.
+    # rust/tests/oracle.rs checks ZIP 321 rendering against librustzcash;
+    # this checks §9.3's instants against CPython's own RFC 3339 reader.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/oracle/instants.py
+
   parity:
     # An API one implementation has and the other does not never reaches the
     # wire, so neither the corpus nor the differential lane can see it.

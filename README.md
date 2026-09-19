@@ -23,6 +23,8 @@ tools/differential/run.sh 1 1200     # three implementations, one operation list
                                      #   diffed against each other and against
                                      #   §10.2's own properties
 python3 tools/spec/claims.py         # SPEC.md's claims, against the tree
+python3 tools/oracle/instants.py     # §9.3's instants, against a reader
+                                     #   nobody here wrote
 python3 tools/parity/surface.py      # the two public surfaces, diffed
 tools/web-target/run.sh              # asserts it still does not compile to JS
 cd dart && dart run example/dinner.dart
