@@ -45,6 +45,32 @@ List<int>? _unb64(String text) {
   }
 }
 
+/// How deep a payload body may nest (§11.2).
+///
+/// Stated rather than inherited from a JSON library: one reader's parser gives
+/// up at its own depth and another does not, and the cap is no defence because
+/// a level of nesting costs two bytes. The deepest a conforming document
+/// reaches is the `sharedBy` array inside an itemised split, at eight.
+const int maxPayloadDepth = 64;
+
+bool _withinDepth(Object? value, int limit) {
+  final stack = <(Object?, int)>[(value, 1)];
+  while (stack.isNotEmpty) {
+    final (node, d) = stack.removeLast();
+    if (d > limit) return false;
+    if (node is Map) {
+      for (final v in node.values) {
+        stack.add((v, d + 1));
+      }
+    } else if (node is List) {
+      for (final v in node) {
+        stack.add((v, d + 1));
+      }
+    }
+  }
+  return true;
+}
+
 /// A decoded payload.
 class ScannedPayload {
   const ScannedPayload({
@@ -106,6 +132,10 @@ ScannedPayload decodePayload(String text) {
   if (body is! Map) {
     raise(SplitCode.payloadDamaged, 'A payload body is an object');
   }
+  if (!_withinDepth(body, maxPayloadDepth)) {
+    raise(SplitCode.payloadDamaged,
+        'A payload body nests deeper than $maxPayloadDepth');
+  }
   final map = body.cast<String, dynamic>();
 
   final version = map['v'];
@@ -128,7 +158,10 @@ ScannedPayload decodePayload(String text) {
     prefix: prefix,
     version: version,
     log: log,
-    invite: map['invite'] is Map
+    // §11.2. Only the bill prefix carries an invite, and only an object is
+    // one: a delta's reader already holds a key, and a second one arriving
+    // from a peer names a bill and a key that reader never chose.
+    invite: prefix == _tabPrefix && map['invite'] is Map
         ? (map['invite'] as Map).cast<String, dynamic>()
         : null,
   );

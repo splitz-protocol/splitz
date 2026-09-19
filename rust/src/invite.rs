@@ -13,7 +13,7 @@ use crate::zip321::base64url;
 const PREFIX: &str = "splitz://join";
 
 /// The invite format version this crate writes and the highest it reads.
-pub const INVITE_VERSION: u32 = 1;
+pub const INVITE_VERSION: i64 = 1;
 
 /// A bill id in an invite holds at most this many base64url characters. A
 /// derived id is 22; the cap is generous rather than tight.
@@ -38,7 +38,7 @@ pub struct Invite {
     /// carries the key; it does not encrypt.
     pub key: String,
     pub name: String,
-    pub expiry: Option<u64>,
+    pub expiry: Option<i64>,
 }
 
 /// Strips scan padding from both ends of `text`, and nothing else.
@@ -138,10 +138,11 @@ pub fn parse_invite(text: &str) -> Result<Invite> {
             "An invite states its version",
         ));
     }
-    let version: u32 = raw_version.parse().map_err(|_| {
+    // Bounded before it is compared (§11.1).
+    let version: i64 = raw_version.parse().map_err(|_| {
         SplitError::new(
             code::INVITE_MISSING_VERSION,
-            "A version is a decimal integer",
+            format!("A version fits in a signed 64-bit integer, got \"{raw_version}\""),
         )
     })?;
     // No sign, no padding, no whitespace.
@@ -192,9 +193,20 @@ pub fn parse_invite(text: &str) -> Result<Invite> {
                     format!("Not an expiry: \"{raw}\""),
                 ));
             }
-            Some(raw.parse::<u64>().map_err(|_| {
-                SplitError::new(code::INVITE_BAD_EXPIRY, format!("Not an expiry: \"{raw}\""))
-            })?)
+            let value = raw.parse::<i64>().map_err(|_| {
+                SplitError::new(
+                    code::INVITE_BAD_EXPIRY,
+                    format!("An expiry is a bare decimal integer within 64 bits, got \"{raw}\""),
+                )
+            })?;
+            // A bare decimal integer, as `v` is: no padding.
+            if raw != value.to_string() {
+                return Err(SplitError::new(
+                    code::INVITE_BAD_EXPIRY,
+                    format!("An expiry is a bare decimal integer within 64 bits, got \"{raw}\""),
+                ));
+            }
+            Some(value)
         }
     };
 
@@ -207,7 +219,34 @@ pub fn parse_invite(text: &str) -> Result<Invite> {
 }
 
 /// Renders an invite.
-pub fn render_invite(invite: &Invite) -> String {
+///
+/// An encoder refuses what [`parse_invite`] refuses: a bound enforced only on
+/// decode lets a caller build a URI no reader accepts, and the caller learns
+/// of it from somebody else's scanner.
+pub fn render_invite(invite: &Invite) -> Result<String> {
+    if let Some(x) = invite.expiry {
+        if x < 0 {
+            return Err(SplitError::new(
+                code::INVITE_BAD_EXPIRY,
+                format!("An expiry is not negative, got {x}"),
+            ));
+        }
+    }
+    if invite.bill_id.is_empty()
+        || invite.bill_id.chars().count() > MAX_INVITE_BILL_ID
+        || !is_b64url(&invite.bill_id)
+    {
+        return Err(SplitError::new(
+            code::INVITE_BAD_BILL_ID,
+            format!("Not a bill id: \"{}\"", invite.bill_id),
+        ));
+    }
+    if invite.key.is_empty() || !is_b64url(&invite.key) {
+        return Err(SplitError::new(
+            code::INVITE_MISSING_KEY,
+            "An invite carries a base64url key",
+        ));
+    }
     let mut parts = vec![
         format!("v={INVITE_VERSION}"),
         format!("b={}", escape(&invite.bill_id)),
@@ -219,7 +258,7 @@ pub fn render_invite(invite: &Invite) -> String {
     if let Some(x) = invite.expiry {
         parts.push(format!("x={x}"));
     }
-    format!("{PREFIX}?{}", parts.join("&"))
+    Ok(format!("{PREFIX}?{}", parts.join("&")))
 }
 
 // --- §11.2 scanned payloads -------------------------------------------------
@@ -233,6 +272,29 @@ pub const PAYLOAD_CAP: usize = 2331;
 
 /// The payload format version this crate writes and the highest it reads.
 pub const PAYLOAD_VERSION: i64 = 1;
+
+/// How deep a payload body may nest (§11.2).
+///
+/// Stated rather than inherited from a JSON library: one reader's parser gives
+/// up at its own depth and another does not, and the cap is no defence because
+/// a level of nesting costs two bytes. The deepest a conforming document
+/// reaches is the `sharedBy` array inside an itemised split, at eight.
+pub const MAX_PAYLOAD_DEPTH: usize = 64;
+
+fn within_depth(value: &Value, limit: usize) -> bool {
+    let mut stack = vec![(value, 1usize)];
+    while let Some((node, d)) = stack.pop() {
+        if d > limit {
+            return false;
+        }
+        match node {
+            Value::Object(o) => stack.extend(o.values().map(|v| (v, d + 1))),
+            Value::Array(a) => stack.extend(a.iter().map(|v| (v, d + 1))),
+            _ => {}
+        }
+    }
+    true
+}
 
 const BILL_PREFIX: &str = "splitz1:";
 const DELTA_PREFIX: &str = "splitzd1:";
@@ -340,6 +402,9 @@ pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
     if !body.is_object() {
         return Err(damaged());
     }
+    if !within_depth(&body, MAX_PAYLOAD_DEPTH) {
+        return Err(damaged());
+    }
 
     let version = body.get("v").and_then(Value::as_i64).ok_or_else(damaged)?;
     if version < 1 {
@@ -361,7 +426,14 @@ pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
         prefix: prefix.to_owned(),
         version,
         log: log.clone(),
-        invite: body.get("invite").filter(|v| v.is_object()).cloned(),
+        // §11.2. Only the bill prefix carries an invite, and only an object
+        // is one: a delta's reader already holds a key, and a second one
+        // arriving from a peer names a bill and a key that reader never chose.
+        invite: if prefix == BILL_PREFIX {
+            body.get("invite").filter(|v| v.is_object()).cloned()
+        } else {
+            None
+        },
     })
 }
 

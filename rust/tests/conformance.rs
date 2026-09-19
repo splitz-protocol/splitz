@@ -13,18 +13,21 @@ fn vector_dir() -> String {
     std::env::var("SPLITZ_VECTORS").unwrap_or_else(|_| "../vectors".to_owned())
 }
 
-/// True when the corpus is not on disk. Every conformance test returns early
-/// rather than failing: a missing corpus is an absent input, not a divergence.
-fn corpus_absent() -> bool {
+/// Panics when the corpus is not on disk.
+///
+/// Returning early instead would report `ok` for a suite that asserted
+/// nothing, and `cargo test` captures stdout on a pass, so the notice would
+/// never be read. Cargo has no skip state, so absence has to be a failure to
+/// be visible at all. The package does not ship `tests/`, so this cannot fire
+/// for a consumer of the published crate.
+fn require_corpus() {
     let dir = vector_dir();
-    if std::path::Path::new(&dir).is_dir() {
-        return false;
-    }
-    println!(
-        "conformance skipped: no corpus at {dir}. Point SPLITZ_VECTORS at a \
-         checkout of https://github.com/KamaIOps/Splitz-protocol to run it."
+    assert!(
+        std::path::Path::new(&dir).is_dir(),
+        "no corpus at {dir}. Point SPLITZ_VECTORS at a checkout of \
+         https://github.com/KamaIOps/Splitz-protocol to run the conformance \
+         suite."
     );
-    true
 }
 
 fn load(name: &str) -> Value {
@@ -35,9 +38,7 @@ fn load(name: &str) -> Value {
 
 /// Checks every case in `file`, running `run` on each.
 fn run_cases(file: &str, run: impl Fn(&Value) -> Result<Value>) {
-    if corpus_absent() {
-        return;
-    }
+    require_corpus();
     let doc = load(file);
     let cases = doc["cases"].as_array().expect("cases is a list");
     assert_eq!(
@@ -280,13 +281,21 @@ fn log() {
         }
         if let Some(left) = c["left"].as_array() {
             let right = c["right"].as_array().cloned().unwrap_or_default();
-            let r = splitz::merge_logs(&[left.clone(), right])?;
-            return Ok(json!({
-                "merged": r.merged,
-                "refused": r.refused.iter().map(|a| json!({
-                    "id": a.id, "code": a.code,
-                })).collect::<Vec<_>>(),
-            }));
+            let answer = |r: splitz::MergeResult| {
+                json!({
+                    "merged": r.merged,
+                    "refused": r.refused.iter().map(|a| json!({
+                        "id": a.id, "code": a.code,
+                    })).collect::<Vec<_>>(),
+                })
+            };
+            // §10.2's union is commutative, which is a claim about this
+            // implementation and not only about the reference that wrote the
+            // expectation. Both orders must give one answer.
+            let forward = answer(splitz::merge_logs(&[left.clone(), right.clone()])?);
+            let backward = answer(splitz::merge_logs(&[right, left.clone()])?);
+            assert_eq!(backward, forward, "merge is not commutative");
+            return Ok(forward);
         }
         let entries = c["log"].as_array().cloned().unwrap_or_default();
         // A case listing `verifies` is driven with a verifier that accepts
@@ -350,8 +359,8 @@ fn invite() {
                 bill_id: raw["billId"].as_str().unwrap_or_default().to_owned(),
                 key: raw["key"].as_str().unwrap_or_default().to_owned(),
                 name: raw["name"].as_str().unwrap_or_default().to_owned(),
-                expiry: raw["expiry"].as_u64(),
-            })))
+                expiry: raw["expiry"].as_i64(),
+            })?))
         }
     });
 }

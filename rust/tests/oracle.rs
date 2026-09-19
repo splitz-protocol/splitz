@@ -18,13 +18,18 @@ use serde_json::Value;
 use std::fs;
 use zip321::{Payment, TransactionRequest};
 
-fn corpus_absent() -> bool {
+/// Panics when the corpus is not on disk.
+///
+/// Returning early instead would report `ok` for a test that asserted
+/// nothing, and `cargo test` captures stdout on a pass, so the notice would
+/// never be read.
+fn require_corpus() {
     let dir = std::env::var("SPLITZ_VECTORS").unwrap_or_else(|_| "../vectors".to_owned());
-    if std::path::Path::new(&dir).is_dir() {
-        return false;
-    }
-    println!("oracle skipped: no corpus at {dir}");
-    true
+    assert!(
+        std::path::Path::new(&dir).is_dir(),
+        "no corpus at {dir}. Point SPLITZ_VECTORS at a checkout to run the \
+         oracle."
+    );
 }
 
 fn load(name: &str) -> Value {
@@ -48,9 +53,7 @@ fn expected_zatoshi(case: &Value) -> Vec<i64> {
 /// and must parse back to the same recipients and the same amounts.
 #[test]
 fn zip321_uris_round_trip_through_librustzcash() {
-    if corpus_absent() {
-        return;
-    }
+    require_corpus();
     let doc = load("zip321.json");
     let mut checked = 0;
     let mut skipped_bulk = 0;
@@ -127,9 +130,7 @@ fn zip321_uris_round_trip_through_librustzcash() {
 /// such a parser and can settle the claim.
 #[test]
 fn a_parser_predating_fiat_ignores_it() {
-    if corpus_absent() {
-        return;
-    }
+    require_corpus();
     let doc = load("zip321.json");
     let mut checked = 0;
 
@@ -170,9 +171,7 @@ fn a_parser_predating_fiat_ignores_it() {
 /// multi-output. Those URIs go through the oracle too.
 #[test]
 fn obligation_uris_round_trip_through_librustzcash() {
-    if corpus_absent() {
-        return;
-    }
+    require_corpus();
     let doc = load("obligations.json");
     let mut checked = 0;
     let mut failures = Vec::new();
@@ -221,9 +220,7 @@ fn obligation_uris_round_trip_through_librustzcash() {
 /// those instead.
 #[test]
 fn rendering_matches_librustzcash_byte_for_byte() {
-    if corpus_absent() {
-        return;
-    }
+    require_corpus();
     let doc = load("zip321.json");
     let mut checked = 0;
     let mut unbuildable = 0;
@@ -349,9 +346,7 @@ fn rendering_matches_librustzcash_byte_for_byte() {
 /// `zcash_address` is the canonical decoder and is already a dev-dependency.
 #[test]
 fn corpus_addresses_are_real_unified_addresses() {
-    if corpus_absent() {
-        return;
-    }
+    require_corpus();
     use std::collections::BTreeSet;
 
     // Every distinct address in every vector file, taken from the files rather

@@ -1,6 +1,6 @@
 {
   "description": "Scanned payloads. SPEC.md section 11.2.",
-  "count": 22,
+  "count": 38,
   "cases": [
     {
       "name": "encode_a_tab",
@@ -2931,6 +2931,443 @@
       "error": "canonical_json_float"
     },
     {
+      "name": "the_smallest_signed_bill",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "invite": {
+            "b": "CERHR0LxeKXYEeIneK9xug",
+            "k": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "v": 1
+          },
+          "log": [
+            {
+              "v": 1,
+              "author": "a",
+              "kind": "createBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "name": "D",
+              "currency": "EUR",
+              "splitMode": "equal",
+              "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+              "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+              "id": "CERHR0LxeKXYEeIneK9xug",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "a",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "a"
+              },
+              "id": "549DY1Qvv0m-bZxveYw6LQ",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "b",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "b",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "Ynwh21xXbnxa2yLKEPNLSw",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            }
+          ]
+        }
+      },
+      "expect": "splitz1:eyJpbnZpdGUiOnsiYiI6IkNFUkhSMEx4ZUtYWUVlSW5lSzl4dWciLCJrIjoiYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEycyIsInYiOjF9LCJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYSIsImNyZWF0b3JLZXkiOiJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJzIiwiY3VycmVuY3kiOiJFVVIiLCJpZCI6IkNFUkhSMEx4ZUtYWUVlSW5lSzl4dWciLCJraW5kIjoiY3JlYXRlQmlsbCIsIm5hbWUiOiJEIiwibm9uY2UiOiJibTV1Ym01dWJtNXVibTV1Ym01dWJnIiwic2lnIjoiU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1MiLCJzcGxpdE1vZGUiOiJlcXVhbCIsInYiOjF9LHsiYXQiOiIyMDI2LTEwLTI4VDE5OjMwOjAwLjAwMFoiLCJhdXRob3IiOiJhIiwiaWQiOiI1NDlEWTFRdnYwbS1iWnh2ZVl3NkxRIiwia2luZCI6ImpvaW5CaWxsIiwicGFydGljaXBhbnQiOnsiaWQiOiJhIn0sInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwidiI6MX0seyJhdCI6IjIwMjYtMTAtMjhUMTk6MzA6MDAuMDAwWiIsImF1dGhvciI6ImIiLCJpZCI6Illud2gyMXhYYm54YTJ5TEtFUE5MU3ciLCJraW5kIjoiam9pbkJpbGwiLCJwYXJ0aWNpcGFudCI6eyJpZCI6ImIiLCJpZGVudGl0eUtleSI6ImEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnMifSwic2lnIjoiU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1MiLCJ2IjoxfV0sInYiOjF9"
+    },
+    {
+      "name": "the_smallest_signed_bill_a_wallet_would_write",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "invite": {
+            "b": "l5qa4ys2kZUG1koCJyPN_Q",
+            "k": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "v": 1
+          },
+          "log": [
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "createBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "name": "Dinner",
+              "currency": "EUR",
+              "splitMode": "equal",
+              "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+              "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+              "id": "l5qa4ys2kZUG1koCJyPN_Q",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ana",
+                "name": "Ana"
+              },
+              "id": "FPnDG9Xwzsx_cxtyNp8pRg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ben",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ben",
+                "name": "Ben",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "_x3BEdqwY08UsB-XDrxnxg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            }
+          ]
+        }
+      },
+      "expect": "splitz1:eyJpbnZpdGUiOnsiYiI6Imw1cWE0eXMya1pVRzFrb0NKeVBOX1EiLCJrIjoiYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEycyIsInYiOjF9LCJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiY3JlYXRvcktleSI6ImEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnMiLCJjdXJyZW5jeSI6IkVVUiIsImlkIjoibDVxYTR5czJrWlVHMWtvQ0p5UE5fUSIsImtpbmQiOiJjcmVhdGVCaWxsIiwibmFtZSI6IkRpbm5lciIsIm5vbmNlIjoiYm01dWJtNXVibTV1Ym01dWJtNXViZyIsInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwic3BsaXRNb2RlIjoiZXF1YWwiLCJ2IjoxfSx7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJGUG5ERzlYd3pzeF9jeHR5TnA4cFJnIiwia2luZCI6ImpvaW5CaWxsIiwicGFydGljaXBhbnQiOnsiaWQiOiJhbmEiLCJuYW1lIjoiQW5hIn0sInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwidiI6MX0seyJhdCI6IjIwMjYtMTAtMjhUMTk6MzA6MDAuMDAwWiIsImF1dGhvciI6ImJlbiIsImlkIjoiX3gzQkVkcXdZMDhVc0ItWERyeG54ZyIsImtpbmQiOiJqb2luQmlsbCIsInBhcnRpY2lwYW50Ijp7ImlkIjoiYmVuIiwiaWRlbnRpdHlLZXkiOiJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJzIiwibmFtZSI6IkJlbiJ9LCJzaWciOiJTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTUyIsInYiOjF9XSwidiI6MX0"
+    },
+    {
+      "name": "two_payable_participants_and_one_expense",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "invite": {
+            "b": "l5qa4ys2kZUG1koCJyPN_Q",
+            "k": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "v": 1
+          },
+          "log": [
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "createBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "name": "Dinner",
+              "currency": "EUR",
+              "splitMode": "equal",
+              "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+              "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+              "id": "l5qa4ys2kZUG1koCJyPN_Q",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ana",
+                "name": "Ana",
+                "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+              },
+              "id": "Gni-_QQSop2uaUznWDbbIQ",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ben",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ben",
+                "name": "Ben",
+                "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "U6nZyciFSif7Q2DMHJJdNg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z",
+              "expense": {
+                "id": "x0",
+                "description": "dinner",
+                "paidBy": "ana",
+                "amount": 9000,
+                "at": "2026-10-28T19:30:00.000Z",
+                "split": {
+                  "type": "equal",
+                  "among": [
+                    "ana",
+                    "ben"
+                  ]
+                }
+              },
+              "id": "wEBwounrennoWknfsl8c0g",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            }
+          ]
+        }
+      },
+      "expect": "splitz1:eyJpbnZpdGUiOnsiYiI6Imw1cWE0eXMya1pVRzFrb0NKeVBOX1EiLCJrIjoiYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEycyIsInYiOjF9LCJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiY3JlYXRvcktleSI6ImEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnMiLCJjdXJyZW5jeSI6IkVVUiIsImlkIjoibDVxYTR5czJrWlVHMWtvQ0p5UE5fUSIsImtpbmQiOiJjcmVhdGVCaWxsIiwibmFtZSI6IkRpbm5lciIsIm5vbmNlIjoiYm01dWJtNXVibTV1Ym01dWJtNXViZyIsInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwic3BsaXRNb2RlIjoiZXF1YWwiLCJ2IjoxfSx7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJHbmktX1FRU29wMnVhVXpuV0RiYklRIiwia2luZCI6ImpvaW5CaWxsIiwicGFydGljaXBhbnQiOnsiaWQiOiJhbmEiLCJuYW1lIjoiQW5hIiwicGF5VG8iOiJ1MTNqM3E4cThmOWh4Mm54MHc5bDUyZHFrc3k0cG5nN2ZnbTBscWpoOGFobjllbnl2ejV6OXhud3pkY2RqbXBmNzU2czJ5ODhybnlyOXB4NGY0azl3MDNzbDZmcjR2d3NxY3ZnOGdnZmp4In0sInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwidiI6MX0seyJhdCI6IjIwMjYtMTAtMjhUMTk6MzA6MDAuMDAwWiIsImF1dGhvciI6ImJlbiIsImlkIjoiVTZuWnljaUZTaWY3UTJETUhKSmROZyIsImtpbmQiOiJqb2luQmlsbCIsInBhcnRpY2lwYW50Ijp7ImlkIjoiYmVuIiwiaWRlbnRpdHlLZXkiOiJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJzIiwibmFtZSI6IkJlbiIsInBheVRvIjoidTE2Y3ludzJ1Nm5zaG00NGdqdjl2eTlkdmF2Nnp2dmtzcGhleHpqczN0amtlOG1yM3A5NDJlcjBwdThoZWxkN3p5N3dwanh6cWdrcGRyanpkNzJoN3B3ZjM0ZGY4YTB4Y3Ywc3UzYWN4NyJ9LCJzaWciOiJTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTUyIsInYiOjF9LHsiYXQiOiIyMDI2LTEwLTI4VDE5OjMwOjAwLjAwMFoiLCJhdXRob3IiOiJhbmEiLCJleHBlbnNlIjp7ImFtb3VudCI6OTAwMCwiYXQiOiIyMDI2LTEwLTI4VDE5OjMwOjAwLjAwMFoiLCJkZXNjcmlwdGlvbiI6ImRpbm5lciIsImlkIjoieDAiLCJwYWlkQnkiOiJhbmEiLCJzcGxpdCI6eyJhbW9uZyI6WyJhbmEiLCJiZW4iXSwidHlwZSI6ImVxdWFsIn19LCJpZCI6IndFQndvdW5yZW5ub1drbmZzbDhjMGciLCJraW5kIjoiYWRkRXhwZW5zZSIsInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwidiI6MX1dLCJ2IjoxfQ"
+    },
+    {
+      "name": "three_payable_participants_and_no_expenses",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "invite": {
+            "b": "l5qa4ys2kZUG1koCJyPN_Q",
+            "k": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "v": 1
+          },
+          "log": [
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "createBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "name": "Dinner",
+              "currency": "EUR",
+              "splitMode": "equal",
+              "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+              "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+              "id": "l5qa4ys2kZUG1koCJyPN_Q",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ana",
+                "name": "Ana",
+                "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+              },
+              "id": "Gni-_QQSop2uaUznWDbbIQ",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ben",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ben",
+                "name": "Ben",
+                "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "U6nZyciFSif7Q2DMHJJdNg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "cai",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "cai",
+                "name": "Cai",
+                "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "4BaZ2wL14xTzu7xXfa9Dsw",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            }
+          ]
+        }
+      },
+      "expect": "splitz1:eyJpbnZpdGUiOnsiYiI6Imw1cWE0eXMya1pVRzFrb0NKeVBOX1EiLCJrIjoiYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEycyIsInYiOjF9LCJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiY3JlYXRvcktleSI6ImEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnMiLCJjdXJyZW5jeSI6IkVVUiIsImlkIjoibDVxYTR5czJrWlVHMWtvQ0p5UE5fUSIsImtpbmQiOiJjcmVhdGVCaWxsIiwibmFtZSI6IkRpbm5lciIsIm5vbmNlIjoiYm01dWJtNXVibTV1Ym01dWJtNXViZyIsInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwic3BsaXRNb2RlIjoiZXF1YWwiLCJ2IjoxfSx7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJHbmktX1FRU29wMnVhVXpuV0RiYklRIiwia2luZCI6ImpvaW5CaWxsIiwicGFydGljaXBhbnQiOnsiaWQiOiJhbmEiLCJuYW1lIjoiQW5hIiwicGF5VG8iOiJ1MTNqM3E4cThmOWh4Mm54MHc5bDUyZHFrc3k0cG5nN2ZnbTBscWpoOGFobjllbnl2ejV6OXhud3pkY2RqbXBmNzU2czJ5ODhybnlyOXB4NGY0azl3MDNzbDZmcjR2d3NxY3ZnOGdnZmp4In0sInNpZyI6IlNTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTIiwidiI6MX0seyJhdCI6IjIwMjYtMTAtMjhUMTk6MzA6MDAuMDAwWiIsImF1dGhvciI6ImJlbiIsImlkIjoiVTZuWnljaUZTaWY3UTJETUhKSmROZyIsImtpbmQiOiJqb2luQmlsbCIsInBhcnRpY2lwYW50Ijp7ImlkIjoiYmVuIiwiaWRlbnRpdHlLZXkiOiJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJzIiwibmFtZSI6IkJlbiIsInBheVRvIjoidTE2Y3ludzJ1Nm5zaG00NGdqdjl2eTlkdmF2Nnp2dmtzcGhleHpqczN0amtlOG1yM3A5NDJlcjBwdThoZWxkN3p5N3dwanh6cWdrcGRyanpkNzJoN3B3ZjM0ZGY4YTB4Y3Ywc3UzYWN4NyJ9LCJzaWciOiJTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTUyIsInYiOjF9LHsiYXQiOiIyMDI2LTEwLTI4VDE5OjMwOjAwLjAwMFoiLCJhdXRob3IiOiJjYWkiLCJpZCI6IjRCYVoyd0wxNHhUenU3eFhmYTlEc3ciLCJraW5kIjoiam9pbkJpbGwiLCJwYXJ0aWNpcGFudCI6eyJpZCI6ImNhaSIsImlkZW50aXR5S2V5IjoiYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEydHJhMnRyYTJ0cmEycyIsIm5hbWUiOiJDYWkiLCJwYXlUbyI6InUxODd2cndsNGFtcHl4ZDVtNmFqMzhuNG5ka21qOHY2Z3M5N2hrdDIzYXBzM3NuNWs4OWEwZ2syc21sdWV4Z2RwcmNydG01NmV6YzVjN3Rqd2xybm5sNzl0anRyeG1xZDQyYzVtcHl6N2cifSwic2lnIjoiU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1MiLCJ2IjoxfV0sInYiOjF9"
+    },
+    {
+      "name": "three_payable_participants_and_one_expense",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "invite": {
+            "b": "l5qa4ys2kZUG1koCJyPN_Q",
+            "k": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "v": 1
+          },
+          "log": [
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "createBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "name": "Dinner",
+              "currency": "EUR",
+              "splitMode": "equal",
+              "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+              "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+              "id": "l5qa4ys2kZUG1koCJyPN_Q",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ana",
+                "name": "Ana",
+                "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+              },
+              "id": "Gni-_QQSop2uaUznWDbbIQ",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ben",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ben",
+                "name": "Ben",
+                "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "U6nZyciFSif7Q2DMHJJdNg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "cai",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "cai",
+                "name": "Cai",
+                "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "4BaZ2wL14xTzu7xXfa9Dsw",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z",
+              "expense": {
+                "id": "x0",
+                "description": "dinner",
+                "paidBy": "ana",
+                "amount": 9000,
+                "at": "2026-10-28T19:30:00.000Z",
+                "split": {
+                  "type": "equal",
+                  "among": [
+                    "ana",
+                    "ben",
+                    "cai"
+                  ]
+                }
+              },
+              "id": "TXmJsqZvzC8cp2vw_uyFCg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            }
+          ]
+        }
+      },
+      "error": "payload_too_large"
+    },
+    {
+      "name": "four_payable_participants_and_no_expenses",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "invite": {
+            "b": "l5qa4ys2kZUG1koCJyPN_Q",
+            "k": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "v": 1
+          },
+          "log": [
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "createBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "name": "Dinner",
+              "currency": "EUR",
+              "splitMode": "equal",
+              "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+              "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+              "id": "l5qa4ys2kZUG1koCJyPN_Q",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ana",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ana",
+                "name": "Ana",
+                "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+              },
+              "id": "Gni-_QQSop2uaUznWDbbIQ",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "ben",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "ben",
+                "name": "Ben",
+                "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "U6nZyciFSif7Q2DMHJJdNg",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "cai",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "cai",
+                "name": "Cai",
+                "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "4BaZ2wL14xTzu7xXfa9Dsw",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            },
+            {
+              "v": 1,
+              "author": "dee",
+              "kind": "joinBill",
+              "at": "2026-10-28T19:30:00.000Z",
+              "participant": {
+                "id": "dee",
+                "name": "Dee",
+                "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0",
+                "identityKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+              },
+              "id": "_bYkA9CgqCaMTrLqsmn6tw",
+              "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+            }
+          ]
+        }
+      },
+      "error": "payload_too_large"
+    },
+    {
       "name": "decode_a_tab",
       "payload": "splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ",
       "expect": {
@@ -3048,6 +3485,214 @@
       "name": "one_byte_past_the_cap",
       "payload": "splitz1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       "error": "payload_too_large"
+    },
+    {
+      "name": "a_version_one_past_the_bound",
+      "payload": "splitz1:eyJ2Ijo5MjIzMzcyMDM2ODU0Nzc1ODA4LCJsb2ciOltdfQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_version_of_twenty_six_digits",
+      "payload": "splitz1:eyJ2Ijo5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OSwibG9nIjpbXX0",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "an_invite_that_is_a_string",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOiJhIHN0cmluZyJ9",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [],
+        "invite": null
+      }
+    },
+    {
+      "name": "an_invite_that_is_a_number",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOjV9",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [],
+        "invite": null
+      }
+    },
+    {
+      "name": "an_invite_that_is_a_list",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOlsxLDJdfQ",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [],
+        "invite": null
+      }
+    },
+    {
+      "name": "an_invite_on_a_bill_payload",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOnsiYiI6IkFiMyIsImsiOiJLayIsInYiOjF9fQ",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [],
+        "invite": {
+          "b": "Ab3",
+          "k": "Kk",
+          "v": 1
+        }
+      }
+    },
+    {
+      "name": "a_body_at_the_depth_limit",
+      "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbMV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dLCJ2IjoxfQ",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [
+          [
+            [
+              [
+                [
+                  [
+                    [
+                      [
+                        [
+                          [
+                            [
+                              [
+                                [
+                                  [
+                                    [
+                                      [
+                                        [
+                                          [
+                                            [
+                                              [
+                                                [
+                                                  [
+                                                    [
+                                                      [
+                                                        [
+                                                          [
+                                                            [
+                                                              [
+                                                                [
+                                                                  [
+                                                                    [
+                                                                      [
+                                                                        [
+                                                                          [
+                                                                            [
+                                                                              [
+                                                                                [
+                                                                                  [
+                                                                                    [
+                                                                                      [
+                                                                                        [
+                                                                                          [
+                                                                                            [
+                                                                                              [
+                                                                                                [
+                                                                                                  [
+                                                                                                    [
+                                                                                                      [
+                                                                                                        [
+                                                                                                          [
+                                                                                                            [
+                                                                                                              [
+                                                                                                                [
+                                                                                                                  [
+                                                                                                                    [
+                                                                                                                      [
+                                                                                                                        [
+                                                                                                                          [
+                                                                                                                            [
+                                                                                                                              [
+                                                                                                                                [
+                                                                                                                                  [
+                                                                                                                                    1
+                                                                                                                                  ]
+                                                                                                                                ]
+                                                                                                                              ]
+                                                                                                                            ]
+                                                                                                                          ]
+                                                                                                                        ]
+                                                                                                                      ]
+                                                                                                                    ]
+                                                                                                                  ]
+                                                                                                                ]
+                                                                                                              ]
+                                                                                                            ]
+                                                                                                          ]
+                                                                                                        ]
+                                                                                                      ]
+                                                                                                    ]
+                                                                                                  ]
+                                                                                                ]
+                                                                                              ]
+                                                                                            ]
+                                                                                          ]
+                                                                                        ]
+                                                                                      ]
+                                                                                    ]
+                                                                                  ]
+                                                                                ]
+                                                                              ]
+                                                                            ]
+                                                                          ]
+                                                                        ]
+                                                                      ]
+                                                                    ]
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ]
+                                                      ]
+                                                    ]
+                                                  ]
+                                                ]
+                                              ]
+                                            ]
+                                          ]
+                                        ]
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]
+                          ]
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        "invite": null
+      }
+    },
+    {
+      "name": "a_body_one_level_too_deep",
+      "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbWzFdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV0sInYiOjF9",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_nested_two_hundred_deep",
+      "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbWzFdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV0sInYiOjF9",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_delta_carries_no_invite",
+      "payload": "splitzd1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOnsiYiI6IkFiMyIsImsiOiJLayIsInYiOjF9fQ",
+      "expect": {
+        "prefix": "splitzd1:",
+        "version": 1,
+        "log": [],
+        "invite": null
+      }
     }
   ]
 }

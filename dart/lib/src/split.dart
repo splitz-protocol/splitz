@@ -121,6 +121,13 @@ Map<String, int> _itemized(int total, Map<String, dynamic> spec) {
   if (items is! List || items.isEmpty) {
     raise(SplitCode.itemizedNoItems, 'An itemised split lists no items');
   }
+  // §4.5: an item is an object. Typed before it is indexed, because `cast`
+  // is lazy and would fail at the first member read instead.
+  for (final item in items) {
+    if (item is! Map) {
+      raise(SplitCode.billTypeError, 'An item is an object, got $item');
+    }
+  }
   final list = items.cast<Map<String, dynamic>>();
   for (final item in list) {
     final who = _ids(item['sharedBy']);

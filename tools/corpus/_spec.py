@@ -18,9 +18,70 @@ class Refused(Exception):
         self.code = code
 
 
+def _ascii_alnum(text):
+    """`1*( ALPHA / DIGIT )` with RFC 3986's ALPHA and DIGIT, which are ASCII.
+
+    `str.isalnum` admits every Unicode letter and digit, so U+00E9 and U+FF12
+    pass it and are not in the grammar.
+    """
+    return bool(text) and all(
+        "0" <= c <= "9" or "A" <= c <= "Z" or "a" <= c <= "z" for c in text
+    )
+
+
+def _ascii_digits(text):
+    """`1*DIGIT`, ASCII only.
+
+    `str.isdigit` admits U+00B2 and U+0663, and `int` then raises on the first
+    and silently reads the second as 3.
+    """
+    return bool(text) and all("0" <= c <= "9" for c in text)
+
+
+# i64::MAX is 9223372036854775807: 19 digits.
+I64_MAX_DIGITS = 19
+
+
+def bare_decimal(text):
+    """A bare decimal integer within a signed 64-bit range, or None.
+
+    The length is checked before the conversion, not after: CPython refuses to
+    convert a numeral past 4300 digits at all, so bounding by value alone
+    raises on exactly the input the bound exists to refuse. No sign, no
+    padding, no whitespace.
+    """
+    if not _ascii_digits(text) or len(text) > I64_MAX_DIGITS:
+        return None
+    value = int(text)
+    if value > I64_MAX or text != str(value):
+        return None
+    return value
+
+
+def _as_dict(value):
+    """`value` when it is a dict, otherwise an empty one.
+
+    For the passes that read inside a payload before it has been decoded:
+    section 10.1 types the payload itself, not its members, so anything under
+    it is whatever a peer wrote and indexing there raises on one entry.
+    """
+    return value if isinstance(value, dict) else {}
+
+
+def _as_list(value):
+    """`value` when it is a list, otherwise an empty one. See `_as_dict`."""
+    return value if isinstance(value, list) else []
+
+
+def is_currency(code):
+    """Section 2.1: exactly three upper-case letters."""
+    return (isinstance(code, str) and len(code) == 3
+            and all("A" <= c <= "Z" for c in code))
+
+
 def check_currency(code):
     """Section 2.1: exactly three upper-case letters."""
-    if not isinstance(code, str) or len(code) != 3 or not all("A" <= c <= "Z" for c in code):
+    if not is_currency(code):
         raise Refused("bill_bad_currency")
 
 
@@ -117,6 +178,10 @@ def split(total, spec):
         extra = spec.get("extraMinorUnits", 0)
         if not items:
             raise Refused("itemized_no_items")
+        # An item is an object (section 4.5). Typed before it is indexed:
+        # every check below reads a member of it.
+        if any(not isinstance(it, dict) for it in items):
+            raise Refused("bill_type_error")
         if any(not (it.get("sharedBy") or []) for it in items):
             raise Refused("itemized_unassigned_item")
         if _against(extra, total) or any(
@@ -281,7 +346,7 @@ def render_uri(payments, include_fiat=False):
         # The address is checked before any other parameter of this payment.
         if not addr:
             raise Refused("zip321_no_address")
-        if not addr.isalnum():
+        if not _ascii_alnum(addr):
             raise Refused("zip321_bad_address")
 
     single = len(payments) == 1
@@ -369,9 +434,11 @@ def parse_invite(text):
     if "v" not in fields:
         raise Refused("invite_missing_version")
     raw_v = fields["v"]
-    if not raw_v.isdigit() or raw_v != str(int(raw_v)) or int(raw_v) < 1:
+    # Bounded before it is converted (section 11.1).
+    version = bare_decimal(raw_v)
+    if version is None or version < 1:
         raise Refused("invite_missing_version")
-    if int(raw_v) > INVITE_VERSION:
+    if version > INVITE_VERSION:
         raise Refused("invite_future_version")
 
     bill_id = fields.get("b", "")
@@ -386,18 +453,33 @@ def parse_invite(text):
     if any(c not in B64URL_ALPHABET for c in key):
         raise Refused("invite_missing_key")
 
-    out = {"version": int(raw_v), "billId": bill_id, "key": key,
+    out = {"version": version, "billId": bill_id, "key": key,
            "name": fields.get("n", "")}
 
     if "x" in fields:
         x = fields["x"]
-        if not x.isdigit():
+        expiry = bare_decimal(x)
+        if expiry is None:
             raise Refused("invite_bad_expiry")
-        out["expiry"] = int(x)
+        out["expiry"] = expiry
     return out
 
 
 def render_invite(bill_id, key, name="", expiry=None):
+    """Section 11.1. An encoder refuses what this parser refuses.
+
+    A bound enforced only on decode lets a caller build a URI that no reader
+    accepts, and the caller learns of it from somebody else's scanner.
+    """
+    if expiry is not None and (not isinstance(expiry, int)
+                               or isinstance(expiry, bool)
+                               or expiry < 0 or expiry > I64_MAX):
+        raise Refused("invite_bad_expiry")
+    if not bill_id or len(bill_id) > MAX_BILL_ID \
+            or any(c not in B64URL_ALPHABET for c in bill_id):
+        raise Refused("invite_bad_bill_id")
+    if not key or any(c not in B64URL_ALPHABET for c in key):
+        raise Refused("invite_missing_key")
     parts = [f"v={INVITE_VERSION}", f"b={qchar(bill_id)}", f"k={qchar(key)}"]
     if name:
         parts.append(f"n={qchar(name)}")
@@ -441,8 +523,31 @@ def canonical_json(value):
 # --- Section 11.2: scanned payloads ----------------------------------------
 
 PAYLOAD_CAP = 2331          # a version-40 QR code, byte mode, EC level M
+
+# Section 11.2. Stated here rather than inherited from a JSON library: one
+# reader's parser gives up at its own depth and another does not, and the cap
+# is no defence because a level of nesting costs two bytes. The deepest a
+# conforming document reaches is the sharedBy array inside an itemised split,
+# at eight.
+MAX_PAYLOAD_DEPTH = 64
+
+
+def _depth(value, limit):
+    """True when `value` nests no deeper than `limit`."""
+    stack = [(value, 1)]
+    while stack:
+        node, d = stack.pop()
+        if d > limit:
+            return False
+        if isinstance(node, dict):
+            stack.extend((v, d + 1) for v in node.values())
+        elif isinstance(node, list):
+            stack.extend((v, d + 1) for v in node)
+    return True
 PAYLOAD_VERSION = 1
-PAYLOAD_PREFIXES = ("splitz1:", "splitzd1:")
+BILL_PREFIX = "splitz1:"
+DELTA_PREFIX = "splitzd1:"
+PAYLOAD_PREFIXES = (BILL_PREFIX, DELTA_PREFIX)
 
 
 def encode_payload(prefix, body):
@@ -477,16 +582,28 @@ def decode_payload(text):
         raise Refused("payload_damaged")
     if not isinstance(body, dict):
         raise Refused("payload_damaged")
+    if not _depth(body, MAX_PAYLOAD_DEPTH):
+        raise Refused("payload_damaged")
 
     version = body.get("v")
-    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+    # Section 11.2 bounds it as section 11.1 bounds the invite's: a JSON
+    # number outside a signed 64-bit integer is not a version this format
+    # numbers, and three readers' integer types must not each decide.
+    if not isinstance(version, int) or isinstance(version, bool) \
+            or version < 1 or version > I64_MAX:
         raise Refused("payload_damaged")
     if version > PAYLOAD_VERSION:
         raise Refused("payload_future_version")
     if "log" not in body or not isinstance(body["log"], list):
         raise Refused("payload_missing_body")
+    # Section 11.2. Only the bill prefix carries an invite, and only an object
+    # is one: a delta's reader already holds a key, and a second one arriving
+    # from a peer names a bill and a key that reader never chose.
+    invite = body.get("invite")
+    if prefix != BILL_PREFIX or not isinstance(invite, dict):
+        invite = None
     return {"prefix": prefix, "version": version, "log": body["log"],
-            "invite": body.get("invite")}
+            "invite": invite}
 
 
 # --- Section 11.3: sealing --------------------------------------------------
@@ -612,6 +729,139 @@ def _check_scalar_values(value):
             _check_scalar_values(v)
 
 
+def decode_rate(raw):
+    """Section 7. One exchange rate, decoded by the rules section 9 states.
+
+    Shared with the fold, which applies it to each setRate before the rate
+    reaches a bill document: a member the decoder would refuse sets its entry
+    aside (section 10.3) rather than making the whole document undecodable.
+    """
+    if not isinstance(raw, dict):
+        raise Refused("bill_type_error")
+    check_currency(raw.get("currency"))
+    per = _int(raw.get("minorUnitsPerZec"))
+    if per <= 0:
+        raise Refused("rate_not_positive")
+    out = {"currency": raw["currency"], "minorUnitsPerZec": per,
+           "at": parse_instant(raw.get("at"))}
+    if "source" in raw:
+        out["source"] = _str(raw["source"])
+    return out
+
+
+def decode_participant(raw):
+    """Section 9.1, one participant.
+
+    Shared with the fold, which applies it to each joinBill before the
+    participant reaches a bill document: a member the decoder would refuse
+    sets its entry aside (section 10.3) rather than making the whole document
+    undecodable.
+    """
+    if not isinstance(raw, dict):
+        raise Refused("bill_type_error")
+    pid = _str(raw.get("id"))
+    # Section 9.1. An empty id is not a name anyone can be settled to.
+    if not pid:
+        raise Refused("bill_bad_participant_id")
+    p = {"id": pid, "name": _str(raw.get("name", ""))}
+    if "payTo" in raw:
+        p["payTo"] = _str(raw["payTo"])
+    if "identityKey" in raw:
+        p["identityKey"] = _str(raw["identityKey"])
+    # Section 9.1. An optional LIST reads null as absent: both denote none,
+    # and the fallback is the empty list rather than a substituted value. A
+    # scalar member does not get this — there the fallback would stand in for
+    # something, which is why a null `currency` is refused and a null
+    # `payouts` is not.
+    if raw.get("payouts") is not None:
+        if not isinstance(raw["payouts"], list):
+            raise Refused("bill_type_error")
+        outs = []
+        for po in raw["payouts"]:
+            if not isinstance(po, dict):
+                raise Refused("bill_type_error")
+            # Refused rather than skipped: skipping settles to the next
+            # preference down, which is a different address.
+            if po.get("type") not in PAYOUT_TYPES:
+                raise Refused("bill_unknown_payout_method")
+            # Section 9: a field of the wrong type is refused, optional or
+            # not. These name the address money is sent to.
+            for member in ("address", "asset", "chain"):
+                if member in po:
+                    _str(po[member])
+            outs.append(po)
+        p["payouts"] = outs
+    return p
+
+
+def decode_expense(raw, currency, ids):
+    """Section 9.1, one expense, against the ids already on the bill."""
+    if not isinstance(raw, dict):
+        raise Refused("bill_type_error")
+    cur = raw.get("currency", currency)
+    check_currency(cur)
+    if cur != currency:
+        raise Refused("currency_mismatch")
+    if raw.get("paidBy") not in ids:
+        raise Refused("unknown_participant")
+    e = {"id": _str(raw.get("id")),
+         "description": _str(raw.get("description", "")),
+         "paidBy": raw["paidBy"],
+         "amount": _int(raw.get("amount")),
+         "currency": cur,
+         "at": parse_instant(raw.get("at")),
+         "split": raw.get("split")}
+    if not isinstance(e["split"], dict):
+        raise Refused("bill_type_error")
+    return e
+
+
+def decode_payment(raw, currency, ids):
+    """Section 9.2, one payment, against the ids already on the bill."""
+    if not isinstance(raw, dict):
+        raise Refused("bill_type_error")
+    cur = raw.get("currency", currency)
+    check_currency(cur)
+    if cur != currency:
+        raise Refused("currency_mismatch")
+    frm, to = raw.get("from"), raw.get("to")
+    if frm not in ids or to not in ids:
+        raise Refused("unknown_participant")
+    if frm == to:
+        raise Refused("self_payment")
+    method = raw.get("method")
+    if method not in SETTLEMENT_METHODS:
+        raise Refused("bill_unknown_settlement_method")
+    amount = _int(raw.get("amount"))
+    if amount < 0:
+        raise Refused("negative_amount")
+    p = {"id": _str(raw.get("id")), "from": frm, "to": to,
+         "amount": amount, "currency": cur, "method": method,
+         "at": parse_instant(raw.get("at"))}
+    if "zatoshi" in raw:
+        z = _int(raw["zatoshi"])
+        if z <= 0:
+            raise Refused("negative_amount")
+        p["zatoshi"] = z
+    if "paidAtRate" in raw:
+        r = raw["paidAtRate"]
+        if not isinstance(r, dict):
+            raise Refused("bill_type_error")
+        check_currency(r.get("currency"))
+        # Checked against the currency the payment states, never inherited.
+        if r["currency"] != cur:
+            raise Refused("rate_currency_mismatch")
+        p["paidAtRate"] = r
+    # Section 9.2. Both are free text a UI shows; both are still typed, for
+    # the reason at the head of section 9: a field of the wrong type is
+    # refused, optional or not.
+    if "reference" in raw:
+        p["reference"] = _str(raw["reference"])
+    if "note" in raw:
+        p["note"] = _str(raw["note"])
+    return p
+
+
 def decode_bill(doc):
     """Section 9. A field of the wrong type is refused, optional or not."""
     if not isinstance(doc, dict):
@@ -644,93 +894,17 @@ def decode_bill(doc):
     participants = []
     seen = set()
     for raw in doc.get("participants") or []:
-        if not isinstance(raw, dict):
-            raise Refused("bill_type_error")
-        pid = _str(raw.get("id"))
-        # Section 9.1. An empty id is not a name anyone can be settled to.
-        if not pid:
-            raise Refused("bill_bad_participant_id")
-        if pid in seen:
+        p = decode_participant(raw)
+        if p["id"] in seen:
             raise Refused("duplicate_participant")
-        seen.add(pid)
-        p = {"id": pid, "name": _str(raw.get("name", ""))}
-        if "payTo" in raw:
-            p["payTo"] = _str(raw["payTo"])
-        if "identityKey" in raw:
-            p["identityKey"] = _str(raw["identityKey"])
-        if "payouts" in raw:
-            if not isinstance(raw["payouts"], list):
-                raise Refused("bill_type_error")
-            outs = []
-            for po in raw["payouts"]:
-                if not isinstance(po, dict):
-                    raise Refused("bill_type_error")
-                # Refused rather than skipped: skipping settles to the next
-                # preference down, which is a different address.
-                if po.get("type") not in PAYOUT_TYPES:
-                    raise Refused("bill_unknown_payout_method")
-                outs.append(po)
-            p["payouts"] = outs
+        seen.add(p["id"])
         participants.append(p)
 
-    expenses = []
-    for raw in doc.get("expenses") or []:
-        if not isinstance(raw, dict):
-            raise Refused("bill_type_error")
-        cur = raw.get("currency", currency)
-        check_currency(cur)
-        if cur != currency:
-            raise Refused("currency_mismatch")
-        if raw.get("paidBy") not in seen:
-            raise Refused("unknown_participant")
-        e = {"id": _str(raw.get("id")),
-             "description": _str(raw.get("description", "")),
-             "paidBy": raw["paidBy"],
-             "amount": _int(raw.get("amount")),
-             "currency": cur,
-             "at": parse_instant(raw.get("at")),
-             "split": raw.get("split")}
-        if not isinstance(e["split"], dict):
-            raise Refused("bill_type_error")
-        expenses.append(e)
+    expenses = [decode_expense(raw, currency, seen)
+                for raw in doc.get("expenses") or []]
 
-    payments = []
-    for raw in doc.get("payments") or []:
-        if not isinstance(raw, dict):
-            raise Refused("bill_type_error")
-        cur = raw.get("currency", currency)
-        check_currency(cur)
-        if cur != currency:
-            raise Refused("currency_mismatch")
-        frm, to = raw.get("from"), raw.get("to")
-        if frm not in seen or to not in seen:
-            raise Refused("unknown_participant")
-        if frm == to:
-            raise Refused("self_payment")
-        method = raw.get("method")
-        if method not in SETTLEMENT_METHODS:
-            raise Refused("bill_unknown_settlement_method")
-        amount = _int(raw.get("amount"))
-        if amount < 0:
-            raise Refused("negative_amount")
-        p = {"id": _str(raw.get("id")), "from": frm, "to": to,
-             "amount": amount, "currency": cur, "method": method,
-             "at": parse_instant(raw.get("at"))}
-        if "zatoshi" in raw:
-            z = _int(raw["zatoshi"])
-            if z <= 0:
-                raise Refused("negative_amount")
-            p["zatoshi"] = z
-        if "paidAtRate" in raw:
-            r = raw["paidAtRate"]
-            if not isinstance(r, dict):
-                raise Refused("bill_type_error")
-            check_currency(r.get("currency"))
-            # Checked against the currency the payment states, never inherited.
-            if r["currency"] != cur:
-                raise Refused("rate_currency_mismatch")
-            p["paidAtRate"] = r
-        payments.append(p)
+    payments = [decode_payment(raw, currency, seen)
+                for raw in doc.get("payments") or []]
 
     # Section 9.1. Carried through unchanged; absent means nothing is
     # confirmed, never everything.
@@ -1000,6 +1174,10 @@ PAYLOAD_FOR = {"joinBill": "participant", "addExpense": "expense",
                "recordPayment": "payment", "confirmPayment": "confirmation",
                "vouchIdentity": "vouch", "setRate": "rate"}
 PAYLOADS = ("rate", "expense", "payment", "confirmation", "vouch")
+# Every member that is a payload. PAYLOADS drives the ambiguity check and
+# omits `participant`; the type check at ingress must not, because an
+# amendEntry may carry any of them and every later pass indexes what it finds.
+PAYLOAD_MEMBERS = PAYLOADS + ("participant",)
 BILL_ID_DOMAIN = "splitz-bill-id-v1"
 ENTRY_ID_DOMAIN = "splitz-entry-id-v1"
 KEY_BYTES, NONCE_LEN = 32, 16
@@ -1078,17 +1256,36 @@ def seal_log(entries):
     out = [dict(e) for e in entries]
     for _ in range(len(out) + 2):
         remap = {}
+        # Two DIFFERENT entries carrying one written id give that id two
+        # answers, and a withdrawal naming it would follow whichever was
+        # rewritten last. There is no correct retarget, so such a log is not
+        # one this pass can build. Two copies of one entry derive the same id
+        # and are not ambiguous.
+        # Ambiguity is over the written ids of EVERY entry, not only those
+        # whose id already differs from their digest. One id written by two
+        # entries whose digests differ has no single answer whichever of the
+        # two happens to be correct already.
+        claims = {}
         for e in out:
             if e.get("kind") not in ENTRY_KINDS:
                 continue
+            old_id = e.get("id")
             want = (derive_bill_id(e) if e["kind"] == "createBill"
                     else derive_entry_id(e))
-            if e.get("id") != want:
-                remap[e.get("id")] = want
+            # An entry carrying no id names nothing and is named by nothing,
+            # so several of them are not a collision.
+            if old_id is not None:
+                if claims.setdefault(old_id, want) != want:
+                    return None
+            if old_id != want:
+                if old_id is not None:
+                    remap[old_id] = want
                 e["id"] = want
         moved = bool(remap)
         for e in out:
-            if e.get("targetId") in remap:
+            # An entry that carries no id maps under None, which is not a
+            # target any withdrawal names.
+            if "targetId" in e and e["targetId"] in remap:
                 e["targetId"] = remap[e["targetId"]]
                 moved = True
         if not moved:
@@ -1109,6 +1306,12 @@ def check_entry(entry):
     carried = [p for p in PAYLOADS if p in entry]
     if len(carried) > 1:
         raise Refused("bill_ambiguous_entry")
+    # Every payload an entry carries is an object, whatever the kind names.
+    # An amendEntry carries the payload it replaces and no kind declares it,
+    # so without this a scalar reaches the fold and is indexed there.
+    for name in PAYLOAD_MEMBERS:
+        if name in entry and not isinstance(entry[name], dict):
+            raise Refused("bill_type_error")
 
     if "targetId" in entry and not isinstance(entry["targetId"], str):
         raise Refused("bill_type_error")
@@ -1141,6 +1344,17 @@ def check_entry(entry):
         if not _b64url_len(entry.get("creatorKey", ""), KEY_BYTES) \
                 or not _b64url_len(entry.get("nonce", ""), NONCE_LEN):
             raise Refused("create_unbound")
+        # The fold copies these into the bill document without re-reading
+        # them, so they are decided here rather than at decode, where the
+        # whole bill would be unopenable instead of this entry refused.
+        if "name" in entry and not isinstance(entry["name"], str):
+            raise Refused("bill_type_error")
+        check_currency(entry.get("currency"))
+        mode = entry.get("splitMode", "equal")
+        if not isinstance(mode, str):
+            raise Refused("bill_type_error")
+        if mode not in SPLIT_MODES:
+            raise Refused("bill_unknown_split_mode")
         if entry["id"] != derive_bill_id(entry):
             raise Refused("create_id_not_derived")
     elif entry["id"] != derive_entry_id(entry):
@@ -1356,16 +1570,21 @@ def fold(entries, bill_id=None, verify=None):
         for other in surviving:
             eff = amendments.get(other["id"], other)
             if other["kind"] == "addExpense":
-                ex = eff.get("expense", {})
-                sp = ex.get("split", {}) or {}
-                pool = set(sp.get("among") or []) | set(sp.get("amounts") or {}) \
-                    | set(sp.get("basisPoints") or {}) | set(sp.get("shareCounts") or {})
-                for item in sp.get("items") or []:
-                    pool |= set(item.get("sharedBy") or [])
+                # Total readers, not indexing: this pass runs before the
+                # expense is decoded, so `split` and everything under it is
+                # whatever a peer wrote. Section 10.1 types the payload
+                # itself; it does not type inside it.
+                ex = _as_dict(eff.get("expense"))
+                sp = _as_dict(ex.get("split"))
+                pool = set(_as_list(sp.get("among")))
+                for member in ("amounts", "basisPoints", "shareCounts"):
+                    pool |= set(_as_dict(sp.get(member)))
+                for item in _as_list(sp.get("items")):
+                    pool |= set(_as_list(_as_dict(item).get("sharedBy")))
                 if ex.get("paidBy") == gone or gone in pool:
                     named = True
             elif other["kind"] == "recordPayment":
-                pay = eff.get("payment", {})
+                pay = _as_dict(eff.get("payment"))
                 if gone in (pay.get("from"), pay.get("to")):
                     named = True
             elif other["kind"] == "confirmPayment" and other["author"] == gone:
@@ -1390,8 +1609,12 @@ def fold(entries, bill_id=None, verify=None):
         if e["kind"] != "setRate":
             continue
         payload = effective(e).get("rate")
-        if isinstance(payload, dict):
-            rate = payload
+        try:
+            decode_rate(payload)
+        except Refused as r:
+            aside(e, r.code, "carries a rate this reader cannot decode")
+            continue
+        rate = payload
 
     # Participants, in a pass of their own.
     participants, replaced = {}, []
@@ -1406,6 +1629,14 @@ def fold(entries, bill_id=None, verify=None):
         if pid in participants and e["author"] != pid:
             aside(e, "unauthorized_entry", "changes a record it does not own")
             continue
+        # The decoder decides what a participant is, here rather than once the
+        # document is assembled: a member it would refuse sets this entry
+        # aside (section 10.3) instead of making the whole bill undecodable.
+        try:
+            decode_participant(p)
+        except Refused as r:
+            aside(e, r.code, "carries a participant this reader cannot decode")
+            continue
         if pid in participants and participants[pid].get("payTo") != p.get("payTo"):
             replaced.append({"id": pid, "from": participants[pid].get("payTo"),
                              "to": p.get("payTo")})
@@ -1416,16 +1647,31 @@ def fold(entries, bill_id=None, verify=None):
         eff = effective(e)
         if e["kind"] == "addExpense":
             ex = dict(eff["expense"])
-            cur = ex.get("currency")
-            if cur is None:
+            # Section 9.1 falls back only when the member is ABSENT. A present
+            # value that is not a currency is an entry that cannot be applied,
+            # and section 10.3 sets those aside rather than raising: one such
+            # entry must not take the bill with it.
+            if "currency" not in ex:
                 ex["currency"] = currency          # denominated by the fold
-            else:
-                check_currency(cur)
-                if cur != currency:
-                    aside(e, "currency_mismatch", "states a currency the bill does not use")
-                    continue
+            elif not is_currency(ex["currency"]):
+                aside(e, "bill_bad_currency", "states a value that is not a currency")
+                continue
+            elif ex["currency"] != currency:
+                aside(e, "currency_mismatch", "states a currency the bill does not use")
+                continue
             if ex.get("paidBy") not in participants:
                 aside(e, "unknown_participant", "paid by somebody not on the bill")
+                continue
+            try:
+                decode_expense(ex, currency, set(participants))
+                # Section 4 is what turns an expense into what each person
+                # owes, and section 5 runs it downstream of this fold. An
+                # expense whose split section 4 refuses cannot be applied, so
+                # it is set aside here rather than raising out of `balances`
+                # once the bill is already built.
+                split(_int(ex.get("amount")), ex.get("split"))
+            except Refused as r:
+                aside(e, r.code, "carries an expense this reader cannot apply")
                 continue
             expenses.append(ex)
         elif e["kind"] == "recordPayment":
@@ -1439,14 +1685,19 @@ def fold(entries, bill_id=None, verify=None):
             if pay.get("from") == pay.get("to"):
                 aside(e, "self_payment", "pays its own author")
                 continue
-            cur = pay.get("currency")
-            if cur is None:
+            if "currency" not in pay:
                 pay["currency"] = currency
-            else:
-                check_currency(cur)
-                if cur != currency:
-                    aside(e, "currency_mismatch", "states a currency the bill does not use")
-                    continue
+            elif not is_currency(pay["currency"]):
+                aside(e, "bill_bad_currency", "states a value that is not a currency")
+                continue
+            elif pay["currency"] != currency:
+                aside(e, "currency_mismatch", "states a currency the bill does not use")
+                continue
+            try:
+                decode_payment(pay, currency, set(participants))
+            except Refused as r:
+                aside(e, r.code, "carries a payment this reader cannot decode")
+                continue
             payments.append(pay)
 
     # Confirmations, in a pass of their own once every payment is on the bill.
@@ -1457,7 +1708,7 @@ def fold(entries, bill_id=None, verify=None):
             continue
         c = effective(e).get("confirmation", {})
         method = c.get("method")
-        if method not in CONFIRMATION_METHODS:
+        if not isinstance(method, str) or method not in CONFIRMATION_METHODS:
             aside(e, "bill_unknown_confirmation_method", f"method {method!r}")
             continue
         speaks_for, needs_ref, settles = CONFIRMATION_METHODS[method]
@@ -1472,7 +1723,11 @@ def fold(entries, bill_id=None, verify=None):
             aside(e, "unauthorized_confirmation",
                   f"{method} speaks for the payment's {speaks_for}")
             continue
-        if needs_ref and not c.get("reference"):
+        # A non-empty STRING, not merely something truthy. A number or a list
+        # here is not a transaction id, and reading "present" three different
+        # ways settles a debt on one device and leaves it open on another.
+        ref = c.get("reference")
+        if needs_ref and not (isinstance(ref, str) and ref):
             aside(e, "confirmation_missing_reference", f"{method} names no transaction")
             continue
         if settles:

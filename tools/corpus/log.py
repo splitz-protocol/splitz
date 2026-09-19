@@ -97,6 +97,133 @@ FOLD_CASES = [
     ("an_amount_that_states_no_currency_is_denominated_by_the_fold",
      BASE, C["id"]),
 
+    # Section 10.3. A payload member the decoder refuses sets ITS OWN entry
+    # aside; it never makes the whole bill undecodable. Every case here folds
+    # to a document decode_bill accepts, with the honest expense still on it.
+    ("an_expense_whose_amount_is_a_string",
+     BASE + [{"v": 1, "id": "e4", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x4", "paidBy": "ben", "amount": "9999",
+                          "at": AT(6),
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    ("an_expense_that_states_no_amount",
+     BASE + [{"v": 1, "id": "e5", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x5", "paidBy": "ben", "at": AT(6),
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    ("an_expense_whose_at_is_not_an_instant",
+     BASE + [{"v": 1, "id": "e6", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x6", "paidBy": "ben", "amount": 10,
+                          "at": "soon",
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    ("an_expense_whose_currency_is_not_a_string",
+     BASE + [{"v": 1, "id": "e7", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x7", "paidBy": "ben", "amount": 10,
+                          "currency": 5, "at": AT(6),
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    ("an_expense_whose_currency_is_lower_case",
+     BASE + [{"v": 1, "id": "e8", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x8", "paidBy": "ben", "amount": 10,
+                          "currency": "eur", "at": AT(6),
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    ("a_payment_that_states_no_id",
+     BASE + [{"v": 1, "id": "p3", "author": "ben", "kind": "recordPayment",
+              "at": AT(6),
+              "payment": {"from": "ben", "to": "ana", "amount": 500,
+                          "method": "cash", "at": AT(6)}}], C["id"]),
+    ("a_participant_whose_name_is_not_a_string",
+     BASE + [{"v": 1, "id": "j4", "author": "ben", "kind": "joinBill",
+              "at": AT(6), "participant": {"id": "ben", "name": 5}}], C["id"]),
+    ("a_rejoin_whose_pay_to_is_not_a_string",
+     BASE + [{"v": 1, "id": "j5", "author": "ben", "kind": "joinBill",
+              "at": AT(6),
+              "participant": {"id": "ben", "name": "Ben", "payTo": 5}}],
+     C["id"]),
+
+    # A payload the decoder that will read it would refuse sets ITS OWN entry
+    # aside, whatever the payload kind. Before these, a rate, an amendment's
+    # payload, a confirmation's reference and a payout's address each reached
+    # a different pass in each implementation.
+    ("a_rate_whose_price_is_a_string",
+     BASE + [{"v": 1, "id": "r1", "author": "cai", "kind": "setRate", "at": AT(6),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": "4200000",
+                       "at": AT(6)}}], C["id"]),
+    ("a_rate_whose_instant_is_a_number",
+     BASE + [{"v": 1, "id": "r2", "author": "ana", "kind": "setRate", "at": AT(6),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": 51234, "at": 7}}],
+     C["id"]),
+    ("a_rate_that_states_no_instant",
+     BASE + [{"v": 1, "id": "r3", "author": "ana", "kind": "setRate", "at": AT(6),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": 51234}}], C["id"]),
+    ("a_rate_whose_source_is_a_list",
+     BASE + [{"v": 1, "id": "r4", "author": "ana", "kind": "setRate", "at": AT(6),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": 51234,
+                       "at": AT(6), "source": []}}], C["id"]),
+    ("a_rate_that_is_not_positive",
+     BASE + [{"v": 1, "id": "r5", "author": "ana", "kind": "setRate", "at": AT(6),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": 0, "at": AT(6)}}],
+     C["id"]),
+    # An amendEntry carries the payload it replaces and no kind declares it.
+    ("an_amendment_whose_expense_is_a_scalar",
+     BASE + [{"v": 1, "id": "am1", "author": "ana", "kind": "amendEntry",
+              "at": AT(6), "targetId": "e1", "expense": 7}], C["id"]),
+    ("an_amendment_whose_participant_is_a_scalar",
+     BASE + [{"v": 1, "id": "am2", "author": "ana", "kind": "amendEntry",
+              "at": AT(6), "targetId": "j1", "participant": 7}], C["id"]),
+    # A reference is a non-empty string; anything else names no transaction.
+    ("an_on_chain_reference_that_is_a_number",
+     BASE + [{"v": 1, "id": "c10", "author": "ben", "kind": "confirmPayment",
+              "at": AT(6),
+              "confirmation": {"paymentId": "y1", "method": "onChain",
+                               "reference": 5}}], C["id"]),
+    ("an_on_chain_reference_that_is_a_list",
+     BASE + [{"v": 1, "id": "c11", "author": "ana", "kind": "confirmPayment",
+              "at": AT(6),
+              "confirmation": {"paymentId": "y1", "method": "onChain",
+                               "reference": []}}], C["id"]),
+    ("a_confirmation_method_that_is_a_list",
+     BASE + [{"v": 1, "id": "c12", "author": "ana", "kind": "confirmPayment",
+              "at": AT(6),
+              "confirmation": {"paymentId": "y1", "method": []}}], C["id"]),
+    # A payout names the address money is sent to.
+    ("a_payout_whose_address_is_a_number",
+     [C, J_ANA,
+      {"v": 1, "id": "j9", "author": "ben", "kind": "joinBill", "at": AT(2),
+       "participant": {"id": "ben", "name": "Ben",
+                       "payouts": [{"type": "zec", "address": 9}]}},
+      E1, P1], C["id"]),
+    # The entry that opens the bill states its own members at ingress, so a
+    # malformed one never enters the union and the log simply has no create.
+    ("a_bill_whose_name_is_a_number",
+     [dict(create(), name=7)] + BASE[1:], None),
+    ("a_bill_whose_split_mode_is_a_number",
+     [dict(create(), splitMode=7)] + BASE[1:], None),
+
+    # §10.1 types a payload; it does not type inside one. The pass that
+    # decides whether a withdrawn participant is still named reads `split`
+    # before the expense is decoded, so a peer's list there reaches it first.
+    ("a_split_that_is_a_list_while_a_participant_is_withdrawn",
+     BASE + [{"v": 1, "id": "e9", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x9", "paidBy": "ben", "amount": 10,
+                          "at": AT(6), "split": ["ana", "ben"]}},
+             void("v30", "ana", "j2", 7)], C["id"]),
+    ("a_split_whose_items_are_scalars",
+     BASE + [{"v": 1, "id": "e10", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x10", "paidBy": "ben", "amount": 10,
+                          "at": AT(6),
+                          "split": {"type": "itemized", "items": [7]}}},
+             void("v31", "ana", "j2", 7)], C["id"]),
+
     ("the_creator_withdraws_an_expense",
      BASE + [void("v1", "ana", "e1", 6)], C["id"]),
     ("a_stranger_may_not_withdraw_an_expense",
@@ -144,8 +271,12 @@ FOLD_CASES = [
     ("a_chain_four_deep",
      BASE + [void("v9", "ana", "e1", 6), void("v10", "ana", "v9", 7),
              void("v11", "ana", "v10", 8), void("v12", "ana", "v11", 9)], C["id"]),
-    ("two_withdrawals_naming_each_other",
-     BASE + [void("v13", "ana", "v14", 6), void("v14", "ana", "v13", 7)], C["id"]),
+    # A pair of withdrawals naming each other is not expressible under §9.5:
+    # each id is the digest of an entry that states the other's id, so the
+    # pair has no fixed point and no log can carry it. What is expressible,
+    # and is what §10.8 has to decide, is two withdrawals aimed at one target.
+    ("two_withdrawals_naming_one_target",
+     BASE + [void("v13", "ana", "e1", 6), void("v14", "ben", "e1", 7)], C["id"]),
     ("a_stranger_may_not_take_back_somebody_elses_withdrawal",
      BASE + [void("v17", "ana", "p1", 6), void("v18", "cai", "v17", 7)], C["id"]),
     ("an_unauthorised_link_does_not_break_a_chain",
@@ -328,18 +459,21 @@ MERGE_CASES = [
     ("union_is_idempotent", [J_ANA], [J_ANA]),
     ("a_signed_copy_beats_an_unsigned_one", [J_ANA], [dict(J_ANA, sig=SIG)]),
     ("and_in_the_other_direction", [dict(J_ANA, sig=SIG)], [J_ANA]),
-    ("two_unsigned_copies_resolve_by_canonical_order",
-     [dict(J_ANA, participant={"id": "ana", "name": "Ana", "payTo": ADDRESSES[4]})],
-     [dict(J_ANA, participant={"id": "ana", "name": "Ana", "payTo": ADDRESSES[5]})]),
+    # §9.5 derives an id from the entry with `id`, `sig` and `v` removed, so
+    # two copies that rule 2 cannot separate differ in exactly those members.
+    # Copies differing anywhere else are different entries with different ids
+    # and never meet under one id at all.
+    ("two_signed_copies_resolve_by_canonical_order",
+     [dict(J_ANA, sig="A" * 86)], [dict(J_ANA, sig="B" * 86)]),
     ("disjoint_logs_union", [J_ANA], [J_BEN]),
 
     # Removing a payload member makes an entry sort higher under §9.3, so
-    # without §10.1 at ingress the stripped copy wins rule 2 and takes the
-    # expense off the bill on every device.
+    # without §10.1 at ingress the stripped copy would win rule 2 and take the
+    # expense off the bill on every device. The copy has to keep the genuine
+    # entry's id to meet it under one id, which is what the callable form
+    # builds: §9.5 fixes that id first.
     ("a_stripped_entry_never_enters_the_union",
-     [E1], [{k: v for k, v in E1.items() if k != "expense"}]),
-    ("and_not_in_the_other_direction_either",
-     [{k: v for k, v in E1.items() if k != "expense"}], [E1]),
+     [E1], lambda left: [{k: v for k, v in left[0].items() if k != "expense"}]),
     ("a_stripped_entry_alone_is_refused",
      [{k: v for k, v in E1.items() if k != "expense"}], []),
 ] + MERGE_CASES_EXTRA + [
@@ -365,8 +499,20 @@ TESTS_THE_ID = {"an_entry_whose_id_is_chosen_rather_than_derived"}
 
 
 def sealed(entries):
-    """Section 9.5 ids, derived. A log that never settles is left as written."""
-    return seal_log(entries) or entries
+    """Section 9.5 ids, derived.
+
+    Raises rather than falling back to the entries as written. A fixture that
+    cannot be sealed is a fixture whose subject the corpus never reaches: the
+    unsealed copy is refused whole at ingress, so the case goes green while
+    asserting nothing about the rule it is named for.
+    """
+    out = seal_log(entries)
+    if out is None:
+        raise AssertionError(
+            "seal_log cannot build this log: every id is a digest of the entry "
+            "that carries it, so a pair of entries naming each other has no "
+            "fixed point")
+    return out
 
 
 def main():

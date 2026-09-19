@@ -48,6 +48,14 @@ const List<String> _payloadNames = [
   'vouch',
 ];
 
+/// Every member that is a payload, including the one no kind lists as
+/// ambiguous (§10.1).
+///
+/// `_payloadNames` drives the ambiguity check and omits `participant`; the
+/// type check below must not, because an `amendEntry` may carry any of them
+/// and every later pass indexes what it finds.
+const List<String> _payloadMembers = [..._payloadNames, 'participant'];
+
 /// The domain separator the bill id digest covers.
 const String billIdDomain = 'splitz-bill-id-v1';
 
@@ -106,13 +114,6 @@ bool _isB64UrlOfLength(Object? value, int bytes) {
   }
 }
 
-/// Checks an entry before it reaches a log (§10.1).
-///
-/// An entry carrying more than one payload is refused because the currency
-/// fallback and the fold would otherwise read different ones. One carrying
-/// none is refused because removing a member makes an entry's canonical
-/// encoding sort higher than the same entry with it, so the merge would keep
-/// the stripped copy.
 /// The members of a payload that name a participant or an entry (§10.1).
 const Map<String, List<String>> _idMembersOf = {
   'participant': ['id'],
@@ -145,6 +146,25 @@ const String entryIdDomain = 'splitz-entry-id-v1';
 /// removed.
 String deriveEntryId(Map<String, dynamic> entry) =>
     _deriveId(entryIdDomain, entry);
+
+/// Checks an entry before it reaches a log (§10.1).
+///
+/// An entry carrying more than one payload is refused because the currency
+/// fallback and the fold would otherwise read different ones. One carrying
+/// none is refused because removing a member makes an entry's canonical
+/// encoding sort higher than the same entry with it, so the merge would keep
+/// the stripped copy.
+/// `value` as a map, or an empty one.
+///
+/// For the passes that read inside a payload before it has been decoded: §10.1
+/// types the payload itself, not its members, so anything under it is whatever
+/// a peer wrote and a cast there is a language-level error waiting for one
+/// entry to arrive.
+Map<String, dynamic> _mapOf(Object? value) =>
+    value is Map ? value.cast<String, dynamic>() : <String, dynamic>{};
+
+/// `value` as a list, or an empty one. See [_mapOf].
+List<Object?> _listOf(Object? value) => value is List ? value : const [];
 
 Map<String, dynamic> checkEntry(Object? raw) {
   if (raw is! Map) {
@@ -186,12 +206,17 @@ Map<String, dynamic> checkEntry(Object? raw) {
   // it, and the fold's authorisation pass reads the target's payload to decide
   // who may withdraw an entry — so a scalar payload admitted here makes the
   // entry unwithdrawable and the bill unopenable.
-  if (wanted != null) {
-    final payload = entry[wanted];
-    if (payload is! Map) {
-      raise(SplitCode.billTypeError, 'A $wanted is an object, got $payload');
+  // Every payload an entry carries is an object, whatever the kind names. An
+  // amendEntry carries the payload it replaces and no kind declares it, so
+  // without this a scalar reaches the fold and is indexed there.
+  for (final name in _payloadMembers) {
+    if (entry.containsKey(name) && entry[name] is! Map) {
+      raise(
+          SplitCode.billTypeError, 'A $name is an object, got ${entry[name]}');
     }
-    _checkPayloadIds(payload.cast<String, dynamic>(), wanted);
+  }
+  if (wanted != null) {
+    _checkPayloadIds((entry[wanted] as Map).cast<String, dynamic>(), wanted);
   }
 
   canonicalInstant(entry['at']);
@@ -203,6 +228,22 @@ Map<String, dynamic> checkEntry(Object? raw) {
   }
 
   if (kind == 'createBill') {
+    // The fold copies these into the bill document without re-reading them,
+    // so they are decided here rather than at decode, where the whole bill
+    // would be unopenable instead of this entry refused.
+    if (entry.containsKey('name') && entry['name'] is! String) {
+      raise(SplitCode.billTypeError, 'A bill states its name as a string');
+    }
+    checkCurrency(entry['currency']);
+    // §9.1. An optional scalar does not read `null` as absent.
+    final createMode =
+        entry.containsKey('splitMode') ? entry['splitMode'] : 'equal';
+    if (createMode is! String) {
+      raise(SplitCode.billTypeError, 'A split mode is a string');
+    }
+    if (!billSplitModes.contains(createMode)) {
+      raise(SplitCode.billUnknownSplitMode, 'No such split mode: $createMode');
+    }
     // Both fields, or the entry is unbound and anybody could claim its id.
     if (!_isB64UrlOfLength(entry['creatorKey'], 32) ||
         !_isB64UrlOfLength(entry['nonce'], 16)) {
@@ -427,7 +468,7 @@ FoldResult foldLog(List<Object?> rawEntries,
   checkCurrency(currency);
   final billCurrency = currency as String;
 
-  final mode = create['splitMode'] ?? 'equal';
+  final mode = create.containsKey('splitMode') ? create['splitMode'] : 'equal';
   if (mode is! String || !{'equal', 'percentage'}.contains(mode)) {
     raise(SplitCode.billUnknownSplitMode, 'No such split mode: $mode');
   }
@@ -547,8 +588,7 @@ FoldResult foldLog(List<Object?> rawEntries,
     if (e['kind'] != 'voidEntry' || !voided.contains(e['targetId'])) continue;
     final target = byId[e['targetId']]!;
     if (target['kind'] != 'joinBill') continue;
-    final gone =
-        ((target['participant'] as Map?)?.cast<String, dynamic>() ?? {})['id'];
+    final gone = _mapOf(target['participant'])['id'];
     var named = false;
     for (final other in entries) {
       if (voided.contains(other['id']) || other['kind'] == 'voidEntry') {
@@ -556,19 +596,22 @@ FoldResult foldLog(List<Object?> rawEntries,
       }
       final eff = effective(other);
       if (other['kind'] == 'addExpense') {
-        final ex = (eff['expense'] as Map?)?.cast<String, dynamic>() ?? {};
-        final split = (ex['split'] as Map?)?.cast<String, dynamic>() ?? {};
+        // Total accessors, not casts: this pass runs before the expense is
+        // decoded, so `split` and everything under it is whatever a peer
+        // wrote. §10.1 types the payload itself; it does not type inside it.
+        final ex = _mapOf(eff['expense']);
+        final split = _mapOf(ex['split']);
         final pool = <Object?>{
-          ...?(split['among'] as List?),
-          ...?(split['amounts'] as Map?)?.keys,
-          ...?(split['basisPoints'] as Map?)?.keys,
-          ...?(split['shareCounts'] as Map?)?.keys,
-          for (final item in (split['items'] as List?) ?? const [])
-            ...?((item as Map)['sharedBy'] as List?),
+          ..._listOf(split['among']),
+          ..._mapOf(split['amounts']).keys,
+          ..._mapOf(split['basisPoints']).keys,
+          ..._mapOf(split['shareCounts']).keys,
+          for (final item in _listOf(split['items']))
+            ..._listOf(_mapOf(item)['sharedBy']),
         };
         if (ex['paidBy'] == gone || pool.contains(gone)) named = true;
       } else if (other['kind'] == 'recordPayment') {
-        final pay = (eff['payment'] as Map?)?.cast<String, dynamic>() ?? {};
+        final pay = _mapOf(eff['payment']);
         if (pay['from'] == gone || pay['to'] == gone) named = true;
       } else if (other['kind'] == 'confirmPayment' && other['author'] == gone) {
         named = true;
@@ -596,7 +639,13 @@ FoldResult foldLog(List<Object?> rawEntries,
   for (final e in live) {
     if (e['kind'] != 'setRate') continue;
     final payload = effective(e)['rate'];
-    if (payload is Map) rate = payload.cast<String, dynamic>();
+    try {
+      decodeRate(payload);
+    } on SplitError catch (err) {
+      aside(e, err.code, 'carries a rate this reader cannot decode');
+      continue;
+    }
+    rate = (payload as Map).cast<String, dynamic>();
   }
 
   // Participants in a pass of their own, before anything that references them.
@@ -607,11 +656,19 @@ FoldResult foldLog(List<Object?> rawEntries,
     final p =
         (effective(e)['participant'] as Map?)?.cast<String, dynamic>() ?? {};
     final id = p['id'];
-    // §9.1. An empty id is not a name anyone can be settled to, and Rust has
-    // refused one here since it was written: two readers disagreeing fold
-    // different bills from one log.
+    // §9.1. An empty id is not a name anyone can be settled to: two readers
+    // disagreeing about it fold different bills from one log.
     if (id is! String || id.isEmpty) {
       aside(e, SplitCode.billMissingEntryPayload, 'names no participant');
+      continue;
+    }
+    // The decoder decides what a participant is, here rather than once the
+    // document is assembled: a member it would refuse sets this entry aside
+    // (§10.3) instead of making the whole bill undecodable.
+    try {
+      decodeParticipant(p);
+    } on SplitError catch (err) {
+      aside(e, err.code, 'carries a participant this reader cannot decode');
       continue;
     }
     if (participants.containsKey(id) && e['author'] != id) {
@@ -634,22 +691,37 @@ FoldResult foldLog(List<Object?> rawEntries,
     final eff = effective(e);
     if (e['kind'] == 'addExpense') {
       final ex = {...(eff['expense'] as Map).cast<String, dynamic>()};
-      // An amount that states no currency is denominated by the fold. One that
-      // states another is set aside, never restamped: that would keep the
-      // count and change the unit.
+      // An amount that states no currency is denominated by the fold. One
+      // that states another is set aside, never restamped: that would keep
+      // the count and change the unit. §9.1 falls back only when the member
+      // is absent, so a present value that is not a currency is an entry that
+      // cannot be applied, and §10.3 sets those aside rather than raising.
       if (!ex.containsKey('currency')) {
         ex['currency'] = billCurrency;
-      } else {
-        checkCurrency(ex['currency']);
-        if (ex['currency'] != billCurrency) {
-          aside(e, SplitCode.currencyMismatch,
-              'states a currency the bill does not use');
-          continue;
-        }
+      } else if (!isCurrency(ex['currency'])) {
+        aside(e, SplitCode.billBadCurrency,
+            'states a value that is not a currency');
+        continue;
+      } else if (ex['currency'] != billCurrency) {
+        aside(e, SplitCode.currencyMismatch,
+            'states a currency the bill does not use');
+        continue;
       }
       if (!participants.containsKey(ex['paidBy'])) {
         aside(e, SplitCode.unknownParticipant,
             'paid by somebody not on the bill');
+        continue;
+      }
+      try {
+        final decoded =
+            decodeExpense(ex, billCurrency, participants.keys.toSet());
+        // §4 is what turns an expense into what each person owes, and §5 runs
+        // it downstream of this fold. An expense whose split §4 refuses cannot
+        // be applied, so it is set aside here rather than raising out of
+        // `netBalances` once the bill is already built.
+        splitExpense(decoded.amount, decoded.split);
+      } on SplitError catch (err) {
+        aside(e, err.code, 'carries an expense this reader cannot apply');
         continue;
       }
       expenses.add(ex);
@@ -673,13 +745,20 @@ FoldResult foldLog(List<Object?> rawEntries,
       }
       if (!pay.containsKey('currency')) {
         pay['currency'] = billCurrency;
-      } else {
-        checkCurrency(pay['currency']);
-        if (pay['currency'] != billCurrency) {
-          aside(e, SplitCode.currencyMismatch,
-              'states a currency the bill does not use');
-          continue;
-        }
+      } else if (!isCurrency(pay['currency'])) {
+        aside(e, SplitCode.billBadCurrency,
+            'states a value that is not a currency');
+        continue;
+      } else if (pay['currency'] != billCurrency) {
+        aside(e, SplitCode.currencyMismatch,
+            'states a currency the bill does not use');
+        continue;
+      }
+      try {
+        decodePayment(pay, billCurrency, participants.keys.toSet());
+      } on SplitError catch (err) {
+        aside(e, err.code, 'carries a payment this reader cannot decode');
+        continue;
       }
       payments.add(pay);
     }
@@ -718,10 +797,12 @@ FoldResult foldLog(List<Object?> rawEntries,
           '${c['method']} speaks for the payment\'s ${rule.speaksFor}');
       continue;
     }
-    if (rule.needsReference &&
-        (c['reference'] == null || c['reference'] == '')) {
+    final reference = c['reference'];
+    if (rule.needsReference && !(reference is String && reference.isNotEmpty)) {
       // One that says a payment is on a chain without saying where contains no
-      // chain.
+      // chain. A number or a list is not a transaction id either, and reading
+      // "present" three different ways settles a debt on one device and
+      // leaves it open on another.
       aside(e, SplitCode.confirmationMissingReference,
           '${c['method']} names no transaction');
       continue;

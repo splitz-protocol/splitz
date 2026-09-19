@@ -187,6 +187,14 @@ fn itemized(total: i64, spec: &Value) -> Result<Shares> {
     };
 
     for item in items {
+        // §4.5: an item is an object. Stated rather than left to `get`
+        // returning None, so all three refuse one input with one code.
+        if !item.is_object() {
+            return Err(SplitError::new(
+                code::BILL_TYPE_ERROR,
+                "An item is an object",
+            ));
+        }
         if id_list(item.get("sharedBy").unwrap_or(&Value::Null)).is_empty() {
             return Err(SplitError::new(
                 code::ITEMIZED_UNASSIGNED_ITEM,

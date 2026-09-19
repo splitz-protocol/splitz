@@ -14,7 +14,11 @@ DECODE = [
     ("a_percent_escaped_name",      f"splitz://join?v=1&b={T}&k={K}&n=Zcon7%20d%C3%AEner"),
     ("an_expiry",                   f"splitz://join?v=1&b={T}&k={K}&x=1793000000"),
     ("no_name_reads_as_empty",      f"splitz://join?v=1&b={T}&k={K}"),
-    ("the_first_occurrence_wins",   f"splitz://join?v=1&b={T}&k={K}&t=other"),
+    # `b` repeats: the first occurrence wins, so the second id is ignored. A
+    # case whose repeated parameter carries two different names proves nothing.
+    ("the_first_occurrence_wins",   f"splitz://join?v=1&b={T}&k={K}&b=Zz99"),
+    ("a_repeated_name_keeps_the_first", f"splitz://join?v=1&b={T}&k={K}&n=Ana&n=Ben"),
+    ("a_repeated_expiry_keeps_the_first", f"splitz://join?v=1&b={T}&k={K}&x=1793000000&x=1"),
     ("a_bill_id_at_the_cap",         f"splitz://join?v=1&b={'A' * MAX_BILL_ID}&k={K}"),
     ("an_unknown_parameter_is_ignored", f"splitz://join?v=1&b={T}&k={K}&z=1"),
 
@@ -44,10 +48,33 @@ DECODE = [
     ("an_empty_key",                f"splitz://join?v=1&b={T}&k="),
     ("a_key_in_the_standard_alphabet", f"splitz://join?v=1&b={T}&k=ab%2Bcd%2Fef%3D"),
     ("an_expiry_that_is_not_a_number", f"splitz://join?v=1&b={T}&k={K}&x=soon"),
+    ("an_empty_expiry",              f"splitz://join?v=1&b={T}&k={K}&x="),
+    # Section 11.1 bounds `x` and `v` at i64::MAX, which is 19 digits.
+    ("an_expiry_at_the_bound",       f"splitz://join?v=1&b={T}&k={K}&x=9223372036854775807"),
+    ("an_expiry_one_over_the_bound", f"splitz://join?v=1&b={T}&k={K}&x=9223372036854775808"),
+    ("an_expiry_at_the_unsigned_bound", f"splitz://join?v=1&b={T}&k={K}&x=18446744073709551615"),
+    ("an_expiry_of_twenty_three_digits", f"splitz://join?v=1&b={T}&k={K}&x=99999999999999999999999"),
+    ("a_version_at_the_bound",       f"splitz://join?v=9223372036854775807&b={T}&k={K}"),
+    ("a_version_one_over_the_bound", f"splitz://join?v=9223372036854775808&b={T}&k={K}"),
+    ("a_version_over_thirty_two_bits", f"splitz://join?v=4294967296&b={T}&k={K}"),
+    # A Unicode digit is not a DIGIT: U+0663 is ARABIC-INDIC DIGIT THREE.
+    ("an_expiry_in_arabic_indic_digits", f"splitz://join?v=1&b={T}&k={K}&x=\u0663"),
+    ("a_version_in_arabic_indic_digits", f"splitz://join?v=\u0663&b={T}&k={K}"),
+    # Section 11.1. `x` is a bare decimal integer, exactly as `v` is: padding
+    # makes one numeral two, and a length bound then disagrees with a value
+    # bound about which is which.
+    ("a_padded_expiry",              f"splitz://join?v=1&b={T}&k={K}&x=007"),
+    ("an_expiry_padded_past_the_bound",
+     f"splitz://join?v=1&b={T}&k={K}&x=00000000000000000001"),
+    ("an_expiry_of_five_thousand_digits",
+     f"splitz://join?v=1&b={T}&k={K}&x={'9' * 5000}"),
+    ("a_version_of_five_thousand_digits",
+     f"splitz://join?v={'9' * 5000}&b={T}&k={K}"),
 ]
 
 ENCODE = [
     ("encode_a_plain_invite",   T, K, "", None),
+    ("encode_refuses_a_negative_expiry", T, K, "", -1),
     ("encode_with_a_name",      T, K, "Zcon7", None),
     ("encode_escapes_the_name", T, K, "Zcon7 dîner ✨", None),
     ("encode_with_an_expiry",   T, K, "", 1793000000),
@@ -65,15 +92,21 @@ def main():
         out.append(case)
 
     for name, t, k, n, x in ENCODE:
-        uri = render_invite(t, k, n, x)
+        case = {"name": name, "invite": {"billId": t, "key": k, "name": n}}
+        if x is not None:
+            case["invite"]["expiry"] = x
+        try:
+            uri = render_invite(t, k, n, x)
+        except Refused as r:
+            case["error"] = r.code
+            out.append(case)
+            continue
         # Anything encoded must parse back to what it was built from.
         back = parse_invite(uri)
         assert back["billId"] == t and back["key"] == k and back["name"] == n, \
             f"{name}: round trip lost {back}"
-        case = {"name": name, "invite": {"billId": t, "key": k, "name": n},
-                "expect": uri}
-        if x is not None:
-            case["invite"]["expiry"] = x
+        assert back.get("expiry") == x, f"{name}: round trip lost the expiry"
+        case["expect"] = uri
         out.append(case)
 
     doc = {"description": "Invite URIs. SPEC.md section 11.1.",

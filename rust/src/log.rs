@@ -12,7 +12,7 @@ use crate::authority::Identities;
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
 use crate::instant::canonical_instant;
-use crate::money::check_currency;
+use crate::money::{check_currency, is_currency};
 use crate::sha256::sha256;
 use crate::zip321::base64url;
 
@@ -29,6 +29,21 @@ pub const ENTRY_KINDS: [&str; 9] = [
 ];
 
 const PAYLOAD_NAMES: [&str; 5] = ["rate", "expense", "payment", "confirmation", "vouch"];
+
+/// Every member that is a payload, including the one no kind lists as
+/// ambiguous (§10.1).
+///
+/// `PAYLOAD_NAMES` drives the ambiguity check and omits `participant`; the
+/// type check at ingress must not, because an `amendEntry` may carry any of
+/// them and every later pass indexes what it finds.
+const PAYLOAD_MEMBERS: [&str; 6] = [
+    "rate",
+    "expense",
+    "payment",
+    "confirmation",
+    "vouch",
+    "participant",
+];
 
 /// The domain separator the bill id digest covers.
 pub const BILL_ID_DOMAIN: &str = "splitz-bill-id-v1";
@@ -164,6 +179,19 @@ pub fn check_entry(entry: &Value) -> Result<()> {
             format!("An entry carries {}", carried.join(" and ")),
         ));
     }
+    // Every payload an entry carries is an object, whatever the kind names.
+    // An amendEntry carries the payload it replaces and no kind declares it,
+    // so without this a scalar reaches the fold and is indexed there.
+    for name in PAYLOAD_MEMBERS {
+        if let Some(value) = entry.get(name) {
+            if !value.is_object() {
+                return Err(SplitError::new(
+                    code::BILL_TYPE_ERROR,
+                    format!("A {name} is an object"),
+                ));
+            }
+        }
+    }
 
     if let Some(wanted) = payload_for(kind) {
         let Some(payload) = entry.get(wanted) else {
@@ -237,6 +265,39 @@ pub fn check_entry(entry: &Value) -> Result<()> {
     }
 
     if kind == "createBill" {
+        // The fold copies these into the bill document without re-reading
+        // them, so they are decided here rather than at decode, where the
+        // whole bill would be unopenable instead of this entry refused.
+        if let Some(name) = entry.get("name") {
+            if !name.is_string() {
+                return Err(SplitError::new(
+                    code::BILL_TYPE_ERROR,
+                    "A bill states its name as a string",
+                ));
+            }
+        }
+        match entry.get("currency").and_then(Value::as_str) {
+            Some(c) => crate::money::check_currency(c)?,
+            None => {
+                return Err(SplitError::new(
+                    code::BILL_BAD_CURRENCY,
+                    "A bill states its currency",
+                ))
+            }
+        }
+        // §9.1. An optional scalar does not read `null` as absent.
+        let mode = match entry.get("splitMode") {
+            None => "equal",
+            Some(v) => v.as_str().ok_or_else(|| {
+                SplitError::new(code::BILL_TYPE_ERROR, "A split mode is a string")
+            })?,
+        };
+        if !crate::serialization::SPLIT_MODES.contains(&mode) {
+            return Err(SplitError::new(
+                code::BILL_UNKNOWN_SPLIT_MODE,
+                format!("No such split mode: \"{mode}\""),
+            ));
+        }
         // Both fields, or the entry is unbound and anybody could claim its id.
         if !is_b64url_of_length(entry.get("creatorKey").and_then(Value::as_str), 32)
             || !is_b64url_of_length(entry.get("nonce").and_then(Value::as_str), 16)
@@ -723,11 +784,12 @@ pub fn fold_log_verified(
         if field(entry, "kind") != "setRate" {
             continue;
         }
-        if let Some(payload) = effective(entry).get("rate") {
-            if payload.is_object() {
-                rate = Some(payload.clone());
-            }
+        let payload = effective(entry).get("rate").cloned().unwrap_or(Value::Null);
+        if let Err(e) = crate::serialization::decode_rate(&payload) {
+            aside!(entry, e.code);
+            continue;
         }
+        rate = Some(payload);
     }
 
     // Participants in a pass of their own, before anything that references
@@ -752,6 +814,13 @@ pub fn fold_log_verified(
             // Without this, one join naming another participant's id and
             // carrying your own address redirects every later settlement.
             aside!(entry, code::UNAUTHORIZED_ENTRY);
+            continue;
+        }
+        // The decoder decides what a participant is, here rather than once
+        // the document is assembled: a member it would refuse sets this entry
+        // aside (§10.3) instead of making the whole bill undecodable.
+        if let Err(e) = crate::serialization::decode_participant(p) {
+            aside!(entry, e.code);
             continue;
         }
         if let Some(held) = participants.get(&id) {
@@ -781,20 +850,42 @@ pub fn fold_log_verified(
                 // An amount that states no currency is denominated by the
                 // fold. One that states another is set aside, never
                 // restamped: that would keep the count and change the unit.
-                match obj.get("currency").and_then(Value::as_str) {
+                // §9.1 falls back only when the member is ABSENT. `as_str`
+                // alone cannot tell absent from present-and-not-a-string, and
+                // a present value that is not a currency is an entry that
+                // cannot be applied: §10.3 sets those aside.
+                match obj.get("currency") {
                     None => {
                         obj.insert("currency".into(), Value::String(currency.clone()));
                     }
-                    Some(own) => {
-                        check_currency(own)?;
-                        if own != currency {
-                            aside!(entry, code::CURRENCY_MISMATCH);
+                    Some(own) => match own.as_str() {
+                        Some(own) if is_currency(own) => {
+                            if own != currency {
+                                aside!(entry, code::CURRENCY_MISMATCH);
+                                continue;
+                            }
+                        }
+                        _ => {
+                            aside!(entry, code::BILL_BAD_CURRENCY);
                             continue;
                         }
-                    }
+                    },
                 }
                 if !participants.contains_key(field(&ex, "paidBy")) {
                     aside!(entry, code::UNKNOWN_PARTICIPANT);
+                    continue;
+                }
+                let ids: std::collections::BTreeSet<String> =
+                    participants.keys().cloned().collect();
+                // §4 is what turns an expense into what each person owes,
+                // and §5 runs it downstream of this fold. An expense whose
+                // split §4 refuses cannot be applied, so it is set aside here
+                // rather than raising out of `net_balances` once the bill is
+                // already built.
+                let applied = crate::serialization::decode_expense(&ex, &currency, &ids)
+                    .and_then(|d| crate::split::split_expense(d.amount, &d.split).map(|_| ()));
+                if let Err(e) = applied {
+                    aside!(entry, e.code);
                     continue;
                 }
                 expenses.push(ex);
@@ -821,17 +912,32 @@ pub fn fold_log_verified(
                 let obj = pay.as_object_mut().ok_or_else(|| {
                     SplitError::new(code::BILL_TYPE_ERROR, "A payment is an object")
                 })?;
-                match obj.get("currency").and_then(Value::as_str) {
+                // §9.1 falls back only when the member is ABSENT. `as_str`
+                // alone cannot tell absent from present-and-not-a-string, and
+                // a present value that is not a currency is an entry that
+                // cannot be applied: §10.3 sets those aside.
+                match obj.get("currency") {
                     None => {
                         obj.insert("currency".into(), Value::String(currency.clone()));
                     }
-                    Some(own) => {
-                        check_currency(own)?;
-                        if own != currency {
-                            aside!(entry, code::CURRENCY_MISMATCH);
+                    Some(own) => match own.as_str() {
+                        Some(own) if is_currency(own) => {
+                            if own != currency {
+                                aside!(entry, code::CURRENCY_MISMATCH);
+                                continue;
+                            }
+                        }
+                        _ => {
+                            aside!(entry, code::BILL_BAD_CURRENCY);
                             continue;
                         }
-                    }
+                    },
+                }
+                let ids: std::collections::BTreeSet<String> =
+                    participants.keys().cloned().collect();
+                if let Err(e) = crate::serialization::decode_payment(&pay, &currency, &ids) {
+                    aside!(entry, e.code);
+                    continue;
                 }
                 payments.push(pay);
             }
@@ -876,7 +982,15 @@ pub fn fold_log_verified(
                 continue;
             }
         }
-        if needs_reference && field(&c, "reference").is_empty() {
+        // A non-empty STRING, not merely something `field` renders empty. A
+        // number or a list here is not a transaction id, and reading
+        // "present" three different ways settles a debt on one device and
+        // leaves it open on another.
+        let has_reference = c
+            .get("reference")
+            .and_then(Value::as_str)
+            .is_some_and(|r| !r.is_empty());
+        if needs_reference && !has_reference {
             // One that says a payment is on a chain without saying where
             // contains no chain.
             aside!(entry, code::CONFIRMATION_MISSING_REFERENCE);

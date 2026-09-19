@@ -1,6 +1,6 @@
 {
   "description": "Entries, merge and folding. SPEC.md sections 9.4 and 10.",
-  "count": 80,
+  "count": 102,
   "cases": [
     {
       "name": "a_bill_with_one_expense",
@@ -2300,6 +2300,3457 @@
       }
     },
     {
+      "name": "an_expense_whose_amount_is_a_string",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "Kh-4Zq9BCJePUR9xZ23eOg",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x4",
+            "paidBy": "ben",
+            "amount": "9999",
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "Kh-4Zq9BCJePUR9xZ23eOg",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_expense_that_states_no_amount",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "h4bnDtMBoCjFiUliNZC2Fg",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x5",
+            "paidBy": "ben",
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "h4bnDtMBoCjFiUliNZC2Fg",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_expense_whose_at_is_not_an_instant",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "I48tsqymeqyRiUaOawntDg",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x6",
+            "paidBy": "ben",
+            "amount": 10,
+            "at": "soon",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "I48tsqymeqyRiUaOawntDg",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_expense_whose_currency_is_not_a_string",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "hBiCgh2-bMB6kbc4_ZMLUg",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x7",
+            "paidBy": "ben",
+            "amount": 10,
+            "currency": 5,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "hBiCgh2-bMB6kbc4_ZMLUg",
+            "code": "bill_bad_currency"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_expense_whose_currency_is_lower_case",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "M93YKscah0jIBhn44Oxdtg",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x8",
+            "paidBy": "ben",
+            "amount": 10,
+            "currency": "eur",
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "M93YKscah0jIBhn44Oxdtg",
+            "code": "bill_bad_currency"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_payment_that_states_no_id",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "JCV-ynZ_gCHADDX9ZmPy1Q",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:06:00.000Z",
+          "payment": {
+            "from": "ben",
+            "to": "ana",
+            "amount": 500,
+            "method": "cash",
+            "at": "2026-10-28T19:06:00.000Z"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "JCV-ynZ_gCHADDX9ZmPy1Q",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_participant_whose_name_is_not_a_string",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "9xdGU-cvMe5fvwEENjyKnw",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:06:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": 5
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "9xdGU-cvMe5fvwEENjyKnw",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_rejoin_whose_pay_to_is_not_a_string",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "fugQh4GQLNqaG8eCLUcvOw",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:06:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": 5
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "fugQh4GQLNqaG8eCLUcvOw",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_rate_whose_price_is_a_string",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "QigePFRz8x_ParLAzrCzbQ",
+          "author": "cai",
+          "kind": "setRate",
+          "at": "2026-10-28T19:06:00.000Z",
+          "rate": {
+            "currency": "EUR",
+            "minorUnitsPerZec": "4200000",
+            "at": "2026-10-28T19:06:00.000Z"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "QigePFRz8x_ParLAzrCzbQ",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_rate_whose_instant_is_a_number",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "aVrXwaNK1qZa1PduNaP3iw",
+          "author": "ana",
+          "kind": "setRate",
+          "at": "2026-10-28T19:06:00.000Z",
+          "rate": {
+            "currency": "EUR",
+            "minorUnitsPerZec": 51234,
+            "at": 7
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "aVrXwaNK1qZa1PduNaP3iw",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_rate_that_states_no_instant",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "Go09KUcdKkbExg6LoOYaRQ",
+          "author": "ana",
+          "kind": "setRate",
+          "at": "2026-10-28T19:06:00.000Z",
+          "rate": {
+            "currency": "EUR",
+            "minorUnitsPerZec": 51234
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "Go09KUcdKkbExg6LoOYaRQ",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_rate_whose_source_is_a_list",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "aIkKl2DVs31exxdvZ8Eb4Q",
+          "author": "ana",
+          "kind": "setRate",
+          "at": "2026-10-28T19:06:00.000Z",
+          "rate": {
+            "currency": "EUR",
+            "minorUnitsPerZec": 51234,
+            "at": "2026-10-28T19:06:00.000Z",
+            "source": []
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "aIkKl2DVs31exxdvZ8Eb4Q",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_rate_that_is_not_positive",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "UFwB7_CokKpjKJW_eC41_w",
+          "author": "ana",
+          "kind": "setRate",
+          "at": "2026-10-28T19:06:00.000Z",
+          "rate": {
+            "currency": "EUR",
+            "minorUnitsPerZec": 0,
+            "at": "2026-10-28T19:06:00.000Z"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "UFwB7_CokKpjKJW_eC41_w",
+            "code": "rate_not_positive"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_amendment_whose_expense_is_a_scalar",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "l_KLMTx8j_UvU1Z2qDP-8g",
+          "author": "ana",
+          "kind": "amendEntry",
+          "at": "2026-10-28T19:06:00.000Z",
+          "targetId": "E4u_dfL3x5xNJk0FThKLjA",
+          "expense": 7
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "l_KLMTx8j_UvU1Z2qDP-8g",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_amendment_whose_participant_is_a_scalar",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "O1t4iGiAwy0AAJiXPXcZsQ",
+          "author": "ana",
+          "kind": "amendEntry",
+          "at": "2026-10-28T19:06:00.000Z",
+          "targetId": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "participant": 7
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "O1t4iGiAwy0AAJiXPXcZsQ",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_on_chain_reference_that_is_a_number",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FiVliSZXqFX1ahVh8nTU-w",
+          "author": "ben",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:06:00.000Z",
+          "confirmation": {
+            "paymentId": "y1",
+            "method": "onChain",
+            "reference": 5
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "FiVliSZXqFX1ahVh8nTU-w",
+            "code": "confirmation_missing_reference"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "an_on_chain_reference_that_is_a_list",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "EkpvCwbrDt9YtourgSIDgA",
+          "author": "ana",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:06:00.000Z",
+          "confirmation": {
+            "paymentId": "y1",
+            "method": "onChain",
+            "reference": []
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "EkpvCwbrDt9YtourgSIDgA",
+            "code": "confirmation_missing_reference"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_confirmation_method_that_is_a_list",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "Au7aC9nq8lnUzJR5SBI4fw",
+          "author": "ana",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:06:00.000Z",
+          "confirmation": {
+            "paymentId": "y1",
+            "method": []
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "Au7aC9nq8lnUzJR5SBI4fw",
+            "code": "bill_unknown_confirmation_method"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_payout_whose_address_is_a_number",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "B0LqQpMZOQU83D-vNzTJnQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": 9
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "error": "unknown_participant"
+    },
+    {
+      "name": "a_bill_whose_name_is_a_number",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": 7,
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "SvvPcpQViBf8hYWfw5hG5g"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        }
+      ],
+      "error": "log_no_create"
+    },
+    {
+      "name": "a_bill_whose_split_mode_is_a_number",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": 7,
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "HniCxyDXGlc3o1G9_bMqJg"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        }
+      ],
+      "error": "log_no_create"
+    },
+    {
+      "name": "a_split_that_is_a_list_while_a_participant_is_withdrawn",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "hFYi229bBey6Jn5w8oLxvQ",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x9",
+            "paidBy": "ben",
+            "amount": 10,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": [
+              "ana",
+              "ben"
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "1XKEePE58Tn8xABoj-2pAg",
+          "author": "ana",
+          "kind": "voidEntry",
+          "at": "2026-10-28T19:07:00.000Z",
+          "targetId": "mI4yRccmwE-uElJhCgV_NQ"
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "1XKEePE58Tn8xABoj-2pAg",
+            "code": "participant_still_named"
+          },
+          {
+            "id": "hFYi229bBey6Jn5w8oLxvQ",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_split_whose_items_are_scalars",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        },
+        {
+          "v": 1,
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
+          "author": "ana",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:04:00.000Z",
+          "payment": {
+            "id": "y1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 4500,
+            "method": "cash",
+            "at": "2026-10-28T19:04:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "CUeaxYKIQziojkq84_-ilw",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x10",
+            "paidBy": "ben",
+            "amount": 10,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "itemized",
+              "items": [
+                7
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "1XKEePE58Tn8xABoj-2pAg",
+          "author": "ana",
+          "kind": "voidEntry",
+          "at": "2026-10-28T19:07:00.000Z",
+          "targetId": "mI4yRccmwE-uElJhCgV_NQ"
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x1",
+              "description": "dinner",
+              "paidBy": "ana",
+              "amount": 9000,
+              "at": "2026-10-28T19:03:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "1XKEePE58Tn8xABoj-2pAg",
+            "code": "participant_still_named"
+          },
+          {
+            "id": "CUeaxYKIQziojkq84_-ilw",
+            "code": "bill_type_error"
+          }
+        ],
+        "balances": {
+          "ana": 4500,
+          "ben": -4500
+        }
+      }
+    },
+    {
       "name": "the_creator_withdraws_an_expense",
       "log": [
         {
@@ -4446,7 +7897,7 @@
       }
     },
     {
-      "name": "two_withdrawals_naming_each_other",
+      "name": "two_withdrawals_naming_one_target",
       "log": [
         {
           "v": 1,
@@ -4462,7 +7913,7 @@
         },
         {
           "v": 1,
-          "id": "j1",
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
           "author": "ana",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
@@ -4474,7 +7925,7 @@
         },
         {
           "v": 1,
-          "id": "j2",
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
           "author": "ben",
           "kind": "joinBill",
           "at": "2026-10-28T19:02:00.000Z",
@@ -4486,7 +7937,7 @@
         },
         {
           "v": 1,
-          "id": "e1",
+          "id": "E4u_dfL3x5xNJk0FThKLjA",
           "author": "ana",
           "kind": "addExpense",
           "at": "2026-10-28T19:03:00.000Z",
@@ -4507,7 +7958,7 @@
         },
         {
           "v": 1,
-          "id": "p1",
+          "id": "PC5AEbDN1IJiepSBCCdT5A",
           "author": "ben",
           "kind": "recordPayment",
           "at": "2026-10-28T19:04:00.000Z",
@@ -4522,19 +7973,19 @@
         },
         {
           "v": 1,
-          "id": "v13",
+          "id": "OtHBjisOwkvPsq7BqEgWIg",
           "author": "ana",
           "kind": "voidEntry",
           "at": "2026-10-28T19:06:00.000Z",
-          "targetId": "v14"
+          "targetId": "E4u_dfL3x5xNJk0FThKLjA"
         },
         {
           "v": 1,
-          "id": "v14",
-          "author": "ana",
+          "id": "P97QNFJ_9WMJKBDmYWntEA",
+          "author": "ben",
           "kind": "voidEntry",
           "at": "2026-10-28T19:07:00.000Z",
-          "targetId": "v13"
+          "targetId": "E4u_dfL3x5xNJk0FThKLjA"
         }
       ],
       "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
@@ -4545,9 +7996,30 @@
           "name": "Dinner",
           "currency": "EUR",
           "splitMode": "equal",
-          "participants": [],
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
           "expenses": [],
-          "payments": [],
+          "payments": [
+            {
+              "id": "y1",
+              "from": "ben",
+              "to": "ana",
+              "amount": 4500,
+              "method": "cash",
+              "at": "2026-10-28T19:04:00.000Z",
+              "currency": "EUR"
+            }
+          ],
           "confirmedPayments": []
         },
         "creator": "ana",
@@ -4556,34 +8028,19 @@
           "contested": []
         },
         "replacedAddresses": [],
-        "withdrawn": [],
+        "withdrawn": [
+          "E4u_dfL3x5xNJk0FThKLjA"
+        ],
         "setAside": [
           {
-            "id": "e1",
-            "code": "entry_id_not_derived"
-          },
-          {
-            "id": "j1",
-            "code": "entry_id_not_derived"
-          },
-          {
-            "id": "j2",
-            "code": "entry_id_not_derived"
-          },
-          {
-            "id": "p1",
-            "code": "entry_id_not_derived"
-          },
-          {
-            "id": "v13",
-            "code": "entry_id_not_derived"
-          },
-          {
-            "id": "v14",
-            "code": "entry_id_not_derived"
+            "id": "P97QNFJ_9WMJKBDmYWntEA",
+            "code": "unauthorized_entry"
           }
         ],
-        "balances": {}
+        "balances": {
+          "ana": 0,
+          "ben": 0
+        }
       }
     },
     {
@@ -7611,60 +11068,51 @@
       }
     },
     {
-      "name": "two_unsigned_copies_resolve_by_canonical_order",
+      "name": "two_signed_copies_resolve_by_canonical_order",
       "left": [
         {
           "v": 1,
-          "id": "hlTB9DE7RQOyPAUm-gSwlg",
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
           "author": "ana",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
             "id": "ana",
             "name": "Ana",
-            "payTo": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c"
-          }
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "sig": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         }
       ],
       "right": [
         {
           "v": 1,
-          "id": "3cuOHi4lhz-qa432PWdlxw",
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
           "author": "ana",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
             "id": "ana",
             "name": "Ana",
-            "payTo": "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl"
-          }
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "sig": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
         }
       ],
       "expect": {
         "merged": [
           {
             "v": 1,
-            "id": "3cuOHi4lhz-qa432PWdlxw",
+            "id": "PTdfEJ_Bx2dEWYejZqabfQ",
             "author": "ana",
             "kind": "joinBill",
             "at": "2026-10-28T19:01:00.000Z",
             "participant": {
               "id": "ana",
               "name": "Ana",
-              "payTo": "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl"
-            }
-          },
-          {
-            "v": 1,
-            "id": "hlTB9DE7RQOyPAUm-gSwlg",
-            "author": "ana",
-            "kind": "joinBill",
-            "at": "2026-10-28T19:01:00.000Z",
-            "participant": {
-              "id": "ana",
-              "name": "Ana",
-              "payTo": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c"
-            }
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            "sig": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
           }
         ],
         "refused": []
@@ -7758,76 +11206,10 @@
       "right": [
         {
           "v": 1,
-          "id": "O3LPCrYWAt0kCFicN_ZzQw",
-          "author": "ana",
-          "kind": "addExpense",
-          "at": "2026-10-28T19:03:00.000Z"
-        }
-      ],
-      "expect": {
-        "merged": [
-          {
-            "v": 1,
-            "id": "E4u_dfL3x5xNJk0FThKLjA",
-            "author": "ana",
-            "kind": "addExpense",
-            "at": "2026-10-28T19:03:00.000Z",
-            "expense": {
-              "id": "x1",
-              "description": "dinner",
-              "paidBy": "ana",
-              "amount": 9000,
-              "at": "2026-10-28T19:03:00.000Z",
-              "split": {
-                "type": "equal",
-                "among": [
-                  "ana",
-                  "ben"
-                ]
-              }
-            }
-          }
-        ],
-        "refused": [
-          {
-            "id": "O3LPCrYWAt0kCFicN_ZzQw",
-            "code": "bill_missing_entry_payload"
-          }
-        ]
-      }
-    },
-    {
-      "name": "and_not_in_the_other_direction_either",
-      "left": [
-        {
-          "v": 1,
-          "id": "O3LPCrYWAt0kCFicN_ZzQw",
-          "author": "ana",
-          "kind": "addExpense",
-          "at": "2026-10-28T19:03:00.000Z"
-        }
-      ],
-      "right": [
-        {
-          "v": 1,
           "id": "E4u_dfL3x5xNJk0FThKLjA",
           "author": "ana",
           "kind": "addExpense",
-          "at": "2026-10-28T19:03:00.000Z",
-          "expense": {
-            "id": "x1",
-            "description": "dinner",
-            "paidBy": "ana",
-            "amount": 9000,
-            "at": "2026-10-28T19:03:00.000Z",
-            "split": {
-              "type": "equal",
-              "among": [
-                "ana",
-                "ben"
-              ]
-            }
-          }
+          "at": "2026-10-28T19:03:00.000Z"
         }
       ],
       "expect": {
@@ -7856,7 +11238,7 @@
         ],
         "refused": [
           {
-            "id": "O3LPCrYWAt0kCFicN_ZzQw",
+            "id": "E4u_dfL3x5xNJk0FThKLjA",
             "code": "bill_missing_entry_payload"
           }
         ]

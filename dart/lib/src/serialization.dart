@@ -16,7 +16,8 @@ import 'rate.dart';
 /// The wire format version this library writes and the highest it reads.
 const int billVersion = 1;
 
-const Set<String> _splitModes = {'equal', 'percentage'};
+/// The split modes a bill may declare (§9.1).
+const Set<String> billSplitModes = {'equal', 'percentage'};
 const Set<String> _payoutTypes = {'zec', 'swap', 'cash'};
 const Set<String> _settlementMethods = {'shieldedZec', 'swap', 'cash'};
 
@@ -56,129 +57,34 @@ Bill decodeBill(Object? doc) {
   checkCurrency(currency);
   final billCurrency = currency as String;
 
-  final mode = map['splitMode'] ?? 'equal';
+  // §9.1. An optional scalar does not read `null` as absent.
+  final mode = map.containsKey('splitMode') ? map['splitMode'] : 'equal';
   if (mode is! String) {
     raise(SplitCode.billTypeError, 'A split mode is a string, got $mode');
   }
-  if (!_splitModes.contains(mode)) {
+  if (!billSplitModes.contains(mode)) {
     raise(SplitCode.billUnknownSplitMode, 'No such split mode: "$mode"');
   }
 
   final participants = <Participant>[];
   final ids = <String>{};
   for (final raw in _list(map['participants'])) {
-    final p = _object(raw);
-    final id = _string(p['id']);
-    // §9.1. An empty id is not a name anyone can be settled to, and two
-    // readers disagreeing about it fold different bills from one log.
-    if (id.isEmpty) {
-      raise(SplitCode.billBadParticipantId, 'A participant states an id');
-    }
-    if (!ids.add(id)) {
+    final participant = decodeParticipant(raw);
+    if (!ids.add(participant.id)) {
       raise(SplitCode.duplicateParticipant,
-          'Two participants share the id "$id"');
+          'Two participants share the id "${participant.id}"');
     }
-    participants.add(Participant(
-      id: id,
-      name: p.containsKey('name') ? _string(p['name']) : '',
-      payTo: p.containsKey('payTo') ? _string(p['payTo']) : null,
-      identityKey:
-          p.containsKey('identityKey') ? _string(p['identityKey']) : null,
-      payouts: [
-        for (final rawPayout in _list(p['payouts'])) _payout(rawPayout),
-      ],
-    ));
+    participants.add(participant);
   }
 
   final expenses = <Expense>[];
   for (final raw in _list(map['expenses'])) {
-    final e = _object(raw);
-    final own = _currencyOf(e, billCurrency);
-    final paidBy = e['paidBy'];
-    if (paidBy is! String || !ids.contains(paidBy)) {
-      raise(SplitCode.unknownParticipant,
-          'An expense is paid by $paidBy, who is not on this bill');
-    }
-    final split = e['split'];
-    if (split is! Map) {
-      raise(SplitCode.billTypeError, 'An expense states how it splits');
-    }
-    expenses.add(Expense(
-      id: _string(e['id']),
-      description:
-          e.containsKey('description') ? _string(e['description']) : '',
-      paidBy: paidBy,
-      amount: _integer(e['amount']),
-      currency: own,
-      at: canonicalInstant(e['at']),
-      split: split.cast<String, dynamic>(),
-    ));
+    expenses.add(decodeExpense(raw, billCurrency, ids));
   }
 
   final payments = <PaymentRecord>[];
   for (final raw in _list(map['payments'])) {
-    final p = _object(raw);
-    final own = _currencyOf(p, billCurrency);
-    final from = p['from'];
-    final to = p['to'];
-    if (from is! String ||
-        !ids.contains(from) ||
-        to is! String ||
-        !ids.contains(to)) {
-      raise(SplitCode.unknownParticipant,
-          'A payment names somebody who is not on this bill');
-    }
-    if (from == to) {
-      raise(SplitCode.selfPayment, '$from cannot pay themselves');
-    }
-    final method = p['method'];
-    if (method is! String || !_settlementMethods.contains(method)) {
-      raise(SplitCode.billUnknownSettlementMethod,
-          'No such settlement method: $method');
-    }
-    final amount = _integer(p['amount']);
-    if (amount < 0) {
-      raise(SplitCode.negativeAmount, 'A payment of $amount is negative');
-    }
-
-    int? zatoshi;
-    if (p.containsKey('zatoshi')) {
-      zatoshi = _integer(p['zatoshi']);
-      if (zatoshi <= 0) {
-        raise(SplitCode.negativeAmount,
-            'A payment sends more than nothing, got $zatoshi');
-      }
-    }
-
-    ExchangeRate? paidAt;
-    if (p.containsKey('paidAtRate')) {
-      final r = p['paidAtRate'];
-      if (r is! Map) {
-        raise(SplitCode.billTypeError, 'A rate is an object, got $r');
-      }
-      paidAt = _rate(r.cast<String, dynamic>());
-      // Checked against the currency the payment states, never one it
-      // inherited: a rate in another currency restates the debt at an
-      // unrelated number rather than pricing it.
-      if (paidAt.currency != own) {
-        raise(SplitCode.rateCurrencyMismatch,
-            'A rate in ${paidAt.currency} does not price a payment in $own');
-      }
-    }
-
-    payments.add(PaymentRecord(
-      id: _string(p['id']),
-      from: from,
-      to: to,
-      amount: amount,
-      currency: own,
-      method: method,
-      at: canonicalInstant(p['at']),
-      zatoshi: zatoshi,
-      paidAtRate: paidAt,
-      reference: p.containsKey('reference') ? _string(p['reference']) : null,
-      note: p.containsKey('note') ? _string(p['note']) : null,
-    ));
+    payments.add(decodePayment(raw, billCurrency, ids));
   }
 
   ExchangeRate? rate;
@@ -187,7 +93,7 @@ Bill decodeBill(Object? doc) {
     if (r is! Map) {
       raise(SplitCode.billTypeError, 'A rate is an object, got $r');
     }
-    rate = _rate(r.cast<String, dynamic>());
+    rate = decodeRate(r);
   }
 
   final rawConfirmed = map['confirmedPayments'];
@@ -214,6 +120,121 @@ Bill decodeBill(Object? doc) {
     // the other way settles a debt on the debtor's own unconfirmed claim.
     confirmedPayments: confirmedPayments,
     rate: rate,
+  );
+}
+
+/// Decodes one participant payload (§9.1).
+///
+/// Shared with the fold, which applies it to each `joinBill` before the
+/// participant reaches a bill document: a member the decoder would refuse must
+/// set its entry aside (§10.3), never make the whole document undecodable.
+Participant decodeParticipant(Object? raw) {
+  final p = _object(raw);
+  final id = _string(p['id']);
+  // §9.1. An empty id is not a name anyone can be settled to, and two
+  // readers disagreeing about it fold different bills from one log.
+  if (id.isEmpty) {
+    raise(SplitCode.billBadParticipantId, 'A participant states an id');
+  }
+  return Participant(
+    id: id,
+    name: p.containsKey('name') ? _string(p['name']) : '',
+    payTo: p.containsKey('payTo') ? _string(p['payTo']) : null,
+    identityKey:
+        p.containsKey('identityKey') ? _string(p['identityKey']) : null,
+    payouts: [
+      for (final rawPayout in _list(p['payouts'])) _payout(rawPayout),
+    ],
+  );
+}
+
+/// Decodes one expense payload (§9.1), against the ids already on the bill.
+Expense decodeExpense(Object? raw, String billCurrency, Set<String> ids) {
+  final e = _object(raw);
+  final own = _currencyOf(e, billCurrency);
+  final paidBy = e['paidBy'];
+  if (paidBy is! String || !ids.contains(paidBy)) {
+    raise(SplitCode.unknownParticipant,
+        'An expense is paid by $paidBy, who is not on this bill');
+  }
+  final split = e['split'];
+  if (split is! Map) {
+    raise(SplitCode.billTypeError, 'An expense states how it splits');
+  }
+  return Expense(
+    id: _string(e['id']),
+    description: e.containsKey('description') ? _string(e['description']) : '',
+    paidBy: paidBy,
+    amount: _integer(e['amount']),
+    currency: own,
+    at: canonicalInstant(e['at']),
+    split: split.cast<String, dynamic>(),
+  );
+}
+
+/// Decodes one payment payload (§9.2), against the ids already on the bill.
+PaymentRecord decodePayment(Object? raw, String billCurrency, Set<String> ids) {
+  final p = _object(raw);
+  final own = _currencyOf(p, billCurrency);
+  final from = p['from'];
+  final to = p['to'];
+  if (from is! String ||
+      !ids.contains(from) ||
+      to is! String ||
+      !ids.contains(to)) {
+    raise(SplitCode.unknownParticipant,
+        'A payment names somebody who is not on this bill');
+  }
+  if (from == to) {
+    raise(SplitCode.selfPayment, '$from cannot pay themselves');
+  }
+  final method = p['method'];
+  if (method is! String || !_settlementMethods.contains(method)) {
+    raise(SplitCode.billUnknownSettlementMethod,
+        'No such settlement method: $method');
+  }
+  final amount = _integer(p['amount']);
+  if (amount < 0) {
+    raise(SplitCode.negativeAmount, 'A payment of $amount is negative');
+  }
+
+  int? zatoshi;
+  if (p.containsKey('zatoshi')) {
+    zatoshi = _integer(p['zatoshi']);
+    if (zatoshi <= 0) {
+      raise(SplitCode.negativeAmount,
+          'A payment sends more than nothing, got $zatoshi');
+    }
+  }
+
+  ExchangeRate? paidAt;
+  if (p.containsKey('paidAtRate')) {
+    final r = p['paidAtRate'];
+    if (r is! Map) {
+      raise(SplitCode.billTypeError, 'A rate is an object, got $r');
+    }
+    paidAt = decodeRate(r);
+    // Checked against the currency the payment states, never one it
+    // inherited: a rate in another currency restates the debt at an
+    // unrelated number rather than pricing it.
+    if (paidAt.currency != own) {
+      raise(SplitCode.rateCurrencyMismatch,
+          'A rate in ${paidAt.currency} does not price a payment in $own');
+    }
+  }
+
+  return PaymentRecord(
+    id: _string(p['id']),
+    from: from,
+    to: to,
+    amount: amount,
+    currency: own,
+    method: method,
+    at: canonicalInstant(p['at']),
+    zatoshi: zatoshi,
+    paidAtRate: paidAt,
+    reference: p.containsKey('reference') ? _string(p['reference']) : null,
+    note: p.containsKey('note') ? _string(p['note']) : null,
   );
 }
 
@@ -247,13 +268,26 @@ Payout _payout(Object? raw) {
   );
 }
 
-ExchangeRate _rate(Map<String, dynamic> raw) {
-  checkCurrency(raw['currency']);
+/// Decodes one exchange rate (§7).
+///
+/// Shared with the fold, which applies it to each `setRate` before the rate
+/// reaches a bill document: a member the decoder would refuse sets its entry
+/// aside (§10.3) rather than making the whole document undecodable.
+///
+/// §7 makes only `source` optional, so `at` is required here. A rate with no
+/// instant prices an expense at a moment nobody stated.
+ExchangeRate decodeRate(Object? raw) {
+  final r = _object(raw);
+  checkCurrency(r['currency']);
+  final per = _integer(r['minorUnitsPerZec']);
+  if (per <= 0) {
+    raise(SplitCode.rateNotPositive, 'A rate of $per is not positive');
+  }
   return ExchangeRate(
-    currency: raw['currency'] as String,
-    minorUnitsPerZec: _integer(raw['minorUnitsPerZec']),
-    at: raw.containsKey('at') ? _string(raw['at']) : '',
-    source: raw.containsKey('source') ? _string(raw['source']) : null,
+    currency: r['currency'] as String,
+    minorUnitsPerZec: per,
+    at: canonicalInstant(r['at']),
+    source: r.containsKey('source') ? _string(r['source']) : null,
   );
 }
 

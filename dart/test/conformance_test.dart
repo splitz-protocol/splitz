@@ -176,22 +176,26 @@ void main() {
       return;
     }
     if (c.containsKey('left')) {
-      final r = mergeLogs([
-        [
-          for (final e in (c['left'] as List))
-            (e as Map).cast<String, dynamic>()
-        ],
-        [
-          for (final e in (c['right'] as List))
-            (e as Map).cast<String, dynamic>()
-        ],
-      ]);
-      produce({
-        'merged': r.merged,
-        'refused': [
-          for (final a in r.refused) {'id': a.id, 'code': a.code},
-        ],
-      });
+      final left = [
+        for (final e in (c['left'] as List)) (e as Map).cast<String, dynamic>()
+      ];
+      final right = [
+        for (final e in (c['right'] as List)) (e as Map).cast<String, dynamic>()
+      ];
+      Map<String, Object?> answer(MergeResult r) => {
+            'merged': r.merged,
+            'refused': [
+              for (final a in r.refused) {'id': a.id, 'code': a.code},
+            ],
+          };
+      // §10.2's union is commutative, which is a claim about this
+      // implementation and not only about the reference that wrote the
+      // expectation. Both orders must give one answer.
+      final forward = answer(mergeLogs([left, right]));
+      final backward = answer(mergeLogs([right, left]));
+      expect(jsonEncode(backward), jsonEncode(forward),
+          reason: 'merge is not commutative');
+      produce(forward);
       return;
     }
     // A case listing `verifies` is driven with a verifier that accepts exactly

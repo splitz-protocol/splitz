@@ -8,9 +8,11 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/KamaIOps/Splitz-protocol"
 readme = "README.md"
 # The conformance corpus lives at the repository root, one level above this
-# package, so a published crate cannot carry it. tests/conformance.rs skips
-# when it is absent and says where to find it.
-include = ["src/**", "tests/**", "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE"]
+# package, so a published crate cannot carry it. `tests/` is therefore left
+# out as well: a suite with no corpus to run asserts nothing, and cargo has no
+# skip state in which to say so — it would report `ok`. The suite is a lane of
+# the repository, not an artifact of the package.
+include = ["src/**", "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE"]
 
 [dependencies]
 serde_json = { version = "1", features = ["preserve_order"] }

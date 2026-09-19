@@ -538,8 +538,12 @@ implementations' output comparable byte for byte.
   does not parse addresses, so an implementation MUST NOT attach a memo to a
   recipient it has not confirmed can receive one.
 
-- An address is written verbatim. It MUST be non-empty and alphanumeric, which
-  is all the ZIP 321 grammar admits (`zip321_bad_address`). **This is a
+- An address is written verbatim. It MUST be non-empty and **ASCII
+  alphanumeric** — `A`–`Z`, `a`–`z`, `0`–`9` and nothing else — which is all
+  the ZIP 321 grammar admits (`zip321_bad_address`): that grammar reads
+  `zcashaddress = 1*( ALPHA / DIGIT )`, and RFC 3986's `ALPHA` and `DIGIT` are
+  ASCII. A Unicode-aware test is a different rule: it admits U+00E9 and
+  U+FF12, which are letters and digits and are not in the grammar. **This is a
   syntactic check, not validation:** a wallet MUST put every address through
   its own decoder — **ZIP 316** for a Unified Address, and the network's own
   rules for the receivers inside it. This protocol never decodes one, so it
@@ -712,7 +716,21 @@ refused with `bill_unknown_split_mode`.
 **Every payload carrying an amount states its own `currency`.** An expense or
 payment therefore decodes on its own, which is what lets §10.3 transmit a
 subset of a log that does not include the entry that opened the bill. A reader
-MUST fall back to the enclosing bill's currency when the field is absent.
+MUST fall back to the enclosing bill's currency when the field is **absent**,
+and a present value that is not a currency is **not** absent: it is refused
+(`bill_bad_currency`), and §10.3 sets the entry carrying it aside. Reading the
+two the same way lets one wrong-typed member redenominate an amount silently.
+
+**An optional member that is a list reads `null` as absent**, because both
+denote none and the fallback is the empty list rather than a value standing in
+for something. **An optional member that is a scalar does not**: there `null`
+is refused like any other wrong type, because the fallback would stand in for
+a value nobody stated.
+
+**An optional member that is an object is refused when it is not one**, with
+one exception stated where it lives: §11.2's `invite`, which a reader ignores
+rather than refuses, because it is carried for the caller and takes no part in
+what the payload means.
 
 ### 9.2 Payments
 
@@ -1144,6 +1162,26 @@ single malformed entry propagates to every device. Aborting on it leaves the
 bill permanently unopenable — including unopenable to append the void that would
 remove it. A reader reports what it set aside and shows the rest.
 
+**This binds every member the reader's own decoder requires, not only the ones
+§10.1 types at ingress.** A document the fold returns and the decoder then
+refuses is the same failure wearing a different code: the bill is unopenable
+and nothing names the entry that did it. So a reader decides each participant,
+expense, payment and rate by the same rules §9 decodes them under — and each
+expense's split by §4, which is what turns it into what anyone owes — at the
+point it applies the entry, and sets aside the one that fails. A reader that
+leaves any of them to a later pass has moved the failure, not removed it: the
+bill is built and then will not open, or opens and will not balance, and
+`setAside` names nothing either way.
+
+**The refusal report is per occurrence, and is not part of the convergent
+state.** §10.2's union converges — the bill, the balances and what was
+withdrawn are the same on every device that has seen the same entries. The
+list of refusals is not: a device that received one malformed entry twice
+reports it twice, and a device that merged before folding reports it from the
+merge rather than from the fold. Both have reported what they refused, which
+is all this section asks. A reader MUST NOT treat two devices' refusal lists
+differing as evidence that their bills differ.
+
 ### 10.4 Authorisation
 
 **An entry speaks for its author.**
@@ -1572,6 +1610,32 @@ than tight.
 
 `n` is optional and reads as empty when absent.
 
+**`x`** is optional and holds the invite's expiry as a Unix timestamp in
+seconds. **`v` and `x` are both bare decimal integers**: ASCII digits only, no
+sign, no padding, no whitespace, and at most `9223372036854775807` — nineteen
+digits. Anything else is `invite_missing_version` and `invite_bad_expiry`
+respectively.
+
+**An over-long numeral is refused, never raised.** A bound expressed only as
+a comparison has to build the number first, and a reader whose integer type
+refuses to convert an over-long numeral at all then fails on exactly the input
+the bound exists to refuse. Checking the length first is one way; catching the
+conversion is another. What a reader may not do is let the numeral escape as
+something other than `invite_missing_version` or `invite_bad_expiry`.
+
+Padding is refused for the same reason for both: `007` and `7` are one value
+written two ways, and a length bound and a value bound disagree about which
+numerals they are.
+
+**An encoder refuses what this parser refuses.** A bound enforced only on
+decode lets a caller build a URI no reader accepts, and the caller hears about
+it from somebody else's scanner.
+
+`invite_missing_version` covers a `v` that is absent **and** one that is
+present and unreadable — non-decimal, padded, zero, or past the bound. A
+wallet's user-facing string is derived from the code (§12), so it says the
+invite states no version it can read, never that it states none.
+
 Missing `v` is `invite_missing_version`; a version above the reader's is
 `invite_future_version`; missing or empty `b` is `invite_missing_bill_id`;
 missing or empty `k` is `invite_missing_key`; an unparseable `x` is
@@ -1581,13 +1645,21 @@ missing or empty `k` is `invite_missing_key`; an unparseable `x` is
 Scanning the code is the whole of joining: no account, no server. That also
 means anyone who photographs the screen can join, which is what `x` is for.
 
+**This protocol parses `x` and does not enforce it.** No refusal code here
+means "expired", and no reader compares it to a clock: a clock is not in this
+document's reach, the two devices' clocks disagree, and `at` is already
+whatever its author wrote. Honouring an expiry is the host's (§13).
+
 ### 11.2 Scanned payloads
 
 `splitz1:<base64url>` carries an invite together with the log, so a joiner who
 scans it holds a bill rather than an id. `splitzd1:<base64url>` carries a
 joiner's answer: the entries the inviter has not seen. Two scans, no network.
 
-**A payload is capped at 2331 bytes in both directions.** Refusing to encode
+**A payload is capped at 2331 characters of encoded body in both
+directions** — the base64url after the prefix, not the whole scanned string.
+The prefix is fixed and known, so measuring it would make the two prefixes
+carry different amounts. Refusing to encode
 past it (`payload_too_large`) keeps a device from producing a code no camera
 can read; refusing to *decode* past it keeps a stranger's code from handing a
 device more work than a QR code could have carried. A cap enforced only on
@@ -1595,17 +1667,76 @@ encode bounds what an implementation emits rather than what it accepts, which
 is the wrong direction for a trust boundary. A bill that has outgrown a scan
 needs a relay.
 
-2331 bytes is what a version-40 QR code holds in byte mode at error-correction
-level M. **The cap is that ceiling rather than a fraction of it, because the
-format has a floor.** The smallest signed payload — one bill, two participants,
-no expenses — encodes to 1118 characters with the shortest ids this
-specification allows, and 1227 with ids a wallet would use, because every entry
-carries an 86-character signature, the creator's join a 43-character identity
-key, and base64 adds a third again.
+The body is an object carrying `v` and `log`. **`v` is bounded exactly as
+§11.1 bounds the invite's**: an integer of at least 1 and at most
+`9223372036854775807`, and anything else is `payload_damaged`. Without the
+bound each reader's integer type decides what one code means, and one QR
+becomes `payload_damaged` to one wallet and `payload_future_version` to
+another.
 
-A cap set below that floor for scanning margin refuses every bill there is. An
-implementation MUST NOT set it below the floor, and a conformance suite SHOULD
-assert that the smallest signed bill encodes.
+**Only `splitz1:` carries an `invite`**, and only an object is one. It is
+*intended* to hold §11.1's `v`, `b` and `k`, without which a joiner has the
+log and not the key it is encrypted under — but this section checks only that
+it is an object. An empty one is accepted, and what is inside is the caller's
+to put through §11.1. A reader **MUST** ignore an `invite` on a
+`splitzd1:` payload and one that is not an object. A delta's reader already
+holds a key, and a second one arriving from a peer names a bill and a key that
+reader never chose. The member is carried verbatim for the caller to put
+through §11.1; this section does not validate what is inside it.
+
+**A body nests at most 64 levels deep**, and deeper is `payload_damaged`.
+**The body itself is level 1, and every value occupies a level, scalars
+included** — a string inside an array inside the body is level 3. Counting
+only the containers gives a figure one smaller and a reader who does that
+accepts a body these readers refuse, which is the divergence this paragraph
+exists to prevent.
+
+The limit is stated here rather than inherited from whichever JSON library a
+reader links: one parser gives up at its own depth and another does not. The
+cap is no defence, because a level of nesting costs two bytes. The deepest a
+conforming document reaches is a participant id inside the `sharedBy` array
+inside an itemised split, at **nine**: body, `log`, the entry, `expense`,
+`split`, `items`, the item, `sharedBy`, the id.
+
+2331 is what a version-40 QR code holds in byte mode at error-correction level
+M. **The cap is that ceiling rather than a fraction of it, because the format
+starts near it.** Every entry carries an 86-character signature; the
+`createBill` a 43-character creator key and a 22-character nonce; a joiner's
+participant a 43-character identity key (§10.7); a payout address about 106; and
+base64url adds a third again.
+
+Every figure below comes from a case in `vectors/payload.json`, which is
+where the measurement lives; the numbers here follow it, and **the vector is
+the normative statement**. Each row names its case, because the composition is
+what sets the size and prose cannot carry all of it: rows three to five are
+measured with ids `ana`/`ben`/`cai`, display names of three characters, a bill
+name of six, 106-character payout addresses, and an expense whose description
+is six characters.
+
+| payload | case in `vectors/payload.json` | encoded |
+|---|---|---|
+| one `createBill`, two `joinBill`, no expenses, its invite, single-character ids, no display names, the joiner publishing an identity key | `the_smallest_signed_bill` | **1268** |
+| the same with the ids and names a wallet would write | `…_a_wallet_would_write` | **1323** |
+| two participants with payout addresses, one expense | `two_payable_participants_and_one_expense` | **2106** |
+| three participants with payout addresses, no expenses | `three_payable_participants_and_no_expenses` | **2188** |
+| three participants with payout addresses, one expense | `three_payable_participants_and_one_expense` | refused |
+
+The headroom on the third row is 225 characters, so the free text on an
+expense is part of the budget: the same bill with a 176-character description
+is refused.
+
+**The second half of that table is the number a wallet plans against.** A
+signed bill with no payout address on it cannot be settled from, and each
+participant that carries one costs between 531 and 553 characters, depending
+on the length of their id and display name. So a scanned
+`splitz1:` reaches **two people and one expense, or three people and none.** A
+bill past that needs a relay — which is what "a bill that has outgrown a scan"
+above means, and it is reached sooner than the floor suggests.
+
+An implementation **MUST NOT** set the cap below the smallest signed bill, and
+a conformance suite **SHOULD** assert that the smallest signed bill encodes.
+Note the floor is not a licence: a cap between the floor and the ceiling
+refuses no bill at all in the first row and every bill in the fourth.
 
 A body that is not this prefix is `payload_not_a_payload`; one whose base64url
 does not decode is `payload_damaged`; one that decodes to an object carrying no
@@ -1771,5 +1902,9 @@ input at all is conformant without it.
   refused in its entirety, which takes the unrelated shielded outputs with it.
   This protocol does not parse addresses, so the rule cannot live in §8; a
   wallet has a decoder and MUST spend it before setting a memo.
+- **Honouring an invite's expiry.** §11.1 fixes what `x` looks like and parses
+  it; comparing it to a clock is the wallet's, along with which clock and what
+  to do about the two devices disagreeing. There is no refusal code for an
+  expired invite because this protocol cannot tell one.
 - **Rate discovery.** §7 specifies what a snapshotted rate does, not where it
   came from.

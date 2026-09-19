@@ -127,7 +127,13 @@ Invite parseInvite(String text) {
   if (rawVersion == null || !RegExp(r'^[0-9]+$').hasMatch(rawVersion)) {
     raise(SplitCode.inviteMissingVersion, 'An invite states its version');
   }
-  final version = int.parse(rawVersion);
+  // Bounded before it is compared (§11.1): a numeral wider than 64 bits takes
+  // `int.parse` outside SplitError, and a scanned code must not reach that.
+  final version = int.tryParse(rawVersion);
+  if (version == null) {
+    raise(SplitCode.inviteMissingVersion,
+        'A version fits in a signed 64-bit integer, got "$rawVersion"');
+  }
   // No sign, no padding, no whitespace.
   if (rawVersion != version.toString() || version < 1) {
     raise(SplitCode.inviteMissingVersion,
@@ -162,7 +168,13 @@ Invite parseInvite(String text) {
     if (!RegExp(r'^[0-9]+$').hasMatch(raw)) {
       raise(SplitCode.inviteBadExpiry, 'Not an expiry: "$raw"');
     }
-    expiry = int.parse(raw);
+    expiry = int.tryParse(raw);
+    // A bare decimal integer, as `v` is: no padding, and within range.
+    // `int.tryParse` returns null above the range rather than saturating.
+    if (expiry == null || raw != expiry.toString()) {
+      raise(SplitCode.inviteBadExpiry,
+          'An expiry is a bare decimal integer within 64 bits, got "$raw"');
+    }
   }
 
   return Invite(
@@ -187,7 +199,23 @@ String _escape(String text) {
 }
 
 /// Renders an invite.
+///
+/// An encoder refuses what [parseInvite] refuses: a bound enforced only on
+/// decode lets a caller build a URI no reader accepts, and the caller learns
+/// of it from somebody else's scanner.
 String renderInvite(Invite invite) {
+  final expiry = invite.expiry;
+  if (expiry != null && expiry < 0) {
+    raise(SplitCode.inviteBadExpiry, 'An expiry is not negative, got $expiry');
+  }
+  if (invite.billId.isEmpty ||
+      invite.billId.length > maxInviteBillId ||
+      !_isB64Url(invite.billId)) {
+    raise(SplitCode.inviteBadBillId, 'Not a bill id: "${invite.billId}"');
+  }
+  if (invite.key.isEmpty || !_isB64Url(invite.key)) {
+    raise(SplitCode.inviteMissingKey, 'An invite carries a base64url key');
+  }
   final parts = <String>[
     'v=$inviteVersion',
     'b=${_escape(invite.billId)}',
