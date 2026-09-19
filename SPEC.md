@@ -1884,7 +1884,14 @@ input at all is conformant without it.
   transacting on. The vectors carry real mainnet Unified Addresses precisely so
   that a wallet running the corpus puts each one through its own decoder rather
   than through filler that would never reach one.
-- **Transaction construction, fees, signing, broadcast.**
+- **Transaction construction, fees, signing, broadcast.** §8's payment request
+  is one input to that, and it is not the only shape a wallet may want: a
+  partially-created transaction (PCZT) carries a transaction between a creator,
+  an updater, signers, a prover and a combiner before an extractor turns it
+  into something broadcastable, which is the route to take when several people
+  contribute to one transaction rather than each sending their own. This
+  protocol produces a URI and stops; which of the two a wallet builds from it
+  is the wallet's.
 - **The curve operation.** §10.6 fixes the message a signature covers and §10.1
   what a host that verifies must check; producing and checking the Ed25519
   signature itself is the host's, as is where the private half is kept.

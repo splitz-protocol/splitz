@@ -126,6 +126,14 @@ Map<String, Object?> answer(Map<String, dynamic> op) {
         };
       });
 
+    case 'property':
+      return {
+        'ok': [
+          for (final run in (op['runs'] as List))
+            answer((run as Map).cast<String, dynamic>()),
+        ],
+      };
+
     case 'billid':
       return attempt(
           () => deriveBillId((op['entry'] as Map).cast<String, dynamic>()));

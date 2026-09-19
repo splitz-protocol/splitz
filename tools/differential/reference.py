@@ -93,6 +93,9 @@ def answer(op):
             return {"merged": merged, "refused": refused}
         return attempt(merge)
 
+    if kind == "property":
+        return {"ok": [answer(run) for run in op["runs"]]}
+
     if kind == "billid":
         return attempt(lambda: _spec.derive_bill_id(op["entry"]))
 

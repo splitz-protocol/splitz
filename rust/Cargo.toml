@@ -20,8 +20,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 [dev-dependencies]
 # The canonical ZIP 321 implementation, used only as an external oracle in
 # tests/oracle.rs. Stock from crates.io rather than a fork, so the check is
-# reproducible by anybody. It is a dev-dependency: a consumer of this crate
-# still takes one dependency, serde_json.
+# reproducible by anybody. These are dev-dependencies of the repository rather
+# than of the published package: `include` above leaves out `tests/`, so a
+# consumer builds against serde_json alone and never resolves these at all.
 zip321 = "0.9"
 zcash_address = "0.13"
 zcash_protocol = "0.10"

@@ -144,6 +144,13 @@ fn answer(op: &Value) -> Value {
             }))
         }),
 
+        "property" => json!({
+            "ok": op["runs"]
+                .as_array()
+                .map(|runs| runs.iter().map(answer).collect::<Vec<_>>())
+                .unwrap_or_default(),
+        }),
+
         "billid" => attempt(|| Ok(json!(splitz::derive_bill_id(&op["entry"])?))),
 
         _ => json!({"refused": "unknown_operation"}),

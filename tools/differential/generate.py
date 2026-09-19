@@ -132,6 +132,7 @@ def operations(seed, count):
     kinds = [
         "allocate", "split", "rate", "amount", "qchar", "instant",
         "invite", "canonical", "billid", "request", "fold", "merge",
+        "property",
     ]
     ops = []
     pairs = _logs.corruptions()
@@ -231,6 +232,44 @@ def operations(seed, count):
             # entries and rule 2 no work at all.
             cut = rng.randrange(1, len(log)) if len(log) > 1 else 1
             op["parts"] = [log[:cut + 1], _logs.variants(rng, log[cut:])]
+
+        elif kind == "property":
+            # A property relates one implementation's answers to each other,
+            # which is what the cross-implementation diff cannot see: three
+            # implementations can agree on every input and all be wrong about
+            # the union. Each run below is answered exactly as its own
+            # operation would be, and `properties.py` checks the relation.
+            log = _logs.log(rng, corrupt=rng.choice([0, 0, 1]))
+            if log is None or len(log) < 2:
+                continue
+            # Every entry twice, the copies differing only in members §9.5's
+            # digest excludes, so each id reaches §10.2's resolution with two
+            # candidates. Disjoint parts make every one of these properties
+            # true for free: nothing has to be resolved, so nothing about
+            # resolution is tested.
+            full = log + _logs.variants(rng, log)
+            rng.shuffle(full)
+            shuffled = list(full)
+            rng.shuffle(shuffled)
+            which = rng.choice(["merge_is_idempotent", "merge_commutes",
+                                "the_union_is_the_same_set",
+                                "fold_is_order_independent"])
+            op["property"] = which
+            if which == "merge_is_idempotent":
+                op["runs"] = [{"op": "merge", "parts": [full]},
+                              {"op": "merge", "parts": [full, full]}]
+            elif which == "merge_commutes":
+                cut = rng.randrange(1, len(full))
+                a, b = full[:cut], full[cut:]
+                op["runs"] = [{"op": "merge", "parts": [a, b]},
+                              {"op": "merge", "parts": [b, a]}]
+            elif which == "the_union_is_the_same_set":
+                left, right = _logs.partitions(rng, full)
+                op["runs"] = [{"op": "merge", "parts": left},
+                              {"op": "merge", "parts": right}]
+            else:
+                op["runs"] = [{"op": "fold", "log": full},
+                              {"op": "fold", "log": shuffled}]
 
         ops.append(op)
     return ops

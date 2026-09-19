@@ -21,7 +21,7 @@ GENERATE = HERE / "generate.py"
 # comes back `unknown_operation` from all of them and agrees vacuously.
 EXPECTED_KINDS = {
     "allocate", "split", "rate", "amount", "qchar", "instant",
-    "invite", "canonical", "billid", "request", "fold", "merge",
+    "invite", "canonical", "billid", "request", "fold", "merge", "property",
 }
 
 
@@ -123,6 +123,24 @@ def main():
     check("every log entry carries a derived id",
           all(len(e.get("id", "")) == 22
               for o in ops if o["op"] == "fold" for e in o["log"]))
+
+    # A property over parts that share no entry id is true for free: nothing
+    # reaches §10.2's resolution, so nothing about resolution is tested. Every
+    # property operation must carry an id with two different candidates.
+    props = [o for o in ops if o["op"] == "property"]
+    shapes = {o["property"] for o in props}
+    check("covers every property shape", len(shapes) == 4, f"{sorted(shapes)}")
+    trivial = []
+    for o in props:
+        sigs = {}
+        for one in o["runs"]:
+            for part in (one.get("parts") or [one.get("log")]):
+                for e in part:
+                    sigs.setdefault(e["id"], set()).add(e.get("sig"))
+        if not any(len(v) > 1 for v in sigs.values()):
+            trivial.append(o["id"])
+    check("no property is true for free", not trivial,
+          f"{len(trivial)} of {len(props)} operations share no contested id")
 
     instants = {o.get("text", "") for o in ops if o["op"] == "instant"}
     check("reaches a leap second",

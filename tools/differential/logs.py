@@ -214,6 +214,28 @@ def log(rng, corrupt=0, pair=None):
     return sealed
 
 
+def partitions(rng, sealed):
+    """Two ways of dealing one log out to devices, each covering all of it.
+
+    §10.2's union is over a set, so a device that has seen every entry has
+    seen the same history however the entries arrived and however they were
+    grouped. Two partitions of one log are the input that says so.
+    """
+    out = []
+    for _ in range(2):
+        shuffled = list(sealed)
+        rng.shuffle(shuffled)
+        cuts = sorted(rng.sample(range(1, len(shuffled)), min(2, len(shuffled) - 1))) \
+            if len(shuffled) > 2 else [1]
+        parts, last = [], 0
+        for cut in cuts:
+            parts.append(shuffled[last:cut])
+            last = cut
+        parts.append(shuffled[last:])
+        out.append([p for p in parts if p])
+    return out
+
+
 def variants(rng, sealed):
     """Copies of some entries differing only in members the digest excludes.
 

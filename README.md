@@ -19,7 +19,9 @@ implementations, one specification, one set of vectors that both run.
 cd dart && dart test                 # 427 tests, 408 of them the corpus
 cd rust && cargo test                # the same 408 cases, plus the oracle
 cd rust && cargo test --release      # and again with overflow checks off
-tools/differential/run.sh 1 1200     # all three implementations, one operation list
+tools/differential/run.sh 1 1200     # three implementations, one operation list,
+                                     #   diffed against each other and against
+                                     #   §10.2's own properties
 python3 tools/spec/claims.py         # SPEC.md's claims, against the tree
 python3 tools/parity/surface.py      # the two public surfaces, diffed
 tools/web-target/run.sh              # asserts it still does not compile to JS
@@ -114,8 +116,8 @@ by a test in each implementation whose string type can hold the input.
 
 ## Integrating it into a wallet
 
-`INTEGRATING.md` has the whole surface. The short version is four calls, and
-the URI is where the library stops: the wallet decodes the addresses, builds
+`INTEGRATING.md` has the whole surface. The short version is four steps in
+three calls, and the URI is where the library stops: the wallet decodes the addresses, builds
 the transaction and signs it.
 
 ## Licence

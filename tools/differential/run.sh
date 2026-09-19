@@ -44,9 +44,20 @@ cargo_bin="${CARGO:-cargo}"
 python3 "$root/tools/differential/reference.py" \
   < "$work/ops.jsonl" > "$work/reference.jsonl"
 
-python3 "$root/tools/differential/compare.py" \
-  "$work/ops.jsonl" \
-  "dart=$work/dart.jsonl" \
-  "rust-debug=$work/rust-debug.jsonl" \
-  "rust-release=$work/rust-release.jsonl" \
+# Two checks over one run: the implementations against each other, and each
+# against itself. A property they all break the same way survives the first
+# and fails only the second, so both are always reported — neither short
+# circuits the other, and the exit status is the worse of the two.
+answers=(
+  "$work/ops.jsonl"
+  "dart=$work/dart.jsonl"
+  "rust-debug=$work/rust-debug.jsonl"
+  "rust-release=$work/rust-release.jsonl"
   "reference=$work/reference.jsonl"
+)
+
+status=0
+python3 "$root/tools/differential/compare.py" "${answers[@]}" || status=1
+echo
+python3 "$root/tools/differential/properties.py" "${answers[@]}" || status=1
+exit "$status"

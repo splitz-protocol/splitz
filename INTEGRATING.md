@@ -1,7 +1,8 @@
 # Integrating splitz into a wallet
 
-The whole surface is four calls: net the bill, plan the settlement, price it,
-render one payer's obligation as a payment request.
+The whole surface is four steps: net the bill, plan the settlement, price it,
+render one payer's obligation as a payment request. `renderObligation` does the
+last two of those, so the shortest wallet makes three calls.
 
 ## Dart
 
