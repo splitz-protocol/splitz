@@ -81,7 +81,7 @@ BILL_CASES = [
      mutate(lambda d: d["participants"][0].__setitem__("payouts", [{"type": "gold"}]))),
     ("an_expense_in_another_currency",
      mutate(lambda d: d["expenses"][0].__setitem__("currency", "USD"))),
-    ("a_payer_who_is_not_on_the_tab",
+    ("a_payer_who_is_not_on_the_bill",
      mutate(lambda d: d["expenses"][0].__setitem__("paidBy", "zed"))),
     ("an_amount_of_the_wrong_type",
      mutate(lambda d: d["expenses"][0].__setitem__("amount", "9000"))),

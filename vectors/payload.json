@@ -3,7 +3,7 @@
   "count": 38,
   "cases": [
     {
-      "name": "encode_a_tab",
+      "name": "encode_a_bill",
       "encode": {
         "prefix": "splitz1:",
         "body": {
@@ -3368,7 +3368,7 @@
       "error": "payload_too_large"
     },
     {
-      "name": "decode_a_tab",
+      "name": "decode_a_bill",
       "payload": "splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ",
       "expect": {
         "prefix": "splitz1:",

@@ -94,7 +94,7 @@ def payload_cases():
 
     # --- encode ---
     for name, prefix, body in [
-        ("encode_a_tab",            "splitz1:",  {"v": 1, "log": [ENTRY]}),
+        ("encode_a_bill",            "splitz1:",  {"v": 1, "log": [ENTRY]}),
         ("encode_a_delta",          "splitzd1:", {"v": 1, "log": [ENTRY]}),
         ("encode_an_empty_log",     "splitz1:",  {"v": 1, "log": []}),
         ("encode_sorts_keys",       "splitz1:",  {"log": [ENTRY], "v": 1}),
@@ -136,7 +136,7 @@ def payload_cases():
     # --- decode ---
     oversize = "splitz1:" + "A" * (PAYLOAD_CAP + 1)
     for name, text in [
-        ("decode_a_tab",                 good),
+        ("decode_a_bill",                 good),
         ("decode_a_delta",               encode_payload("splitzd1:", {"v": 1, "log": []})),
         ("decode_strips_scan_padding",   "﻿  " + good + "\n"),
         ("padding_does_not_count_toward_the_cap",

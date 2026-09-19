@@ -1308,7 +1308,7 @@
       "error": "currency_mismatch"
     },
     {
-      "name": "a_payer_who_is_not_on_the_tab",
+      "name": "a_payer_who_is_not_on_the_bill",
       "json": {
         "v": 1,
         "id": "weekend",
