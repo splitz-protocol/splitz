@@ -43,6 +43,40 @@ Map<String, int> _equal(int total, Map<String, dynamic> spec) {
 /// The rule is sign agreement rather than non-negativity because §10.4 makes a
 /// refund an expense with a negative total, and every method must divide one.
 /// Refuses an id list holding anything but strings (§10.1, §4).
+/// Every participant id a split names, whatever method it uses.
+///
+/// Kept beside the split methods so a new method cannot add a place an id
+/// hides. A caller checks these against the bill's participants; the ids are
+/// returned rather than checked here because this file knows nothing about
+/// which bill a split belongs to.
+Set<String> splitParticipants(Map<String, dynamic> spec) {
+  final out = <String>{};
+  void addAll(Object? v) {
+    if (v is List) {
+      for (final x in v) {
+        if (x is String) out.add(x);
+      }
+    }
+  }
+
+  addAll(spec['among']);
+  for (final key in const ['amounts', 'basisPoints', 'shareCounts']) {
+    final m = spec[key];
+    if (m is Map) {
+      for (final k in m.keys) {
+        if (k is String) out.add(k);
+      }
+    }
+  }
+  final items = spec['items'];
+  if (items is List) {
+    for (final item in items) {
+      if (item is Map) addAll(item['sharedBy']);
+    }
+  }
+  return out;
+}
+
 void checkIdLists(Map<String, dynamic> spec) {
   for (final key in const ['among', 'sharedBy']) {
     final list = spec[key];

@@ -216,6 +216,25 @@ FOLD_CASES = [
               "expense": {"id": "x9", "paidBy": "ben", "amount": 10,
                           "at": AT(6), "split": ["ana", "ben"]}},
              void("v30", "ana", "j2", 7)], C["id"]),
+    # Section 10.8 rests on the fold being unable to apply an entry naming
+    # somebody who is not on the bill. `paidBy` was checked; the ids a split
+    # names were not, so such an expense was kept and the refusal surfaced
+    # from balances on a bill that already looked whole.
+    ("an_expense_splits_to_somebody_who_never_joined",
+     BASE + [{"v": 1, "id": "e11", "author": "ana", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x11", "paidBy": "ana", "amount": 10,
+                          "at": AT(6),
+                          "split": {"type": "equal",
+                                    "among": ["ana", "nobody"]}}}], C["id"]),
+    ("an_itemized_share_names_somebody_who_never_joined",
+     BASE + [{"v": 1, "id": "e12", "author": "ana", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x12", "paidBy": "ana", "amount": 10,
+                          "at": AT(6),
+                          "split": {"type": "itemized", "items": [
+                              {"minorUnits": 10,
+                               "sharedBy": ["ana", "nobody"]}]}}}], C["id"]),
     ("a_split_whose_items_are_scalars",
      BASE + [{"v": 1, "id": "e10", "author": "ben", "kind": "addExpense",
               "at": AT(6),

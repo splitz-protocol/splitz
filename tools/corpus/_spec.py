@@ -795,6 +795,33 @@ def decode_participant(raw):
     return p
 
 
+def split_participants(spec):
+    """Every participant id a split names, whatever method it uses.
+
+    Kept beside the split methods so a new method cannot add a place an id
+    hides. The ids are returned rather than checked here: this function knows
+    nothing about which bill a split belongs to.
+    """
+    out = set()
+    if not isinstance(spec, dict):
+        return out
+    among = spec.get("among")
+    if isinstance(among, list):
+        out.update(x for x in among if isinstance(x, str))
+    for key in ("amounts", "basisPoints", "shareCounts"):
+        m = spec.get(key)
+        if isinstance(m, dict):
+            out.update(k for k in m if isinstance(k, str))
+    items = spec.get("items")
+    if isinstance(items, list):
+        for item in items:
+            if isinstance(item, dict):
+                shared = item.get("sharedBy")
+                if isinstance(shared, list):
+                    out.update(x for x in shared if isinstance(x, str))
+    return out
+
+
 def decode_expense(raw, currency, ids):
     """Section 9.1, one expense, against the ids already on the bill."""
     if not isinstance(raw, dict):
@@ -805,6 +832,12 @@ def decode_expense(raw, currency, ids):
         raise Refused("currency_mismatch")
     if raw.get("paidBy") not in ids:
         raise Refused("unknown_participant")
+    # Every id a split names must be on the bill, not just `paidBy`. Without
+    # this an expense splitting to a stranger is decoded, folded and kept, and
+    # the refusal surfaces from `balances` on a bill that already looks whole.
+    for pid in split_participants(raw.get("split")):
+        if pid not in ids:
+            raise Refused("unknown_participant")
     e = {"id": _str(raw.get("id")),
          "description": _str(raw.get("description", "")),
          "paidBy": raw["paidBy"],

@@ -197,6 +197,19 @@ pub fn decode_expense(raw: &Value, currency: &str, ids: &BTreeSet<String>) -> Re
     if !split.is_object() {
         return Err(type_error("a split"));
     }
+    // Every id a split names must be on the bill, not just `paidBy`. Without
+    // this an expense splitting to a stranger is decoded, folded and kept, and
+    // the refusal surfaces from `net_balances` on a bill that already looks
+    // whole - section 10.8 rests on the fold being unable to apply such an
+    // entry.
+    for id in crate::split::split_participants(&split) {
+        if !ids.contains(&id) {
+            return Err(SplitError::new(
+                code::UNKNOWN_PARTICIPANT,
+                format!("An expense splits to {id}, who is not on this bill"),
+            ));
+        }
+    }
     Ok(Expense {
         id: string(raw.get("id").unwrap_or(&Value::Null))?,
         description: match raw.get("description") {

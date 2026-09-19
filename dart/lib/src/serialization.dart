@@ -10,6 +10,7 @@ import 'errors.dart';
 import 'instant.dart';
 import 'model.dart';
 import 'money.dart';
+import 'split.dart';
 import 'ordering.dart';
 import 'rate.dart';
 
@@ -160,6 +161,16 @@ Expense decodeExpense(Object? raw, String billCurrency, Set<String> ids) {
   final split = e['split'];
   if (split is! Map) {
     raise(SplitCode.billTypeError, 'An expense states how it splits');
+  }
+  // Every id a split names must be on the bill, not just `paidBy`. Without
+  // this an expense splitting to a stranger is decoded, folded and kept, and
+  // the refusal surfaces from `netBalances` on a bill that already looks
+  // whole — §10.8 rests on the fold being unable to apply such an entry.
+  for (final id in splitParticipants(split.cast<String, dynamic>())) {
+    if (!ids.contains(id)) {
+      raise(SplitCode.unknownParticipant,
+          'An expense splits to $id, who is not on this bill');
+    }
   }
   return Expense(
     id: _string(e['id']),

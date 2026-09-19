@@ -5,7 +5,7 @@
 //! leftover units of §3 land on the same people everywhere.
 
 use serde_json::Value;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::allocation::{allocate, allocate_evenly};
 use crate::error::{code, Result, SplitError};
@@ -56,6 +56,34 @@ fn id_list(value: &Value) -> Vec<String> {
 ///
 /// Dropping a member a reader cannot read reassigns that participant's share
 /// to the others: three people splitting 9000 become two paying 4500 each.
+/// Every participant id a split names, whatever method it uses.
+///
+/// Kept beside the split methods so a new method cannot add a place an id
+/// hides. The ids are returned rather than checked here: this module knows
+/// nothing about which bill a split belongs to.
+pub fn split_participants(spec: &Value) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let Some(spec) = spec.as_object() else {
+        return out;
+    };
+    if let Some(among) = spec.get("among").and_then(Value::as_array) {
+        out.extend(among.iter().filter_map(Value::as_str).map(str::to_owned));
+    }
+    for key in ["amounts", "basisPoints", "shareCounts"] {
+        if let Some(map) = spec.get(key).and_then(Value::as_object) {
+            out.extend(map.keys().cloned());
+        }
+    }
+    if let Some(items) = spec.get("items").and_then(Value::as_array) {
+        for item in items {
+            if let Some(shared) = item.get("sharedBy").and_then(Value::as_array) {
+                out.extend(shared.iter().filter_map(Value::as_str).map(str::to_owned));
+            }
+        }
+    }
+    out
+}
+
 pub fn check_id_lists(spec: &Value) -> Result<()> {
     for key in ["among", "sharedBy"] {
         if let Some(list) = spec.get(key).and_then(Value::as_array) {

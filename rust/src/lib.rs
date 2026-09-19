@@ -62,7 +62,7 @@ pub use settle::{
     DEFAULT_EXACT_LIMIT, MAX_EXACT_LIMIT,
 };
 pub use sha256::{sha256, sha256_hex};
-pub use split::{check_id_lists, split_expense, Shares};
+pub use split::{check_id_lists, split_expense, split_participants, Shares};
 pub use zip321::{
     bounded_label, qchar, render_amount, render_uri, FiatPrice, Zip321Payment, MAX_FIAT_DIGITS,
     MAX_LABEL_BYTES, MAX_MEMO_BYTES, MAX_PAYMENTS, MAX_ZATOSHI,

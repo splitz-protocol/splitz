@@ -27,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # Names one language spells differently for reasons that carry no meaning.
 RENAMES = {
     "splitExpense": "split_expense",
+    "splitParticipants": "split_participants",
     "allocateEvenly": "allocate_evenly",
     "fiatToZatoshi": "fiat_to_zatoshi",
     "zatoshiToFiat": "zatoshi_to_fiat",
