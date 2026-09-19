@@ -20,6 +20,7 @@ cd dart && dart test                 # 427 tests, 408 of them the corpus
 cd rust && cargo test                # the same 408 cases, plus the oracle
 cd rust && cargo test --release      # and again with overflow checks off
 tools/differential/run.sh 1 1200     # all three implementations, one operation list
+python3 tools/spec/claims.py         # SPEC.md's claims, against the tree
 python3 tools/parity/surface.py      # the two public surfaces, diffed
 tools/web-target/run.sh              # asserts it still does not compile to JS
 cd dart && dart run example/dinner.dart

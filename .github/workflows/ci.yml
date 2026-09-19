@@ -64,6 +64,16 @@ jobs:
       - run: tools/differential/run.sh 6 1200
       - run: tools/differential/run.sh 7 1200
 
+  spec:
+    # The corpus checks values, the differential lane checks that three
+    # implementations answer alike, and the parity lane checks the two public
+    # surfaces. None of them reads SPEC.md, so a sentence there is the one
+    # claim in this repository nothing verifies.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/spec/claims.py
+
   parity:
     # An API one implementation has and the other does not never reaches the
     # wire, so neither the corpus nor the differential lane can see it.
