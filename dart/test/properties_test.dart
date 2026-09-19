@@ -22,8 +22,7 @@ List<Map<String, dynamic>> _logOf(String caseName) {
 
 void main() {
   group('deltaFor (§14.5)', () {
-    test('the square is a function of the entry set, not of arrival order',
-        () {
+    test('the square is a function of the entry set, not of arrival order', () {
       // Two devices holding one history, having received it in different
       // orders, must produce the same square. §10.2 orders the log; a delta
       // that skipped that would hand a peer two different URIs for one set.
@@ -40,8 +39,7 @@ void main() {
 
       // A probe where every input gives one answer is broken rather than
       // conclusive: a different entry set must differ.
-      final fewer =
-          deltaFor(entries.sublist(0, entries.length - 1), const {});
+      final fewer = deltaFor(entries.sublist(0, entries.length - 1), const {});
       expect((fewer as DeltaSquare).uri, isNot(base.uri));
     });
 
