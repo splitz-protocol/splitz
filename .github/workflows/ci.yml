@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+        working-directory: dart
+      - run: dart analyze
+        working-directory: dart
+      - run: dart format --output=none --set-exit-if-changed .
+        working-directory: dart
+      - run: dart test
+        working-directory: dart
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt -- --check
+        working-directory: rust
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: rust
+      - run: cargo test
+        working-directory: rust
+      # Both profiles: "the two implementations agree" means nothing at a
+      # numeric boundary unless the overflow-checked and unchecked builds
+      # both run.
+      - run: cargo test --release
+        working-directory: rust
+
+  differential:
+    # The corpus is generated from one reference, so it cannot hold a case
+    # that reference is self-consistently wrong about. This lane invents
+    # inputs nobody wrote an expectation for and diffs the answers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - uses: dtolnay/rust-toolchain@stable
+      - run: dart pub get
+        working-directory: dart
+      - run: tools/differential/run.sh 1 1200
+      - run: tools/differential/run.sh 2 1200
+      - run: tools/differential/run.sh 3 1200
+
+  parity:
+    # An API one implementation has and the other does not never reaches the
+    # wire, so neither the corpus nor the differential lane can see it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/parity/surface.py
+
+  web-target:
+    # Asserts the package still refuses to compile to JavaScript. A JS number
+    # is exact only to 2^53-1; this library's amounts are 64-bit.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+        working-directory: dart
+      - run: tools/web-target/run.sh

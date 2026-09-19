@@ -1,0 +1,118 @@
+# Divergences surface.py must not fail on, and why.
+#
+# A bare name is an idiom divergence: the two languages spell one thing
+# differently and both spellings are correct. Anything not listed here is a
+# gap, and the lane exits non-zero for it.
+
+# The refusal codes of SPEC.md section 12. Rust exposes them as `pub const` in
+# a `code` module; Dart as static members of `SplitCode`, which the extractor
+# reads as one name rather than seventy-three. Both expose every code.
+dart::SplitCode
+
+# Dart throws and Rust returns; each needs a helper the other has no use for.
+dart::raise
+rust::Result
+
+# Dart names the confirmation rule as a class with fields; Rust returns a
+# tuple from `confirmation_rule`. The same three facts either way.
+dart::ConfirmationRule
+
+# A named type for the owed-per-participant map. Dart uses Map<String, int>
+# directly, which needs no alias.
+rust::Shares
+
+# Dart takes base64url from dart:convert; Rust writes it out, since the crate
+# takes no dependency for it.
+rust::base64url
+
+# The individual code constants covered by the note above.
+
+# Dart names the host's verifier as a typedef; Rust takes it as a generic
+# `impl Fn` bound, which has no name to expose.
+dart::VerifySignature
+
+# The individual code constants covered by the note above.
+rust::ALLOCATION_OVERFLOW
+rust::AMBIGUOUS_CREATE
+rust::AMEND_KIND_MISMATCH
+rust::AMOUNT_OVERFLOW
+rust::BALANCES_NONZERO_RESIDUAL
+rust::BILL_AMBIGUOUS_ENTRY
+rust::BILL_BAD_CURRENCY
+rust::BILL_FUTURE_VERSION
+rust::BILL_MISSING_CURRENCY
+rust::BILL_MISSING_ENTRY_PAYLOAD
+rust::BILL_MISSING_VERSION
+rust::BILL_TYPE_ERROR
+rust::BILL_UNKNOWN_CONFIRMATION_METHOD
+rust::BILL_UNKNOWN_ENTRY_KIND
+rust::BILL_UNKNOWN_PAYOUT_METHOD
+rust::BILL_UNKNOWN_SETTLEMENT_METHOD
+rust::BILL_UNKNOWN_SPLIT_MODE
+rust::BILL_UNKNOWN_SPLIT_TYPE
+rust::CANONICAL_JSON_FLOAT
+rust::CONFIRMATION_MISSING_REFERENCE
+rust::BILL_BAD_PARTICIPANT_ID
+rust::BILL_NOT_SCALAR_VALUES
+rust::CREATE_ID_NOT_DERIVED
+rust::CREATE_UNBOUND
+rust::CURRENCY_MISMATCH
+rust::DUPLICATE_PARTICIPANT
+rust::ENTRY_ID_NOT_DERIVED
+rust::EMPTY_SPLIT
+rust::EMPTY_WEIGHTS
+rust::EXACT_LIMIT_TOO_LARGE
+rust::EXACT_TOTAL_MISMATCH
+rust::INVITE_BAD_BILL_ID
+rust::INVITE_BAD_EXPIRY
+rust::INVITE_FUTURE_VERSION
+rust::INVITE_MISSING_BILL_ID
+rust::INVITE_MISSING_KEY
+rust::INVITE_MISSING_VERSION
+rust::INVITE_NOT_AN_INVITE
+rust::ITEMIZED_NO_ITEMS
+rust::ITEMIZED_TOTAL_MISMATCH
+rust::ITEMIZED_UNASSIGNED_ITEM
+rust::LOG_EMPTY
+rust::LOG_NO_CREATE
+rust::NEGATIVE_AMOUNT
+rust::NEGATIVE_SHARE
+rust::NEGATIVE_WEIGHT
+rust::PARTICIPANT_STILL_NAMED
+rust::PAYLOAD_DAMAGED
+rust::PAYLOAD_FUTURE_VERSION
+rust::PAYLOAD_MISSING_BODY
+rust::PAYLOAD_NOT_A_PAYLOAD
+rust::PAYLOAD_TOO_LARGE
+rust::PERCENTAGE_NOT_FULL_SCALE
+rust::RATE_AMOUNT_TOO_LARGE
+rust::RATE_CURRENCY_MISMATCH
+rust::RATE_NOT_POSITIVE
+rust::SEALED_FUTURE_VERSION
+rust::SEALED_MALFORMED
+rust::SELF_PAYMENT
+rust::UNAUTHORIZED_CONFIRMATION
+rust::UNAUTHORIZED_ENTRY
+rust::UNAUTHORIZED_PAYMENT
+rust::UNKNOWN_ENTRY
+rust::UNKNOWN_PARTICIPANT
+rust::UNKNOWN_PAYMENT
+rust::WEIGHT_SUM_OVERFLOW
+rust::ZERO_WEIGHT_SUM
+rust::ZIP321_AMOUNT_NOT_POSITIVE
+rust::ZIP321_AMOUNT_TOO_LARGE
+rust::ZIP321_BAD_ADDRESS
+rust::ZIP321_BAD_CURRENCY_CODE
+rust::ZIP321_FIAT_NOT_POSITIVE
+rust::ZIP321_FIAT_TOO_MANY_DIGITS
+rust::ZIP321_MEMO_TOO_LARGE
+rust::ZIP321_NO_ADDRESS
+rust::ZIP321_NO_PAYMENTS
+rust::ZIP321_TOO_MANY_PAYMENTS
+
+# Section 2.3's scalar-value check. A Rust `String` is UTF-8 by construction,
+# so a lone surrogate cannot reach `decode_bill` or `check_entry` and the check
+# has no Rust counterpart to write. The code constant exists because section 12
+# lists it, and because a consumer matching on codes must be able to name it.
+dart::hasLoneSurrogate
+dart::checkScalarValues
