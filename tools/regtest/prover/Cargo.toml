@@ -1,0 +1,27 @@
+[package]
+name = "splitz-regtest-prover"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Broadcasts a transaction built from a splitz payment request on a regtest chain."
+
+# Deliberately not a workspace member of ../../rust: the splitz crate takes one
+# dependency and this takes forty. It depends on splitz by path, the way a
+# wallet would.
+[dependencies]
+splitz = { path = "../../../rust" }
+
+zcash_client_backend = { version = "0.24", features = ["lightwalletd-tonic-transport", "orchard"] }
+zcash_client_sqlite = { version = "0.22", features = ["orchard"] }
+zcash_keys = { version = "0.16", features = ["orchard", "transparent-inputs"] }
+zcash_protocol = "0.10"
+zcash_address = "0.13"
+zcash_transparent = { version = "0.10", features = ["transparent-inputs"] }
+zip32 = "0.2"
+zip321 = "0.9"
+rusqlite = { version = "0.37", features = ["bundled"] }
+secrecy = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+serde_json = "1"
+ureq = "2"
+anyhow = "1"

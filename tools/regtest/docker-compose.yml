@@ -1,0 +1,46 @@
+# A chain of our own, so a transaction built from a splitz payment request can
+# be broadcast and mined and the money watched arriving.
+#
+# Zebra runs regtest with every upgrade active at height 1 — an Orchard output
+# needs NU5, and a chain that stops at Canopy refuses one without saying so.
+# lightwalletd has no arm64 image, so it runs emulated; that is slower and
+# changes nothing about what is proved.
+
+services:
+  zebra:
+    image: zfnd/zebra:latest
+    command: ["zebrad", "-c", "/etc/zebrad.toml", "start"]
+    volumes:
+      - ./zebrad.toml:/etc/zebrad.toml:ro
+    ports:
+      - "18232:18232"   # JSON-RPC
+      - "18233:18233"   # peer port, unused with no peers
+    healthcheck:
+      # The node is ready when it answers an RPC, not when the port opens.
+      # curl, because this image carries no wget — a healthcheck that cannot
+      # run reports unhealthy for the wrong reason and the stack never starts.
+      test: ["CMD-SHELL",
+             "curl -sf --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getblockcount\",\"params\":[]}' -H 'Content-Type: application/json' http://127.0.0.1:18232/ | grep -q result"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 10s
+
+  lightwalletd:
+    image: electriccoinco/lightwalletd:latest
+    platform: linux/amd64
+    depends_on:
+      zebra:
+        condition: service_healthy
+    command: >
+      --no-tls-very-insecure
+      --grpc-bind-addr=0.0.0.0:9067
+      --http-bind-addr=0.0.0.0:9068
+      --zcash-conf-path=/etc/zcash.conf
+      --data-dir=/var/lib/lightwalletd
+      --log-file=/dev/stdout
+    volumes:
+      - ./zcash.conf:/etc/zcash.conf:ro
+    ports:
+      - "9067:9067"
+      - "9068:9068"

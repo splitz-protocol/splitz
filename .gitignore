@@ -10,3 +10,7 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# regtest: a build tree and a config generated from the wallet's own seed
+tools/regtest/prover/target/
+tools/regtest/zebrad.toml

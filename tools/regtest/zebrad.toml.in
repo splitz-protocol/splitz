@@ -1,0 +1,40 @@
+# Zebra in regtest: a chain of our own, no peers, mined on demand.
+#
+# Every upgrade activates at height 1 so a shielded transaction is valid in
+# the first block the miner produces — an Orchard output needs NU5, and a
+# regtest chain that stops at Canopy silently refuses one.
+
+[network]
+network = "Regtest"
+listen_addr = "0.0.0.0:18233"
+cache_dir = false
+initial_mainnet_peers = []
+initial_testnet_peers = []
+
+[network.testnet_parameters.activation_heights]
+BeforeOverwinter = 1
+Overwinter = 1
+Sapling = 1
+Blossom = 1
+Heartwood = 1
+Canopy = 1
+NU5 = 1
+
+[state]
+cache_dir = "/zebra/state"
+ephemeral = true
+
+[rpc]
+listen_addr = "0.0.0.0:18232"
+enable_cookie_auth = false
+parallel_cpu_threads = 1
+
+[mining]
+# Filled in by run.sh from `prover miner-address`, so the coinbase lands on
+# an address the wallet under test can shield and then spend. Templating it
+# rather than pinning it keeps the two from drifting apart silently.
+miner_address = "@MINER_ADDRESS@"
+internal_miner = true
+
+[tracing]
+filter = "info"
