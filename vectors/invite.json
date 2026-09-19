@@ -1,0 +1,259 @@
+{
+  "description": "Invite URIs. SPEC.md section 11.1.",
+  "count": 35,
+  "cases": [
+    {
+      "name": "a_plain_invite",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_name_comes_along",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Zcon7",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Zcon7"
+      }
+    },
+    {
+      "name": "a_percent_escaped_name",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Zcon7%20d%C3%AEner",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Zcon7 d\u00eener"
+      }
+    },
+    {
+      "name": "an_expiry",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&x=1793000000",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "",
+        "expiry": 1793000000
+      }
+    },
+    {
+      "name": "no_name_reads_as_empty",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "the_first_occurrence_wins",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&t=other",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_bill_id_at_the_cap",
+      "uri": "splitz://join?v=1&b=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "expect": {
+        "version": 1,
+        "billId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "an_unknown_parameter_is_ignored",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&z=1",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_leading_space_is_padding",
+      "uri": "  splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_trailing_newline_is_padding",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_byte_order_mark_is_padding",
+      "uri": "\ufeffsplitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_tab_character_and_a_return",
+      "uri": "\t splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\r\n",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "padding_inside_is_content",
+      "uri": "splitz://join ?v=1&t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_non_breaking_space_is_not_padding",
+      "uri": "\u00a0splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "the_scheme_is_case_sensitive",
+      "uri": "SPLITZ://join?v=1&t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "the_host_is_case_sensitive",
+      "uri": "splitz://JOIN?v=1&t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_path_is_not_an_invite",
+      "uri": "splitz://join/x?v=1&t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_fragment_is_not_an_invite",
+      "uri": "splitz://join#f?v=1&t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "some_other_scheme",
+      "uri": "zcash:u1abc?amount=1",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "no_version",
+      "uri": "splitz://join?t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_missing_version"
+    },
+    {
+      "name": "a_padded_version",
+      "uri": "splitz://join?v=01&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_missing_version"
+    },
+    {
+      "name": "a_signed_version",
+      "uri": "splitz://join?v=+1&t=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_missing_version"
+    },
+    {
+      "name": "a_version_from_the_future",
+      "uri": "splitz://join?v=2&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_future_version"
+    },
+    {
+      "name": "no_bill_id",
+      "uri": "splitz://join?v=1&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_missing_bill_id"
+    },
+    {
+      "name": "an_empty_bill_id",
+      "uri": "splitz://join?v=1&b=&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_missing_bill_id"
+    },
+    {
+      "name": "a_plus_in_the_bill_id",
+      "uri": "splitz://join?v=1&b=Ab%2Bc&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_bad_bill_id"
+    },
+    {
+      "name": "a_bill_id_one_over_the_cap",
+      "uri": "splitz://join?v=1&b=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_bad_bill_id"
+    },
+    {
+      "name": "no_key",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "an_empty_key",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "a_key_in_the_standard_alphabet",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=ab%2Bcd%2Fef%3D",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "an_expiry_that_is_not_a_number",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&x=soon",
+      "error": "invite_bad_expiry"
+    },
+    {
+      "name": "encode_a_plain_invite",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "name": "encode_with_a_name",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Zcon7"
+      },
+      "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Zcon7"
+    },
+    {
+      "name": "encode_escapes_the_name",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Zcon7 d\u00eener \u2728"
+      },
+      "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Zcon7%20d%C3%AEner%20%E2%9C%A8"
+    },
+    {
+      "name": "encode_with_an_expiry",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "",
+        "expiry": 1793000000
+      },
+      "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&x=1793000000"
+    }
+  ]
+}

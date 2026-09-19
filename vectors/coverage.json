@@ -1,0 +1,482 @@
+{
+  "description": "What each payment discharges. SPEC.md section 6.3.",
+  "count": 6,
+  "cases": [
+    {
+      "name": "a_fabricated_refund_leaves_a_settlement_unexplained",
+      "bill": {
+        "v": 1,
+        "id": "b",
+        "name": "Trip",
+        "currency": "MXN",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana"
+          },
+          {
+            "id": "ben",
+            "name": "Ben"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ana",
+            "amount": 10000,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          },
+          {
+            "id": "e2",
+            "paidBy": "ben",
+            "amount": -10000,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        ]
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 10000,
+            "covers": [
+              {
+                "from": "ben",
+                "to": "ana",
+                "amount": 5000
+              }
+            ],
+            "rerouted": false,
+            "unexplained": 5000
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 1
+      }
+    },
+    {
+      "name": "a_rerouted_payment_names_the_debts_it_discharges",
+      "bill": {
+        "v": 1,
+        "id": "b",
+        "name": "Trip",
+        "currency": "MXN",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana"
+          },
+          {
+            "id": "ben",
+            "name": "Ben"
+          },
+          {
+            "id": "cai",
+            "name": "Cai"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ana",
+            "amount": 4800,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          },
+          {
+            "id": "e2",
+            "paidBy": "ben",
+            "amount": 300,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ]
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 1450,
+            "covers": [
+              {
+                "from": "ben",
+                "to": "ana",
+                "amount": 1450
+              }
+            ],
+            "rerouted": false,
+            "unexplained": 0
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 1750,
+            "covers": [
+              {
+                "from": "cai",
+                "to": "ana",
+                "amount": 1600
+              },
+              {
+                "from": "cai",
+                "to": "ben",
+                "amount": 150
+              }
+            ],
+            "rerouted": true,
+            "unexplained": 0
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "membership_is_not_the_test",
+      "bill": {
+        "v": 1,
+        "id": "b",
+        "name": "Trip",
+        "currency": "MXN",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana"
+          },
+          {
+            "id": "ben",
+            "name": "Ben"
+          },
+          {
+            "id": "cai",
+            "name": "Cai"
+          },
+          {
+            "id": "dee",
+            "name": "Dee"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ana",
+            "amount": 900,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "dee"
+              ]
+            }
+          },
+          {
+            "id": "e2",
+            "paidBy": "ben",
+            "amount": 610,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ben",
+                "cai"
+              ]
+            }
+          },
+          {
+            "id": "e3",
+            "paidBy": "dee",
+            "amount": 610,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "dee",
+                "cai"
+              ]
+            }
+          },
+          {
+            "id": "e4",
+            "paidBy": "ana",
+            "amount": 20,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cai"
+              ]
+            }
+          }
+        ]
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 610,
+            "covers": [
+              {
+                "from": "cai",
+                "to": "ana",
+                "amount": 10
+              },
+              {
+                "from": "cai",
+                "to": "ben",
+                "amount": 305
+              },
+              {
+                "from": "cai",
+                "to": "dee",
+                "amount": 295
+              }
+            ],
+            "rerouted": true,
+            "unexplained": 0
+          },
+          {
+            "from": "cai",
+            "to": "ben",
+            "amount": 5,
+            "covers": [
+              {
+                "from": "cai",
+                "to": "dee",
+                "amount": 5
+              }
+            ],
+            "rerouted": true,
+            "unexplained": 0
+          },
+          {
+            "from": "cai",
+            "to": "dee",
+            "amount": 5,
+            "covers": [
+              {
+                "from": "cai",
+                "to": "dee",
+                "amount": 5
+              }
+            ],
+            "rerouted": false,
+            "unexplained": 0
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 3
+      }
+    },
+    {
+      "name": "a_credit_on_a_pair_is_not_consumed",
+      "bill": {
+        "v": 1,
+        "id": "b",
+        "name": "Trip",
+        "currency": "MXN",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana"
+          },
+          {
+            "id": "ben",
+            "name": "Ben"
+          },
+          {
+            "id": "cai",
+            "name": "Cai"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ben",
+            "amount": 1000,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          },
+          {
+            "id": "e2",
+            "paidBy": "ben",
+            "amount": -1200,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          },
+          {
+            "id": "e3",
+            "paidBy": "cai",
+            "amount": 400,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cai"
+              ]
+            }
+          }
+        ]
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "ana",
+            "to": "cai",
+            "amount": 100,
+            "covers": [
+              {
+                "from": "ana",
+                "to": "cai",
+                "amount": 100
+              }
+            ],
+            "rerouted": false,
+            "unexplained": 0
+          },
+          {
+            "from": "ben",
+            "to": "cai",
+            "amount": 100,
+            "covers": [],
+            "rerouted": false,
+            "unexplained": 100
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "nobody_owes_anything",
+      "bill": {
+        "v": 1,
+        "id": "b",
+        "name": "Trip",
+        "currency": "MXN",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana"
+          },
+          {
+            "id": "ben",
+            "name": "Ben"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ana",
+            "amount": 3000,
+            "currency": "MXN",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana"
+              ]
+            }
+          }
+        ]
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [],
+        "isOptimal": true,
+        "paymentCount": 0
+      }
+    },
+    {
+      "name": "a_plan_from_balances_carries_no_coverage",
+      "balances": {
+        "ana": 5000,
+        "ben": -1000,
+        "cai": -4000
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 1000,
+            "covers": [],
+            "rerouted": false,
+            "unexplained": 1000
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 4000,
+            "covers": [],
+            "rerouted": false,
+            "unexplained": 4000
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    }
+  ]
+}

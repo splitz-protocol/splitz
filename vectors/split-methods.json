@@ -1,0 +1,602 @@
+{
+  "description": "The five split methods. SPEC.md section 4.",
+  "count": 36,
+  "cases": [
+    {
+      "name": "equal_two_ways",
+      "total": 700,
+      "split": {
+        "type": "equal",
+        "among": [
+          "ana",
+          "ben"
+        ]
+      },
+      "expect": {
+        "ana": 350,
+        "ben": 350
+      }
+    },
+    {
+      "name": "equal_three_with_leftover",
+      "total": 100,
+      "split": {
+        "type": "equal",
+        "among": [
+          "ana",
+          "ben",
+          "cai"
+        ]
+      },
+      "expect": {
+        "ana": 34,
+        "ben": 33,
+        "cai": 33
+      }
+    },
+    {
+      "name": "equal_collapses_duplicates",
+      "total": 100,
+      "split": {
+        "type": "equal",
+        "among": [
+          "ana",
+          "ana",
+          "ben"
+        ]
+      },
+      "expect": {
+        "ana": 50,
+        "ben": 50
+      }
+    },
+    {
+      "name": "equal_sorts_before_splitting",
+      "total": 100,
+      "split": {
+        "type": "equal",
+        "among": [
+          "cai",
+          "ana",
+          "ben"
+        ]
+      },
+      "expect": {
+        "ana": 34,
+        "ben": 33,
+        "cai": 33
+      }
+    },
+    {
+      "name": "equal_needs_somebody",
+      "total": 100,
+      "split": {
+        "type": "equal",
+        "among": []
+      },
+      "error": "empty_split"
+    },
+    {
+      "name": "exact_amounts_stand",
+      "total": 700,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": 400,
+          "ben": 300
+        }
+      },
+      "expect": {
+        "ana": 400,
+        "ben": 300
+      }
+    },
+    {
+      "name": "exact_allows_a_zero_share",
+      "total": 700,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": 700,
+          "ben": 0
+        }
+      },
+      "expect": {
+        "ana": 700,
+        "ben": 0
+      }
+    },
+    {
+      "name": "exact_must_reach_the_total",
+      "total": 700,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": 400,
+          "ben": 200
+        }
+      },
+      "error": "exact_total_mismatch"
+    },
+    {
+      "name": "exact_refuses_a_negative",
+      "total": 700,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": 900,
+          "ben": -200
+        }
+      },
+      "error": "negative_share"
+    },
+    {
+      "name": "exact_sum_overflows",
+      "total": 700,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": 9223372036854775807,
+          "ben": 9223372036854775807
+        }
+      },
+      "error": "amount_overflow"
+    },
+    {
+      "name": "percentage_full_scale",
+      "total": 1000,
+      "split": {
+        "type": "percentage",
+        "basisPoints": {
+          "ana": 2500,
+          "ben": 7500
+        }
+      },
+      "expect": {
+        "ana": 250,
+        "ben": 750
+      }
+    },
+    {
+      "name": "percentage_rounds_by_remainder",
+      "total": 100,
+      "split": {
+        "type": "percentage",
+        "basisPoints": {
+          "ana": 3333,
+          "ben": 3333,
+          "cai": 3334
+        }
+      },
+      "expect": {
+        "ana": 33,
+        "ben": 33,
+        "cai": 34
+      }
+    },
+    {
+      "name": "percentage_short_of_scale",
+      "total": 1000,
+      "split": {
+        "type": "percentage",
+        "basisPoints": {
+          "ana": 2500,
+          "ben": 7000
+        }
+      },
+      "error": "percentage_not_full_scale"
+    },
+    {
+      "name": "percentage_overflow_before_scale",
+      "total": 1000,
+      "split": {
+        "type": "percentage",
+        "basisPoints": {
+          "a": 4611686018427387904,
+          "b": 4611686018427387904,
+          "c": 4611686018427387904,
+          "d": 4611686018427387904,
+          "e": 10000
+        }
+      },
+      "error": "amount_overflow"
+    },
+    {
+      "name": "shares_by_count",
+      "total": 1000,
+      "split": {
+        "type": "shares",
+        "shareCounts": {
+          "ana": 1,
+          "ben": 3
+        }
+      },
+      "expect": {
+        "ana": 250,
+        "ben": 750
+      }
+    },
+    {
+      "name": "shares_zero_owes_nothing",
+      "total": 900,
+      "split": {
+        "type": "shares",
+        "shareCounts": {
+          "ana": 2,
+          "ben": 0,
+          "cai": 1
+        }
+      },
+      "expect": {
+        "ana": 600,
+        "ben": 0,
+        "cai": 300
+      }
+    },
+    {
+      "name": "shares_all_zero",
+      "total": 900,
+      "split": {
+        "type": "shares",
+        "shareCounts": {
+          "ana": 0,
+          "ben": 0
+        }
+      },
+      "error": "zero_weight_sum"
+    },
+    {
+      "name": "itemized_no_extra",
+      "total": 10400,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 0,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": 5200,
+            "sharedBy": [
+              "ben",
+              "eli"
+            ]
+          },
+          {
+            "description": "mole",
+            "minorUnits": 5200,
+            "sharedBy": [
+              "ana"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "ana": 5200,
+        "ben": 2600,
+        "eli": 2600
+      }
+    },
+    {
+      "name": "itemized_tax_follows_what_was_eaten",
+      "total": 12000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 2000,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": 2000,
+            "sharedBy": [
+              "ben"
+            ]
+          },
+          {
+            "description": "steak",
+            "minorUnits": 8000,
+            "sharedBy": [
+              "ana"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "ana": 9600,
+        "ben": 2400
+      }
+    },
+    {
+      "name": "itemized_all_zero_items_share_extra_evenly",
+      "total": 1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 1000,
+        "items": [
+          {
+            "description": "water",
+            "minorUnits": 0,
+            "sharedBy": [
+              "ana"
+            ]
+          },
+          {
+            "description": "bread",
+            "minorUnits": 0,
+            "sharedBy": [
+              "ben"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "ana": 500,
+        "ben": 500
+      }
+    },
+    {
+      "name": "itemized_needs_items",
+      "total": 1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 1000,
+        "items": []
+      },
+      "error": "itemized_no_items"
+    },
+    {
+      "name": "itemized_item_needs_an_eater",
+      "total": 1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 0,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": 1000,
+            "sharedBy": []
+          }
+        ]
+      },
+      "error": "itemized_unassigned_item"
+    },
+    {
+      "name": "itemized_must_reach_the_total",
+      "total": 9999,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 0,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": 1000,
+            "sharedBy": [
+              "ana"
+            ]
+          }
+        ]
+      },
+      "error": "itemized_total_mismatch"
+    },
+    {
+      "name": "itemized_refuses_a_negative_extra",
+      "total": 1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": -100,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": 1100,
+            "sharedBy": [
+              "ana"
+            ]
+          }
+        ]
+      },
+      "error": "negative_share"
+    },
+    {
+      "name": "itemized_refuses_a_negative_item",
+      "total": 1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 2000,
+        "items": [
+          {
+            "description": "refund",
+            "minorUnits": -1000,
+            "sharedBy": [
+              "ana"
+            ]
+          }
+        ]
+      },
+      "error": "negative_share"
+    },
+    {
+      "name": "a_refund_split_equally",
+      "total": -1000,
+      "split": {
+        "type": "equal",
+        "among": [
+          "ana",
+          "ben"
+        ]
+      },
+      "expect": {
+        "ana": -500,
+        "ben": -500
+      }
+    },
+    {
+      "name": "a_refund_by_shares",
+      "total": -1000,
+      "split": {
+        "type": "shares",
+        "shareCounts": {
+          "ana": 1,
+          "ben": 1
+        }
+      },
+      "expect": {
+        "ana": -500,
+        "ben": -500
+      }
+    },
+    {
+      "name": "a_refund_by_percentage",
+      "total": -1000,
+      "split": {
+        "type": "percentage",
+        "basisPoints": {
+          "ana": 5000,
+          "ben": 5000
+        }
+      },
+      "expect": {
+        "ana": -500,
+        "ben": -500
+      }
+    },
+    {
+      "name": "a_refund_in_exact_amounts",
+      "total": -1000,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": -500,
+          "ben": -500
+        }
+      },
+      "expect": {
+        "ana": -500,
+        "ben": -500
+      }
+    },
+    {
+      "name": "a_refund_itemized",
+      "total": -1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": -100,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": -600,
+            "sharedBy": [
+              "ana"
+            ]
+          },
+          {
+            "description": "mole",
+            "minorUnits": -300,
+            "sharedBy": [
+              "ben"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "ana": -667,
+        "ben": -333
+      }
+    },
+    {
+      "name": "exact_refuses_a_positive_share_of_a_refund",
+      "total": -1000,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": -1500,
+          "ben": 500
+        }
+      },
+      "error": "negative_share"
+    },
+    {
+      "name": "itemized_refuses_a_positive_item_on_a_refund",
+      "total": -1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 0,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": -1100,
+            "sharedBy": [
+              "ana"
+            ]
+          },
+          {
+            "description": "tip",
+            "minorUnits": 100,
+            "sharedBy": [
+              "ben"
+            ]
+          }
+        ]
+      },
+      "error": "negative_share"
+    },
+    {
+      "name": "itemized_refuses_a_positive_extra_on_a_refund",
+      "total": -1000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 100,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": -1100,
+            "sharedBy": [
+              "ana"
+            ]
+          }
+        ]
+      },
+      "error": "negative_share"
+    },
+    {
+      "name": "among_holds_a_non_string",
+      "total": 9000,
+      "split": {
+        "type": "equal",
+        "among": [
+          "ana",
+          7,
+          "ben"
+        ]
+      },
+      "error": "bill_type_error"
+    },
+    {
+      "name": "shared_by_holds_a_non_string",
+      "total": 9000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 0,
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": 9000,
+            "sharedBy": [
+              "ana",
+              7,
+              "ben"
+            ]
+          }
+        ]
+      },
+      "error": "bill_type_error"
+    },
+    {
+      "name": "an_unknown_split_type",
+      "total": 1000,
+      "split": {
+        "type": "byHeight",
+        "among": [
+          "ana"
+        ]
+      },
+      "error": "bill_unknown_split_type"
+    }
+  ]
+}

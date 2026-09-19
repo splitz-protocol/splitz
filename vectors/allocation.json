@@ -1,0 +1,241 @@
+{
+  "description": "Largest-remainder allocation. SPEC.md section 3.",
+  "count": 18,
+  "cases": [
+    {
+      "name": "splits_evenly",
+      "total": 900,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        300,
+        300,
+        300
+      ]
+    },
+    {
+      "name": "one_weight_takes_everything",
+      "total": 500,
+      "weights": [
+        7
+      ],
+      "expect": [
+        500
+      ]
+    },
+    {
+      "name": "zero_weight_gets_nothing",
+      "total": 100,
+      "weights": [
+        1,
+        0,
+        1
+      ],
+      "expect": [
+        50,
+        0,
+        50
+      ]
+    },
+    {
+      "name": "one_unit_left_over",
+      "total": 100,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        34,
+        33,
+        33
+      ]
+    },
+    {
+      "name": "two_units_left_over",
+      "total": 101,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        34,
+        34,
+        33
+      ]
+    },
+    {
+      "name": "unequal_weights_round",
+      "total": 1000,
+      "weights": [
+        1,
+        2,
+        4
+      ],
+      "expect": [
+        143,
+        286,
+        571
+      ]
+    },
+    {
+      "name": "tie_goes_to_the_lower_index",
+      "total": 2,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        1,
+        1,
+        0
+      ]
+    },
+    {
+      "name": "a_refund_divides",
+      "total": -900,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        -300,
+        -300,
+        -300
+      ]
+    },
+    {
+      "name": "a_refund_with_a_leftover",
+      "total": -100,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        -34,
+        -33,
+        -33
+      ]
+    },
+    {
+      "name": "zero_total_allocates_zero",
+      "total": 0,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "large_total_conserves",
+      "total": 4611686018427387903,
+      "weights": [
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        1537228672809129301,
+        1537228672809129301,
+        1537228672809129301
+      ]
+    },
+    {
+      "name": "many_participants",
+      "total": 997,
+      "weights": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "expect": [
+        77,
+        77,
+        77,
+        77,
+        77,
+        77,
+        77,
+        77,
+        77,
+        76,
+        76,
+        76,
+        76
+      ]
+    },
+    {
+      "name": "no_weights_at_all",
+      "total": 100,
+      "weights": [],
+      "error": "empty_weights"
+    },
+    {
+      "name": "a_negative_weight",
+      "total": 100,
+      "weights": [
+        1,
+        -1
+      ],
+      "error": "negative_weight"
+    },
+    {
+      "name": "every_weight_is_zero",
+      "total": 100,
+      "weights": [
+        0,
+        0
+      ],
+      "error": "zero_weight_sum"
+    },
+    {
+      "name": "weight_sum_overflows",
+      "total": 100,
+      "weights": [
+        9223372036854775807,
+        1
+      ],
+      "error": "weight_sum_overflow"
+    },
+    {
+      "name": "product_overflows",
+      "total": 9223372036854775807,
+      "weights": [
+        2,
+        1
+      ],
+      "error": "allocation_overflow"
+    },
+    {
+      "name": "most_negative_total",
+      "total": -9223372036854775808,
+      "weights": [
+        1,
+        1
+      ],
+      "error": "allocation_overflow"
+    }
+  ]
+}

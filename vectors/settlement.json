@@ -1,0 +1,320 @@
+{
+  "description": "Settlement plans. SPEC.md section 6.",
+  "count": 12,
+  "cases": [
+    {
+      "name": "three_people_two_payments",
+      "balances": {
+        "ana": 5000,
+        "ben": -1000,
+        "cai": -4000
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 1000
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 4000
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "two_independent_pairs",
+      "balances": {
+        "a": -100,
+        "b": 100,
+        "c": -50,
+        "d": 50
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "a",
+            "to": "b",
+            "amount": 100
+          },
+          {
+            "from": "c",
+            "to": "d",
+            "amount": 50
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "a_group_of_five_needs_four",
+      "balances": {
+        "a": -10,
+        "b": -20,
+        "c": -30,
+        "d": -40,
+        "e": 100
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "a",
+            "to": "e",
+            "amount": 10
+          },
+          {
+            "from": "b",
+            "to": "e",
+            "amount": 20
+          },
+          {
+            "from": "c",
+            "to": "e",
+            "amount": 30
+          },
+          {
+            "from": "d",
+            "to": "e",
+            "amount": 40
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 4
+      }
+    },
+    {
+      "name": "nobody_owes_anything",
+      "balances": {
+        "ana": 0,
+        "ben": 0
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [],
+        "isOptimal": true,
+        "paymentCount": 0
+      }
+    },
+    {
+      "name": "a_tie_goes_to_the_lower_id",
+      "balances": {
+        "a": -100,
+        "b": 50,
+        "c": 50
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "a",
+            "to": "b",
+            "amount": 50
+          },
+          {
+            "from": "a",
+            "to": "c",
+            "amount": 50
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "past_the_exact_limit_reports_itself",
+      "balances": {
+        "a": 140,
+        "b": -10,
+        "c": -10,
+        "d": -10,
+        "e": -10,
+        "f": -10,
+        "g": -10,
+        "h": -10,
+        "i": -10,
+        "j": -10,
+        "k": -10,
+        "l": -10,
+        "m": -10,
+        "n": -10,
+        "o": -10
+      },
+      "exactLimit": 2,
+      "expect": {
+        "settlements": [
+          {
+            "from": "b",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "c",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "d",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "e",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "f",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "g",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "h",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "i",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "j",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "k",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "l",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "m",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "n",
+            "to": "a",
+            "amount": 10
+          },
+          {
+            "from": "o",
+            "to": "a",
+            "amount": 10
+          }
+        ],
+        "isOptimal": false,
+        "paymentCount": 14
+      }
+    },
+    {
+      "name": "positives_that_exceed_i64_still_settle",
+      "balances": {
+        "a": 5000000000000000000,
+        "b": -5000000000000000000,
+        "c": 5000000000000000000,
+        "d": -5000000000000000000
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "b",
+            "to": "c",
+            "amount": 5000000000000000000
+          },
+          {
+            "from": "d",
+            "to": "a",
+            "amount": 5000000000000000000
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "a_balance_of_the_most_negative_integer",
+      "balances": {
+        "a": -9223372036854775808,
+        "b": 9223372036854775807,
+        "c": 1
+      },
+      "exactLimit": 14,
+      "error": "amount_overflow"
+    },
+    {
+      "name": "a_subset_wraps_although_the_total_does_not",
+      "balances": {
+        "a": 9223372036854775807,
+        "b": -9223372036854775807,
+        "c": 9223372036854775807,
+        "d": -9223372036854775807
+      },
+      "exactLimit": 14,
+      "expect": {
+        "settlements": [
+          {
+            "from": "b",
+            "to": "c",
+            "amount": 9223372036854775807
+          },
+          {
+            "from": "d",
+            "to": "a",
+            "amount": 9223372036854775807
+          }
+        ],
+        "isOptimal": true,
+        "paymentCount": 2
+      }
+    },
+    {
+      "name": "balances_that_do_not_sum_to_zero",
+      "balances": {
+        "a": 100,
+        "b": -50
+      },
+      "exactLimit": 14,
+      "error": "balances_nonzero_residual"
+    },
+    {
+      "name": "a_running_total_that_overflows",
+      "balances": {
+        "a": 9223372036854775807,
+        "b": 9223372036854775807,
+        "c": 2,
+        "d": -2
+      },
+      "exactLimit": 14,
+      "error": "balances_nonzero_residual"
+    },
+    {
+      "name": "an_exact_limit_over_the_ceiling",
+      "balances": {
+        "a": -100,
+        "b": 100
+      },
+      "exactLimit": 21,
+      "error": "exact_limit_too_large"
+    }
+  ]
+}

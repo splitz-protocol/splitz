@@ -1,0 +1,54 @@
+{
+  "description": "Sealed entry frames. SPEC.md section 11.3.",
+  "count": 8,
+  "cases": [
+    {
+      "name": "a_well_formed_frame",
+      "frame": "AW5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
+      "expect": {
+        "version": 1,
+        "nonce": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5u",
+        "bodyBytes": 24
+      }
+    },
+    {
+      "name": "the_shortest_legal_frame",
+      "frame": "AW5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2M",
+      "expect": {
+        "version": 1,
+        "nonce": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5u",
+        "bodyBytes": 16
+      }
+    },
+    {
+      "name": "a_version_of_zero",
+      "frame": "AG5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
+      "error": "sealed_malformed"
+    },
+    {
+      "name": "a_version_from_the_future",
+      "frame": "Am5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
+      "error": "sealed_future_version"
+    },
+    {
+      "name": "too_short_to_hold_a_nonce",
+      "frame": "AW5ubm5ubm5ubm4",
+      "error": "sealed_malformed"
+    },
+    {
+      "name": "too_short_to_hold_a_tag",
+      "frame": "AW5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2M",
+      "error": "sealed_malformed"
+    },
+    {
+      "name": "not_base64url",
+      "frame": "!!!not base64!!!",
+      "error": "sealed_malformed"
+    },
+    {
+      "name": "an_empty_frame",
+      "frame": "",
+      "error": "sealed_malformed"
+    }
+  ]
+}

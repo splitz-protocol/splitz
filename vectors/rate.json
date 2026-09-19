@@ -1,0 +1,278 @@
+{
+  "description": "Fiat to zatoshi and back. SPEC.md section 7.",
+  "count": 23,
+  "cases": [
+    {
+      "name": "exact_division_needs_no_rounding",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 950000,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "expect": 100000000
+    },
+    {
+      "name": "rounds_up_by_default",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "expect": 36843
+    },
+    {
+      "name": "the_same_amount_rounded_down",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "down",
+      "expect": 36842
+    },
+    {
+      "name": "nearest_rounds_up_at_half",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 1,
+      "rate": {
+        "currency": "USD",
+        "minorUnitsPerZec": 2,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "nearest",
+      "expect": 50000000
+    },
+    {
+      "name": "nearest_rounds_down_below_half",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 1,
+      "rate": {
+        "currency": "USD",
+        "minorUnitsPerZec": 3,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "nearest",
+      "expect": 33333333
+    },
+    {
+      "name": "a_small_amount_at_a_high_price",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 1,
+      "rate": {
+        "currency": "USD",
+        "minorUnitsPerZec": 51234,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "expect": 1952
+    },
+    {
+      "name": "zero_converts_to_zero",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 0,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "expect": 0
+    },
+    {
+      "name": "matching_currency_is_accepted",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "amountCurrency": "MXN",
+      "expect": 36843
+    },
+    {
+      "name": "the_largest_amount_that_fits",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 92233720368,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "down",
+      "expect": 9708812670315
+    },
+    {
+      "name": "a_currency_the_rate_does_not_price",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "amountCurrency": "EUR",
+      "error": "rate_currency_mismatch"
+    },
+    {
+      "name": "a_price_of_zero",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 0,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "error": "rate_not_positive"
+    },
+    {
+      "name": "a_negative_price",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": -1,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "error": "rate_not_positive"
+    },
+    {
+      "name": "a_negative_amount",
+      "direction": "fiatToZatoshi",
+      "minorUnits": -350,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "error": "negative_amount"
+    },
+    {
+      "name": "one_unit_past_the_bound",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 92233720369,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "error": "rate_amount_too_large"
+    },
+    {
+      "name": "a_lower_case_currency",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 350,
+      "rate": {
+        "currency": "mxn",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "up",
+      "error": "bill_bad_currency"
+    },
+    {
+      "name": "nearest_at_a_remainder_past_two_to_the_sixty_two",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 92233720368,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 9223372036854775807,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "nearest",
+      "expect": 1
+    },
+    {
+      "name": "nearest_just_below_half_at_the_same_price",
+      "direction": "fiatToZatoshi",
+      "minorUnits": 46116860184,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 9223372036854775807,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "rounding": "nearest",
+      "expect": 0
+    },
+    {
+      "name": "one_zec_is_the_price",
+      "direction": "zatoshiToFiat",
+      "zatoshi": 100000000,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "expect": 950000
+    },
+    {
+      "name": "half_a_zec",
+      "direction": "zatoshiToFiat",
+      "zatoshi": 50000000,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "expect": 475000
+    },
+    {
+      "name": "display_rounds_half_up",
+      "direction": "zatoshiToFiat",
+      "zatoshi": 1,
+      "rate": {
+        "currency": "USD",
+        "minorUnitsPerZec": 200000000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "expect": 2
+    },
+    {
+      "name": "zero_zatoshi",
+      "direction": "zatoshiToFiat",
+      "zatoshi": 0,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "expect": 0
+    },
+    {
+      "name": "a_negative_zatoshi_count",
+      "direction": "zatoshiToFiat",
+      "zatoshi": -1,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "error": "negative_amount"
+    },
+    {
+      "name": "the_product_overflows",
+      "direction": "zatoshiToFiat",
+      "zatoshi": 9223372036854775807,
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "error": "amount_overflow"
+    }
+  ]
+}

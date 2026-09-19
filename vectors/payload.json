@@ -1,0 +1,3053 @@
+{
+  "description": "Scanned payloads. SPEC.md section 11.2.",
+  "count": 22,
+  "cases": [
+    {
+      "name": "encode_a_tab",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "log": [
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            }
+          ]
+        }
+      },
+      "expect": "splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ"
+    },
+    {
+      "name": "encode_a_delta",
+      "encode": {
+        "prefix": "splitzd1:",
+        "body": {
+          "v": 1,
+          "log": [
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            }
+          ]
+        }
+      },
+      "expect": "splitzd1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ"
+    },
+    {
+      "name": "encode_an_empty_log",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "log": []
+        }
+      },
+      "expect": "splitz1:eyJsb2ciOltdLCJ2IjoxfQ"
+    },
+    {
+      "name": "encode_sorts_keys",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "log": [
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            }
+          ],
+          "v": 1
+        }
+      },
+      "expect": "splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ"
+    },
+    {
+      "name": "encode_past_the_cap",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "log": [
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            },
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z"
+            }
+          ]
+        }
+      },
+      "error": "payload_too_large"
+    },
+    {
+      "name": "encode_refuses_a_float",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "log": [
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z",
+              "expense": {
+                "amount": 90.0
+              }
+            }
+          ]
+        }
+      },
+      "error": "canonical_json_float"
+    },
+    {
+      "name": "encode_refuses_a_nested_float",
+      "encode": {
+        "prefix": "splitz1:",
+        "body": {
+          "v": 1,
+          "log": [
+            {
+              "v": 1,
+              "id": "e1",
+              "author": "ana",
+              "kind": "addExpense",
+              "at": "2026-10-28T19:30:00.000Z",
+              "expense": {
+                "items": [
+                  {
+                    "minorUnits": 1.5
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "error": "canonical_json_float"
+    },
+    {
+      "name": "decode_a_tab",
+      "payload": "splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [
+          {
+            "at": "2026-10-28T19:30:00.000Z",
+            "author": "ana",
+            "id": "e1",
+            "kind": "addExpense",
+            "v": 1
+          }
+        ],
+        "invite": null
+      }
+    },
+    {
+      "name": "decode_a_delta",
+      "payload": "splitzd1:eyJsb2ciOltdLCJ2IjoxfQ",
+      "expect": {
+        "prefix": "splitzd1:",
+        "version": 1,
+        "log": [],
+        "invite": null
+      }
+    },
+    {
+      "name": "decode_strips_scan_padding",
+      "payload": "\ufeff  splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ\n",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [
+          {
+            "at": "2026-10-28T19:30:00.000Z",
+            "author": "ana",
+            "id": "e1",
+            "kind": "addExpense",
+            "v": 1
+          }
+        ],
+        "invite": null
+      }
+    },
+    {
+      "name": "padding_does_not_count_toward_the_cap",
+      "payload": "                                                  splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ                                                  ",
+      "expect": {
+        "prefix": "splitz1:",
+        "version": 1,
+        "log": [
+          {
+            "at": "2026-10-28T19:30:00.000Z",
+            "author": "ana",
+            "id": "e1",
+            "kind": "addExpense",
+            "v": 1
+          }
+        ],
+        "invite": null
+      }
+    },
+    {
+      "name": "not_a_payload_at_all",
+      "payload": "zcash:u1abc?amount=1",
+      "error": "payload_not_a_payload"
+    },
+    {
+      "name": "a_prefix_with_nothing_after",
+      "payload": "splitz1:",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "base64_that_does_not_decode",
+      "payload": "splitz1:!!!!",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_that_is_not_json",
+      "payload": "splitz1:bm90IGpzb24",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_that_is_not_an_object",
+      "payload": "splitz1:WzEsMiwzXQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "no_version",
+      "payload": "splitz1:eyJsb2ciOltdfQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_version_written_as_a_string",
+      "payload": "splitz1:eyJ2IjoiMSIsImxvZyI6W119",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_version_from_the_future",
+      "payload": "splitz1:eyJ2IjoyLCJsb2ciOltdfQ",
+      "error": "payload_future_version"
+    },
+    {
+      "name": "no_log_at_all",
+      "payload": "splitz1:eyJ2IjoxfQ",
+      "error": "payload_missing_body"
+    },
+    {
+      "name": "a_log_that_is_not_a_list",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOnt9fQ",
+      "error": "payload_missing_body"
+    },
+    {
+      "name": "one_byte_past_the_cap",
+      "payload": "splitz1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "error": "payload_too_large"
+    }
+  ]
+}

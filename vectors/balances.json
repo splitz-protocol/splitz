@@ -1,0 +1,484 @@
+{
+  "description": "Net positions and pre-netting debts. SPEC.md section 5.",
+  "count": 6,
+  "cases": [
+    {
+      "name": "one_expense_three_ways",
+      "bill": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": []
+      },
+      "expect": {
+        "net": {
+          "ana": 6000,
+          "ben": -3000,
+          "cai": -3000
+        },
+        "creditors": [
+          {
+            "id": "ana",
+            "amount": 6000
+          }
+        ],
+        "debtors": [
+          {
+            "id": "ben",
+            "amount": -3000
+          },
+          {
+            "id": "cai",
+            "amount": -3000
+          }
+        ],
+        "directDebts": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 3000
+          }
+        ]
+      }
+    },
+    {
+      "name": "two_expenses_net_off",
+      "bill": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          },
+          {
+            "id": "e2",
+            "paidBy": "ben",
+            "amount": 3000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:31:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": []
+      },
+      "expect": {
+        "net": {
+          "ana": 5000,
+          "ben": -1000,
+          "cai": -4000
+        },
+        "creditors": [
+          {
+            "id": "ana",
+            "amount": 5000
+          }
+        ],
+        "debtors": [
+          {
+            "id": "cai",
+            "amount": -4000
+          },
+          {
+            "id": "ben",
+            "amount": -1000
+          }
+        ],
+        "directDebts": [
+          {
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000
+          },
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 3000
+          },
+          {
+            "from": "cai",
+            "to": "ben",
+            "amount": 1000
+          }
+        ]
+      }
+    },
+    {
+      "name": "everybody_nets_to_zero",
+      "bill": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "paidBy": "ana",
+            "amount": 3000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "exact",
+              "amounts": {
+                "ana": 3000
+              }
+            }
+          }
+        ],
+        "payments": []
+      },
+      "expect": {
+        "net": {
+          "ana": 0,
+          "ben": 0,
+          "cai": 0
+        },
+        "creditors": [],
+        "debtors": [],
+        "directDebts": []
+      }
+    },
+    {
+      "name": "a_confirmed_payment_moves_a_balance",
+      "bill": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000,
+            "currency": "EUR",
+            "method": "cash",
+            "at": "2026-10-28T19:31:00.000Z"
+          }
+        ],
+        "confirmedPayments": [
+          "p1"
+        ]
+      },
+      "expect": {
+        "net": {
+          "ana": 3000,
+          "ben": 0,
+          "cai": -3000
+        },
+        "creditors": [
+          {
+            "id": "ana",
+            "amount": 3000
+          }
+        ],
+        "debtors": [
+          {
+            "id": "cai",
+            "amount": -3000
+          }
+        ],
+        "directDebts": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 3000
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_recorded_payment_that_nobody_confirmed_moves_nothing",
+      "bill": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000,
+            "currency": "EUR",
+            "method": "cash",
+            "at": "2026-10-28T19:31:00.000Z"
+          }
+        ]
+      },
+      "expect": {
+        "net": {
+          "ana": 6000,
+          "ben": -3000,
+          "cai": -3000
+        },
+        "creditors": [
+          {
+            "id": "ana",
+            "amount": 6000
+          }
+        ],
+        "debtors": [
+          {
+            "id": "ben",
+            "amount": -3000
+          },
+          {
+            "id": "cai",
+            "amount": -3000
+          }
+        ],
+        "directDebts": [
+          {
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000
+          },
+          {
+            "from": "cai",
+            "to": "ana",
+            "amount": 3000
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_confirmed_payments_list_that_is_not_a_list",
+      "bill": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ben",
+            "to": "ana",
+            "amount": 3000,
+            "currency": "EUR",
+            "method": "cash",
+            "at": "2026-10-28T19:31:00.000Z"
+          }
+        ],
+        "confirmedPayments": "p1"
+      },
+      "error": "bill_type_error"
+    }
+  ]
+}

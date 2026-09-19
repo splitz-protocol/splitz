@@ -1,0 +1,342 @@
+{
+  "description": "Payment request URIs. SPEC.md section 8.",
+  "count": 27,
+  "cases": [
+    {
+      "name": "one_payment_puts_the_address_in_the_path",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 36843
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843"
+    },
+    {
+      "name": "a_whole_zec_has_no_decimal_point",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 100000000
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1"
+    },
+    {
+      "name": "trailing_zeros_are_removed",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 50000000
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.5"
+    },
+    {
+      "name": "one_zatoshi_keeps_eight_places",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 1
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00000001"
+    },
+    {
+      "name": "the_largest_amount_there_is",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 2100000000000000
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=21000000"
+    },
+    {
+      "name": "two_payments_index_the_second",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246"
+    },
+    {
+      "name": "parameters_keep_their_order",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "memo": "thanks",
+          "label": "Ana",
+          "message": "dinner"
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&memo=dGhhbmtz&label=Ana&message=dinner"
+    },
+    {
+      "name": "a_label_is_percent_escaped",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "label": "Zcon7 d\u00eener \u2728"
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&label=Zcon7%20d%C3%AEner%20%E2%9C%A8"
+    },
+    {
+      "name": "a_long_label_is_cut_on_a_character_boundary",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "label": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9"
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&label=%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9"
+    },
+    {
+      "name": "a_memo_at_the_cap",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "memo": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&memo=bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW0"
+    },
+    {
+      "name": "fiat_prices_this_payment",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 6000000,
+          "fiat": [
+            "EUR",
+            3000
+          ]
+        }
+      ],
+      "includeFiat": true,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.06&fiat=EUR:3000"
+    },
+    {
+      "name": "each_payment_carries_its_own_fiat",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": [
+            "EUR",
+            1000
+          ]
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246,
+          "fiat": [
+            "EUR",
+            1500
+          ]
+        }
+      ],
+      "includeFiat": true,
+      "expect": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&fiat=EUR:1000&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246&fiat.1=EUR:1500"
+    },
+    {
+      "name": "fiat_is_omitted_unless_asked_for",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": [
+            "EUR",
+            1000
+          ]
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004"
+    },
+    {
+      "name": "fiat_at_the_digit_cap",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": [
+            "EUR",
+            999999999999999999
+          ]
+        }
+      ],
+      "includeFiat": true,
+      "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&fiat=EUR:999999999999999999"
+    },
+    {
+      "name": "no_payments_at_all",
+      "payments": [],
+      "includeFiat": false,
+      "error": "zip321_no_payments"
+    },
+    {
+      "name": "an_amount_of_zero",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 0
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_amount_not_positive"
+    },
+    {
+      "name": "a_negative_amount",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": -1
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_amount_not_positive"
+    },
+    {
+      "name": "more_than_there_will_ever_be",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 2100000000000001
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_amount_too_large"
+    },
+    {
+      "name": "a_memo_one_byte_over",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "memo": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_memo_too_large"
+    },
+    {
+      "name": "an_address_the_grammar_forbids",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l-2dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_bad_address"
+    },
+    {
+      "name": "no_address_at_all",
+      "payments": [
+        {
+          "address": "",
+          "zatoshi": 7004
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_no_address"
+    },
+    {
+      "name": "the_address_is_checked_first",
+      "payments": [
+        {
+          "address": "",
+          "zatoshi": 0
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_no_address"
+    },
+    {
+      "name": "a_fiat_code_that_is_not_three_letters",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": [
+            "EURO",
+            3000
+          ]
+        }
+      ],
+      "includeFiat": true,
+      "error": "zip321_bad_currency_code"
+    },
+    {
+      "name": "a_fiat_count_of_zero",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": [
+            "EUR",
+            0
+          ]
+        }
+      ],
+      "includeFiat": true,
+      "error": "zip321_fiat_not_positive"
+    },
+    {
+      "name": "a_fiat_count_of_nineteen_digits",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": [
+            "EUR",
+            1000000000000000000
+          ]
+        }
+      ],
+      "includeFiat": true,
+      "error": "zip321_fiat_too_many_digits"
+    },
+    {
+      "name": "the_largest_index_there_is",
+      "repeatPayment": {
+        "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+        "zatoshiFrom": 1000
+      },
+      "paymentCount": 10000,
+      "expectLength": 1426671,
+      "expectLastIndex": 9999
+    },
+    {
+      "name": "one_payment_past_the_cap",
+      "repeatPayment": {
+        "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+        "zatoshiFrom": 1000
+      },
+      "paymentCount": 10001,
+      "error": "zip321_too_many_payments"
+    }
+  ]
+}
