@@ -1,0 +1,25 @@
+[package]
+name = "splitz"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.82"
+description = "A shared-bill protocol for Zcash wallets. Exact integer money, deterministic settlement, ZIP 321 output."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/KamaIOps/Splitz-protocol"
+readme = "README.md"
+# The conformance corpus lives at the repository root, one level above this
+# package, so a published crate cannot carry it. tests/conformance.rs skips
+# when it is absent and says where to find it.
+include = ["src/**", "tests/**", "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE"]
+
+[dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+# The canonical ZIP 321 implementation, used only as an external oracle in
+# tests/oracle.rs. Stock from crates.io rather than a fork, so the check is
+# reproducible by anybody. It is a dev-dependency: a consumer of this crate
+# still takes one dependency, serde_json.
+zip321 = "0.9"
+zcash_address = "0.13"
+zcash_protocol = "0.10"
