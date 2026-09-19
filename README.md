@@ -10,16 +10,16 @@ implementations, one specification, one set of vectors that both run.
 ```
 ├── SPEC.md         the protocol
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
-├── vectors/        348 language-neutral conformance cases
+├── vectors/        408 language-neutral conformance cases
 ├── dart/           reference implementation  (0 dependencies)
 └── rust/           second implementation     (serde_json, for the wire format)
 ```
 
 ```
-cd dart && dart test                 # 367 tests, 348 of them the corpus
-cd rust && cargo test                # the same 348 cases, plus the oracle
+cd dart && dart test                 # 427 tests, 408 of them the corpus
+cd rust && cargo test                # the same 408 cases, plus the oracle
 cd rust && cargo test --release      # and again with overflow checks off
-tools/differential/run.sh 1 1200     # both implementations, one operation list
+tools/differential/run.sh 1 1200     # all three implementations, one operation list
 python3 tools/parity/surface.py      # the two public surfaces, diffed
 tools/web-target/run.sh              # asserts it still does not compile to JS
 cd dart && dart run example/dinner.dart
