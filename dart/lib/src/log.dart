@@ -186,6 +186,14 @@ Map<String, dynamic> checkEntry(Object? raw) {
         'An entry carries ${carried.join(" and ")}');
   }
 
+  // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
+  // and every pass below walks it — deriving its id encodes it. A depth
+  // nobody bounded is a stack the peer chose.
+  if (!withinDepth(entry, maxDocumentDepth)) {
+    raise(SplitCode.billTypeError,
+        'An entry nests deeper than $maxDocumentDepth');
+  }
+
   // §2.3, at entry ingress: a lone surrogate anywhere in the entry breaks the
   // §10.2 order the merge and the fold both depend on.
   checkScalarValues(entry);

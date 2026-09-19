@@ -168,6 +168,16 @@ pub fn check_entry(entry: &Value) -> Result<()> {
         }
     };
 
+    // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
+    // and every pass below walks it — deriving its id encodes it. A depth
+    // nobody bounded is a stack the peer chose.
+    if !crate::invite::within_depth(entry, crate::invite::MAX_DOCUMENT_DEPTH) {
+        return Err(SplitError::new(
+            code::BILL_TYPE_ERROR,
+            "An entry nests deeper than the document limit",
+        ));
+    }
+
     let carried: Vec<&str> = PAYLOAD_NAMES
         .iter()
         .copied()

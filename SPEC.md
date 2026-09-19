@@ -1685,6 +1685,10 @@ reader never chose. The member is carried verbatim for the caller to put
 through §11.1; this section does not validate what is inside it.
 
 **A body nests at most 64 levels deep**, and deeper is `payload_damaged`.
+§10.1 applies the same bound to a single entry, with `bill_type_error`,
+because an entry arriving over a relay (§11.3) never passes through this
+section at all — and every pass that touches it walks it, deriving its id by
+encoding it. A limit at one door only is a limit on the door nobody uses.
 **The body itself is level 1, and every value occupies a level, scalars
 included** — a string inside an array inside the body is level 3. Counting
 only the containers gives a figure one smaller and a reader who does that

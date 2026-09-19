@@ -391,8 +391,39 @@ FOLD_CASES = [
      [C, create(name="Other"), J_ANA], None),
 ]
 
+def at_depth(total):
+    """An entry whose deepest value sits at level `total` (§10.1).
+
+    The entry is level 1, its `expense` level 2 and the `note` level 3, so the
+    scalar inside `total - 3` list wrappers is at `total`. The id is derived,
+    because an entry that fails §9.5 first never reaches the depth check and
+    the case would assert nothing about it.
+    """
+    value = 1
+    for _ in range(total - 3):
+        value = [value]
+    e = {"v": 1, "author": "ana", "kind": "addExpense", "at": AT(3),
+         "expense": {"id": "x1", "paidBy": "ana", "amount": 1, "at": AT(3),
+                     "split": {"type": "equal", "among": ["ana"]},
+                     "note": value}}
+    # Too deep to encode is too deep to derive an id for, so the over-limit
+    # cases keep a written id: §10.1 refuses them before §9.5 is reached.
+    try:
+        e["id"] = derive_entry_id(e)
+    except RecursionError:
+        e["id"] = "too-deep-to-derive"
+    return e
+
+
 ENTRY_CASES = [
     ("a_create_entry_derives_its_id", C),
+    # §10.1's depth bound, at the boundary and one past it. A case nested far
+    # past a JSON reader's own recursion limit cannot live here: the file
+    # would fail to parse and take the whole corpus down rather than test one
+    # rule, which is the same reason §12 gives for `bill_not_scalar_values`.
+    # Each suite carries that case itself.
+    ("an_entry_at_the_depth_limit", at_depth(64)),
+    ("an_entry_one_level_too_deep", at_depth(65)),
     ("a_create_entry_with_no_key", {k: v for k, v in C.items() if k != "creatorKey"}),
     ("a_create_entry_with_a_short_nonce", dict(C, nonce=b64url(b"n" * 8))),
     ("a_create_entry_with_a_chosen_id", dict(C, id="weekend")),

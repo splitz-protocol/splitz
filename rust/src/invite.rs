@@ -273,15 +273,15 @@ pub const PAYLOAD_CAP: usize = 2331;
 /// The payload format version this crate writes and the highest it reads.
 pub const PAYLOAD_VERSION: i64 = 1;
 
-/// How deep a payload body may nest (§11.2).
+/// How deep a document may nest before a reader refuses it (§10.1, §11.2).
 ///
 /// Stated rather than inherited from a JSON library: one reader's parser gives
 /// up at its own depth and another does not, and the cap is no defence because
 /// a level of nesting costs two bytes. The deepest a conforming document
 /// reaches is the `sharedBy` array inside an itemised split, at eight.
-pub const MAX_PAYLOAD_DEPTH: usize = 64;
+pub const MAX_DOCUMENT_DEPTH: usize = 64;
 
-fn within_depth(value: &Value, limit: usize) -> bool {
+pub fn within_depth(value: &Value, limit: usize) -> bool {
     let mut stack = vec![(value, 1usize)];
     while let Some((node, d)) = stack.pop() {
         if d > limit {
@@ -402,7 +402,7 @@ pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
     if !body.is_object() {
         return Err(damaged());
     }
-    if !within_depth(&body, MAX_PAYLOAD_DEPTH) {
+    if !within_depth(&body, MAX_DOCUMENT_DEPTH) {
         return Err(damaged());
     }
 

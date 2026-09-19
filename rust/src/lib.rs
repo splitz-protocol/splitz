@@ -34,9 +34,9 @@ pub use error::{code, Result, SplitError};
 pub use instant::canonical_instant;
 pub use invite::{
     decode_payload, encode_payload, parse_invite, parse_sealed_frame, render_invite,
-    strip_scan_padding, Invite, ScannedPayload, SealedFrame, INVITE_VERSION, MAX_INVITE_BILL_ID,
-    MAX_PAYLOAD_DEPTH, NONCE_BYTES, PAYLOAD_CAP, PAYLOAD_VERSION, SCAN_PADDING, SEALED_VERSION,
-    TAG_BYTES,
+    strip_scan_padding, within_depth, Invite, ScannedPayload, SealedFrame, INVITE_VERSION,
+    MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP, PAYLOAD_VERSION,
+    SCAN_PADDING, SEALED_VERSION, TAG_BYTES,
 };
 pub use log::{
     check_entry, confirmation_rule, derive_bill_id, derive_entry_id, fold_log, merge_logs,

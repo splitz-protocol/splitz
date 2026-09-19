@@ -474,6 +474,41 @@ void loneSurrogateTests() {
   const high = '\uD800'; // a high surrogate with nothing after it
   const low = '\uDC00'; // a low surrogate with nothing before it
 
+  // §10.1's depth bound, past what a JSON reader's own recursion limit
+  // admits. This cannot be a corpus vector: the file would fail to parse and
+  // take the whole corpus down rather than test one rule, which is the reason
+  // §12 gives for `bill_not_scalar_values`. Built here in code instead.
+  test('an entry nested far past the limit is refused, not a stack overflow',
+      () {
+    Object? value = 1;
+    for (var i = 0; i < 20000; i++) {
+      value = [value];
+    }
+    final entry = <String, dynamic>{
+      'v': 1,
+      'id': 'x',
+      'author': 'ana',
+      'kind': 'addExpense',
+      'at': '2026-10-28T19:30:00.000Z',
+      'expense': {
+        'id': 'x1',
+        'paidBy': 'ana',
+        'amount': 1,
+        'at': '2026-10-28T19:30:00.000Z',
+        'split': {
+          'type': 'equal',
+          'among': ['ana']
+        },
+        'note': value,
+      },
+    };
+    expect(
+        () => checkEntry(entry),
+        throwsA(isA<SplitError>()
+            .having((e) => e.code, 'code', SplitCode.billTypeError)),
+        reason: 'a relay entry never passes §11.2, so §10.1 has to bound it');
+  });
+
   test('a lone surrogate is not a scalar value', () {
     expect(hasLoneSurrogate(high), isTrue);
     expect(hasLoneSurrogate(low), isTrue);

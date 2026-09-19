@@ -524,12 +524,13 @@ def canonical_json(value):
 
 PAYLOAD_CAP = 2331          # a version-40 QR code, byte mode, EC level M
 
-# Section 11.2. Stated here rather than inherited from a JSON library: one
+# Sections 10.1 and 11.2. Stated here rather than inherited from a JSON
+# library: one
 # reader's parser gives up at its own depth and another does not, and the cap
 # is no defence because a level of nesting costs two bytes. The deepest a
 # conforming document reaches is the sharedBy array inside an itemised split,
 # at eight.
-MAX_PAYLOAD_DEPTH = 64
+MAX_DOCUMENT_DEPTH = 64
 
 
 def _depth(value, limit):
@@ -582,7 +583,7 @@ def decode_payload(text):
         raise Refused("payload_damaged")
     if not isinstance(body, dict):
         raise Refused("payload_damaged")
-    if not _depth(body, MAX_PAYLOAD_DEPTH):
+    if not _depth(body, MAX_DOCUMENT_DEPTH):
         raise Refused("payload_damaged")
 
     version = body.get("v")
@@ -1296,6 +1297,12 @@ def seal_log(entries):
 def check_entry(entry):
     """Section 10.1. Refused before the entry reaches a log."""
     if not isinstance(entry, dict):
+        raise Refused("bill_type_error")
+    # Section 10.1, before anything that walks the entry — the scalar-value
+    # check below and the id derivation both recurse. An entry arriving over a
+    # relay (section 11.3) never passes section 11.2's cap, so a depth nobody
+    # bounded here is a stack the peer chose.
+    if not _depth(entry, MAX_DOCUMENT_DEPTH):
         raise Refused("bill_type_error")
     kind = entry.get("kind")
     if kind not in ENTRY_KINDS:
