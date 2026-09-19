@@ -53,9 +53,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: dart pub get
         working-directory: dart
+      # A generator that quietly narrowed would make every run print
+      # "agreement" and mean nothing by it.
+      - run: python3 tools/differential/test_generate.py
       - run: tools/differential/run.sh 1 1200
       - run: tools/differential/run.sh 2 1200
       - run: tools/differential/run.sh 3 1200
+      - run: tools/differential/run.sh 4 1200
+      - run: tools/differential/run.sh 5 1200
+      - run: tools/differential/run.sh 6 1200
+      - run: tools/differential/run.sh 7 1200
 
   parity:
     # An API one implementation has and the other does not never reaches the

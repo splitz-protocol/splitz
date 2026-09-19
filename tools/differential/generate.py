@@ -10,8 +10,13 @@ rather than against anybody's expectation.
 Usage: generate.py [seed] [count]
 """
 import json
+import pathlib
 import random
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+
+import logs as _logs  # noqa: E402
 
 # Values chosen to sit on boundaries rather than in the middle of ranges: a
 # wrong answer in the interior is usually wrong at the edge too, and the edge
@@ -46,6 +51,31 @@ NAMES = [
 ]
 RATES = [1, 2, 3, 51234, 950000, 10**8, 2**31, 2**53 - 1]
 
+# Addresses that separate an ASCII-alphanumeric test from a Unicode-aware one.
+# ZIP 321's grammar is `zcashaddress = 1*( ALPHA / DIGIT )`, and RFC 3986's
+# ALPHA and DIGIT are ASCII, so every entry here carrying a letter or digit
+# outside ASCII is refused.
+ADDRESSES = [
+    "u1abc",
+    "Ab3",
+    "t1MJpRjRDKmNbFLkBFtYnPU2S9TgJph3Yc",
+    "0",
+    "\u00e9",              # LATIN SMALL LETTER E WITH ACUTE
+    "a\u00b2",             # SUPERSCRIPT TWO: numeric, not a digit
+    "\uff12",              # FULLWIDTH DIGIT TWO
+    "\u00df",              # LATIN SMALL LETTER SHARP S
+    "a-b",
+    "a b",
+    "",
+]
+
+# MAX_ZATOSHI is 21e6 ZEC in zatoshi; 18 digits is the fiat ceiling.
+ZATOSHI = [1, 2, 10**8, 2_100_000_000_000_000, 2_100_000_000_000_001, 0, -1]
+MEMOS = [None, "", "hi", "\u2728", "\u00e9" * 200, "\u00e9" * 300]
+LABELS = [None, "", "Ana", "\u00e9" * 60, "a+b"]
+MESSAGES = [None, "", "dinner", "a b", "\U0001F600"]
+FIATS = [None, ["EUR", 1], ["EUR", 0], ["eur", 5], ["EUR", 10**17], ["EUR", 10**18]]
+
 INSTANTS = [
     "2026-10-28T19:30:00.000Z",
     "2026-10-28t19:30:00.0009Z",
@@ -69,6 +99,21 @@ INVITES = [
     "  splitz://join?v=1&b=Ab3&k=Kk  ",
     "splitz://join?v=1&b=Ab3&k=Kk&t=other",
     "SPLITZ://join?v=1&t=Ab3&k=Kk",
+    # The bounds section 11.1 puts on `v` and `x`. i64::MAX is 19 digits;
+    # u64::MAX is 20 and is over the bound.
+    "splitz://join?v=1&b=Ab3&k=Kk&x=0",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=1793000000",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=9223372036854775807",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=9223372036854775808",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=18446744073709551615",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=18446744073709551616",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=99999999999999999999999",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=007",
+    "splitz://join?v=1&b=Ab3&k=Kk&x=",
+    "splitz://join?v=9223372036854775807&b=Ab3&k=Kk",
+    "splitz://join?v=9223372036854775808&b=Ab3&k=Kk",
+    "splitz://join?v=4294967296&b=Ab3&k=Kk",
+    "splitz://join?v=99999999999999999999999&b=Ab3&k=Kk",
 ]
 
 CANONICAL = [
@@ -86,12 +131,17 @@ def operations(seed, count):
     rng = random.Random(seed)
     kinds = [
         "allocate", "split", "rate", "amount", "qchar", "instant",
-        "invite", "canonical", "billid",
+        "invite", "canonical", "billid", "request", "fold", "merge",
     ]
     ops = []
-    for i in range(count):
+    pairs = _logs.corruptions()
+    fold_seen = 0
+    # A log operation whose log cannot be built is skipped and redrawn, so the
+    # list is always `count` long and its ids are dense: compare.py keys
+    # answers by id and test_generate.py asserts both.
+    while len(ops) < count:
         kind = rng.choice(kinds)
-        op = {"id": i, "op": kind}
+        op = {"id": len(ops), "op": kind}
 
         if kind == "allocate":
             op["total"] = rng.choice(TOTALS)
@@ -144,6 +194,43 @@ def operations(seed, count):
                 "creatorKey": "k" * 43,
                 "nonce": "n" * 22,
             }
+
+        elif kind == "request":
+            op["includeFiat"] = rng.choice([True, False])
+            op["payments"] = [
+                {
+                    "address": rng.choice(ADDRESSES),
+                    "zatoshi": rng.choice(ZATOSHI),
+                    "memo": rng.choice(MEMOS),
+                    "label": rng.choice(LABELS),
+                    "message": rng.choice(MESSAGES),
+                    "fiat": rng.choice(FIATS),
+                }
+                for _ in range(rng.randint(1, 3))
+            ]
+
+        elif kind == "fold":
+            # The corruption list is DEALT to fold operations rather than
+            # drawn for each one. A draw shared with the merge kind reaches
+            # barely a third of the pairs at the count this lane is run at,
+            # and the pairs it misses are not the ones anybody predicts.
+            pair = pairs[fold_seen % len(pairs)] if pairs else None
+            fold_seen += 1
+            log = _logs.log(rng, corrupt=rng.choice([0, 0, 1]), pair=pair)
+            if log is None:
+                continue
+            op["log"] = log
+
+        elif kind == "merge":
+            log = _logs.log(rng, corrupt=rng.choice([0, 1]))
+            if log is None:
+                continue
+            # Two devices holding overlapping views of one log, the shared
+            # entries differing in `sig` — which is what §10.2's rule 2 has to
+            # separate. Slicing one log gives an overlap of byte-identical
+            # entries and rule 2 no work at all.
+            cut = rng.randrange(1, len(log)) if len(log) > 1 else 1
+            op["parts"] = [log[:cut + 1], _logs.variants(rng, log[cut:])]
 
         ops.append(op)
     return ops

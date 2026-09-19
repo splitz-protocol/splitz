@@ -6,6 +6,13 @@ answers, so an API one side has and the other does not — a getter a consumer
 reads, a constant a caller branches on — is invisible to both. It never reaches
 the wire, so nothing that watches the wire can see it.
 
+Names are not the whole surface. Two functions can share a name and disagree
+about what they accept, and the wider signature then reaches a value the
+narrower one cannot be called with at all — so one implementation runs a check
+the other never gets to. This lane therefore compares arity, and reports a
+parameter Dart types as `Object?` or `dynamic` whose Rust counterpart is typed
+concretely.
+
 A divergence is either idiom, in which case it belongs in `allow.txt` with a
 reason, or it is a gap. Exit status is 1 when one is neither.
 
@@ -57,6 +64,14 @@ RENAMES = {
     "signingMessage": "signing_message",
     "resolveIdentities": "resolve_identities",
     "renderObligation": "render_obligation",
+    "decodeRate": "decode_rate",
+    "billSplitModes": "SPLIT_MODES",
+    "checkCurrency": "check_currency",
+    "isCurrency": "is_currency",
+    "decodeParticipant": "decode_participant",
+    "decodeExpense": "decode_expense",
+    "decodePayment": "decode_payment",
+    "maxPayloadDepth": "MAX_PAYLOAD_DEPTH",
     "entrySigningDomain": "ENTRY_SIGNING_DOMAIN",
     "checkCurrency": "check_currency",
     "isCurrency": "is_currency",
@@ -114,18 +129,73 @@ def dart_surface() -> set[str]:
 
 
 def rust_surface() -> set[str]:
+    """What `splitz::` re-exports — the surface a consumer actually reaches.
+
+    Not every `pub` item in every module. A module is `pub mod`, so a name can
+    be `pub` and still cost a consumer a compile error and a search, because
+    the crate root does not carry it. Dart's barrel re-exports everything, so
+    comparing module-level `pub` against it says two surfaces match when one
+    of them is reachable only by spelling out the module.
+    """
+    text = (ROOT / "rust" / "src" / "lib.rs").read_text(encoding="utf-8")
     names: set[str] = set()
+    for match in re.finditer(r"^pub use [\w:]+\{([^}]*)\};", text, re.M | re.S):
+        for item in match.group(1).split(","):
+            item = item.strip()
+            if item:
+                names.add(item.split(" as ")[-1])
+    for match in re.finditer(r"^pub use [\w:]*::(\w+);", text, re.M):
+        names.add(match.group(1))
+    return names
+
+
+def _split_params(text: str) -> list[str]:
+    """Top-level comma-separated parameters, ignoring nested brackets."""
+    out, depth, cur = [], 0, ""
+    for ch in text:
+        if ch in "<([{":
+            depth += 1
+        elif ch in ">)]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return out
+
+
+def dart_signatures() -> dict[str, list[str]]:
+    """Top-level function name -> its parameter declarations."""
+    sigs: dict[str, list[str]] = {}
+    for path in (ROOT / "dart" / "lib" / "src").glob("*.dart"):
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\] ]*\s+)(\w+)\s*\(([^;{]*?)\)\s*(?:\{|=>)",
+            text,
+            re.M | re.S,
+        ):
+            name, params = match.group(1), match.group(2)
+            if name.startswith("_"):
+                continue
+            sigs[name] = [p for p in _split_params(params.replace("{", "").replace("}", ""))]
+    return sigs
+
+
+def rust_signatures() -> dict[str, list[str]]:
+    sigs: dict[str, list[str]] = {}
     for path in (ROOT / "rust" / "src").glob("*.rs"):
         text = path.read_text(encoding="utf-8")
-        # Strip test modules: they are not surface.
         text = re.split(r"^#\[cfg\(test\)\]", text, maxsplit=1, flags=re.M)[0]
         for match in re.finditer(
-            r"^pub\s+(?:fn|struct|enum|trait|type)\s+(\w+)", text, re.M
+            r"^pub\s+fn\s+(\w+)\s*(?:<[^>]*>)?\s*\(([^;{]*?)\)\s*(?:->|\{)",
+            text,
+            re.M | re.S,
         ):
-            names.add(match.group(1))
-        for match in re.finditer(r"^\s*pub\s+const\s+(\w+)", text, re.M):
-            names.add(match.group(1))
-    return names
+            sigs[match.group(1)] = _split_params(match.group(2))
+    return sigs
 
 
 def normalise(name: str) -> str:
@@ -148,14 +218,37 @@ def main() -> int:
 
     only_dart = sorted(f"dart::{n}" for n in dart - rust)
     only_rust = sorted(f"rust::{n}" for n in rust - dart)
-    divergences = only_dart + only_rust
+
+    # Shared names whose signatures disagree. An arity difference is a
+    # consumer's compile error; an `Object?` on one side against a concrete
+    # type on the other is worse, because the typed side cannot be handed the
+    # value that the untyped side has to decide about.
+    d_sigs = {normalise(n): ps for n, ps in dart_signatures().items()}
+    r_sigs = rust_signatures()
+    shape: list[str] = []
+    for name in sorted(set(d_sigs) & set(r_sigs)):
+        dp, rp = d_sigs[name], r_sigs[name]
+        if len(dp) != len(rp):
+            shape.append(f"shape::{name} takes {len(dp)} in dart, {len(rp)} in rust")
+            continue
+        for i, (d, r) in enumerate(zip(dp, rp)):
+            loose = re.match(r"^(Object\?|dynamic)(\s|$)", d.strip())
+            if loose and "dyn " not in r and "Value" not in r:
+                shape.append(
+                    f"shape::{name} parameter {i} is {d.strip()} in dart "
+                    f"and {r.strip()} in rust"
+                )
+
+    divergences = only_dart + only_rust + shape
 
     unexplained = [d for d in divergences if d not in allowed]
     explained = [d for d in divergences if d in allowed]
     stale = [name for name in allowed if name not in divergences]
 
     print(
-        f"{len(dart & rust)} shared, {len(divergences)} divergences: "
+        f"{len(dart & rust)} shared names, "
+        f"{len(set(d_sigs) & set(r_sigs))} shared signatures, "
+        f"{len(divergences)} divergences: "
         f"{len(explained)} recorded, {len(unexplained)} unexplained"
     )
     for name in stale:

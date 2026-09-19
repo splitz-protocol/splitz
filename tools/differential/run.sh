@@ -10,6 +10,10 @@
 # Rust runs in both profiles. "Both implementations agree" means nothing at a
 # numeric boundary unless the overflow-checked and unchecked builds both run.
 #
+# The reference under tools/corpus answers the same list. It writes every
+# expectation in vectors/, so no corpus case can contradict it; this is the one
+# lane where a third, independently written answer checks the other two.
+#
 # Usage: tools/differential/run.sh [seed] [count]
 # Exit status is 1 when any two disagree, so it can gate a commit.
 
@@ -37,8 +41,12 @@ cargo_bin="${CARGO:-cargo}"
 (cd "$root/rust" && "$cargo_bin" run --quiet --release --example differential) \
   < "$work/ops.jsonl" > "$work/rust-release.jsonl"
 
+python3 "$root/tools/differential/reference.py" \
+  < "$work/ops.jsonl" > "$work/reference.jsonl"
+
 python3 "$root/tools/differential/compare.py" \
   "$work/ops.jsonl" \
   "dart=$work/dart.jsonl" \
   "rust-debug=$work/rust-debug.jsonl" \
-  "rust-release=$work/rust-release.jsonl"
+  "rust-release=$work/rust-release.jsonl" \
+  "reference=$work/reference.jsonl"

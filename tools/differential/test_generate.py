@@ -21,7 +21,7 @@ GENERATE = HERE / "generate.py"
 # comes back `unknown_operation` from all of them and agrees vacuously.
 EXPECTED_KINDS = {
     "allocate", "split", "rate", "amount", "qchar", "instant",
-    "invite", "canonical", "billid",
+    "invite", "canonical", "billid", "request", "fold", "merge",
 }
 
 
@@ -76,6 +76,53 @@ def main():
     uris = {o.get("uri", "") for o in ops}
     check("reaches a byte order mark", any("﻿" in u for u in uris))
     check("reaches a non-breaking space", any(" " in u for u in uris))
+
+    # A payment request whose address is alphanumeric only under a Unicode-aware
+    # test is what separates the ZIP 321 grammar from `str.isalnum`.
+    addresses = {
+        p["address"]
+        for o in ops if o["op"] == "request"
+        for p in o["payments"]
+    }
+    check("reaches an address outside ASCII",
+          any(any(ord(c) > 127 for c in a) for a in addresses),
+          f"{sorted(addresses)}")
+    check("reaches an empty address", "" in addresses)
+
+    # The fold and merge operations exist to reach the passes that apply an
+    # entry. A generator emitting only well-formed logs makes every run agree
+    # and mean nothing by it, so a payload member of the wrong type has to
+    # appear. A non-string `currency` is named separately: absent and
+    # present-but-not-a-currency take different branches (section 9.1), and a
+    # generator that reaches only one of them tests neither against the
+    # other.
+    def payload_members(kind, member):
+        seen = []
+        for o in ops:
+            if o["op"] == "fold":
+                sources = [o["log"]]
+            elif o["op"] == "merge":
+                sources = o["parts"]
+            else:
+                continue
+            for log in sources:
+                for e in log:
+                    p = e.get(kind)
+                    if isinstance(p, dict) and member in p:
+                        seen.append(p[member])
+        return seen
+
+    currencies = payload_members("expense", "currency") + \
+        payload_members("payment", "currency")
+    check("reaches a currency that is not a string",
+          any(not isinstance(v, str) for v in currencies),
+          f"{currencies}")
+    amounts = payload_members("expense", "amount")
+    check("reaches an amount that is not an integer",
+          any(not isinstance(v, int) or isinstance(v, bool) for v in amounts))
+    check("every log entry carries a derived id",
+          all(len(e.get("id", "")) == 22
+              for o in ops if o["op"] == "fold" for e in o["log"]))
 
     instants = {o.get("text", "") for o in ops if o["op"] == "instant"}
     check("reaches a leap second",

@@ -77,10 +77,72 @@ fn answer(op: &Value) -> Value {
 
         "invite" => attempt(|| {
             let i = splitz::parse_invite(op["uri"].as_str().unwrap_or(""))?;
-            Ok(json!({"billId": i.bill_id, "key": i.key, "name": i.name}))
+            Ok(json!({"billId": i.bill_id, "key": i.key, "name": i.name,
+                      "expiry": i.expiry}))
         }),
 
         "canonical" => attempt(|| Ok(json!(splitz::canonical_json(&op["value"])?))),
+
+        "request" => attempt(|| {
+            let payments: Vec<splitz::Zip321Payment> = op["payments"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|p| splitz::Zip321Payment {
+                            address: p["address"].as_str().unwrap_or("").to_owned(),
+                            zatoshi: p["zatoshi"].as_i64().unwrap_or(0),
+                            fiat: p["fiat"].as_array().map(|f| splitz::FiatPrice {
+                                currency: f[0].as_str().unwrap_or("").to_owned(),
+                                minor_units: f[1].as_i64().unwrap_or(0),
+                            }),
+                            memo: p["memo"].as_str().map(|m| m.as_bytes().to_vec()),
+                            label: p["label"].as_str().map(str::to_owned),
+                            message: p["message"].as_str().map(str::to_owned),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(json!(splitz::render_uri(
+                &payments,
+                op["includeFiat"].as_bool().unwrap_or(false)
+            )?))
+        }),
+
+        "fold" => attempt(|| {
+            let log = op["log"].as_array().cloned().unwrap_or_default();
+            let r = splitz::fold_log(&log, None)?;
+            // The bill goes through the decoder: a fold that returns a
+            // document its own decoder refuses is the defect this op exists
+            // to catch, and it must show as a divergence rather than a crash.
+            splitz::decode_bill(&r.bill)?;
+            Ok(json!({
+                "bill": r.bill,
+                "setAside": r.set_aside.iter()
+                    .map(|a| json!({"id": a.id, "code": a.code}))
+                    .collect::<Vec<_>>(),
+                "withdrawn": r.withdrawn,
+            }))
+        }),
+
+        "merge" => attempt(|| {
+            let parts: Vec<Vec<Value>> = op["parts"]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .map(|p| p.as_array().cloned().unwrap_or_default())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let r = splitz::merge_logs(&parts)?;
+            Ok(json!({
+                // The entries themselves: §10.2 rule 2 decides which copy
+                // under one id survives, and an id list is the same either way.
+                "merged": r.merged,
+                "refused": r.refused.iter()
+                    .map(|a| json!({"id": a.id, "code": a.code}))
+                    .collect::<Vec<_>>(),
+            }))
+        }),
 
         "billid" => attempt(|| Ok(json!(splitz::derive_bill_id(&op["entry"])?))),
 

@@ -61,11 +61,70 @@ Map<String, Object?> answer(Map<String, dynamic> op) {
     case 'invite':
       return attempt(() {
         final i = parseInvite(op['uri'] as String);
-        return {'billId': i.billId, 'key': i.key, 'name': i.name};
+        return {
+          'billId': i.billId,
+          'key': i.key,
+          'name': i.name,
+          'expiry': i.expiry
+        };
       });
 
     case 'canonical':
       return attempt(() => canonicalJson(op['value']));
+
+    case 'request':
+      return attempt(() => renderUri(
+            [
+              for (final p
+                  in (op['payments'] as List).cast<Map<String, dynamic>>())
+                Zip321Payment(
+                  address: p['address'] as String,
+                  zatoshi: p['zatoshi'] as int,
+                  fiat: p['fiat'] == null
+                      ? null
+                      : FiatPrice((p['fiat'] as List)[0] as String,
+                          (p['fiat'] as List)[1] as int),
+                  memo: p['memo'] == null
+                      ? null
+                      : utf8.encode(p['memo'] as String),
+                  label: p['label'] as String?,
+                  message: p['message'] as String?,
+                ),
+            ],
+            includeFiat: op['includeFiat'] as bool,
+          ));
+
+    case 'fold':
+      return attempt(() {
+        final r = foldLog((op['log'] as List).cast<Map<String, dynamic>>());
+        // The bill goes through the decoder: a fold that returns a document
+        // its own decoder refuses is the defect this op exists to catch, and
+        // it must show as a divergence rather than a crash.
+        decodeBill(r.bill);
+        return {
+          'bill': r.bill,
+          'setAside': [
+            for (final a in r.setAside) {'id': a.id, 'code': a.code},
+          ],
+          'withdrawn': r.withdrawn,
+        };
+      });
+
+    case 'merge':
+      return attempt(() {
+        final r = mergeLogs([
+          for (final part in (op['parts'] as List))
+            (part as List).cast<Map<String, dynamic>>(),
+        ]);
+        return {
+          // The entries themselves: §10.2 rule 2 decides which copy under one
+          // id survives, and an id list is the same either way.
+          'merged': r.merged,
+          'refused': [
+            for (final a in r.refused) {'id': a.id, 'code': a.code},
+          ],
+        };
+      });
 
     case 'billid':
       return attempt(
