@@ -17,8 +17,11 @@ const int payloadCap = 2331;
 /// The payload format version this library writes and the highest it reads.
 const int payloadVersion = 1;
 
-const String _tabPrefix = 'splitz1:';
-const String _deltaPrefix = 'splitzd1:';
+/// The prefix a whole bill's payload carries (§11.2).
+const String billPrefix = 'splitz1:';
+
+/// The prefix a delta carries. A delta never carries an invite.
+const String deltaPrefix = 'splitzd1:';
 
 /// The sealed frame version.
 const int sealedVersion = 1;
@@ -62,7 +65,7 @@ class ScannedPayload {
 
 /// Encodes [body] under [prefix].
 String encodePayload(String prefix, Map<String, dynamic> body) {
-  if (prefix != _tabPrefix && prefix != _deltaPrefix) {
+  if (prefix != billPrefix && prefix != deltaPrefix) {
     raise(SplitCode.payloadNotAPayload, 'No such payload prefix: "$prefix"');
   }
   final encoded = _b64(utf8.encode(canonicalJson(body)));
@@ -79,10 +82,10 @@ ScannedPayload decodePayload(String text) {
   // measured, so padding does not count toward the cap.
   final s = stripScanPadding(text);
   final String prefix;
-  if (s.startsWith(_tabPrefix)) {
-    prefix = _tabPrefix;
-  } else if (s.startsWith(_deltaPrefix)) {
-    prefix = _deltaPrefix;
+  if (s.startsWith(billPrefix)) {
+    prefix = billPrefix;
+  } else if (s.startsWith(deltaPrefix)) {
+    prefix = deltaPrefix;
   } else {
     raise(SplitCode.payloadNotAPayload, 'Not a payload: "$text"');
   }
@@ -135,7 +138,7 @@ ScannedPayload decodePayload(String text) {
     // §11.2. Only the bill prefix carries an invite, and only an object is
     // one: a delta's reader already holds a key, and a second one arriving
     // from a peer names a bill and a key that reader never chose.
-    invite: prefix == _tabPrefix && map['invite'] is Map
+    invite: prefix == billPrefix && map['invite'] is Map
         ? (map['invite'] as Map).cast<String, dynamic>()
         : null,
   );

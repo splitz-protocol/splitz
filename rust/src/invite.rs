@@ -296,8 +296,11 @@ pub fn within_depth(value: &Value, limit: usize) -> bool {
     true
 }
 
-const BILL_PREFIX: &str = "splitz1:";
-const DELTA_PREFIX: &str = "splitzd1:";
+/// The prefix a whole bill's payload carries (section 11.2).
+pub const BILL_PREFIX: &str = "splitz1:";
+
+/// The prefix a delta carries. A delta never carries an invite.
+pub const DELTA_PREFIX: &str = "splitzd1:";
 
 /// A decoded payload.
 #[derive(Debug, Clone, PartialEq)]
