@@ -10,7 +10,7 @@ implementations, one specification, one set of vectors that both run.
 ```
 ├── SPEC.md         the protocol
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
-├── vectors/        408 language-neutral conformance cases
+├── vectors/        426 language-neutral conformance cases
 ├── dart/           reference implementation  (0 dependencies)
 └── rust/           second implementation     (serde_json, for the wire format)
 ```
@@ -94,7 +94,11 @@ zcash:u1ana...?amount=0.15263158&fiat=MXN:145000&label=Ana
 
 ## Conformance
 
-An implementation is conformant when it reproduces every case in `vectors/`.
+An implementation is conformant when it reproduces every case in `vectors/`
+**and keeps §14, which is addressed to the wallet rather than the wire.**
+`CONFORMANCE.md` is the guide: what conformance means, what the host
+supplies, the signed-64-bit requirement and which languages it rules out,
+and what makes a green suite mean something.
 See `vectors/README.md` for the format, and for how the expectations were
 produced: a reference written from the specification text, not from either
 shipped implementation, because a corpus generated from an implementation

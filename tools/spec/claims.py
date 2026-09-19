@@ -135,14 +135,27 @@ def corpus_codes() -> set[str]:
 
 
 def corpus_cases() -> dict[str, dict]:
-    """Every corpus case by name, so a figure quoted beside one can be read."""
+    """Every corpus case, keyed `file:name`.
+
+    A case name is unique within its file and not across the corpus: seven
+    names are carried by more than one file, because `a_version_from_the_future`
+    is a sensible name for a bill, an invite, a payload and a sealed frame. A
+    map keyed by name alone silently keeps one of each and drops the rest,
+    which both undercounts the corpus and lets a figure quoted beside one case
+    be checked against another.
+    """
     cases: dict[str, dict] = {}
     for path in sorted((ROOT / "vectors").glob("*.json")):
         doc = json.loads(path.read_text(encoding="utf-8"))
         for case in doc.get("cases", []):
             if isinstance(case, dict) and "name" in case:
-                cases[case["name"]] = case
+                cases[f"{path.name}:{case['name']}"] = case
     return cases
+
+
+def case_names(cases: dict[str, dict]) -> set[str]:
+    """The bare names, for a document that cites a case without its file."""
+    return {key.split(":", 1)[1] for key in cases}
 
 
 def main() -> int:
@@ -196,7 +209,7 @@ def main() -> int:
     named_cases = set(re.findall(r"`(the_[a-z0-9_]+|[a-z]+_payable_[a-z0-9_]+)`", text))
     check("cases-named", len(named_cases),
           [f"SPEC.md names the case `{c}`, which no vector file carries"
-           for c in sorted(named_cases) if c not in cases])
+           for c in sorted(named_cases) if c not in case_names(cases)])
 
     # A figure quoted in the same table row as a case name must be what that
     # case measures. This is what stops a number drifting from its evidence.
@@ -205,11 +218,20 @@ def main() -> int:
     for row in re.findall(r"^\|.*`([a-z0-9_…]+)`.*\|\s*\**(\d[\d,]*|refused)\**\s*\|$",
                           text, re.M):
         name, figure = row
-        match = [c for c in cases if c.endswith(name.lstrip("…"))]
+        bare = name.lstrip("…")
+        match = [c for c in cases if c.split(":", 1)[1].endswith(bare)]
         if not match:
             continue
-        case = cases[match[0]]
         pinned += 1
+        if len(match) > 1:
+            # Resolving to whichever file sorts first would check the figure
+            # against a case SPEC.md was not talking about.
+            bad_figures.append(
+                f"`{name}` names a case in {len(match)} files "
+                f"({', '.join(sorted(m.split(':', 1)[0] for m in match))}); "
+                f"quote it with its file")
+            continue
+        case = cases[match[0]]
         if figure == "refused":
             if "error" not in case:
                 bad_figures.append(f"`{match[0]}` is quoted as refused and is accepted")
@@ -237,12 +259,46 @@ def main() -> int:
         end = text.find("\n## ", start + 1)
         return bool(re.search(rf"^{int(part)}\. ", text[start:end], re.M))
 
-    refs = set(re.findall(r"§(\d+(?:\.\d+)?)", text))
+    # Every document that cites the specification, not only the
+    # specification itself: a renumbered section breaks a guide silently, and
+    # the guide is what somebody implementing this in a fourth language reads.
+    cited = {"SPEC.md": text}
+    for name in ("CONFORMANCE.md", "README.md", "vectors/README.md"):
+        path = ROOT / name
+        if path.exists():
+            cited[name] = path.read_text(encoding="utf-8")
+
+    refs = {(name, r)
+            for name, body in cited.items()
+            for r in re.findall(r"§(\d+(?:\.\d+)?)", body)}
     check("sections-resolve", len(refs),
-          [f"SPEC.md refers to §{r}, which is neither a heading nor a "
+          [f"{name} refers to §{r}, which is neither a heading nor a "
            f"numbered step of its section"
-           for r in sorted(refs, key=lambda x: [int(p) for p in x.split(".")])
+           for name, r in sorted(refs)
            if not resolves(r)])
+
+    # Every count of the corpus quoted in a document is the corpus's own.
+    # A figure typed once and left behind tells somebody implementing this
+    # that they have run everything when they have not.
+    total = len(cases)
+    files = len(list((ROOT / "vectors").glob("*.json")))
+    counted = 0
+    bad_counts: list[str] = []
+    for name, body in cited.items():
+        # Only phrasings that mean the whole corpus. "11 cases" in a
+        # sentence about the oracle is a count of something else.
+        for m in re.finditer(
+                r"(\d[\d,]*)\s+(?:language-neutral\s+conformance\s+cases"
+                r"|cases\s+across\s+(\d+)\s+files)", body):
+            counted += 1
+            got = int(m.group(1).replace(",", ""))
+            if got != total:
+                bad_counts.append(
+                    f"{name} says {got} cases, the corpus holds {total}")
+            if m.group(2) and int(m.group(2)) != files:
+                bad_counts.append(
+                    f"{name} says {m.group(2)} files, `vectors/` holds {files}")
+    check("corpus-size", counted, bad_counts)
 
     # A check with no subjects is broken rather than passing.
     for name, n in sorted(counts.items()):
