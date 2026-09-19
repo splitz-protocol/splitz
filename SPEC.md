@@ -1919,3 +1919,78 @@ input at all is conformant without it.
   expired invite because this protocol cannot tell one.
 - **Rate discovery.** §7 specifies what a snapshotted rate does, not where it
   came from.
+
+## 14. What a host must supply, show and refuse
+
+§13 lists what this protocol leaves to a wallet. This section states what it
+requires of one. Keeping the wire format is not sufficient: the rules below
+decide what a person is asked to pay, and a wallet that keeps §1–§12 and
+breaks these sends money to the wrong place or sends it twice.
+
+### 14.1 What a host supplies
+
+- **The participant id it speaks as.** Every entry it writes is authored by
+  that id, and §10.4 decides what the id authorises.
+- **The address it is paid at, or none.** A participant with no address is
+  reported under §8.4 and MUST NOT be dropped from a request.
+- **A clock** producing §9.3 instants. It is read when an entry is written and
+  never while folding: §10.2 orders a log by instant, so a fold that consulted
+  a clock would return different bills for one entry set.
+- **Unpredictable randomness** for §9.4's nonce. A bill's id is the digest of
+  the entry that opened it, so two bills opened in the same second by the same
+  participant are one bill unless the nonce cannot be guessed.
+- **A way to send** a §8 payment request, answering as §14.3 requires.
+- **Optionally a signature and a verifier** over §10.6's message. A host that
+  supplies neither leaves every participant unauthenticated, which §10.7
+  admits and which is a different statement from a bill whose identities were
+  checked and found sound.
+
+### 14.2 What a host MUST put in front of a payer before settling
+
+Each of these is an answer the protocol produces and discards nowhere. A
+request that omits them looks, to the person paying, exactly like one that has
+nothing to omit.
+
+- Every recipient the request cannot carry, with the reason for each (§8.4).
+- Every pay-to address the fold recorded as replaced (§10.3).
+- Every debt with a payment recorded and not yet confirmed (§10.5).
+- Every contested identity among the recipients (§10.7).
+
+### 14.3 A send has three outcomes, not two
+
+A transaction may reach the network, may be refused before it is built, or may
+be **built and signed and not handed to the network**. The third may still
+land.
+
+- A wallet MUST NOT record a payment (§10.5) for any outcome but the first.
+- A wallet MUST NOT retry the third as though it had failed.
+- A host's send therefore reports which of the three occurred, rather than
+  returning a transaction id or raising.
+
+Recording the third as paid settles a debt that nothing on chain settled.
+Retrying it pays the debt twice, and this protocol has no remedy for an
+overpayment.
+
+### 14.4 A pending payment withholds the whole debt
+
+§10.5 moves a balance only on confirmation, so a debt this payer has already
+paid is still in the plan §6 produces.
+
+- A wallet MUST NOT include such a debt in a request.
+- Where the amount pending is **less** than the debt, the **whole** debt is
+  withheld rather than the remainder. Requesting the remainder overpays by the
+  pending amount if that payment lands.
+- What is owed and what is pending are reported as two quantities. On a part
+  payment they differ, and presenting the debt as the amount in flight states
+  something untrue.
+
+A payment that never lands is withheld by the same rule, and §10.8's
+withdrawal of its record is what releases the debt.
+
+### 14.5 A peer who is current and a peer who is behind are different answers
+
+§11.2 caps a payload, so the entries a peer has not seen may not fit in one.
+A wallet computing them MUST distinguish three states: the peer holds
+everything; the peer is missing entries that fit; the peer is missing entries
+that do not. Reporting the third as the first tells somebody their bill is up
+to date while entries on it have never reached them.

@@ -1,6 +1,6 @@
 # Conformance vectors
 
-412 cases across 15 files. An implementation is conformant when it reproduces
+426 cases across 16 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape
@@ -23,6 +23,12 @@ rather than refusing the whole log (§10.3), so the codes appear inside
 bill is from a newer version" and "this bill is damaged" is the difference
 between telling a user to update and telling them to give up.
 
+`withholdings.json` is the only file whose subject is the wallet rather than
+the wire. SPEC.md §14 is addressed to a host, so an implementation can keep
+every rule in §1–§12 and still ask somebody to pay a debt they have already
+paid, or send the balance of a bill to whoever minted the second claim on an
+id. A wallet is not conformant without it.
+
 Amounts are integer minor units throughout. Instants are canonical (§9.3).
 Objects keyed by participant id are compared by content, not by key order.
 
@@ -42,6 +48,7 @@ Objects keyed by participant id are compared by content, not by key order.
 | `invite.json` | `uri` to decode, or `invite` to encode | the fields, or the URI |
 | `payload.json` | `payload` to decode, or `encode` | the contents, or the string |
 | `sealed.json` | `frame` | the version, nonce and body length |
+| `withholdings.json` | `plan`, `bill`, `payer`, `contested`, `payAnyway` | what a request carries, and what is held back |
 
 Two cases in `zip321.json` carry `repeatPayment` and `paymentCount` instead of
 a literal list, because ten thousand payments would make the file unreadable. A

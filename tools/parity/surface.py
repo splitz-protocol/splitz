@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RENAMES = {
     "splitExpense": "split_expense",
     "splitParticipants": "split_participants",
+    "withholdings": "withholdings",
     "billPrefix": "BILL_PREFIX",
     "deltaPrefix": "DELTA_PREFIX",
     "allocateEvenly": "allocate_evenly",

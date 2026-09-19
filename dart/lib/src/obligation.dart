@@ -100,3 +100,92 @@ Obligation renderObligation(
     withheldMinorUnits: withheld,
   );
 }
+
+/// A debt held back because a payment to that participant is unconfirmed
+/// (§14.4).
+class Awaiting {
+  const Awaiting(this.to, this.owed, this.paid);
+
+  final String to;
+
+  /// What the plan still says is owed. An unconfirmed payment does not reduce
+  /// it (§10.5).
+  final int owed;
+
+  /// What this payer has already sent and is waiting to have confirmed. Less
+  /// than [owed] when the payment was partial.
+  final int paid;
+}
+
+/// A debt held back because two keys each claim that participant's id
+/// (§10.7).
+class Contested {
+  const Contested(this.to, this.amount, this.address);
+
+  final String to;
+  final int amount;
+
+  /// The payout address standing on the bill, which may be an impostor's.
+  final String? address;
+}
+
+/// One payer's settlements, split into what a request may carry and what
+/// §14 holds back.
+class Withholdings {
+  const Withholdings({
+    required this.carried,
+    required this.awaiting,
+    required this.contested,
+  });
+
+  /// Safe to render. Still subject to §8.4: a participant here may have no
+  /// payout address, which `renderObligation` reports as unpayable.
+  final List<Settlement> carried;
+  final List<Awaiting> awaiting;
+  final List<Contested> contested;
+}
+
+/// Splits [payer]'s settlements into what may be requested and what may not.
+///
+/// Pure: it reads the bill and the identities the fold resolved, and decides
+/// nothing a wallet is entitled to decide. [payAnyway] names the contested
+/// ids a payer has accepted after being shown them, which §10.7 permits and
+/// which is the only way through a contest — anyone may mint a rival claim,
+/// so a refusal with no exit is a denial of payment.
+Withholdings withholdings(
+  List<Settlement> plan,
+  Bill bill,
+  String payer, {
+  Set<String> contestedIds = const {},
+  Set<String> payAnyway = const {},
+}) {
+  final mine = plan.where((s) => s.from == payer);
+
+  // §10.5: only a confirmed payment moves a balance, so a debt this payer has
+  // already paid is still in the plan. Several records to one participant sum.
+  final pending = <String, int>{};
+  for (final p in bill.payments) {
+    if (p.from != payer) continue;
+    if (bill.confirmedPayments.contains(p.id)) continue;
+    pending[p.to] = (pending[p.to] ?? 0) + p.amount;
+  }
+
+  final payTo = <String, String?>{
+    for (final p in bill.participants) p.id: p.payTo,
+  };
+
+  final carried = <Settlement>[];
+  final awaiting = <Awaiting>[];
+  final contested = <Contested>[];
+  for (final s in mine) {
+    if (pending.containsKey(s.to)) {
+      awaiting.add(Awaiting(s.to, s.amount, pending[s.to]!));
+    } else if (contestedIds.contains(s.to) && !payAnyway.contains(s.to)) {
+      contested.add(Contested(s.to, s.amount, payTo[s.to]));
+    } else {
+      carried.add(s);
+    }
+  }
+  return Withholdings(
+      carried: carried, awaiting: awaiting, contested: contested);
+}

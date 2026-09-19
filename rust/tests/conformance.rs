@@ -227,6 +227,58 @@ fn authority() {
     });
 }
 
+// Section 14 is addressed to a host, so none of it is reachable from the wire
+// format: an implementation can keep sections 1 to 12 and still ask a payer
+// for a debt they have already paid.
+#[test]
+fn withholdings() {
+    run_cases("withholdings.json", |c| {
+        let bill = splitz::decode_bill(&c["bill"])?;
+        let plan: Vec<splitz::settle::Settlement> = c["plan"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|s| splitz::settle::Settlement {
+                        from: s["from"].as_str().unwrap_or_default().to_owned(),
+                        to: s["to"].as_str().unwrap_or_default().to_owned(),
+                        amount: s["amount"].as_i64().unwrap_or_default(),
+                        covers: Vec::new(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ids = |key: &str| -> std::collections::BTreeSet<String> {
+            c[key]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str())
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let w = splitz::withholdings(
+            &plan,
+            &bill,
+            c["payer"].as_str().unwrap_or_default(),
+            &ids("contested"),
+            &ids("payAnyway"),
+        );
+        Ok(json!({
+            "carried": w.carried.iter().map(|s| json!({
+                "from": s.from, "to": s.to, "amount": s.amount,
+            })).collect::<Vec<_>>(),
+            "awaiting": w.awaiting.iter().map(|a| json!({
+                "to": a.to, "owed": a.owed, "paid": a.paid,
+            })).collect::<Vec<_>>(),
+            "contested": w.contested.iter().map(|x| json!({
+                "to": x.to, "amount": x.amount, "address": x.address,
+            })).collect::<Vec<_>>(),
+        }))
+    });
+}
+
 #[test]
 fn obligations() {
     run_cases("obligations.json", |c| {

@@ -115,6 +115,42 @@ void main() {
     });
   });
 
+  // Section 14 is addressed to a host, so none of it is reachable from the
+  // wire format: an implementation can keep sections 1 to 12 and still ask a
+  // payer for a debt they have already paid.
+  runCases('withholdings.json', (c, produce) {
+    final bill = decodeBill((c['bill'] as Map).cast<String, dynamic>());
+    final plan = [
+      for (final s in (c['plan'] as List).cast<Map<String, dynamic>>())
+        Settlement(s['from'] as String, s['to'] as String, s['amount'] as int),
+    ];
+    final w = withholdings(
+      plan,
+      bill,
+      c['payer'] as String,
+      contestedIds: {
+        for (final id in (c['contested'] as List?) ?? const []) id as String,
+      },
+      payAnyway: {
+        for (final id in (c['payAnyway'] as List?) ?? const []) id as String,
+      },
+    );
+    produce({
+      'carried': [
+        for (final s in w.carried)
+          {'from': s.from, 'to': s.to, 'amount': s.amount},
+      ],
+      'awaiting': [
+        for (final a in w.awaiting)
+          {'to': a.to, 'owed': a.owed, 'paid': a.paid},
+      ],
+      'contested': [
+        for (final x in w.contested)
+          {'to': x.to, 'amount': x.amount, 'address': x.address},
+      ],
+    });
+  });
+
   runCases('obligations.json', (c, produce) {
     final raw = (c['rate'] as Map).cast<String, dynamic>();
     final bill = Bill(

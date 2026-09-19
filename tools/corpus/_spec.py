@@ -1894,6 +1894,43 @@ def payable_address(participant):
     return address or None
 
 
+def withholdings(plan, bill, payer, contested_ids=(), pay_anyway=()):
+    """Splits `payer`'s settlements into what a request may carry and what
+    section 14 holds back.
+
+    Pure: reads the bill and the identities the fold resolved, and decides
+    nothing a wallet is entitled to decide. `pay_anyway` names the contested
+    ids a payer has accepted after being shown them, which section 10.7
+    permits and which is the only way through a contest.
+    """
+    contested_ids = set(contested_ids)
+    pay_anyway = set(pay_anyway)
+    mine = [s for s in plan if s["from"] == payer]
+
+    # Section 10.5: only a confirmed payment moves a balance, so a debt this
+    # payer has already paid is still in the plan. Records to one id sum.
+    confirmed = set(bill.get("confirmedPayments") or ())
+    pending = {}
+    for p in bill.get("payments") or ():
+        if p["from"] != payer or p["id"] in confirmed:
+            continue
+        pending[p["to"]] = pending.get(p["to"], 0) + p["amount"]
+
+    pay_to = {p["id"]: p.get("payTo") for p in bill.get("participants") or ()}
+
+    carried, awaiting, contested = [], [], []
+    for s in mine:
+        if s["to"] in pending:
+            awaiting.append({"to": s["to"], "owed": s["amount"],
+                             "paid": pending[s["to"]]})
+        elif s["to"] in contested_ids and s["to"] not in pay_anyway:
+            contested.append({"to": s["to"], "amount": s["amount"],
+                              "address": pay_to.get(s["to"])})
+        else:
+            carried.append(s)
+    return {"carried": carried, "awaiting": awaiting, "contested": contested}
+
+
 def render_obligation(settlements, participants, rate, currency,
                       skip_unpayable=False, include_fiat=False):
     """Section 8.5. One payer's whole obligation as a payment request.

@@ -47,7 +47,9 @@ pub use model::{Bill, Expense, Participant, PaymentRecord, Payout};
 pub use money::{
     check_currency, checked_add, checked_mul, checked_sum, is_currency, MAX_AMOUNT, MIN_AMOUNT,
 };
-pub use obligation::{render_obligation, Obligation, Unpayable};
+pub use obligation::{
+    render_obligation, withholdings, Awaiting, Contested, Obligation, Unpayable, Withholdings,
+};
 pub use ordering::{compare_utf8, sorted_utf8, unique_sorted_utf8};
 pub use rate::{
     fiat_to_zatoshi, zatoshi_to_fiat, ExchangeRate, RateRounding, MAX_CONVERTIBLE_MINOR_UNITS,
