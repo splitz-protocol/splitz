@@ -1,0 +1,12 @@
+# Dart
+.dart_tool/
+build/
+pubspec.lock
+
+# Rust
+target/
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
