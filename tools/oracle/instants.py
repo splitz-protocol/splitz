@@ -129,8 +129,15 @@ def main():
             continue
         # §9.3 truncates the fraction to milliseconds and never rounds, so the
         # two agree once the same truncation is applied to the oracle's answer.
-        canonical = theirs.strftime("%Y-%m-%dT%H:%M:%S.") + \
-            f"{theirs.microsecond // 1000:03d}Z"
+        #
+        # Built field by field rather than with `strftime`: `%Y` pads the year
+        # to four digits on some platforms and not on others, so year 1 comes
+        # back as "0001" on one machine and "1" on the next, and the oracle
+        # reports a disagreement that exists only between two C libraries.
+        canonical = (
+            f"{theirs.year:04d}-{theirs.month:02d}-{theirs.day:02d}"
+            f"T{theirs.hour:02d}:{theirs.minute:02d}:{theirs.second:02d}"
+            f".{theirs.microsecond // 1000:03d}Z")
         if canonical != mine:
             failures.append(
                 f"{text!r}: §9.3 reads {mine}, CPython reads {canonical}")
