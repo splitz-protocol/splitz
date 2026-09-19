@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'canonical_json.dart';
 import 'errors.dart';
 import 'invite.dart';
+import 'log.dart';
 
 /// What a version-40 QR code holds in byte mode at error-correction level M.
 ///
@@ -194,4 +195,56 @@ SealedFrame parseSealedFrame(String text) {
     nonce: _b64(raw.sublist(1, 1 + nonceBytes)),
     bodyBytes: raw.length - 1 - nonceBytes,
   );
+}
+
+/// What a peer has not seen, and whether it fits one square (§14.5).
+///
+/// Three answers, not two. A peer holding everything and a peer holding none
+/// of a log too long to encode are opposite states, and one value for both
+/// tells somebody their bill is up to date while entries on it have never
+/// reached them.
+sealed class Delta {
+  const Delta(this.entryCount);
+
+  /// How many entries the peer is missing. Zero only for [NothingMissing].
+  final int entryCount;
+}
+
+/// The peer holds every entry this device does.
+class NothingMissing extends Delta {
+  const NothingMissing() : super(0);
+}
+
+/// The entries the peer has not seen, as one square.
+class DeltaSquare extends Delta {
+  const DeltaSquare(this.uri, super.entryCount);
+
+  final String uri;
+}
+
+/// The peer is behind by more than one square can carry. What this needs is a
+/// relay, not a smaller camera.
+class TooBigForOneSquare extends Delta {
+  const TooBigForOneSquare(super.entryCount, this.code);
+
+  /// The refusal §11.2 gave, `payload_too_large` when it is the cap.
+  final String code;
+}
+
+/// Computes what [theyHave] is missing from [entries] (§14.5).
+///
+/// A delta carries no invite: its reader already holds the key (§11.2).
+Delta deltaFor(List<Map<String, dynamic>> entries, Set<String> theyHave) {
+  final missing = [
+    for (final e in orderEntries(entries))
+      if (!theyHave.contains(e['id'])) e,
+  ];
+  if (missing.isEmpty) return const NothingMissing();
+  try {
+    final uri =
+        encodePayload(deltaPrefix, <String, dynamic>{'v': 1, 'log': missing});
+    return DeltaSquare(uri, missing.length);
+  } on SplitError catch (e) {
+    return TooBigForOneSquare(missing.length, e.code);
+  }
 }

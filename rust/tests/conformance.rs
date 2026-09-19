@@ -227,6 +227,33 @@ fn authority() {
     });
 }
 
+#[test]
+fn delta() {
+    run_cases("delta.json", |c| {
+        let entries: Vec<serde_json::Value> = c["log"].as_array().cloned().unwrap_or_default();
+        let they_have: std::collections::BTreeSet<String> = c["theyHave"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(match splitz::delta_for(&entries, &they_have) {
+            splitz::Delta::NothingMissing => {
+                json!({ "state": "nothing", "entryCount": 0 })
+            }
+            splitz::Delta::Square { uri, entry_count } => {
+                json!({ "state": "square", "uri": uri, "entryCount": entry_count })
+            }
+            splitz::Delta::TooBig { entry_count, code } => {
+                json!({ "state": "too_big", "entryCount": entry_count, "code": code })
+            }
+        })
+    });
+}
+
 // Section 14 is addressed to a host, so none of it is reachable from the wire
 // format: an implementation can keep sections 1 to 12 and still ask a payer
 // for a debt they have already paid.

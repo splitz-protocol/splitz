@@ -118,6 +118,27 @@ void main() {
   // Section 14 is addressed to a host, so none of it is reachable from the
   // wire format: an implementation can keep sections 1 to 12 and still ask a
   // payer for a debt they have already paid.
+  runCases('delta.json', (c, produce) {
+    final entries = (c['log'] as List).cast<Map<String, dynamic>>();
+    final theyHave = {
+      for (final id in c['theyHave'] as List) id as String,
+    };
+    final d = deltaFor(entries, theyHave);
+    produce(switch (d) {
+      NothingMissing() => {'state': 'nothing', 'entryCount': 0},
+      DeltaSquare(:final uri, :final entryCount) => {
+          'state': 'square',
+          'uri': uri,
+          'entryCount': entryCount,
+        },
+      TooBigForOneSquare(:final entryCount, :final code) => {
+          'state': 'too_big',
+          'entryCount': entryCount,
+          'code': code,
+        },
+    });
+  });
+
   runCases('withholdings.json', (c, produce) {
     final bill = decodeBill((c['bill'] as Map).cast<String, dynamic>());
     final plan = [

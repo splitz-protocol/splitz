@@ -29,6 +29,7 @@ RENAMES = {
     "splitExpense": "split_expense",
     "splitParticipants": "split_participants",
     "withholdings": "withholdings",
+    "deltaFor": "delta_for",
     "billPrefix": "BILL_PREFIX",
     "deltaPrefix": "DELTA_PREFIX",
     "allocateEvenly": "allocate_evenly",

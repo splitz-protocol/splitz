@@ -10,7 +10,7 @@ implementations, one specification, one set of vectors that both run.
 ```
 ├── SPEC.md         the protocol
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
-├── vectors/        426 language-neutral conformance cases
+├── vectors/        435 language-neutral conformance cases
 ├── dart/           reference implementation  (0 dependencies)
 └── rust/           second implementation     (serde_json, for the wire format)
 ```

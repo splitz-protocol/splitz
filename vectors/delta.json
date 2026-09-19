@@ -1,0 +1,812 @@
+{
+  "description": "What a peer has not seen. SPEC.md section 14.5.",
+  "count": 9,
+  "cases": [
+    {
+      "name": "a_peer_who_has_nothing_gets_every_entry",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1"
+              ]
+            }
+          },
+          "id": "smYfkPS5Q0Z5x_9ypBxDMg"
+        }
+      ],
+      "theyHave": [],
+      "expect": {
+        "state": "square",
+        "uri": "splitzd1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTowMDowMC4wMDBaIiwiYXV0aG9yIjoicDAiLCJjcmVhdG9yS2V5Ijoia2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2trayIsImN1cnJlbmN5IjoiRVVSIiwiaWQiOiJWRy14VGhFR1Z1bmZGLWJDbVN3ei1BIiwia2luZCI6ImNyZWF0ZUJpbGwiLCJuYW1lIjoiRGlubmVyIiwibm9uY2UiOiJubm5ubm5ubm5ubm5ubm5ubm5ubm5uIiwic3BsaXRNb2RlIjoiZXF1YWwiLCJ2IjoxfSx7ImF0IjoiMjAyNi0xMC0yOFQxOTowMTowMC4wMDBaIiwiYXV0aG9yIjoicDAiLCJpZCI6IjUzdUQ0MFp3RWhndVpiMlp1ZDd3MFEiLCJraW5kIjoiam9pbkJpbGwiLCJwYXJ0aWNpcGFudCI6eyJpZCI6InAwIiwibmFtZSI6IlAwIiwicGF5VG8iOiJ1MTNqM3E4cThmOWh4Mm54MHc5bDUyZHFrc3k0cG5nN2ZnbTBscWpoOGFobjllbnl2ejV6OXhud3pkY2RqbXBmNzU2czJ5ODhybnlyOXB4NGY0azl3MDNzbDZmcjR2d3NxY3ZnOGdnZmp4In0sInYiOjF9LHsiYXQiOiIyMDI2LTEwLTI4VDE5OjAyOjAwLjAwMFoiLCJhdXRob3IiOiJwMSIsImlkIjoiNFNiUW9PYWlTZzBXWWpGX2VsZTJOZyIsImtpbmQiOiJqb2luQmlsbCIsInBhcnRpY2lwYW50Ijp7ImlkIjoicDEiLCJuYW1lIjoiUDEiLCJwYXlUbyI6InUxNmN5bncydTZuc2htNDRnanY5dnk5ZHZhdjZ6dnZrc3BoZXh6anMzdGprZThtcjNwOTQyZXIwcHU4aGVsZDd6eTd3cGp4enFna3Bkcmp6ZDcyaDdwd2YzNGRmOGEweGN2MHN1M2FjeDcifSwidiI6MX0seyJhdCI6IjIwMjYtMTAtMjhUMTk6MDM6MDAuMDAwWiIsImF1dGhvciI6InAwIiwiZXhwZW5zZSI6eyJhbW91bnQiOjkwMDAsImF0IjoiMjAyNi0xMC0yOFQxOTowMzowMC4wMDBaIiwiZGVzY3JpcHRpb24iOiJkaW5uZXIiLCJpZCI6IngwIiwicGFpZEJ5IjoicDAiLCJzcGxpdCI6eyJhbW9uZyI6WyJwMCIsInAxIl0sInR5cGUiOiJlcXVhbCJ9fSwiaWQiOiJzbVlma1BTNVEwWjV4Xzl5cEJ4RE1nIiwia2luZCI6ImFkZEV4cGVuc2UiLCJ2IjoxfV0sInYiOjF9",
+        "entryCount": 4
+      }
+    },
+    {
+      "name": "a_peer_who_has_everything_is_missing_nothing",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1"
+              ]
+            }
+          },
+          "id": "smYfkPS5Q0Z5x_9ypBxDMg"
+        }
+      ],
+      "theyHave": [
+        "VG-xThEGVunfF-bCmSwz-A",
+        "53uD40ZwEhguZb2Zud7w0Q",
+        "4SbQoOaiSg0WYjF_ele2Ng",
+        "smYfkPS5Q0Z5x_9ypBxDMg"
+      ],
+      "expect": {
+        "state": "nothing",
+        "entryCount": 0
+      }
+    },
+    {
+      "name": "a_peer_missing_one_entry_gets_one",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1"
+              ]
+            }
+          },
+          "id": "smYfkPS5Q0Z5x_9ypBxDMg"
+        }
+      ],
+      "theyHave": [
+        "VG-xThEGVunfF-bCmSwz-A",
+        "53uD40ZwEhguZb2Zud7w0Q",
+        "4SbQoOaiSg0WYjF_ele2Ng"
+      ],
+      "expect": {
+        "state": "square",
+        "uri": "splitzd1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTowMzowMC4wMDBaIiwiYXV0aG9yIjoicDAiLCJleHBlbnNlIjp7ImFtb3VudCI6OTAwMCwiYXQiOiIyMDI2LTEwLTI4VDE5OjAzOjAwLjAwMFoiLCJkZXNjcmlwdGlvbiI6ImRpbm5lciIsImlkIjoieDAiLCJwYWlkQnkiOiJwMCIsInNwbGl0Ijp7ImFtb25nIjpbInAwIiwicDEiXSwidHlwZSI6ImVxdWFsIn19LCJpZCI6InNtWWZrUFM1UTBaNXhfOXlwQnhETWciLCJraW5kIjoiYWRkRXhwZW5zZSIsInYiOjF9XSwidiI6MX0",
+        "entryCount": 1
+      }
+    },
+    {
+      "name": "a_peer_missing_the_middle_gets_the_middle",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1"
+              ]
+            }
+          },
+          "id": "smYfkPS5Q0Z5x_9ypBxDMg"
+        }
+      ],
+      "theyHave": [
+        "VG-xThEGVunfF-bCmSwz-A",
+        "4SbQoOaiSg0WYjF_ele2Ng",
+        "smYfkPS5Q0Z5x_9ypBxDMg"
+      ],
+      "expect": {
+        "state": "square",
+        "uri": "splitzd1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTowMTowMC4wMDBaIiwiYXV0aG9yIjoicDAiLCJpZCI6IjUzdUQ0MFp3RWhndVpiMlp1ZDd3MFEiLCJraW5kIjoiam9pbkJpbGwiLCJwYXJ0aWNpcGFudCI6eyJpZCI6InAwIiwibmFtZSI6IlAwIiwicGF5VG8iOiJ1MTNqM3E4cThmOWh4Mm54MHc5bDUyZHFrc3k0cG5nN2ZnbTBscWpoOGFobjllbnl2ejV6OXhud3pkY2RqbXBmNzU2czJ5ODhybnlyOXB4NGY0azl3MDNzbDZmcjR2d3NxY3ZnOGdnZmp4In0sInYiOjF9XSwidiI6MX0",
+        "entryCount": 1
+      }
+    },
+    {
+      "name": "an_id_the_log_does_not_hold_is_ignored",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:03:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:03:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1"
+              ]
+            }
+          },
+          "id": "smYfkPS5Q0Z5x_9ypBxDMg"
+        }
+      ],
+      "theyHave": [
+        "VG-xThEGVunfF-bCmSwz-A",
+        "53uD40ZwEhguZb2Zud7w0Q",
+        "4SbQoOaiSg0WYjF_ele2Ng",
+        "smYfkPS5Q0Z5x_9ypBxDMg",
+        "not-an-entry-of-this-log"
+      ],
+      "expect": {
+        "state": "nothing",
+        "entryCount": 0
+      }
+    },
+    {
+      "name": "an_empty_log_is_missing_nothing",
+      "log": [],
+      "theyHave": [],
+      "expect": {
+        "state": "nothing",
+        "entryCount": 0
+      }
+    },
+    {
+      "name": "an_empty_log_with_a_peer_who_claims_entries",
+      "log": [],
+      "theyHave": [
+        "whatever"
+      ],
+      "expect": {
+        "state": "nothing",
+        "entryCount": 0
+      }
+    },
+    {
+      "name": "a_log_past_the_cap_does_not_fit_one_square",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p2",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "p2",
+            "name": "P2",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          },
+          "id": "NK-h7t4moqq-HBg5WiofBg"
+        },
+        {
+          "v": 1,
+          "author": "p3",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "p3",
+            "name": "P3",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          },
+          "id": "rEQwHdTM7RXp9NPn8KCSLA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "c8_jbNa9i23WYHK2l1HUEA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "--gO1EfzwFlbOypGkhJO3w"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x2",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "rju9NYrEM_E2ZFLfTmNR_A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:08:00.000Z",
+          "expense": {
+            "id": "x3",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:08:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "oGIAYswOiaQkKHLrLGelNA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:09:00.000Z",
+          "expense": {
+            "id": "x4",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:09:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "8E2ulTeU336KhaSjpb5ozA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:10:00.000Z",
+          "expense": {
+            "id": "x5",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:10:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "-vgtKJEpX1BVjx3_PaGEpQ"
+        }
+      ],
+      "theyHave": [],
+      "expect": {
+        "state": "too_big",
+        "entryCount": 11,
+        "code": "payload_too_large"
+      }
+    },
+    {
+      "name": "one_entry_behind_on_a_log_past_the_cap",
+      "log": [
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+          "nonce": "nnnnnnnnnnnnnnnnnnnnnn",
+          "id": "VG-xThEGVunfF-bCmSwz-A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "p0",
+            "name": "P0",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          "id": "53uD40ZwEhguZb2Zud7w0Q"
+        },
+        {
+          "v": 1,
+          "author": "p1",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "p1",
+            "name": "P1",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          "id": "4SbQoOaiSg0WYjF_ele2Ng"
+        },
+        {
+          "v": 1,
+          "author": "p2",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "p2",
+            "name": "P2",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          },
+          "id": "NK-h7t4moqq-HBg5WiofBg"
+        },
+        {
+          "v": 1,
+          "author": "p3",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "p3",
+            "name": "P3",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          },
+          "id": "rEQwHdTM7RXp9NPn8KCSLA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x0",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "c8_jbNa9i23WYHK2l1HUEA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x1",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "--gO1EfzwFlbOypGkhJO3w"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x2",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "rju9NYrEM_E2ZFLfTmNR_A"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:08:00.000Z",
+          "expense": {
+            "id": "x3",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:08:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "oGIAYswOiaQkKHLrLGelNA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:09:00.000Z",
+          "expense": {
+            "id": "x4",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:09:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "8E2ulTeU336KhaSjpb5ozA"
+        },
+        {
+          "v": 1,
+          "author": "p0",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:10:00.000Z",
+          "expense": {
+            "id": "x5",
+            "description": "dinner",
+            "paidBy": "p0",
+            "amount": 9000,
+            "at": "2026-10-28T19:10:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "p0",
+                "p1",
+                "p2",
+                "p3"
+              ]
+            }
+          },
+          "id": "-vgtKJEpX1BVjx3_PaGEpQ"
+        }
+      ],
+      "theyHave": [
+        "VG-xThEGVunfF-bCmSwz-A",
+        "53uD40ZwEhguZb2Zud7w0Q",
+        "4SbQoOaiSg0WYjF_ele2Ng",
+        "NK-h7t4moqq-HBg5WiofBg",
+        "rEQwHdTM7RXp9NPn8KCSLA",
+        "c8_jbNa9i23WYHK2l1HUEA",
+        "--gO1EfzwFlbOypGkhJO3w",
+        "rju9NYrEM_E2ZFLfTmNR_A",
+        "oGIAYswOiaQkKHLrLGelNA",
+        "8E2ulTeU336KhaSjpb5ozA"
+      ],
+      "expect": {
+        "state": "square",
+        "uri": "splitzd1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOToxMDowMC4wMDBaIiwiYXV0aG9yIjoicDAiLCJleHBlbnNlIjp7ImFtb3VudCI6OTAwMCwiYXQiOiIyMDI2LTEwLTI4VDE5OjEwOjAwLjAwMFoiLCJkZXNjcmlwdGlvbiI6ImRpbm5lciIsImlkIjoieDUiLCJwYWlkQnkiOiJwMCIsInNwbGl0Ijp7ImFtb25nIjpbInAwIiwicDEiLCJwMiIsInAzIl0sInR5cGUiOiJlcXVhbCJ9fSwiaWQiOiItdmd0S0pFcFgxQlZqeDNfUGFHRXBRIiwia2luZCI6ImFkZEV4cGVuc2UiLCJ2IjoxfV0sInYiOjF9",
+        "entryCount": 1
+      }
+    }
+  ]
+}

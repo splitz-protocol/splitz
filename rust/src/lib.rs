@@ -33,8 +33,8 @@ pub use canonical_json::canonical_json;
 pub use error::{code, Result, SplitError};
 pub use instant::canonical_instant;
 pub use invite::{
-    decode_payload, encode_payload, parse_invite, parse_sealed_frame, render_invite,
-    strip_scan_padding, within_depth, Invite, ScannedPayload, SealedFrame, BILL_PREFIX,
+    decode_payload, delta_for, encode_payload, parse_invite, parse_sealed_frame, render_invite,
+    strip_scan_padding, within_depth, Delta, Invite, ScannedPayload, SealedFrame, BILL_PREFIX,
     DELTA_PREFIX, INVITE_VERSION, MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP,
     PAYLOAD_VERSION, SCAN_PADDING, SEALED_VERSION, TAG_BYTES,
 };

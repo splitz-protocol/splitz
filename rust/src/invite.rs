@@ -5,6 +5,7 @@
 //! has to fix itself, and two libraries answer them differently.
 
 use serde_json::Value;
+use std::collections::BTreeSet;
 
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
@@ -490,4 +491,52 @@ pub fn parse_sealed_frame(text: &str) -> Result<SealedFrame> {
         nonce: base64url(&raw[1..1 + NONCE_BYTES]),
         body_bytes: raw.len() - 1 - NONCE_BYTES,
     })
+}
+
+/// What a peer has not seen, and whether it fits one square (section 14.5).
+///
+/// Three answers, not two. A peer holding everything and a peer holding none
+/// of a log too long to encode are opposite states, and one value for both
+/// tells somebody their bill is up to date while entries on it have never
+/// reached them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Delta {
+    /// The peer holds every entry this device does.
+    NothingMissing,
+    /// The entries the peer has not seen, as one square.
+    Square { uri: String, entry_count: usize },
+    /// Behind by more than one square can carry. What this needs is a relay.
+    TooBig {
+        entry_count: usize,
+        /// The refusal section 11.2 gave, `payload_too_large` when it is the
+        /// cap.
+        code: &'static str,
+    },
+}
+
+/// Computes what `they_have` is missing from `entries` (section 14.5).
+///
+/// A delta carries no invite: its reader already holds the key (section 11.2).
+pub fn delta_for(entries: &[Value], they_have: &BTreeSet<String>) -> Delta {
+    let mut ordered: Vec<Value> = entries.to_vec();
+    crate::log::order_entries(&mut ordered);
+    let missing: Vec<Value> = ordered
+        .into_iter()
+        .filter(|e| {
+            !e.get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| they_have.contains(id))
+        })
+        .collect();
+    if missing.is_empty() {
+        return Delta::NothingMissing;
+    }
+    let entry_count = missing.len();
+    match encode_payload(DELTA_PREFIX, &serde_json::json!({ "v": 1, "log": missing })) {
+        Ok(uri) => Delta::Square { uri, entry_count },
+        Err(e) => Delta::TooBig {
+            entry_count,
+            code: e.code,
+        },
+    }
 }

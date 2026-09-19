@@ -1,6 +1,6 @@
 # Conformance vectors
 
-426 cases across 16 files. An implementation is conformant when it reproduces
+435 cases across 17 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape
@@ -49,6 +49,7 @@ Objects keyed by participant id are compared by content, not by key order.
 | `payload.json` | `payload` to decode, or `encode` | the contents, or the string |
 | `sealed.json` | `frame` | the version, nonce and body length |
 | `withholdings.json` | `plan`, `bill`, `payer`, `contested`, `payAnyway` | what a request carries, and what is held back |
+| `delta.json` | `log`, `theyHave` | nothing missing, one square, or past the cap |
 
 Two cases in `zip321.json` carry `repeatPayment` and `paymentCount` instead of
 a literal list, because ten thousand payments would make the file unreadable. A

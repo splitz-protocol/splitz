@@ -1894,6 +1894,29 @@ def payable_address(participant):
     return address or None
 
 
+def delta_for(entries, they_have):
+    """Section 14.5. What a peer has not seen, and whether it fits one square.
+
+    Three answers, not two: a peer who holds everything and a peer who holds
+    none of a log too long to encode are opposite states, and one value for
+    both tells somebody their bill is up to date while entries on it have
+    never reached them.
+
+    Returns `{"state": "nothing"}`,
+    `{"state": "square", "uri": ..., "entryCount": n}` or
+    `{"state": "too_big", "entryCount": n, "code": ...}`.
+    """
+    known = set(they_have)
+    missing = [e for e in order(entries) if e.get("id") not in known]
+    if not missing:
+        return {"state": "nothing", "entryCount": 0}
+    try:
+        uri = encode_payload(DELTA_PREFIX, {"v": 1, "log": missing})
+    except Refused as r:
+        return {"state": "too_big", "entryCount": len(missing), "code": r.code}
+    return {"state": "square", "uri": uri, "entryCount": len(missing)}
+
+
 def withholdings(plan, bill, payer, contested_ids=(), pay_anyway=()):
     """Splits `payer`'s settlements into what a request may carry and what
     section 14 holds back.
