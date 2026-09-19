@@ -541,7 +541,10 @@ implementations' output comparable byte for byte.
 - An address is written verbatim. It MUST be non-empty and alphanumeric, which
   is all the ZIP 321 grammar admits (`zip321_bad_address`). **This is a
   syntactic check, not validation:** a wallet MUST put every address through
-  its own decoder.
+  its own decoder — **ZIP 316** for a Unified Address, and the network's own
+  rules for the receivers inside it. This protocol never decodes one, so it
+  cannot tell a mainnet address from a testnet address, nor a Unified Address
+  from a string that merely looks like one.
 
   **The address is checked before any other parameter of the same payment**, so
   a payment invalid in two ways is refused with the same code everywhere.
@@ -1745,8 +1748,11 @@ input at all is conformant without it.
   belongs to; moving blobs — over what, with what retries, stored for how long
   — is the wallet's. So is running the cipher §11.3 names.
 - **Address validation and network.** §8.3 checks only what the ZIP 321 grammar
-  admits. A wallet MUST decode every address itself and MUST check it is for
-  the network it is transacting on.
+  admits. A wallet MUST decode every address itself — **ZIP 316** defines the
+  Unified Address format — and MUST check it is for the network it is
+  transacting on. The vectors carry real mainnet Unified Addresses precisely so
+  that a wallet running the corpus puts each one through its own decoder rather
+  than through filler that would never reach one.
 - **Transaction construction, fees, signing, broadcast.**
 - **The curve operation.** §10.6 fixes the message a signature covers and §10.1
   what a host that verifies must check; producing and checking the Ed25519

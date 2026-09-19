@@ -59,6 +59,9 @@ let uri = splitz::render_uri(&payments, true)?;
 2. **Address validation and network.** §8.3 checks only what the ZIP 321
    grammar admits: non-empty and alphanumeric. **A wallet MUST decode every
    address itself and MUST check it is for the network it is transacting on.**
+   ZIP 316 defines the Unified Address format; `zcash_address` in Rust and the
+   equivalent in your stack are what a decoder looks like. The corpus carries
+   real mainnet Unified Addresses so that running it exercises yours.
 3. **Transaction construction, fees, signing, broadcast.**
 4. **The curve operation.** §10.6 fixes the bytes a signature covers; producing
    and checking the Ed25519 signature is the host's. `signingMessage(entry)`

@@ -337,3 +337,84 @@ fn rendering_matches_librustzcash_byte_for_byte() {
         "{checked} URIs are byte-identical to librustzcash ({unbuildable} not expressible there)"
     );
 }
+
+/// Every address the corpus carries decodes as a mainnet Unified Address.
+///
+/// §8.3 checks only what the ZIP 321 grammar admits and says outright that a
+/// wallet MUST put every address through its own decoder (ZIP 316). Nothing in
+/// this repository decodes one, so that clause had no external check: filler
+/// that merely looks like an address would satisfy every other lane and fail
+/// the first wallet to run the corpus.
+///
+/// `zcash_address` is the canonical decoder and is already a dev-dependency.
+#[test]
+fn corpus_addresses_are_real_unified_addresses() {
+    if corpus_absent() {
+        return;
+    }
+    use std::collections::BTreeSet;
+
+    // Every distinct address in every vector file, taken from the files rather
+    // than from a list here, so a new one cannot be added without decoding.
+    let mut addresses: BTreeSet<String> = BTreeSet::new();
+    fn walk(v: &Value, out: &mut BTreeSet<String>) {
+        match v {
+            Value::String(s) if s.starts_with("u1") && s.len() > 20 => {
+                out.insert(s.clone());
+            }
+            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            Value::Object(o) => o.values().for_each(|x| walk(x, out)),
+            _ => {}
+        }
+    }
+    // Only from cases the corpus accepts. A refusal case deliberately carries
+    // a corrupted address — one has a `-` substituted to exercise
+    // `zip321_bad_address` — and that is a fixture, not an address this
+    // protocol would ever emit.
+    for name in [
+        "zip321.json",
+        "obligations.json",
+        "bill-json.json",
+        "balances.json",
+        "log.json",
+        "coverage.json",
+    ] {
+        for case in load(name)["cases"].as_array().expect("cases is a list") {
+            if case.get("error").is_none() {
+                walk(case, &mut addresses);
+            }
+        }
+    }
+
+    assert!(
+        addresses.len() >= 5,
+        "only {} addresses found; the walk is not reaching the corpus",
+        addresses.len()
+    );
+
+    let mut failures = Vec::new();
+    for a in &addresses {
+        match zcash_address::ZcashAddress::try_from_encoded(a) {
+            Err(e) => failures.push(format!("{a}: does not decode: {e}")),
+            Ok(parsed) => {
+                // The `u1` human-readable part is ZIP 316's mainnet Unified
+                // Address prefix; testnet is `utest1` and regtest `uregtest1`,
+                // and the decoder will not accept one under the other's HRP.
+                if parsed.encode() != *a {
+                    failures.push(format!("{a}: does not round-trip through the decoder"));
+                } else if !parsed.can_receive_memo() {
+                    // §8.3: ZIP 321 refuses a URI carrying a memo at the same
+                    // index as an address that cannot hold one, and takes the
+                    // unrelated shielded outputs with it. An address in this
+                    // corpus must be able to carry the memos the corpus sets.
+                    failures.push(format!("{a}: decodes, but cannot receive a memo"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+    println!(
+        "{} corpus addresses decode as mainnet Unified Addresses",
+        addresses.len()
+    );
+}
