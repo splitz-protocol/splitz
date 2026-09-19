@@ -116,3 +116,8 @@ rust::ZIP321_TOO_MANY_PAYMENTS
 # lists it, and because a consumer matching on codes must be able to name it.
 dart::hasLoneSurrogate
 dart::checkScalarValues
+
+# Dart takes the host's verifier as an optional named argument on foldLog;
+# Rust cannot overload, so the verifying form is a second entry point. Both
+# expose the same seam (SPEC.md section 10.3).
+rust::fold_log_verified

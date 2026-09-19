@@ -1201,7 +1201,7 @@ def order(entries):
                                           canonical_json(e).encode("utf-8")))
 
 
-def fold(entries, bill_id=None):
+def fold(entries, bill_id=None, verify=None):
     """Section 10.3. Returns the bill and everything the fold reached."""
     if not entries:
         raise Refused("log_empty")
@@ -1227,6 +1227,17 @@ def fold(entries, bill_id=None):
     creates = [e for e in entries if e["kind"] == "createBill"]
     if bill_id is not None:
         creates = [e for e in creates if e["id"] == bill_id]
+    if verify is not None:
+        # Section 10.1. A host that verifies MUST check a create entry's
+        # signature against the creatorKey that same entry states.
+        kept = []
+        for e in creates:
+            if verify(e, e.get("creatorKey", "")):
+                kept.append(e)
+            else:
+                refused_at_ingress.append(
+                    {"id": e["id"], "code": "unauthorized_entry"})
+        creates = kept
     if not creates:
         raise Refused("log_no_create")
     if len(creates) > 1:
@@ -1475,6 +1486,14 @@ def fold(entries, bill_id=None):
                 "confirmedPayments": sorted(confirmed),
                  **({"rate": rate} if rate else {})},
         "creator": creator,
+        # Section 10.7, over the same entry set the bill was materialised
+        # from. Without a verifier nothing can be decided, and nothing is
+        # claimed.
+        "identities": (
+            {"bound": {}, "contested": []} if verify is None else
+            (lambda r: {"bound": {k: r[0][k] for k in sorted(r[0])},
+                        "contested": sorted(r[1])})(
+                resolve_identities(entries, create, verify))),
         "replacedAddresses": replaced,
         "withdrawn": sorted(voided),
         # Section 10.2. Total: rows sharing an id are ordered by code.

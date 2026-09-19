@@ -8,6 +8,7 @@ library;
 
 import 'dart:convert';
 
+import 'authority.dart';
 import 'canonical_json.dart';
 import 'errors.dart';
 import 'instant.dart';
@@ -325,6 +326,7 @@ class FoldResult {
     required this.replacedAddresses,
     required this.withdrawn,
     required this.setAside,
+    required this.identities,
   });
 
   /// The materialised bill, as a wire-form map.
@@ -340,6 +342,14 @@ class FoldResult {
   final List<String> withdrawn;
 
   final List<SetAside> setAside;
+
+  /// Which key speaks for each participant, and which ids two keys claim
+  /// (§10.7).
+  ///
+  /// Empty when [foldLog] is given no verifier: §13 makes the curve operation
+  /// the host's, so a fold that cannot check a signature reports no binding
+  /// and no contest rather than claiming there are none.
+  final Identities identities;
 }
 
 /// Materialises a bill from [rawEntries] (§10.3).
@@ -349,7 +359,8 @@ class FoldResult {
 /// entry propagates to every device, and aborting on it would leave the bill
 /// permanently unopenable — including unopenable to append the withdrawal that
 /// would remove it.
-FoldResult foldLog(List<Object?> rawEntries, {String? billId}) {
+FoldResult foldLog(List<Object?> rawEntries,
+    {String? billId, VerifySignature? verify}) {
   if (rawEntries.isEmpty) {
     raise(SplitCode.logEmpty, 'A log with no entries opens no bill');
   }
@@ -381,6 +392,23 @@ FoldResult foldLog(List<Object?> rawEntries, {String? billId}) {
     creates = [
       for (final e in creates)
         if (e['id'] == billId) e
+    ];
+  }
+  if (verify != null) {
+    // §10.1. A host that verifies MUST check a create entry's signature
+    // against the creatorKey that same entry states — the one key on a bill
+    // that needs no prior acquaintance, because §9.4 binds it to the id.
+    final unverified = [
+      for (final e in creates)
+        if (!verify(e, e['creatorKey'] as String? ?? '')) e
+    ];
+    for (final e in unverified) {
+      refusedAtIngress.add(SetAside(e['id'] as String,
+          SplitCode.unauthorizedEntry, 'a create entry whose signature fails'));
+    }
+    creates = [
+      for (final e in creates)
+        if (!unverified.contains(e)) e
     ];
   }
   if (creates.isEmpty) {
@@ -706,6 +734,12 @@ FoldResult foldLog(List<Object?> rawEntries, {String? billId}) {
     return byId != 0 ? byId : compareUtf8(a.code, b.code);
   });
 
+  // §10.7, over the same entry set the bill was materialised from. Without a
+  // verifier nothing can be decided, and nothing is claimed.
+  final identities = verify == null
+      ? const Identities({}, {})
+      : resolveIdentities(entries, create, verify);
+
   return FoldResult(
     bill: {
       'v': billVersion,
@@ -725,5 +759,6 @@ FoldResult foldLog(List<Object?> rawEntries, {String? billId}) {
     replacedAddresses: replaced,
     withdrawn: sortedUtf8(voided),
     setAside: setAside,
+    identities: identities,
   );
 }

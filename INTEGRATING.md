@@ -61,7 +61,17 @@ let uri = splitz::render_uri(&payments, true)?;
    address itself and MUST check it is for the network it is transacting on.**
 3. **Transaction construction, fees, signing, broadcast.**
 4. **The curve operation.** §10.6 fixes the bytes a signature covers; producing
-   and checking the Ed25519 signature is the host's.
+   and checking the Ed25519 signature is the host's. `signingMessage(entry)`
+   returns exactly those bytes, so a wallet signs and verifies what every other
+   implementation does.
+
+   **Hand the verifier to the fold**: `foldLog(entries, verify: ...)` takes a
+   `bool Function(entry, key)`. With one, a `createBill` whose signature fails
+   opens no bill (§10.1), and `FoldResult.identities` carries `bound` and
+   `contested` (§10.7). Without one both are empty — the fold reports no
+   binding rather than claiming there is none. **A wallet MUST NOT settle to a
+   contested participant's address without putting it in front of the payer
+   first**, and that is the call that tells it which those are.
 5. **Where a private key lives**, and how a participant comes by one.
 6. **Storage.**
 7. **Surfacing a changed pay-to address.** The fold reports every one.

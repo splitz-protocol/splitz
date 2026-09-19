@@ -289,13 +289,32 @@ fn log() {
             }));
         }
         let entries = c["log"].as_array().cloned().unwrap_or_default();
-        let r = splitz::fold_log(&entries, c["billId"].as_str())?;
+        // A case listing `verifies` is driven with a verifier that accepts
+        // exactly those entry ids; one without is driven with none (§10.3).
+        let verifies: Option<std::collections::BTreeSet<String>> =
+            c["verifies"].as_array().map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            });
+        let r = splitz::log::fold_log_verified(
+            &entries,
+            c["billId"].as_str(),
+            verifies.map(|ok| {
+                move |e: &Value, _k: &str| ok.contains(e["id"].as_str().unwrap_or_default())
+            }),
+        )?;
 
         // §9.1: the decoder carries confirmedPayments through, so the
         // fold's answer survives the round trip with no fixup here.
         let bill = splitz::decode_bill(&r.bill)?;
 
         Ok(json!({
+            "identities": {
+                "bound": r.identities.bound,
+                "contested": r.identities.contested.iter().collect::<Vec<_>>(),
+            },
             "bill": r.bill,
             "creator": r.creator,
             "replacedAddresses": r.replaced_addresses.iter().map(|a| json!({

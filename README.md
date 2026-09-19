@@ -108,7 +108,7 @@ by a test in each implementation whose string type can hold the input.
 | `vectors/` | Both implementations against one fixed corpus. |
 | `tools/differential` | Inputs nobody wrote an expectation for, answered by every implementation and diffed against each other. Catches what a corpus generated from one reference structurally cannot. |
 | `tools/parity` | The two public surfaces. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
-| `rust/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate. Every other lane compares implementations written from one specification by one author; they can all be wrong together. |
+| `rust/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |
 | `tools/web-target` | That the package still refuses to compile to JavaScript. A JS number is exact only to 2^53−1; amounts here are 64-bit, so compiling would round them silently rather than fail. |
 
 ## Integrating it into a wallet

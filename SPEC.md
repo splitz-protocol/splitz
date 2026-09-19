@@ -1084,23 +1084,34 @@ depends on arrival order or on local state.
 6. Apply every non-voided `confirmPayment` (§10.5), in a pass of its own once
    every payment is on the bill.
 
-**The fold reaches three answers beyond the bill itself, and an implementation
+**The fold reaches four answers beyond the bill itself, and an implementation
 MUST report them rather than discard them.** A consumer that re-derives one has
 a second place for it to come from:
 
 - the **creator's id**, which the withdrawal rules of §10.8 name;
+- the **identities bound and contested** under §10.7, which say why a payout is
+  missing rather than leaving it looking undeclared;
 - the ids of the **entries a void withdrew**, because a withdrawal is absent
   from the fold by design and is otherwise indistinguishable from an entry that
   was never written;
 - the **entries set aside**, each with its code and the reason.
 
-**The contested identities of §10.7 are not among them.** Deciding a contest
-needs a signature verified, and §13 makes the curve operation the host's, so
-the fold has no way to reach one. A host that verifies signatures calls
-`resolveIdentities` (§10.7) with its verifier and gets `bound` and `contested`
-from there. §10.7's rule — that a wallet MUST NOT settle to a contested
-participant's address without putting it in front of the payer first — is
-therefore a rule about that call, not about the fold's result.
+**The fold takes the host's verifier, and the fourth answer is empty without
+one.** §13 makes the curve operation the host's, so a fold given no verifier
+cannot decide a contest and reports none — which is the honest answer, not a
+claim that none exists. A caller that hands one in gets `bound` and `contested`
+computed over the same entry set the bill was materialised from, which is what
+§10.7's rule depends on: a wallet MUST NOT settle to a contested participant's
+address without putting it in front of the payer first, and it can only obey
+that if the fold tells it.
+
+**A verifier also decides which entries are applied at all.** §10.1 requires a
+host that verifies to check a `createBill` entry's `sig` against the
+`creatorKey` in that same entry. When a verifier is supplied, a `createBill`
+whose signature does not verify is set aside with `unauthorized_entry` and
+opens no bill. Unsigned entries are still accepted — §10.1 says so and says why
+— and a fold with no verifier behaves exactly as one that is given a verifier
+accepting everything.
 
 **An amount that states no currency is denominated by the fold, not by the
 reader.** A reader MUST record which of the two an amount did — stated its own

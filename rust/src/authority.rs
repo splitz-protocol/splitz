@@ -34,7 +34,7 @@ pub fn signing_message(entry: &Value) -> Result<String> {
 }
 
 /// Which key, if any, speaks for each participant (§10.7).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Identities {
     /// Participant id to the key bound to it.
     pub bound: BTreeMap<String, String>,

@@ -194,11 +194,27 @@ void main() {
       });
       return;
     }
-    final r = foldLog(c['log'] as List, billId: c['billId'] as String?);
+    // A case listing `verifies` is driven with a verifier that accepts exactly
+    // those entry ids; one without is driven with none (§10.3).
+    final verifies = (c['verifies'] as List?)?.cast<String>().toSet();
+    final r = foldLog(
+      c['log'] as List,
+      billId: c['billId'] as String?,
+      verify: verifies == null
+          ? null
+          : (entry, key) => verifies.contains(entry['id']),
+    );
     // §9.1: the decoder carries confirmedPayments through, so the fold's
     // answer survives the round trip with no fixup here.
     final settled = decodeBill(r.bill);
     produce({
+      'identities': {
+        'bound': {
+          for (final id in sortedUtf8(r.identities.bound.keys))
+            id: r.identities.bound[id],
+        },
+        'contested': sortedUtf8(r.identities.contested),
+      },
       'bill': r.bill,
       'creator': r.creator,
       'replacedAddresses': [

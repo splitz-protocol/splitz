@@ -1,6 +1,6 @@
 {
   "description": "Entries, merge and folding. SPEC.md sections 9.4 and 10.",
-  "count": 75,
+  "count": 80,
   "cases": [
     {
       "name": "a_bill_with_one_expense",
@@ -129,6 +129,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -265,6 +269,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -414,6 +422,10 @@
           ]
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -563,6 +575,10 @@
           ]
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -713,6 +729,10 @@
           ]
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -860,6 +880,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -1007,6 +1031,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -1159,6 +1187,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -1311,6 +1343,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -1463,6 +1499,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -1617,6 +1657,10 @@
           ]
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -1768,6 +1812,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -1928,6 +1976,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -2089,6 +2141,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -2230,6 +2286,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -2358,6 +2418,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "E4u_dfL3x5xNJk0FThKLjA"
@@ -2504,6 +2568,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -2643,6 +2711,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "PC5AEbDN1IJiepSBCCdT5A"
@@ -2791,6 +2863,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "PC5AEbDN1IJiepSBCCdT5A"
@@ -2937,6 +3013,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -3071,6 +3151,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "E4u_dfL3x5xNJk0FThKLjA",
@@ -3231,6 +3315,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -3380,6 +3468,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -3541,6 +3633,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -3689,6 +3785,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [
           {
             "id": "ben",
@@ -3843,6 +3943,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -4000,6 +4104,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "OtHBjisOwkvPsq7BqEgWIg"
@@ -4146,6 +4254,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "E4u_dfL3x5xNJk0FThKLjA",
@@ -4317,6 +4429,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "OtHBjisOwkvPsq7BqEgWIg",
@@ -4435,6 +4551,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -4599,6 +4719,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "PC5AEbDN1IJiepSBCCdT5A"
@@ -4750,6 +4874,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "E4u_dfL3x5xNJk0FThKLjA"
@@ -4913,6 +5041,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "YP1aofC-RxauMZVfkgenEw"
@@ -5080,6 +5212,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "Qeooy_8CgAXHpcnwrbOfLQ"
@@ -5254,6 +5390,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "F73Jg5or1GAZF_XfBmkUYg"
@@ -5420,6 +5560,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -5581,6 +5725,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -5730,6 +5878,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -5898,6 +6050,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "yaWxV7FHEKLvSMtg3xn_Dw"
@@ -6059,6 +6215,10 @@
           }
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -6224,6 +6384,10 @@
           }
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [],
@@ -6397,6 +6561,10 @@
           }
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [
           "UMzRhGaZJ3sv-OjZl54j4w"
@@ -6542,6 +6710,10 @@
           "confirmedPayments": []
         },
         "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
         "replacedAddresses": [],
         "withdrawn": [],
         "setAside": [
@@ -6553,6 +6725,395 @@
         "balances": {
           "ana": 4500,
           "ben": -4500
+        }
+      }
+    },
+    {
+      "name": "a_verified_create_binds_the_creator",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "verifies": [
+        "g0a5mrH6D5nx5bJ7KrgwVA"
+      ],
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+            }
+          ],
+          "expenses": [],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {
+            "ana": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+          },
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": 0,
+          "ben": 0
+        }
+      }
+    },
+    {
+      "name": "a_create_whose_signature_fails_opens_no_bill",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mI4yRccmwE-uElJhCgV_NQ",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "verifies": [],
+      "error": "log_no_create"
+    },
+    {
+      "name": "a_self_claim_that_verifies_binds_a_key",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "r2IRFUt3M4kP4i1eEbsD7g",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "verifies": [
+        "g0a5mrH6D5nx5bJ7KrgwVA",
+        "r2IRFUt3M4kP4i1eEbsD7g"
+      ],
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+            }
+          ],
+          "expenses": [],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {
+            "ana": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+            "ben": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          },
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": 0,
+          "ben": 0
+        }
+      }
+    },
+    {
+      "name": "a_rival_claim_leaves_the_id_contested",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "r2IRFUt3M4kP4i1eEbsD7g",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          }
+        },
+        {
+          "v": 1,
+          "id": "6krkADf2swkuj2QSqhT-kw",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:07:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "verifies": [
+        "6krkADf2swkuj2QSqhT-kw",
+        "g0a5mrH6D5nx5bJ7KrgwVA",
+        "r2IRFUt3M4kP4i1eEbsD7g"
+      ],
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
+            }
+          ],
+          "expenses": [],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {
+            "ana": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s"
+          },
+          "contested": [
+            "ben"
+          ]
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": 0,
+          "ben": 0
+        }
+      }
+    },
+    {
+      "name": "no_verifier_decides_nothing",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "r2IRFUt3M4kP4i1eEbsD7g",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+            }
+          ],
+          "expenses": [],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": 0,
+          "ben": 0
         }
       }
     },

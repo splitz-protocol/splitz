@@ -8,6 +8,7 @@
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::authority::Identities;
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
 use crate::instant::canonical_instant;
@@ -385,6 +386,11 @@ pub struct FoldResult {
     /// indistinguishable from an entry that was never written.
     pub withdrawn: Vec<String>,
     pub set_aside: Vec<SetAside>,
+    /// Which key speaks for each participant, and which ids two keys claim
+    /// (§10.7). Empty when `fold_log` is given no verifier: §13 makes the
+    /// curve operation the host's, so a fold that cannot check a signature
+    /// reports no binding and no contest rather than claiming there are none.
+    pub identities: Identities,
 }
 
 fn split_pool(split: &Value) -> BTreeSet<String> {
@@ -414,6 +420,15 @@ fn split_pool(split: &Value) -> BTreeSet<String> {
 /// entry propagates to every device, and aborting on it would leave the bill
 /// permanently unopenable.
 pub fn fold_log(raw_entries: &[Value], bill_id: Option<&str>) -> Result<FoldResult> {
+    fold_log_verified(raw_entries, bill_id, None::<fn(&Value, &str) -> bool>)
+}
+
+/// Folds a log, checking signatures with the host's verifier (§10.1, §10.7).
+pub fn fold_log_verified(
+    raw_entries: &[Value],
+    bill_id: Option<&str>,
+    verify: Option<impl Fn(&Value, &str) -> bool>,
+) -> Result<FoldResult> {
     if raw_entries.is_empty() {
         return Err(SplitError::new(
             code::LOG_EMPTY,
@@ -444,11 +459,28 @@ pub fn fold_log(raw_entries: &[Value], bill_id: Option<&str>) -> Result<FoldResu
     let mut entries = merge_logs(&[entries])?.merged;
     order_entries(&mut entries);
 
-    let creates: Vec<&Value> = entries
+    let mut creates: Vec<&Value> = entries
         .iter()
         .filter(|e| field(e, "kind") == "createBill")
         .filter(|e| bill_id.is_none_or(|want| field(e, "id") == want))
         .collect();
+    if let Some(verify) = &verify {
+        // §10.1. A host that verifies MUST check a create entry's signature
+        // against the creatorKey that same entry states — the one key on a
+        // bill that needs no prior acquaintance, because §9.4 binds it to the
+        // id.
+        creates.retain(|e| {
+            if verify(e, field(e, "creatorKey")) {
+                true
+            } else {
+                refused_at_ingress.push(SetAside {
+                    id: field(e, "id").to_owned(),
+                    code: code::UNAUTHORIZED_ENTRY,
+                });
+                false
+            }
+        });
+    }
     if creates.is_empty() {
         return Err(SplitError::new(
             code::LOG_NO_CREATE,
@@ -879,11 +911,19 @@ pub fn fold_log(raw_entries: &[Value], bill_id: Option<&str>) -> Result<FoldResu
             .insert("rate".into(), rate);
     }
 
+    // §10.7, over the same entry set the bill was materialised from. Without
+    // a verifier nothing can be decided, and nothing is claimed.
+    let identities = match &verify {
+        Some(verify) => crate::authority::resolve_identities(&entries, &create, verify),
+        None => Identities::default(),
+    };
+
     Ok(FoldResult {
         bill,
         creator,
         replaced_addresses: replaced,
         withdrawn: voided.into_iter().collect(),
         set_aside,
+        identities,
     })
 }

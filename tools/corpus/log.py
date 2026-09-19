@@ -15,6 +15,8 @@ def AT(m):
 KEY = b64url(b"k" * 32)
 NONCE = b64url(b"n" * 16)
 SIG = "S" * 86
+KEY_B = b64url(b"b" * 32)
+KEY_RIVAL = b64url(b"r" * 32)
 
 
 def create(author="ana", name="Dinner", currency="EUR", nonce=NONCE):
@@ -229,6 +231,29 @@ FOLD_CASES = [
      BASE + [{"v": 1, "id": "r3", "author": "ana", "kind": "setRate",
               "at": AT(6)}], C["id"]),
 
+    # §10.1 and §10.7. A host that verifies hands its verifier to the fold; one
+    # that does not gets no binding and no contest, which is the honest answer
+    # rather than a claim that none exists.
+    ("a_verified_create_binds_the_creator",
+     [C, J_ANA, J_BEN], C["id"], [0]),
+    ("a_create_whose_signature_fails_opens_no_bill",
+     [C, J_ANA, J_BEN], C["id"], []),
+    ("a_self_claim_that_verifies_binds_a_key",
+     [C, J_ANA, dict(J_BEN, participant={"id": "ben", "name": "Ben",
+                                         "identityKey": KEY_B})],
+     C["id"], [0, 2]),
+    ("a_rival_claim_leaves_the_id_contested",
+     [C, J_ANA,
+      dict(J_BEN, participant={"id": "ben", "name": "Ben",
+                               "identityKey": KEY_B}),
+      {"v": 1, "id": "jr", "author": "ben", "kind": "joinBill", "at": AT(7),
+       "participant": {"id": "ben", "name": "Ben",
+                       "identityKey": KEY_RIVAL}}],
+     C["id"], [0, 2, 3]),
+    ("no_verifier_decides_nothing",
+     [C, J_ANA, dict(J_BEN, participant={"id": "ben", "name": "Ben",
+                                         "identityKey": KEY_B})], C["id"]),
+
     ("an_empty_log", [], None),
     ("a_log_with_no_create", [J_ANA, J_BEN], None),
     ("two_create_entries",
@@ -347,13 +372,24 @@ def sealed(entries):
 def main():
     out = []
 
-    for name, raw, bill_id in FOLD_CASES:
+    for spec in FOLD_CASES:
+        name, raw, bill_id = spec[0], spec[1], spec[2]
+        # A fourth element lists the entry ids the host is taken to have
+        # verified. Absent, the fold is driven with no verifier at all, which
+        # is the shape every other case uses.
+        verifies = spec[3] if len(spec) > 3 else None
         entries = sealed(raw)
         case = {"name": name, "log": entries}
         if bill_id:
             case["billId"] = bill_id
+        verify = None
+        if verifies is not None:
+            ok = {entries[i]["id"] for i in verifies}
+            case["verifies"] = sorted(ok)
+            def verify(e, key, ok=ok):
+                return e["id"] in ok
         try:
-            r = fold(entries, bill_id)
+            r = fold(entries, bill_id, verify)
             r["balances"] = balances(r["bill"])
             case["expect"] = r
         except Refused as e:
