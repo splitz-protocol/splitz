@@ -1,6 +1,6 @@
 import 'package:test/test.dart';
-import 'package:splitz/splitz.dart' as splitz;
-import 'package:splitz/host.dart';
+import 'package:splitz_core/splitz_core.dart' as splitz;
+import 'package:splitz_core/host.dart';
 
 import 'support/fake_host.dart';
 

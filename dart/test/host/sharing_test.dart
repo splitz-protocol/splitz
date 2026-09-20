@@ -1,5 +1,5 @@
 import 'package:test/test.dart';
-import 'package:splitz/host.dart';
+import 'package:splitz_core/host.dart';
 
 import 'support/fake_host.dart';
 

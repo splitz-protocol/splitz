@@ -1,33 +1,6 @@
-[package]
-name = "splitz"
-version = "1.0.0"
-edition = "2021"
-rust-version = "1.82"
-description = "A shared-bill protocol for Zcash wallets. Exact integer money, deterministic settlement, ZIP 321 output."
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/KamaIOps/Splitz-protocol"
-readme = "README.md"
-# Held back from crates.io. A publish there cannot be undone — there is no
-# delete, only yank, and a yanked version stays visible — so the crate carries
-# the same guard the Dart package carries in its `publish_to: none`. Both come
-# off together when the product is released.
-publish = false
-# The conformance corpus lives at the repository root, one level above this
-# package, so a published crate cannot carry it. `tests/` is therefore left
-# out as well: a suite with no corpus to run asserts nothing, and cargo has no
-# skip state in which to say so — it would report `ok`. The suite is a lane of
-# the repository, not an artifact of the package.
-include = ["src/**", "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE"]
-
-[dependencies]
-serde_json = { version = "1", features = ["preserve_order"] }
-
-[dev-dependencies]
-# The canonical ZIP 321 implementation, used only as an external oracle in
-# tests/oracle.rs. Stock from crates.io rather than a fork, so the check is
-# reproducible by anybody. These are dev-dependencies of the repository rather
-# than of the published package: `include` above leaves out `tests/`, so a
-# consumer builds against serde_json alone and never resolves these at all.
-zip321 = "0.9"
-zcash_address = "0.13"
-zcash_protocol = "0.10"
+# One workspace. `splitz-core` is the protocol: exact integer money,
+# deterministic settlement, ZIP 321 output. Further members — the wallet
+# plumbing and the foreign bindings — join it here.
+[workspace]
+resolver = "2"
+members = ["splitz-core"]

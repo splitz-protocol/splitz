@@ -9,13 +9,13 @@ use serde_json::{json, Value};
 use std::cell::Cell;
 use std::collections::BTreeSet;
 
-use splitz::host::{
+use splitz_core::host::{
     add_expense, base64url_no_pad, create_bill, in_lane, join_bill, lane_debts, lane_for,
     obligation_for, record_payment, set_rate, settle, settle_cash, settle_swap, BillHost, BillLog,
     SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
 };
-use splitz::model::Participant;
-use splitz::{net_balances, settle_bill, DEFAULT_EXACT_LIMIT};
+use splitz_core::model::Participant;
+use splitz_core::{net_balances, settle_bill, DEFAULT_EXACT_LIMIT};
 
 // --- a wallet that does nothing ---------------------------------------------
 
@@ -182,13 +182,13 @@ fn the_first_preference_decides_not_the_most_convenient_one() {
         pay_to: None,
         identity_key: None,
         payouts: vec![
-            splitz::model::Payout {
+            splitz_core::model::Payout {
                 kind: "cash".to_owned(),
                 address: None,
                 asset: None,
                 chain: None,
             },
-            splitz::model::Payout {
+            splitz_core::model::Payout {
                 kind: "zec".to_owned(),
                 address: Some("u1cara".to_owned()),
                 asset: None,

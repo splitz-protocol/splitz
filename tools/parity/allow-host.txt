@@ -1,8 +1,8 @@
 # Divergences between the two wallet seams that are idiom rather than gap.
 #
-# The Rust side is `rust/src/host/mod.rs`'s `pub use` block — what a consumer
-# reaches as `splitz::host::…`. The Dart side is what
-# `package:splitz/host.dart` re-exports from `dart/lib/src/host/`.
+# The Rust side is `rust/splitz-core/src/host/mod.rs`'s `pub use` block — what a consumer
+# reaches as `splitz_core::host::…`. The Dart side is what
+# `package:splitz_core/host.dart` re-exports from `dart/lib/src/host/`.
 #
 # The seam is compared separately from the protocol because it is separately
 # importable on both sides: a protocol name absent from it is correct rather

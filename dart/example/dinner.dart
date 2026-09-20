@@ -3,7 +3,7 @@
 /// Run with `dart run example/dinner.dart` from the `dart` directory.
 library;
 
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 
 void main() {
   const at = '2026-10-28T19:30:00.000Z';

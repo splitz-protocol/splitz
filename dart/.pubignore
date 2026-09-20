@@ -3,7 +3,7 @@
 # corpus is therefore left out too: a suite with nothing to run asserts
 # nothing, and `dart test` reports it as a pass with skips that a reader of
 # the summary line does not see. The suite is a lane of the repository, not an
-# artefact of the package. `rust/Cargo.toml` leaves out `tests/` for the same
+# artefact of the package. `rust/splitz-core/Cargo.toml` leaves out `tests/` for the same
 # reason.
 test/
 tool/

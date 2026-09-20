@@ -7,7 +7,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 import 'package:test/test.dart';
 
 /// The corpus lives at the repository root, one level above this package, so a

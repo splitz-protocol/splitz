@@ -1,4 +1,4 @@
-# splitz
+# splitz-core
 
 The Rust implementation of the splitz shared-bill protocol. One specification,
 two implementations, one corpus that both run.

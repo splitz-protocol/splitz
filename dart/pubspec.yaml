@@ -1,4 +1,4 @@
-name: splitz
+name: splitz_core
 description: A shared-bill protocol for Zcash wallets. Exact integer money, deterministic settlement, ZIP 321 output.
 version: 1.0.0
 publish_to: none

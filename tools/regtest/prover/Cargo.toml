@@ -5,11 +5,11 @@ edition = "2021"
 publish = false
 description = "Broadcasts a transaction built from a splitz payment request on a regtest chain."
 
-# Deliberately not a workspace member of ../../rust: the splitz crate takes one
-# dependency and this takes forty. It depends on splitz by path, the way a
-# wallet would.
+# Deliberately not a workspace member of ../../rust: the splitz-core crate takes
+# one dependency and this takes forty. It depends on splitz-core by path, the way
+# a wallet would.
 [dependencies]
-splitz = { path = "../../../rust" }
+splitz-core = { path = "../../../rust/splitz-core" }
 
 zcash_client_backend = { version = "0.24", features = ["lightwalletd-tonic-transport", "orchard", "sync", "transparent-inputs"] }
 zcash_client_sqlite = { version = "0.22", features = ["orchard", "transparent-inputs"] }

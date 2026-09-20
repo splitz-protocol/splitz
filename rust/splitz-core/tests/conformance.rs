@@ -1,16 +1,17 @@
-//! Runs the language-neutral corpus in ../vectors against this crate.
+//! Runs the language-neutral corpus in the repository root against this crate.
 //!
 //! A case carries either `expect` or `error`. Refusing for the wrong reason is
 //! a failure, so the code is compared and not merely the fact of a refusal.
 
 use serde_json::{json, Value};
-use splitz::error::Result;
+use splitz_core::error::Result;
 use std::fs;
 
-/// The corpus lives at the repository root, one level above this package, so a
+/// The corpus lives at the repository root, two levels above this package, so a
 /// published crate cannot carry it. `SPLITZ_VECTORS` points at a checkout.
 fn vector_dir() -> String {
-    std::env::var("SPLITZ_VECTORS").unwrap_or_else(|_| "../vectors".to_owned())
+    std::env::var("SPLITZ_VECTORS")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors").to_owned())
 }
 
 /// Panics when the corpus is not on disk.
@@ -97,8 +98,8 @@ fn ints(value: &Value) -> Vec<i64> {
         .collect()
 }
 
-fn rate_of(value: &serde_json::Value) -> splitz::ExchangeRate {
-    splitz::ExchangeRate {
+fn rate_of(value: &serde_json::Value) -> splitz_core::ExchangeRate {
+    splitz_core::ExchangeRate {
         currency: value["currency"].as_str().unwrap_or_default().to_owned(),
         minor_units_per_zec: value["minorUnitsPerZec"].as_i64().unwrap_or(0),
         at: value["at"].as_str().unwrap_or_default().to_owned(),
@@ -106,14 +107,14 @@ fn rate_of(value: &serde_json::Value) -> splitz::ExchangeRate {
     }
 }
 
-fn payments_of(c: &serde_json::Value) -> Vec<splitz::Zip321Payment> {
+fn payments_of(c: &serde_json::Value) -> Vec<splitz_core::Zip321Payment> {
     if let Some(count) = c["paymentCount"].as_u64() {
         // Carried as a count rather than a literal list; §8.2's index cap.
         let repeat = &c["repeatPayment"];
         let address = repeat["address"].as_str().unwrap_or_default().to_owned();
         let from = repeat["zatoshiFrom"].as_i64().unwrap_or(0);
         return (0..count)
-            .map(|i| splitz::Zip321Payment {
+            .map(|i| splitz_core::Zip321Payment {
                 address: address.clone(),
                 zatoshi: from + i as i64,
                 ..Default::default()
@@ -124,10 +125,10 @@ fn payments_of(c: &serde_json::Value) -> Vec<splitz::Zip321Payment> {
         .as_array()
         .map(|list| {
             list.iter()
-                .map(|raw| splitz::Zip321Payment {
+                .map(|raw| splitz_core::Zip321Payment {
                     address: raw["address"].as_str().unwrap_or_default().to_owned(),
                     zatoshi: raw["zatoshi"].as_i64().unwrap_or(0),
-                    fiat: raw["fiat"].as_array().map(|f| splitz::FiatPrice {
+                    fiat: raw["fiat"].as_array().map(|f| splitz_core::FiatPrice {
                         currency: f[0].as_str().unwrap_or_default().to_owned(),
                         minor_units: f[1].as_i64().unwrap_or(0),
                     }),
@@ -143,7 +144,7 @@ fn payments_of(c: &serde_json::Value) -> Vec<splitz::Zip321Payment> {
 #[test]
 fn signing() {
     run_cases("signing.json", |c| {
-        Ok(json!(splitz::signing_message(&c["entry"])?))
+        Ok(json!(splitz_core::signing_message(&c["entry"])?))
     });
 }
 
@@ -165,7 +166,7 @@ fn authority() {
             .find(|e| e["kind"] == "createBill")
             .expect("a create entry");
         // The curve operation is the host's; the case says what it decided.
-        let r = splitz::resolve_identities(&entries, create, |e, _key| {
+        let r = splitz_core::resolve_identities(&entries, create, |e, _key| {
             verified.contains(e["id"].as_str().unwrap_or(""))
         });
         Ok(json!({
@@ -188,14 +189,14 @@ fn delta() {
                     .collect()
             })
             .unwrap_or_default();
-        Ok(match splitz::delta_for(&entries, &they_have) {
-            splitz::Delta::NothingMissing => {
+        Ok(match splitz_core::delta_for(&entries, &they_have) {
+            splitz_core::Delta::NothingMissing => {
                 json!({ "state": "nothing", "entryCount": 0 })
             }
-            splitz::Delta::Square { uri, entry_count } => {
+            splitz_core::Delta::Square { uri, entry_count } => {
                 json!({ "state": "square", "uri": uri, "entryCount": entry_count })
             }
-            splitz::Delta::TooBig { entry_count, code } => {
+            splitz_core::Delta::TooBig { entry_count, code } => {
                 json!({ "state": "too_big", "entryCount": entry_count, "code": code })
             }
         })
@@ -208,12 +209,12 @@ fn delta() {
 #[test]
 fn withholdings() {
     run_cases("withholdings.json", |c| {
-        let bill = splitz::decode_bill(&c["bill"])?;
-        let plan: Vec<splitz::settle::Settlement> = c["plan"]
+        let bill = splitz_core::decode_bill(&c["bill"])?;
+        let plan: Vec<splitz_core::settle::Settlement> = c["plan"]
             .as_array()
             .map(|a| {
                 a.iter()
-                    .map(|s| splitz::settle::Settlement {
+                    .map(|s| splitz_core::settle::Settlement {
                         from: s["from"].as_str().unwrap_or_default().to_owned(),
                         to: s["to"].as_str().unwrap_or_default().to_owned(),
                         amount: s["amount"].as_i64().unwrap_or_default(),
@@ -233,7 +234,7 @@ fn withholdings() {
                 })
                 .unwrap_or_default()
         };
-        let w = splitz::withholdings(
+        let w = splitz_core::withholdings(
             &plan,
             &bill,
             c["payer"].as_str().unwrap_or_default(),
@@ -257,18 +258,18 @@ fn withholdings() {
 #[test]
 fn obligations() {
     run_cases("obligations.json", |c| {
-        let bill = splitz::decode_bill(&json!({
-            "v": splitz::BILL_VERSION,
+        let bill = splitz_core::decode_bill(&json!({
+            "v": splitz_core::BILL_VERSION,
             "id": "b",
             "name": "",
             "currency": c["currency"],
             "participants": c["participants"],
         }))?;
-        let settlements: Vec<splitz::settle::Settlement> = c["settlements"]
+        let settlements: Vec<splitz_core::settle::Settlement> = c["settlements"]
             .as_array()
             .map(|a| {
                 a.iter()
-                    .map(|s| splitz::settle::Settlement {
+                    .map(|s| splitz_core::settle::Settlement {
                         from: s["from"].as_str().unwrap_or_default().to_owned(),
                         to: s["to"].as_str().unwrap_or_default().to_owned(),
                         amount: s["amount"].as_i64().unwrap_or(0),
@@ -277,7 +278,7 @@ fn obligations() {
                     .collect()
             })
             .unwrap_or_default();
-        let r = splitz::render_obligation(
+        let r = splitz_core::render_obligation(
             &settlements,
             &bill,
             &rate_of(&c["rate"]),
@@ -303,12 +304,12 @@ fn obligations() {
 fn log() {
     run_cases("log.json", |c| {
         if let Some(entry) = c.get("entry") {
-            splitz::check_entry(entry)?;
+            splitz_core::check_entry(entry)?;
             return Ok(json!({"accepted": true}));
         }
         if let Some(left) = c["left"].as_array() {
             let right = c["right"].as_array().cloned().unwrap_or_default();
-            let answer = |r: splitz::MergeResult| {
+            let answer = |r: splitz_core::MergeResult| {
                 json!({
                     "merged": r.merged,
                     "refused": r.refused.iter().map(|a| json!({
@@ -319,8 +320,8 @@ fn log() {
             // §10.2's union is commutative, which is a claim about this
             // implementation and not only about the reference that wrote the
             // expectation. Both orders must give one answer.
-            let forward = answer(splitz::merge_logs(&[left.clone(), right.clone()])?);
-            let backward = answer(splitz::merge_logs(&[right, left.clone()])?);
+            let forward = answer(splitz_core::merge_logs(&[left.clone(), right.clone()])?);
+            let backward = answer(splitz_core::merge_logs(&[right, left.clone()])?);
             assert_eq!(backward, forward, "merge is not commutative");
             return Ok(forward);
         }
@@ -334,7 +335,7 @@ fn log() {
                     .map(str::to_owned)
                     .collect()
             });
-        let r = splitz::log::fold_log_verified(
+        let r = splitz_core::log::fold_log_verified(
             &entries,
             c["billId"].as_str(),
             verifies.map(|ok| {
@@ -344,7 +345,7 @@ fn log() {
 
         // §9.1: the decoder carries confirmedPayments through, so the
         // fold's answer survives the round trip with no fixup here.
-        let bill = splitz::decode_bill(&r.bill)?;
+        let bill = splitz_core::decode_bill(&r.bill)?;
 
         Ok(json!({
             "identities": {
@@ -361,7 +362,7 @@ fn log() {
             "setAside": r.set_aside.iter().map(|a| json!({
                 "id": a.id, "code": a.code,
             })).collect::<Vec<_>>(),
-            "balances": splitz::net_balances(&bill)?,
+            "balances": splitz_core::net_balances(&bill)?,
         }))
     });
 }
@@ -370,9 +371,9 @@ fn log() {
 fn invite() {
     run_cases("invite.json", |c| {
         if let Some(uri) = c["uri"].as_str() {
-            let i = splitz::parse_invite(uri)?;
+            let i = splitz_core::parse_invite(uri)?;
             let mut o = serde_json::Map::new();
-            o.insert("version".into(), json!(splitz::invite::INVITE_VERSION));
+            o.insert("version".into(), json!(splitz_core::invite::INVITE_VERSION));
             o.insert("billId".into(), json!(i.bill_id));
             o.insert("key".into(), json!(i.key));
             o.insert("name".into(), json!(i.name));
@@ -382,7 +383,7 @@ fn invite() {
             Ok(Value::Object(o))
         } else {
             let raw = &c["invite"];
-            Ok(json!(splitz::render_invite(&splitz::Invite {
+            Ok(json!(splitz_core::render_invite(&splitz_core::Invite {
                 bill_id: raw["billId"].as_str().unwrap_or_default().to_owned(),
                 key: raw["key"].as_str().unwrap_or_default().to_owned(),
                 name: raw["name"].as_str().unwrap_or_default().to_owned(),
@@ -396,12 +397,12 @@ fn invite() {
 fn payload() {
     run_cases("payload.json", |c| {
         if let Some(spec) = c.get("encode") {
-            return Ok(json!(splitz::encode_payload(
+            return Ok(json!(splitz_core::encode_payload(
                 spec["prefix"].as_str().unwrap_or_default(),
                 &spec["body"],
             )?));
         }
-        let p = splitz::decode_payload(c["payload"].as_str().unwrap_or_default())?;
+        let p = splitz_core::decode_payload(c["payload"].as_str().unwrap_or_default())?;
         Ok(json!({
             "prefix": p.prefix,
             "version": p.version,
@@ -414,7 +415,7 @@ fn payload() {
 #[test]
 fn sealed() {
     run_cases("sealed.json", |c| {
-        let f = splitz::parse_sealed_frame(c["frame"].as_str().unwrap_or_default())?;
+        let f = splitz_core::parse_sealed_frame(c["frame"].as_str().unwrap_or_default())?;
         Ok(json!({
             "version": f.version,
             "nonce": f.nonce,
@@ -428,12 +429,12 @@ fn seal() {
     run_cases("seal.json", |c| {
         // Either an entry to seal, or a bill id to derive a channel from.
         if let Some(bill_id) = c["billId"].as_str() {
-            return Ok(json!({"channel": splitz::channel_for(bill_id)}));
+            return Ok(json!({"channel": splitz_core::channel_for(bill_id)}));
         }
-        let plaintext = splitz::sealed_plaintext(&c["entry"])?;
+        let plaintext = splitz_core::sealed_plaintext(&c["entry"])?;
         Ok(json!({
             "plaintext": String::from_utf8(plaintext.clone()).unwrap(),
-            "nonce": splitz::host::base64url_no_pad(&splitz::sealed_nonce(&plaintext)),
+            "nonce": splitz_core::host::base64url_no_pad(&splitz_core::sealed_nonce(&plaintext)),
         }))
     });
 }
@@ -448,7 +449,7 @@ fn settlement() {
             .map(|(k, v)| (k.clone(), v.as_i64().expect("an integer")))
             .collect();
         let limit = c["exactLimit"].as_u64().expect("a limit") as usize;
-        let plan = splitz::settle_balances(&net, limit)?;
+        let plan = splitz_core::settle_balances(&net, limit)?;
         Ok(json!({
             "settlements": plan.settlements.iter().map(|s| json!({
                 "from": s.from, "to": s.to, "amount": s.amount,
@@ -466,7 +467,7 @@ fn coverage() {
         // A case carries a bill or bare balances: §6.3 coverage needs the
         // debts, and net balances do not carry them.
         let plan = if c.get("bill").is_some() {
-            splitz::settle_bill(&splitz::decode_bill(&c["bill"])?, limit)?
+            splitz_core::settle_bill(&splitz_core::decode_bill(&c["bill"])?, limit)?
         } else {
             let net: std::collections::BTreeMap<String, i64> = c["balances"]
                 .as_object()
@@ -474,7 +475,7 @@ fn coverage() {
                 .iter()
                 .map(|(k, v)| (k.clone(), v.as_i64().expect("an integer")))
                 .collect();
-            splitz::settle_balances(&net, limit)?
+            splitz_core::settle_balances(&net, limit)?
         };
         Ok(json!({
             "settlements": plan.settlements.iter().map(|s| json!({
@@ -497,15 +498,15 @@ fn coverage() {
 fn balances() {
     run_cases("balances.json", |c| {
         // §9.1: a document that omits confirmedPayments has confirmed nothing.
-        let bill = splitz::decode_bill(&c["bill"])?;
-        let net = splitz::net_balances(&bill)?;
+        let bill = splitz_core::decode_bill(&c["bill"])?;
+        let net = splitz_core::net_balances(&bill)?;
         Ok(json!({
             "net": net,
-            "creditors": splitz::creditors(&net).iter()
+            "creditors": splitz_core::creditors(&net).iter()
                 .map(|p| json!({"id": p.id, "amount": p.amount})).collect::<Vec<_>>(),
-            "debtors": splitz::debtors(&net).iter()
+            "debtors": splitz_core::debtors(&net).iter()
                 .map(|p| json!({"id": p.id, "amount": p.amount})).collect::<Vec<_>>(),
-            "directDebts": splitz::direct_debts(&bill)?.iter()
+            "directDebts": splitz_core::direct_debts(&bill)?.iter()
                 .map(|d| json!({"from": d.from, "to": d.to, "amount": d.amount}))
                 .collect::<Vec<_>>(),
         }))
@@ -515,8 +516,8 @@ fn balances() {
 #[test]
 fn bill_json() {
     run_cases("bill-json.json", |c| {
-        let bill = splitz::decode_bill(&c["json"])?;
-        Ok(splitz::bill_to_json(&bill))
+        let bill = splitz_core::decode_bill(&c["json"])?;
+        Ok(splitz_core::bill_to_json(&bill))
     });
 }
 
@@ -524,7 +525,7 @@ fn bill_json() {
 fn zip321() {
     run_cases("zip321.json", |c| {
         let payments = payments_of(c);
-        let uri = splitz::render_uri(&payments, c["includeFiat"].as_bool().unwrap_or(false))?;
+        let uri = splitz_core::render_uri(&payments, c["includeFiat"].as_bool().unwrap_or(false))?;
         if let Some(want) = c["expectLength"].as_u64() {
             assert_eq!(uri.len() as u64, want, "URI length");
             return Ok(Value::Null);
@@ -538,17 +539,17 @@ fn rate() {
     run_cases("rate.json", |c| {
         let rate = rate_of(&c["rate"]);
         if c["direction"] == "zatoshiToFiat" {
-            Ok(json!(splitz::zatoshi_to_fiat(
+            Ok(json!(splitz_core::zatoshi_to_fiat(
                 c["zatoshi"].as_i64().expect("zatoshi is an integer"),
                 &rate
             )?))
         } else {
             let rounding = match c["rounding"].as_str() {
-                Some("down") => splitz::RateRounding::Down,
-                Some("nearest") => splitz::RateRounding::Nearest,
-                _ => splitz::RateRounding::Up,
+                Some("down") => splitz_core::RateRounding::Down,
+                Some("nearest") => splitz_core::RateRounding::Nearest,
+                _ => splitz_core::RateRounding::Up,
             };
-            Ok(json!(splitz::fiat_to_zatoshi(
+            Ok(json!(splitz_core::fiat_to_zatoshi(
                 c["minorUnits"].as_i64().expect("minorUnits is an integer"),
                 &rate,
                 c["amountCurrency"].as_str(),
@@ -561,7 +562,7 @@ fn rate() {
 #[test]
 fn split_methods() {
     run_cases("split-methods.json", |c| {
-        let shares = splitz::split_expense(
+        let shares = splitz_core::split_expense(
             c["total"].as_i64().expect("total is an integer"),
             &c["split"],
         )?;
@@ -572,7 +573,7 @@ fn split_methods() {
 #[test]
 fn allocation() {
     run_cases("allocation.json", |c| {
-        let parts = splitz::allocate(
+        let parts = splitz_core::allocate(
             c["total"].as_i64().expect("total is an integer"),
             &ints(&c["weights"]),
         )?;

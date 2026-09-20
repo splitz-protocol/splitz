@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Diffs the two implementations' public surfaces.
 
-Two surfaces, not one: the protocol (`package:splitz/splitz.dart` against
-`splitz::`) and the wallet seam (`package:splitz/host.dart` against
-`splitz::host::`). They are compared separately because they are separately
+Two surfaces, not one: the protocol (`package:splitz_core/splitz_core.dart` against
+`splitz_core::`) and the wallet seam (`package:splitz_core/host.dart` against
+`splitz_core::host::`). They are compared separately because they are separately
 importable — a name that is on the crate root and not on `host` is not a gap,
 and a consumer reaching for the seam gets only what the seam exports.
 
@@ -175,7 +175,7 @@ def dart_surface(source: Path) -> set[str]:
 
 
 def rust_surface(source: Path) -> set[str]:
-    """What `splitz::` re-exports — the surface a consumer actually reaches.
+    """What `splitz_core::` re-exports — the surface a consumer actually reaches.
 
     Not every `pub` item in every module. A module is `pub mod`, so a name can
     be `pub` and still cost a consumer a compile error and a search, because
@@ -350,8 +350,8 @@ def main() -> int:
     open_items = compare(
         "protocol",
         ROOT / "dart" / "lib" / "src",
-        ROOT / "rust" / "src" / "lib.rs",
-        ROOT / "rust" / "src",
+        ROOT / "rust" / "splitz-core" / "src" / "lib.rs",
+        ROOT / "rust" / "splitz-core" / "src",
         here / "allow.txt",
     )
     # The seam is its own import on both sides, so it is its own comparison.
@@ -359,8 +359,8 @@ def main() -> int:
     open_items += compare(
         "host",
         ROOT / "dart" / "lib" / "src" / "host",
-        ROOT / "rust" / "src" / "host" / "mod.rs",
-        ROOT / "rust" / "src" / "host",
+        ROOT / "rust" / "splitz-core" / "src" / "host" / "mod.rs",
+        ROOT / "rust" / "splitz-core" / "src" / "host",
         here / "allow-host.txt",
     )
     return 1 if open_items else 0

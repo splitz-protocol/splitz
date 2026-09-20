@@ -5,8 +5,8 @@
 // ignore_for_file: avoid_print
 import 'dart:typed_data';
 
-import 'package:splitz/host.dart';
-import 'package:splitz/splitz.dart' as splitz;
+import 'package:splitz_core/host.dart';
+import 'package:splitz_core/splitz_core.dart' as splitz;
 
 class MyWallet extends BillHost {
   @override

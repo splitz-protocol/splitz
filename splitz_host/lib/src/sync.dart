@@ -1,0 +1,200 @@
+/// Moving a bill between devices through a relay that holds only ciphertext.
+library;
+
+import 'package:splitz_core/host.dart' as splitz;
+import 'package:splitz_core/splitz_core.dart' as protocol;
+
+import 'keys.dart';
+import 'relay.dart';
+import 'sealing.dart';
+import 'signing.dart';
+import 'store.dart';
+
+/// Syncs one bill through a relay.
+///
+/// Everything promised about the relay lives here: entries are sealed under the
+/// bill key before they leave, the channel is the bill id's hash so the relay
+/// cannot name the bill, and merging is the same order-independent set union
+/// the local store already performs — so a device that has been offline merges
+/// what it missed rather than reconciling two versions of a summary.
+class SplitsSync {
+  SplitsSync({
+    required BillStore store,
+    required SplitsKeys keys,
+    required SplitsRelay relay,
+    SplitsSealing? sealing,
+    SplitsSigner? signer,
+  }) : _store = store,
+       _keys = keys,
+       _relay = relay,
+       _sealing = sealing ?? SplitsSealing(),
+       _signer = signer ?? SplitsSigner();
+
+  final BillStore _store;
+  final SplitsKeys _keys;
+  final SplitsRelay _relay;
+  final SplitsSealing _sealing;
+  final SplitsSigner _signer;
+
+  /// Pushes what this device holds, then pulls what it does not.
+  ///
+  /// Push first, so a participant syncing right after us sees our entries; then
+  /// pull, so we see theirs. Both directions merge by entry id, so running this
+  /// twice, or on two devices at once, converges.
+  Future<SyncResult> sync(
+    String billId, {
+    List<int>? signerSeed,
+    String? authorId,
+  }) async {
+    await push(billId, signerSeed: signerSeed, authorId: authorId);
+    return pull(billId);
+  }
+
+  /// Seals every entry this device holds and pushes it to the bill's channel.
+  ///
+  /// Entries this device authored are signed first, so participants who receive
+  /// them can confirm they came from this identity. A signature is
+  /// deterministic and a blob is keyed by its content, so pushing the whole log
+  /// every time is safe: the relay stores each entry once however often it is
+  /// sent.
+  Future<List<Map<String, dynamic>>> push(
+    String billId, {
+    List<int>? signerSeed,
+    String? authorId,
+  }) async {
+    final entries = await _store.read(billId);
+    if (entries.isEmpty) return entries;
+    final key = await _requireKey(billId);
+
+    final sign = signerSeed == null ? null : _signer.signerFor(signerSeed);
+    final blobs = <String>[];
+    for (final entry in entries) {
+      final toSeal =
+          (sign != null &&
+              authorId != null &&
+              entry['author'] == authorId &&
+              entry['sig'] == null)
+          ? await splitz.signEntry(host: _SigningOnly(sign), entry: entry)
+          : entry;
+      blobs.add(await _sealing.seal(toSeal, key));
+    }
+    await _relay.push(SplitsChannel.forBill(billId), blobs);
+    return entries;
+  }
+
+  /// Fetches the channel, opens what it can, and merges it into what is held.
+  ///
+  /// Everything that opens is merged. Authorship is **not** judged here: an
+  /// entry admitted or refused by what this device happened to hold when it
+  /// arrived would make the stored log depend on network order, and two devices
+  /// that pulled the same entries in a different order would then hold
+  /// different bills. §10.7 decides authorship over the whole log at fold time,
+  /// where the answer is the same on every device and a locally written entry
+  /// faces exactly the rules a synced one does.
+  Future<SyncResult> pull(String billId) async {
+    final key = await _requireKey(billId);
+    final blobs = await _relay.fetch(SplitsChannel.forBill(billId));
+
+    var unopenable = 0;
+    final entries = <Map<String, dynamic>>[];
+    for (final blob in blobs) {
+      try {
+        entries.add(await _sealing.open(blob, key));
+      } on SealingException {
+        // A foreign or altered blob is skipped rather than failing the whole
+        // sync, so one bad blob cannot strand a bill.
+        unopenable++;
+      }
+    }
+
+    final merged = await _store.merge(billId, entries);
+    return SyncResult(
+      entries: merged.entries,
+      refused: merged.refused,
+      unopenable: unopenable,
+    );
+  }
+
+  Future<String> _requireKey(String billId) async {
+    final String? key;
+    try {
+      key = await _keys.readBillKey(billId);
+    } on StateError catch (e) {
+      // A keychain refuses while the session is locked. A poll that lands then
+      // is a sync that could not run, and is reported as one.
+      throw SplitsSyncException(
+        'Cannot read the key for $billId: ${e.message}',
+      );
+    }
+    if (key == null || key.isEmpty) {
+      throw SplitsSyncException('No key for $billId; it cannot be synced');
+    }
+    return key;
+  }
+}
+
+/// What one sync produced.
+class SyncResult {
+  const SyncResult({
+    required this.entries,
+    required this.refused,
+    required this.unopenable,
+  });
+
+  /// The merged log, in the order §10.2 puts it.
+  final List<Map<String, dynamic>> entries;
+
+  /// What the merge refused at ingress (§10.1).
+  final List<protocol.SetAside> refused;
+
+  /// Blobs in the channel that would not open under this bill's key.
+  ///
+  /// Counted rather than ignored. A channel where every blob is unopenable is
+  /// a key that is wrong, and that looks identical to a quiet relay unless
+  /// somebody is counting.
+  final int unopenable;
+}
+
+/// Raised when a bill cannot be synced.
+class SplitsSyncException implements Exception {
+  const SplitsSyncException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'SplitsSyncException: $message';
+}
+
+/// A host that can do nothing but sign.
+///
+/// `signEntry` needs a `BillHost`, and signing reads none of the rest of it.
+/// Rather than require a whole wallet to seal an entry that already exists,
+/// this supplies the one member that is used and refuses the others loudly, so
+/// a later change that starts reading them fails here instead of silently
+/// signing with a placeholder identity.
+class _SigningOnly extends splitz.BillHost {
+  _SigningOnly(this._sign);
+
+  final splitz.SignEntry _sign;
+
+  @override
+  splitz.SignEntry? get sign => _sign;
+
+  @override
+  String get me => throw UnimplementedError('signing reads no author');
+
+  @override
+  String? get payToAddress =>
+      throw UnimplementedError('signing reads no address');
+
+  @override
+  splitz.Clock get now => throw UnimplementedError('signing reads no clock');
+
+  @override
+  splitz.Randomness get randomBytes =>
+      throw UnimplementedError('signing reads no randomness');
+
+  @override
+  splitz.Broadcast get broadcast =>
+      throw UnimplementedError('signing sends nothing');
+}

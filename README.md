@@ -13,16 +13,20 @@ from the specification text alone — that produces them.
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
 ├── CONFORMANCE.md  what conformance means, and what a green suite does not say
 ├── vectors/        448 language-neutral conformance cases
-├── dart/           reference implementation  (0 dependencies)
-│                   `splitz.dart` the protocol, `host.dart` the wallet seam
-├── rust/           second implementation     (serde_json, for the wire format)
+├── dart/           `splitz_core`, the reference implementation (0 dependencies)
+│                   `splitz_core.dart` the protocol, `host.dart` the wallet seam
+├── rust/           a cargo workspace; `splitz-core` is the second
+│                   implementation (serde_json, for the wire format)
+├── splitz_host/    `splitz_host`, what a wallet needs around the protocol:
+│                   entry signing, sealing, the log, the sync, the store
 └── tools/          the lanes a fixed corpus cannot be
 ```
 
 ```
-cd dart && dart test                 # 540 tests, 448 of them the corpus
+cd dart && dart test                 # 539 tests, 448 of them the corpus
 cd rust && cargo test                # the same 448 cases, plus the oracle
 cd rust && cargo test --release      # and again with overflow checks off
+cd splitz_host && dart test          # 110 over the wallet seam
 tools/differential/run.sh 1 1200     # three implementations, one operation list,
                                      #   diffed against each other and against
                                      #   §10.2's own properties
@@ -124,9 +128,9 @@ by a test in each implementation whose string type can hold the input.
 | `tools/differential` | Inputs nobody wrote an expectation for, answered by every implementation and diffed against each other. Catches what a corpus generated from one reference structurally cannot. |
 | `tools/parity` | The two public surfaces. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
 | `tools/spec` | `SPEC.md` against the tree that has to keep it: every §12 code declared, thrown and covered in all three implementations, every `vectors/…` file and case the text names by name, every figure it quotes beside a named case, every §N cross-reference. Nothing else in this repository reads the specification, and every implementation written from it inherits its mistakes. |
-| `rust/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |
+| `rust/splitz-core/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |
 | `tools/oracle/instants.py` | §9.3's instants against CPython's `datetime`, written by other people for another purpose. §9.3 is deliberately narrower than RFC 3339, so the relation checked is containment and agreement, and the strings the stdlib accepts and §9.3 refuses are counted rather than assumed. |
-| `tools/examples` | Every sample under `dart/example/`, plus `rust/examples/seam.rs`, run with its exit code read. `dart analyze` type-checks them; it does not call them, and a sample that only compiles proves the names exist rather than that the calls in it are ones a caller may make in that order with those values. |
+| `tools/examples` | Every sample under `dart/example/`, plus `rust/splitz-core/examples/seam.rs`, run with its exit code read. `dart analyze` type-checks them; it does not call them, and a sample that only compiles proves the names exist rather than that the calls in it are ones a caller may make in that order with those values. |
 | `tools/web-target` | That the package still refuses to compile to JavaScript. A JS number is exact only to 2^53−1; amounts here are 64-bit, so compiling would round them silently rather than fail. |
 
 ## Integrating it into a wallet

@@ -84,7 +84,7 @@ byte. That rules out, in any language:
 Each case is data. A harness in any language loads the JSON, feeds the inputs
 to the implementation, and compares. The two harnesses here are worth reading
 before writing a third: `dart/test/conformance_test.dart` and
-`rust/tests/conformance.rs`. Neither is long.
+`rust/splitz-core/tests/conformance.rs`. Neither is long.
 
 Objects keyed by participant id are compared by content, not key order.
 Amounts are integer minor units throughout. Instants are canonical (§9.3).

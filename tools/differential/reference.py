@@ -3,7 +3,7 @@
 
 Reads one JSON operation per line on stdin and writes one JSON answer per line
 on stdout, in the shape `dart/tool/differential.dart` and
-`rust/examples/differential.rs` write. Every implementation answers the same
+`rust/splitz-core/examples/differential.rs` write. Every implementation answers the same
 list, and `tools/differential/compare.py` diffs the answers against each other
 rather than against anybody's expectation.
 

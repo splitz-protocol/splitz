@@ -1,7 +1,7 @@
 # Divergences between the two public surfaces that are idiom rather than gap.
 #
-# The Rust side of the comparison is `rust/src/lib.rs`'s `pub use` block — the
-# names a consumer reaches as `splitz::…`. A name that is `pub` inside a module
+# The Rust side of the comparison is `rust/splitz-core/src/lib.rs`'s `pub use` block — the
+# names a consumer reaches as `splitz_core::…`. A name that is `pub` inside a module
 # but not re-exported is not surface: the module is open, so it costs a
 # consumer a compile error and a search, which is exactly what this lane is
 # for. Dart's barrel re-exports its whole `src/`, so the two lists are

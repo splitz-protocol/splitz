@@ -5,9 +5,9 @@ render one payer's obligation as a payment request. `renderObligation` does the
 last two of those, so the shortest wallet makes three calls.
 
 There are two imports, and a wallet usually wants both. The protocol —
-`package:splitz/splitz.dart`, `splitz::` — is what this page's first two
-sections show. The wallet seam — `package:splitz/host.dart`,
-`splitz::host::` — is the layer above it: something that assembles an entry
+`package:splitz_core/splitz_core.dart`, `splitz_core::` — is what this page's first two
+sections show. The wallet seam — `package:splitz_core/host.dart`,
+`splitz_core::host::` — is the layer above it: something that assembles an entry
 and derives §9.5's id, a log that merges and folds, the two scans that move a
 bill between phones, and one payer's obligation from a folded bill. See **The
 wallet seam** below.
@@ -15,7 +15,7 @@ wallet seam** below.
 ## Dart
 
 ```dart
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 
 final plan = settleBill(bill);                  // fewest payments
 // A bill with no `setRate` entry is an ordinary bill, so this is a branch and
@@ -48,7 +48,7 @@ broadcast(renderUri(payments));                 // one transaction
 // A bill closes because a payment is confirmed, not because one was sent.
 // The protocol import exports no entry builder: at this level the wallet
 // assembles the map and derives its §9.5 id with `deriveEntryId`, then
-// appends it to its own log. `package:splitz/host.dart` has `recordPayment`
+// appends it to its own log. `package:splitz_core/host.dart` has `recordPayment`
 // and the rest, which do exactly this and hand back an entry whose id is
 // already the digest; see **The wallet seam**.
 // `canonicalInstant` takes a string, not a clock value: this library exports
@@ -74,16 +74,16 @@ entry['id'] = deriveEntryId(entry);            // §9.5: the id IS the digest
 ## Rust
 
 ```rust
-let plan = splitz::settle_bill(&bill, splitz::DEFAULT_EXACT_LIMIT)?;
-let zatoshi = splitz::fiat_to_zatoshi(
+let plan = splitz_core::settle_bill(&bill, splitz_core::DEFAULT_EXACT_LIMIT)?;
+let zatoshi = splitz_core::fiat_to_zatoshi(
     settlement.amount,
     // A bill with no `setRate` entry is an ordinary bill; this is a branch,
     // not an `expect`.
     bill.rate.as_ref().ok_or(NoRateYet)?,
     Some(&bill.currency),
-    splitz::RateRounding::Up,
+    splitz_core::RateRounding::Up,
 )?;
-let uri = splitz::render_uri(&payments, true)?;
+let uri = splitz_core::render_uri(&payments, true)?;
 ```
 
 ## The wallet seam
@@ -93,8 +93,8 @@ socket and reads no clock of its own: everything it cannot do is declared as
 one interface the wallet implements.
 
 ```dart
-import 'package:splitz/splitz.dart' as splitz;
-import 'package:splitz/host.dart';
+import 'package:splitz_core/splitz_core.dart' as splitz;
+import 'package:splitz_core/host.dart';
 
 class MyWallet extends BillHost {
   @override String get me => 'ana';
@@ -117,7 +117,7 @@ if (owed != null) await settle(host, log, owed);
 ```
 
 ```rust
-use splitz::host::{create_bill, obligation_for, settle, BillHost, BillLog, Sent};
+use splitz_core::host::{create_bill, obligation_for, settle, BillHost, BillLog, Sent};
 
 impl BillHost for MyWallet {
     fn me(&self) -> &str { "ana" }
@@ -136,7 +136,7 @@ What the seam adds, in both:
 
 | | Dart | Rust |
 |---|---|---|
-| The wallet's obligations | `BillHost` | `splitz::host::BillHost` |
+| The wallet's obligations | `BillHost` | `splitz_core::host::BillHost` |
 | Entries, with §9.5's id already derived | `createBill`, `joinBill`, `addExpense`, `recordPayment`, `confirmPayment`, `setRate`, `voidEntry` | the same names in snake case |
 | A signature over §10.6's message | `signEntry` | `sign_entry` |
 | One bill's log, merged and folded | `BillLog`, `FoldedBill` | `BillLog`, `FoldedBill` |

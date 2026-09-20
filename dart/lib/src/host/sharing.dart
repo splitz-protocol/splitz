@@ -8,7 +8,7 @@
 /// the wallet, and nothing here pretends otherwise.
 library;
 
-import 'package:splitz/splitz.dart' as splitz;
+import 'package:splitz_core/splitz_core.dart' as splitz;
 
 import 'bill_log.dart';
 import 'host.dart';

@@ -25,7 +25,7 @@ dart_bin="${DART:-dart}"
 
 cat > "$root/dart/tool/_web_target_probe.dart" <<'PROBE'
 // Written by tools/web-target/run.sh and deleted after it runs.
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 
 void main() {
   print(allocate(100, [1, 1, 1]));

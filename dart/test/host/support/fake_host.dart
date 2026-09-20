@@ -7,7 +7,7 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:splitz/host.dart';
+import 'package:splitz_core/host.dart';
 
 class FakeHost implements BillHost {
   FakeHost({

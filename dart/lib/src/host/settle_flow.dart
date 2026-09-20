@@ -5,7 +5,7 @@
 /// mid-send, and that is what this file is for.
 library;
 
-import 'package:splitz/splitz.dart' as splitz;
+import 'package:splitz_core/splitz_core.dart' as splitz;
 
 import 'bill_log.dart';
 import 'entries.dart';

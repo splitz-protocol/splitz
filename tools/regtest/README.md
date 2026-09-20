@@ -1,6 +1,6 @@
 # A chain of our own
 
-Every other lane in this repository stops at the URI. `rust/tests/oracle.rs`
+Every other lane in this repository stops at the URI. `rust/splitz-core/tests/oracle.rs`
 checks that librustzcash's `zip321` parses back exactly what §8 rendered, which
 is the strongest claim that can be made without a node: **no transaction has
 ever been broadcast from a URI this library produced.**

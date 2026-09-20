@@ -370,14 +370,14 @@ fn splitz_request(payee_address: &str) -> Result<(String, i64, u64)> {
         },
     });
 
-    let bill = splitz::decode_bill(&document).map_err(|e| anyhow!("decoding the bill: {e}"))?;
+    let bill = splitz_core::decode_bill(&document).map_err(|e| anyhow!("decoding the bill: {e}"))?;
     let rate = bill
         .rate
         .clone()
         .ok_or_else(|| anyhow!("the bill carries no rate"))?;
-    let plan = splitz::settle_bill(&bill, splitz::DEFAULT_EXACT_LIMIT)
+    let plan = splitz_core::settle_bill(&bill, splitz_core::DEFAULT_EXACT_LIMIT)
         .map_err(|e| anyhow!("settling the bill: {e}"))?;
-    let mine: Vec<splitz::Settlement> = plan
+    let mine: Vec<splitz_core::Settlement> = plan
         .settlements
         .iter()
         .filter(|s| s.from == "ana")
@@ -388,7 +388,7 @@ fn splitz_request(payee_address: &str) -> Result<(String, i64, u64)> {
     // `include_fiat` is off: the `fiat=` parameter is splitz's own and ZIP 321
     // does not define it, so a request carrying it is not a request every
     // wallet can read.
-    let obligation = splitz::render_obligation(&mine, &bill, &rate, true, false)
+    let obligation = splitz_core::render_obligation(&mine, &bill, &rate, true, false)
         .map_err(|e| anyhow!("rendering the obligation: {e}"))?;
     let uri = obligation
         .uri

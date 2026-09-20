@@ -7,7 +7,7 @@
 //!
 //! This lane compares against the canonical implementation instead. The crate
 //! is stock from crates.io, not a fork, so the check is reproducible by
-//! anybody. It is a dev-dependency: a consumer of `splitz` still takes one
+//! anybody. It is a dev-dependency: a consumer of `splitz-core` still takes one
 //! dependency, `serde_json`.
 //!
 //! Note that `zip321` parses an address into a `ZcashAddress`, so every
@@ -24,7 +24,8 @@ use zip321::{Payment, TransactionRequest};
 /// nothing, and `cargo test` captures stdout on a pass, so the notice would
 /// never be read.
 fn require_corpus() {
-    let dir = std::env::var("SPLITZ_VECTORS").unwrap_or_else(|_| "../vectors".to_owned());
+    let dir = std::env::var("SPLITZ_VECTORS")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors").to_owned());
     assert!(
         std::path::Path::new(&dir).is_dir(),
         "no corpus at {dir}. Point SPLITZ_VECTORS at a checkout to run the \
@@ -33,9 +34,10 @@ fn require_corpus() {
 }
 
 fn load(name: &str) -> Value {
-    // The corpus lives one level above this package; SPLITZ_VECTORS points at
-    // a checkout when the crate is consumed on its own.
-    let dir = std::env::var("SPLITZ_VECTORS").unwrap_or_else(|_| "../vectors".to_owned());
+    // The corpus lives at the repository root, two levels above this package;
+    // SPLITZ_VECTORS points at a checkout when the crate is consumed on its own.
+    let dir = std::env::var("SPLITZ_VECTORS")
+        .unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors").to_owned());
     let path = format!("{dir}/{name}");
     serde_json::from_str(&fs::read_to_string(&path).expect("vectors are readable"))
         .expect("vectors are JSON")
@@ -286,12 +288,12 @@ fn rendering_matches_librustzcash_byte_for_byte() {
         };
 
         // Ours, rendered here rather than read from the corpus.
-        let mine: Vec<splitz::Zip321Payment> = case["payments"]
+        let mine: Vec<splitz_core::Zip321Payment> = case["payments"]
             .as_array()
             .cloned()
             .unwrap_or_default()
             .iter()
-            .map(|raw| splitz::Zip321Payment {
+            .map(|raw| splitz_core::Zip321Payment {
                 address: raw["address"].as_str().unwrap_or_default().to_owned(),
                 zatoshi: raw["zatoshi"].as_i64().unwrap_or(0),
                 memo: raw["memo"].as_str().map(|m| m.as_bytes().to_vec()),
@@ -300,7 +302,7 @@ fn rendering_matches_librustzcash_byte_for_byte() {
                 ..Default::default()
             })
             .collect();
-        let Ok(rendered_by_us) = splitz::render_uri(&mine, false) else {
+        let Ok(rendered_by_us) = splitz_core::render_uri(&mine, false) else {
             unbuildable += 1;
             continue;
         };

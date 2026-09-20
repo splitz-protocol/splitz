@@ -1,6 +1,6 @@
 /// The wallet seam: the entries a log is made of, and what a wallet lends.
 ///
-/// `package:splitz/splitz.dart` decides what a bill is, what anyone owes and
+/// `package:splitz_core/splitz_core.dart` decides what a bill is, what anyone owes and
 /// what payment request settles it. This entry point supplies the two things
 /// §13 leaves to the wallet that embeds it: something that assembles an entry
 /// and derives §9.5's id, and the seam through which a wallet lends its keys,
@@ -13,13 +13,13 @@
 /// both:
 ///
 /// ```dart
-/// import 'package:splitz/splitz.dart' as splitz;
-/// import 'package:splitz/host.dart';
+/// import 'package:splitz_core/splitz_core.dart' as splitz;
+/// import 'package:splitz_core/host.dart';
 /// ```
 library;
 
 /// The two answers §14 holds back, named where a caller meets them.
-export 'splitz.dart'
+export 'splitz_core.dart'
     show
         Awaiting,
         Contested,

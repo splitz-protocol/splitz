@@ -1,0 +1,23 @@
+name: splitz_host
+description: "What a Zcash wallet needs around package:splitz_core — the seam, entry signing, sealing, the log, the sync, and where keys live. No screens, no wallet named, no Flutter."
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  # The protocol. A path dependency while both trees are private: a git dep
+  # pins a commit nobody outside can fetch.
+  splitz_core:
+    path: ../dart
+
+  # Ed25519 for §10.6 signatures, XChaCha20-Poly1305 for sealing entries before
+  # they reach a relay. The protocol fixes the signing message and hands the
+  # curve operation to the host (§13); this package is the host.
+  cryptography: ^2.7.0
+  crypto: ^3.0.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^6.0.0

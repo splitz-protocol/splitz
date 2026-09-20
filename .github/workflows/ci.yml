@@ -25,6 +25,25 @@ jobs:
       # in it are ones a caller may make in that order with those values.
       - run: tools/examples/run.sh
 
+  host:
+    # The plumbing a wallet needs around the protocol: the seam, signing,
+    # sealing, the log, the sync, the store. Pure Dart, no Flutter, so it runs
+    # on the Dart SDK alone.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - run: dart pub get
+        working-directory: splitz_host
+      - run: dart analyze
+        working-directory: splitz_host
+      - run: dart format --output=none --set-exit-if-changed .
+        working-directory: splitz_host
+      - run: dart test
+        working-directory: splitz_host
+
   rust:
     runs-on: ubuntu-latest
     steps:
@@ -81,7 +100,7 @@ jobs:
   oracle:
     # Every other lane compares implementations written from one
     # specification by one author; they can agree and be wrong together.
-    # rust/tests/oracle.rs checks ZIP 321 rendering against librustzcash;
+    # rust/splitz-core/tests/oracle.rs checks ZIP 321 rendering against librustzcash;
     # this checks §9.3's instants against CPython's own RFC 3339 reader.
     runs-on: ubuntu-latest
     steps:

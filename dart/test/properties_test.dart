@@ -8,7 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 import 'package:test/test.dart';
 
 List<Map<String, dynamic>> _logOf(String caseName) {

@@ -9,7 +9,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 
 /// Runs [body] and returns its value, or the refusal code that stopped it.
 Map<String, Object?> attempt(Object? Function() body) {

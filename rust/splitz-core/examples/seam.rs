@@ -2,7 +2,7 @@
 //! run. A snippet that has never been through a compiler is a claim about the
 //! crate that nothing in the tree backs.
 
-use splitz::host::{
+use splitz_core::host::{
     base64url_no_pad, create_bill, join_bill, obligation_for, settle, BillHost, BillLog, Sent,
     CREATOR_KEY_BYTES,
 };
@@ -32,7 +32,7 @@ impl BillHost for MyWallet {
     }
 }
 
-fn main() -> splitz::Result<()> {
+fn main() -> splitz_core::Result<()> {
     let host = MyWallet;
     let my_key = base64url_no_pad(&[0u8; CREATOR_KEY_BYTES]);
 

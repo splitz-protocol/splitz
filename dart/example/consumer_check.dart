@@ -5,7 +5,7 @@
 //
 // Its output is the result, so it prints.
 // ignore_for_file: avoid_print
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 
 void main() {
   const me = 'ana';

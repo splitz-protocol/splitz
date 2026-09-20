@@ -4,7 +4,7 @@
 SPEC.md:788 says every instant is RFC 3339, UTC. Every other lane in this
 repository compares this protocol's three implementations with each other, and
 all three were written from one specification by one author — they can agree
-and be wrong together. `rust/tests/oracle.rs` is the only outside check and it
+and be wrong together. `rust/splitz-core/tests/oracle.rs` is the only outside check and it
 covers ZIP 321 rendering. This is the second: CPython's `datetime` module,
 written by other people for another purpose, reading the same strings.
 

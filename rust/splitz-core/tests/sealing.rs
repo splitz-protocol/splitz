@@ -8,7 +8,7 @@
 
 use serde_json::json;
 
-use splitz::{
+use splitz_core::{
     canonical_json, channel_for, frame_sealed, parse_sealed_frame, sealed_nonce, sealed_plaintext,
     sha256, sha256_hex, NONCE_BYTES, SEALED_VERSION, TAG_BYTES,
 };

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:splitz/host.dart';
+import 'package:splitz_core/host.dart';
 
 /// A `splitz1:` payload carrying [body] verbatim, however malformed.
 String payload(Map<String, dynamic> body) =>

@@ -1,7 +1,7 @@
 //! The wallet seam, exercised without a wallet.
 //!
 //! The corpus pins the protocol's values and the differential lane pins its
-//! answers; neither reaches `splitz::host`, because nothing it produces is a
+//! answers; neither reaches `splitz_core::host`, because nothing it produces is a
 //! corpus case — an entry's id depends on a clock and a nonce the host
 //! supplies. What is asserted here is what a wallet meets: that every entry
 //! this layer writes passes the protocol's own ingress check, that a send
@@ -12,13 +12,13 @@ use serde_json::{json, Value};
 use std::cell::Cell;
 use std::collections::BTreeSet;
 
-use splitz::host::{
+use splitz_core::host::{
     accept_scan, add_expense, base64url_no_pad, confirm_payment, create_bill, delta_for,
     has_joined, invite_for, join_bill, obligation_for, read_scan, record_payment, set_rate, settle,
     shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
     SignEntry, VerifyEntry,
 };
-use splitz::{check_entry, net_balances, sha256_hex, signing_message, Delta, Invite};
+use splitz_core::{check_entry, net_balances, sha256_hex, signing_message, Delta, Invite};
 
 // --- a wallet that does nothing ---------------------------------------------
 
@@ -143,7 +143,7 @@ fn a_create_entry_opens_a_bill_and_its_id_is_the_bill() {
     // wallet cannot choose one and two wallets cannot disagree about it.
     assert_eq!(
         create.get("id").and_then(Value::as_str),
-        Some(splitz::derive_bill_id(&create).unwrap().as_str())
+        Some(splitz_core::derive_bill_id(&create).unwrap().as_str())
     );
     check_entry(&create).expect("a create this layer wrote passes ingress");
 }
@@ -767,7 +767,7 @@ fn an_invite_member_that_is_not_a_string_is_refused_not_panicked() {
     // every member is whatever a peer wrote. A camera is pointed at this.
     for bad in [json!(5), json!(true), json!([]), json!({}), Value::Null] {
         let body = json!({ "v": 1, "log": [], "invite": { "v": 1, "b": bad, "k": "Kk" } });
-        let text = splitz::encode_payload(splitz::BILL_PREFIX, &body).unwrap();
+        let text = splitz_core::encode_payload(splitz_core::BILL_PREFIX, &body).unwrap();
         match read_scan(&text) {
             Scanned::Bill(scan) => assert!(scan.invite.is_none()),
             other => panic!("a payload read as {other:?}"),

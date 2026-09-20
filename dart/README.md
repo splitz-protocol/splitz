@@ -1,4 +1,4 @@
-# splitz
+# splitz_core
 
 The Dart reference implementation of the splitz shared-bill protocol. One specification,
 two implementations, one corpus that both run.

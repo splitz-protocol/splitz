@@ -8,7 +8,7 @@
 
 import 'dart:typed_data';
 
-import 'package:splitz/host.dart';
+import 'package:splitz_core/host.dart';
 
 /// Stands in for the wallet. A real one signs, holds a secure random source
 /// and sends; this one is enough to show the shape.

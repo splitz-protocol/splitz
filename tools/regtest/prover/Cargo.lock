@@ -2511,7 +2511,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "splitz"
+name = "splitz-core"
 version = "1.0.0"
 dependencies = [
  "serde_json",
@@ -2529,7 +2529,7 @@ dependencies = [
  "rusqlite",
  "secrecy",
  "serde_json",
- "splitz",
+ "splitz-core",
  "tempfile",
  "tokio",
  "tonic",

@@ -85,7 +85,7 @@ def declared() -> dict[str, set[str]]:
         (ROOT / "dart/lib/src/errors.dart").read_text(encoding="utf-8")))
     rust = set(re.findall(
         r'pub const [A-Z0-9_]+: &str = "([a-z][a-z0-9_]+)";',
-        (ROOT / "rust/src/error.rs").read_text(encoding="utf-8")))
+        (ROOT / "rust/splitz-core/src/error.rs").read_text(encoding="utf-8")))
     ref = _reference_codes()
     return {"dart": dart, "rust": rust, "reference": ref}
 
@@ -105,10 +105,10 @@ def thrown() -> dict[str, set[str]]:
             if n in dart_names}
 
     rust_src = "\n".join(p.read_text(encoding="utf-8")
-                         for p in (ROOT / "rust/src").glob("*.rs"))
+                         for p in (ROOT / "rust/splitz-core/src").glob("*.rs"))
     rust_names = dict(re.findall(
         r'pub const ([A-Z0-9_]+): &str = "([a-z][a-z0-9_]+)";',
-        (ROOT / "rust/src/error.rs").read_text(encoding="utf-8")))
+        (ROOT / "rust/splitz-core/src/error.rs").read_text(encoding="utf-8")))
     rust = {rust_names[n] for n in re.findall(r"code::([A-Z0-9_]+)", rust_src)
             if n in rust_names}
 

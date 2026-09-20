@@ -6,7 +6,7 @@
 /// truth that goes stale without saying so.
 library;
 
-import 'package:splitz/splitz.dart' as splitz;
+import 'package:splitz_core/splitz_core.dart' as splitz;
 
 import 'host.dart';
 

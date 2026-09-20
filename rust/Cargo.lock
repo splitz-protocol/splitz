@@ -283,7 +283,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "splitz"
+name = "splitz-core"
 version = "1.0.0"
 dependencies = [
  "serde_json",

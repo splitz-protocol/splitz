@@ -10,7 +10,7 @@ library;
 import 'dart:convert';
 
 import 'package:test/test.dart';
-import 'package:splitz/splitz.dart';
+import 'package:splitz_core/splitz_core.dart';
 
 /// Stands in for the cipher's output: this library never produces one.
 List<int> fakeBody(int length) => List<int>.generate(length, (i) => i % 251);

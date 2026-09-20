@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:test/test.dart';
-import 'package:splitz/host.dart';
+import 'package:splitz_core/host.dart';
 
 /// The least a wallet can implement: no signing, no address to be paid at.
 class BareHost extends BillHost {
