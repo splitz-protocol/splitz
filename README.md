@@ -24,9 +24,10 @@ from the specification text alone — that produces them.
 
 ```
 cd dart && dart test                 # 539 tests, 448 of them the corpus
-cd rust && cargo test                # the same 448 cases, plus the oracle
+cd rust && cargo test                # 122: the same 448 cases, the oracle,
+                                     #   and the host layer's own
 cd rust && cargo test --release      # and again with overflow checks off
-cd splitz_host && dart test          # 110 over the wallet seam
+cd splitz_host && dart test          # 112 over the wallet seam
 tools/differential/run.sh 1 1200     # three implementations, one operation list,
                                      #   diffed against each other and against
                                      #   §10.2's own properties
