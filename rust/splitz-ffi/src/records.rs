@@ -7,39 +7,9 @@
 
 use std::collections::HashMap;
 
-/// How a wallet's send ended (§14.3, §15.2).
-#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WalletSendPhase {
-    Succeeded,
-    PendingBroadcast,
-    Failed,
-    Aborted,
-}
-
-#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
-pub struct WalletSendOutcome {
-    pub phase: WalletSendPhase,
-    /// Present when and only when `phase` is `Succeeded`.
-    pub txid: Option<String>,
-    pub status_message: Option<String>,
-    pub error: Option<String>,
-}
-
-impl From<WalletSendOutcome> for splitz_host::WalletSendOutcome {
-    fn from(o: WalletSendOutcome) -> Self {
-        splitz_host::WalletSendOutcome {
-            phase: match o.phase {
-                WalletSendPhase::Succeeded => splitz_host::WalletSendPhase::Succeeded,
-                WalletSendPhase::PendingBroadcast => splitz_host::WalletSendPhase::PendingBroadcast,
-                WalletSendPhase::Failed => splitz_host::WalletSendPhase::Failed,
-                WalletSendPhase::Aborted => splitz_host::WalletSendPhase::Aborted,
-            },
-            txid: o.txid,
-            status_message: o.status_message,
-            error: o.error,
-        }
-    }
-}
+// §14.3's three send outcomes are not here. The wallet sends, so the wallet
+// owns what happened: it calls `payment_entries_for_send` when — and only
+// when — a transaction reached the network, and records nothing otherwise.
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Payout {

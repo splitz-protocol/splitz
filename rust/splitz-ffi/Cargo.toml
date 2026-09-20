@@ -21,4 +21,7 @@ path = "src/bin/uniffi-bindgen.rs"
 splitz-core = { path = "../splitz-core" }
 splitz-host = { path = "../splitz-host" }
 serde_json = { version = "1", features = ["preserve_order"] }
-uniffi = { version = "=0.31.0", features = ["cli"] }
+uniffi = { version = "=0.31.0", features = ["cli", "scaffolding-ffi-buffer-fns"] }
+
+[dev-dependencies]
+splitz-host = { path = "../splitz-host" }

@@ -1,10 +1,9 @@
-/// A wallet, written against the generated Kotlin and nothing else.
+/// A Kotlin wallet over the generated binding.
 ///
-/// It implements all seven of SPEC.md §15's interfaces and drives one bill
-/// from opening it to settling it, across two devices sharing one relay. A
-/// binding that compiles is not a binding that carries a callback: this calls
-/// back into Kotlin for storage, secrets, the clock, randomness, the relay and
-/// the send on every step.
+/// It holds its own log, keeps its own clock and its own randomness, and hands
+/// the library the facts it owns. Nothing calls back into Kotlin: SPEC.md §15
+/// names seven interfaces a wallet implements, and across a foreign boundary
+/// those would be seven sets of callbacks.
 import uniffi.splitz_ffi.*
 
 var failures = 0
@@ -14,240 +13,168 @@ fun check(name: String, ok: Boolean, saw: String) {
     else { failures += 1; println("  FAIL  $name — $saw") }
 }
 
-/// A clock that stands still until it is moved.
-///
-/// §9.3 instants order a log (§10.2), so a log that reordered between runs
-/// could not be asserted. Fixed width, three fractional digits.
-class Clock(private var minute: Int = 0) {
-    fun tick() { minute += 1 }
+/// One device: its log, its clock, its randomness.
+class Device(val me: String, val payTo: String?, private val seedByte: Int) {
+    var entries: List<String> = emptyList()
+    private var minute = 0
+
+    /// A §9.3 instant: UTC, exactly three fractional digits, fixed width, so a
+    /// log sorts as text on every device (§10.2).
     fun now(): String {
+        minute += 1
         val total = 19 * 60 + 30 + minute
         return "2026-10-28T%02d:%02d:00.000Z".format(total / 60, total % 60)
     }
-}
 
-class Device(val id: String, val payTo: String, val relay: Relay, seed: Byte) {
-    val clock = Clock()
-    private var counter = seed
+    /// §9.4 derives a bill's id from this. A shipped wallet uses the
+    /// platform's own entropy: two bills opened in one second by one person
+    /// are one bill if it can be guessed.
+    fun nonce(): ByteArray = ByteArray(16) { (seedByte + minute + it).toByte() }
 
-    val wallet = object : SplitsWallet {
-        override fun accountId() = id
-        override fun viewingKey() = "uview-$id"
-        override fun now() = clock.now()
-        override fun randomBytes(byteCount: UInt): ByteArray {
-            counter = (counter + 1).toByte()
-            return ByteArray(byteCount.toInt()) { (counter + it).toByte() }
-        }
+    fun facts() = HostFacts(me, payTo, now(), nonce())
+
+    /// The Ed25519 seed this account signs with, as §9.4 writes a key. A
+    /// shipped wallet keeps this in the platform keychain.
+    val seed: String = java.util.Base64.getUrlEncoder().withoutPadding()
+        .encodeToString(ByteArray(32) { (seedByte + it).toByte() })
+
+    fun add(entry: String) {
+        entries = mergeEntries(entries, listOf(entry)).entries
     }
 
-    val secrets = Keychain()
-    val storage = Store()
-    val sender = Sender(id, payTo)
-
-    val prices = object : ZecPrices {
-        override fun minorUnitsPerZec(currency: String): Long? =
-            if (currency == "EUR") 3_000_00L else null
+    fun take(other: Device) {
+        entries = mergeEntries(entries, other.entries).entries
     }
-
-    /// A build with no provider says so rather than doing nothing (§15.7).
-    val swaps = object : SwapProvider {
-        override fun tradableAssets() = listOf<TradableAsset>()
-        override fun quote(
-            asset: TradableAsset, amountInZatoshi: Long,
-            recipient: String, refundTo: String,
-        ): SwapQuote = throw SplitzException.Host("this build arranges no swaps", false)
-        override fun statusOf(quote: SwapQuote): SwapStatus =
-            throw SplitzException.Host("this build arranges no swaps", false)
-    }
-
-    val session: SplitzSession =
-        SplitzSession(wallet, secrets, storage, sender, relay, prices, swaps)
 }
 
-/// The platform keychain, in a demonstration's memory. §15.3 requires a value
-/// written to outlive the process that wrote it, so a shipped build puts these
-/// where the platform does.
-class Keychain : SecretStore {
-    val values = LinkedHashMap<String, String>()
-    override fun read(key: String) = values[key]
-    override fun write(key: String, value: String) { values[key] = value }
-    override fun delete(key: String) { values.remove(key) }
-}
-
-/// §15.4's store, for the length of this run.
-class Store : BillStorage {
-    val values = LinkedHashMap<String, String>()
-    override fun read(key: String) = values[key]
-    override fun write(key: String, value: String) { values[key] = value }
-    override fun delete(key: String) { values.remove(key) }
-    override fun keys(prefix: String) = values.keys.filter { it.startsWith(prefix) }
-    /// Nothing to sweep: a map cannot be half written.
-    override fun sweepUnfinishedWrites() = 0u
-}
-
-/// §15.2's send path. One call takes the whole request, which is why a payer
-/// who owes four people signs once.
-class Sender(val id: String, val payTo: String) : WalletSender {
-    var sent: String? = null
-    override fun send(paymentRequestUri: String): WalletSendOutcome {
-        sent = paymentRequestUri
-        return WalletSendOutcome(WalletSendPhase.SUCCEEDED, "tx-$id-1", null, null)
-    }
-    override fun payToAddress() = payTo
-}
-
-/// A relay that keeps blobs in memory, shared by the two devices.
-class Relay : SplitsRelay {
+/// A relay holding ciphertext, shared by both devices. It holds no key.
+class Relay {
     private val channels = LinkedHashMap<String, MutableList<String>>()
-    var pushes = 0
-    override fun push(channel: String, blobs: List<String>) {
-        pushes += 1
+    fun push(channel: String, blobs: List<String>) {
         val held = channels.getOrPut(channel) { mutableListOf() }
         for (blob in blobs) if (blob !in held) held.add(blob)
     }
-    override fun fetch(channel: String): List<String> = channels[channel] ?: emptyList()
-    fun sizeOf(channel: String) = (channels[channel] ?: emptyList<String>()).size
-    fun channels() = channels.keys.toList()
+    fun fetch(channel: String): List<String> = channels[channel] ?: emptyList()
+    fun names() = channels.keys.toList()
 }
 
 fun main() {
     val relay = Relay()
-    val ana = Device("ana", "u1ana", relay, 1)
-    val ben = Device("ben", "u1ben", relay, 90)
+    val ana = Device("ana", "u1ana", 1)
+    val ben = Device("ben", "u1ben", 90)
+    val anaKey = identityKeyFromSeed(ana.seed)
+    val benKey = identityKeyFromSeed(ben.seed)
 
-    println("the seam carries a callback in both directions")
-    check("the session read an identity out of Kotlin's keychain",
-          ana.secrets.values.isNotEmpty(), "keys=${ana.secrets.values.keys}")
-    check("an identity from a viewing key is recoverable",
-          ana.session.identityIsRecoverable(), "recoverable")
-    check("the identity key is 43 unpadded base64url characters",
-          ana.session.identityKey().length == 43, ana.session.identityKey())
+    println("a wallet passes facts, not callbacks")
+    check("an identity key is 43 unpadded base64url characters",
+          anaKey.length == 43, anaKey)
+    check("a seed derived from a viewing key survives a reinstall",
+          identitySeedFromViewingKey("uview1abc") ==
+              identitySeedFromViewingKey("uview1abc"),
+          identitySeedFromViewingKey("uview1abc"))
+    check("a key of the wrong length is named, not accepted",
+          billKeyProblem("AAAA") == "wrong_length" && billKeyProblem(anaKey) == null,
+          "${billKeyProblem("AAAA")}")
 
     println("ana opens a bill and joins it")
-    val billId = ana.session.createBill("Dinner", "EUR", "equal")
-    ana.clock.tick()
-    ana.session.joinBill(billId, "Ana", "u1ana")
-    check("the bill is held", ana.session.billIds() == listOf(billId), billId)
-    check("ana has joined", ana.session.hasJoined(billId), "joined")
+    val create = createBillEntry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed)
+    ana.add(create)
+    val billId = Regex("\"id\":\"([^\"]+)\"").find(create)!!.groupValues[1]
+    ana.add(joinBillEntry(ana.facts(), "Ana", "u1ana", anaKey, ana.seed))
 
-    println("ben scans the invite and joins")
-    val invite = ana.session.inviteFor(billId, "Ana")
-    check("the invite names the bill and carries a key",
-          invite.startsWith("splitz://join?") && invite.contains("k="), invite.take(48) + "…")
-    ana.session.sync(billId)
-    check("the relay was pushed to under a hashed channel",
-          relay.channels().size == 1 && relay.channels()[0] != billId,
-          "channel=${relay.channels()[0].take(16)}… billId=$billId")
+    println("ana shares it, and ben takes it from the code")
+    // The bill key is the wallet's to mint and to keep; §9.4's id is public.
+    val billKey = "-_" + "A".repeat(41)
+    check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
+    val payload = shareableBillPayload(ana.facts(), ana.entries, billKey)
+    check("the whole bill fits in one code", payload != null, "${payload?.length} characters")
+    val scanned = readScanned(payload!!)
+    check("the scan names the same bill", scanned.billId == billId, "${scanned.billId}")
+    check("and carries the key", scanned.billKey == billKey, "${scanned.billKey}")
+    ben.entries = mergeEntries(ben.entries, scanned.entries).entries
+    ben.add(joinBillEntry(ben.facts(), "Ben", "u1ben", benKey, ben.seed))
 
-    val scanned = ben.session.acceptScan(invite)
-    check("the scan opened the same bill", scanned == billId, scanned)
-    ben.session.sync(billId)
-    ben.clock.tick(); ben.clock.tick()
-    ben.session.joinBill(billId, "Ben", "u1ben")
-    ben.session.sync(billId)
+    println("the two logs move through a relay that holds only ciphertext")
+    val channel = channelForBill(billId)
+    check("the channel is the bill id's hash, never the id",
+          channel != billId && channel.length == 64, channel.take(16) + "…")
+    relay.push(channel, blobsToPush(ben.entries, billKey, ben.seed, "ben"))
+    val opened = openBlobs(relay.fetch(channel), billKey)
+    check("every blob opened", opened.unopenable == 0u, "unopenable=${opened.unopenable}")
+    ana.entries = mergeEntries(ana.entries, opened.entries).entries
 
-    println("ana adds an expense both share, and prices the bill")
-    ana.session.sync(billId)
-    ana.clock.tick()
-    ana.session.addExpense(
-        billId, "x1", "ana", 9000,
-        """{"type":"equal","among":["ana","ben"]}""", "dinner",
-    )
-    ana.clock.tick()
-    ana.session.setRate(billId, "EUR", ana.prices.minorUnitsPerZec("EUR")!!, "a fixed feed")
-    ana.session.sync(billId)
+    println("ana adds an expense they share, and prices it")
+    ana.add(addExpenseEntry(ana.facts(), "x1", "ana", 9000,
+        """{"type":"equal","among":["ana","ben"]}""", "dinner", ana.seed))
+    ana.add(setRateEntry(ana.facts(), "EUR", 300000, "a fixed feed", ana.seed))
 
-    val folded = ana.session.fold(billId)
+    val folded = foldEntries(ana.facts(), ana.entries)
     check("both people are on the bill", folded.bill.participants.size == 2,
-          folded.bill.participants.map { it.id }.toString())
-    check("nothing was set aside", folded.setAside.isEmpty(), folded.setAside.toString())
-    check("no identity is contested", folded.identities.contested.isEmpty(),
-          folded.identities.contested.toString())
+          folded.bill.participants.joinToString { it.id })
+    check("nothing was set aside", folded.setAside.isEmpty(), "${folded.setAside}")
     check("both keys are bound under §10.7", folded.identities.bound.size == 2,
-          folded.identities.bound.keys.toString())
-    check("the expense is nine thousand minor units",
-          folded.bill.expenses.single().amount == 9000L, folded.bill.expenses.single().amount.toString())
-    check("the bill is priced", folded.bill.rate?.minorUnitsPerZec == 300000L,
-          folded.bill.rate.toString())
+          "${folded.identities.bound.keys}")
+    check("no identity is contested", folded.identities.contested.isEmpty(),
+          "${folded.identities.contested}")
 
-    println("ben owes half of it, and settles")
-    ben.session.sync(billId)
-    val obligation = ben.session.obligation(billId, listOf())
-    check("ben has an obligation", obligation != null, obligation?.request?.uri ?: "none")
-    val settlement = obligation!!.settlements.single()
+    println("ben owes half of it")
+    ben.take(ana)
+    val owed = obligationOf(ben.facts(), ben.entries, listOf())
+    check("ben has an obligation", owed != null, owed?.request?.uri ?: "none")
+    val settlement = owed!!.settlements.single()
     check("it is four and a half thousand to ana",
           settlement.to == "ana" && settlement.amount == 4500L,
           "${settlement.to} ${settlement.amount}")
     check("the request is a ZIP 321 URI naming ana's address",
-          obligation.request.uri!!.startsWith("zcash:u1ana"), obligation.request.uri!!)
-    check("nothing is withheld", obligation.request.withheldMinorUnits == 0L,
-          obligation.request.withheldMinorUnits.toString())
-    check("nobody is unpayable", obligation.request.unpayable.isEmpty(),
-          obligation.request.unpayable.toString())
+          owed.request.uri!!.startsWith("zcash:u1ana"), owed.request.uri!!)
+    check("nothing is withheld", owed.request.withheldMinorUnits == 0L,
+          "${owed.request.withheldMinorUnits}")
 
-    ben.clock.tick()
-    val settled = ben.session.settle(billId, listOf())
-    check("the wallet was handed the whole request in one call",
-          ben.sender.sent == obligation.request.uri, ben.sender.sent ?: "nothing")
-    check("one payment was recorded", settled.sent && settled.recorded == 1u,
-          "sent=${settled.sent} recorded=${settled.recorded} txid=${settled.txid}")
+    println("the wallet sends, then records what §14.3 allows")
+    // The send is the wallet's. These are written only because it reached the
+    // network: a transaction built and not broadcast may still land.
+    val records = paymentEntriesForSend(ben.facts(), owed, "tx-ben-1", ben.seed)
+    check("one record, for what the request carried", records.size == 1,
+          "${records.size} record(s)")
+    for (record in records) ben.add(record)
 
-    println("a record is a claim until the payee confirms")
-    ben.session.sync(billId)
-    ana.session.sync(billId)
-    val afterPayment = ana.session.fold(billId)
+    ana.take(ben)
+    val afterPayment = foldEntries(ana.facts(), ana.entries)
     check("ana sees the payment", afterPayment.bill.payments.size == 1,
-          afterPayment.bill.payments.toString())
+          "${afterPayment.bill.payments.map { it.id }}")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty(),
-          afterPayment.bill.confirmedPayments.toString())
-    val stillOwed = ben.session.obligation(billId, listOf())!!
+          "${afterPayment.bill.confirmedPayments}")
+    val stillOwed = obligationOf(ben.facts(), ben.entries, listOf())!!
     check("so ben is asked for nothing twice", stillOwed.settlements.isEmpty(),
-          stillOwed.settlements.toString())
+          "${stillOwed.settlements}")
     check("and is told what is in flight", stillOwed.awaiting.single().paid == 4500L,
-          stillOwed.awaiting.toString())
+          "${stillOwed.awaiting}")
 
-    ana.clock.tick()
-    ana.session.confirmPayment(
-        billId, afterPayment.bill.payments.single().id, "recipientConfirmed", null)
-    ana.session.sync(billId)
-    ben.session.sync(billId)
+    ana.add(confirmPaymentEntry(ana.facts(), "tx-ben-1", "recipientConfirmed", null, ana.seed))
+    ben.take(ana)
+    val settled = obligationOf(ben.facts(), ben.entries, listOf())!!
     check("once confirmed, the debt is gone",
-          ben.session.obligation(billId, listOf())!!.let {
-              it.settlements.isEmpty() && it.awaiting.isEmpty()
-          },
-          ben.session.obligation(billId, listOf())!!.toString().take(80))
+          settled.settlements.isEmpty() && settled.awaiting.isEmpty(),
+          "settlements=${settled.settlements.size} awaiting=${settled.awaiting.size}")
 
     println("the log reads as a history")
-    val history = ana.session.history(billId)
-    val kinds = history.map { it.kind }
+    val history = historyOf(ana.facts(), ana.entries)
     check("every kind a person needs is there",
-          kinds.containsAll(listOf(
+          history.map { it.kind }.containsAll(listOf(
               BillEventKind.OPENED, BillEventKind.JOINED, BillEventKind.EXPENSE_ADDED,
               BillEventKind.PRICED, BillEventKind.PAYMENT_RECORDED,
               BillEventKind.PAYMENT_CONFIRMED)),
-          kinds.toString())
+          "${history.map { it.kind }.toSet()}")
     check("newest first", history.first().at >= history.last().at,
           "${history.first().at} .. ${history.last().at}")
-    check("every entry applied", history.all { it.applied }, "${history.size} lines")
-
-    println("a build with no swap provider says so")
-    check("assets are empty rather than invented", ana.session.swapAssets().isEmpty(), "[]")
-    try {
-        ana.session.swapQuote(TradableAsset("x", "USDC", "base", 6), 1, "0xcara", "u1ana")
-        check("a quote is refused", false, "it was not")
-    } catch (e: SplitzException.Host) {
-        check("a quote is refused", true, e.message ?: "")
-    }
 
     println("a refusal crosses as a §12 code")
-    try {
-        ana.session.acceptScan("not a bill")
-        check("a scan that is nothing is refused", false, "it was not")
-    } catch (e: SplitzException.Protocol) {
-        check("a scan that is nothing is refused by its code", e.code.isNotEmpty(), e.code)
-    }
+    check("a scan that is nothing is refused by its code",
+          readScanned("not a bill").refusedCode?.isNotEmpty() == true,
+          "${readScanned("not a bill").refusedCode}")
 
-    println(if (failures == 0) "CONSUMER RESULT: the binding carries a whole bill, $failures failures"
-            else "CONSUMER RESULT: $failures check(s) failed")
+    println(if (failures == 0)
+        "CONSUMER RESULT: kotlin drives a whole bill with no callbacks, $failures failures"
+    else "CONSUMER RESULT: $failures check(s) failed")
     if (failures != 0) kotlin.system.exitProcess(1)
 }

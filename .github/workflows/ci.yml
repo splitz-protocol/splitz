@@ -119,6 +119,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: tools/ffi/kotlin.sh
 
+  bindings-dart:
+    # The Dart Zcash wallets are the ones that need this. The published Dart
+    # generator does not implement uniffi's callback ABI, so a binding with
+    # callback interfaces compiles and then calls the wrong method; this crate
+    # has none, and its output is correct unpatched.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - uses: dtolnay/rust-toolchain@stable
+      - run: tools/ffi/dart.sh
+
   bindings-node:
     # A third language over the same foreign library, with no static types to
     # lean on. It implements all seven of §15's interfaces and drives one bill

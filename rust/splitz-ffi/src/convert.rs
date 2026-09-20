@@ -209,3 +209,26 @@ pub(crate) fn quote(q: &splitz_host::SwapQuote) -> ffi::SwapQuote {
         reference: q.reference.clone(),
     }
 }
+
+pub(crate) fn asset_back(a: &ffi::TradableAsset) -> splitz_host::TradableAsset {
+    splitz_host::TradableAsset {
+        asset_id: a.asset_id.clone(),
+        symbol: a.symbol.clone(),
+        chain: a.chain.clone(),
+        decimals: a.decimals,
+    }
+}
+
+pub(crate) fn status(s: &splitz_host::SwapStatus) -> ffi::SwapStatus {
+    use splitz_host::SwapState as S;
+    ffi::SwapStatus {
+        state: match s.state {
+            S::AwaitingDeposit => ffi::SwapState::AwaitingDeposit,
+            S::Processing => ffi::SwapState::Processing,
+            S::Delivered => ffi::SwapState::Delivered,
+            S::Failed => ffi::SwapState::Failed,
+        },
+        destination_tx_hash: s.destination_tx_hash.clone(),
+        detail: s.detail.clone(),
+    }
+}
