@@ -30,8 +30,10 @@ class SplitsSealing {
 
   /// Blob layout version, the first byte of every blob, so a later change to
   /// the framing or the cipher is recognised rather than fed to the wrong
-  /// decoder. Bumped only when an older reader would misread a newer blob.
-  static const int blobVersion = 1;
+  /// decoder.
+  ///
+  /// §11.3 fixes it; it is not restated here.
+  static const int blobVersion = protocol.sealedVersion;
 
   /// Seals one entry into a base64url string safe for a URL, a QR payload or a
   /// JSON field.
@@ -56,13 +58,13 @@ class SplitsSealing {
       secretKey: key,
       nonce: _nonceFor(clear),
     );
-    // version ++ nonce ++ ciphertext ++ mac. The cipher's nonce and mac
-    // lengths are fixed, so a reader splits it apart with no length fields.
-    final concatenation = box.concatenation();
-    final framed = Uint8List(1 + concatenation.length)
-      ..[0] = blobVersion
-      ..setRange(1, 1 + concatenation.length, concatenation);
-    return SplitsSigner.encode(framed);
+    // §11.3's frame, from the protocol rather than built here: the layout is
+    // a value two devices must agree on byte for byte, and a second place to
+    // build it is a second place for it to drift.
+    return protocol.frameSealed(box.nonce, [
+      ...box.cipherText,
+      ...box.mac.bytes,
+    ]);
   }
 
   /// Opens a blob back into an entry.

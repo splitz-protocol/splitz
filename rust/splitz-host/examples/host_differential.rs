@@ -9,8 +9,50 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Value};
 use splitz_core::{sha256, signing_message};
 use splitz_host::{
-    base64url_decode, base64url_encode, is_well_formed_key, Signer, IDENTITY_DOMAIN,
+    base64url_decode, base64url_encode, is_well_formed_key, HostError, Sealing, Signer,
+    IDENTITY_DOMAIN,
 };
+
+/// The two implementations word their refusals differently; what has to match
+/// is *which* refusal. Both drivers map to this vocabulary.
+fn tag(e: &HostError) -> &'static str {
+    let HostError::Sealing(why) = e else {
+        return "other";
+    };
+    for (prefix, name) in [
+        ("Empty blob", "empty"),
+        ("Blob is format v", "version"),
+        ("Blob is too short", "short"),
+        ("Malformed base64url", "malformed_b64"),
+        ("Key is ", "key_length"),
+        ("Could not open", "auth"),
+        ("Opened blob is not UTF-8", "not_utf8"),
+        ("Opened blob is not JSON", "not_json"),
+        ("Opened blob is not an entry", "not_entry"),
+        ("An entry is not sealable", "not_sealable"),
+    ] {
+        if why.starts_with(prefix) {
+            return name;
+        }
+    }
+    "unclassified"
+}
+
+/// Flips a bit of a blob: 1 in the ciphertext, 2 in the version byte.
+fn tamper_blob(blob: &str, how: i64) -> String {
+    let Some(mut bytes) = base64url_decode(blob) else {
+        return blob.to_owned();
+    };
+    match how {
+        1 if bytes.len() > 3 => {
+            let last = bytes.len() - 3;
+            bytes[last] ^= 0x01;
+        }
+        2 if !bytes.is_empty() => bytes[0] = bytes[0].wrapping_add(1),
+        _ => {}
+    }
+    base64url_encode(&bytes)
+}
 
 fn answer(op: &Value) -> Value {
     let name = op.get("op").and_then(Value::as_str).unwrap_or("");
@@ -60,6 +102,26 @@ fn answer(op: &Value) -> Value {
                 )))
             }
         }
+        "seal_open" => {
+            let key = op["key"].as_str().unwrap();
+            let blob = match Sealing.seal(&op["entry"], key) {
+                Err(e) => return json!({ "sealed": false, "why": tag(&e) }),
+                Ok(blob) => blob,
+            };
+            let presented = tamper_blob(&blob, op["tamper"].as_i64().unwrap_or(0));
+            let open_with = op["openWith"].as_str().unwrap_or(key);
+            match Sealing.open(&presented, open_with) {
+                Ok(entry) => json!({ "sealed": true, "blob": blob, "opened": true,
+                                     "entry": entry }),
+                Err(e) => json!({ "sealed": true, "blob": blob, "opened": false,
+                                  "why": tag(&e) }),
+            }
+        }
+        "open_raw" => match Sealing.open(op["blob"].as_str().unwrap(), op["key"].as_str().unwrap())
+        {
+            Ok(entry) => json!({ "opened": true, "entry": entry }),
+            Err(e) => json!({ "opened": false, "why": tag(&e) }),
+        },
         "well_formed_key" => json!(is_well_formed_key(op["key"].as_str().unwrap())),
         "b64_round_trip" => match base64url_decode(op["text"].as_str().unwrap()) {
             None => json!(Value::Null),

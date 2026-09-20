@@ -15,6 +15,8 @@ pub enum HostError {
     Malformed(String),
     /// The wallet's own store would not read, write or delete.
     Storage(String),
+    /// A blob could not be sealed or opened (§11.3).
+    Sealing(String),
 }
 
 impl fmt::Display for HostError {
@@ -22,6 +24,7 @@ impl fmt::Display for HostError {
         match self {
             HostError::Malformed(why) => write!(f, "{why}"),
             HostError::Storage(why) => write!(f, "{why}"),
+            HostError::Sealing(why) => write!(f, "{why}"),
         }
     }
 }

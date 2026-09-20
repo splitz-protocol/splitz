@@ -46,6 +46,29 @@ def an_entry(rng: random.Random) -> dict:
     return entry
 
 
+def a_bill_key(rng: random.Random) -> str:
+    """A key for the cipher. Most are usable; some are the wrong length."""
+    n = rng.choice([32, 32, 32, 32, 31, 33, 3])
+    return b64(bytes(rng.randrange(256) for _ in range(n)))
+
+
+def a_raw_blob(rng: random.Random) -> str:
+    """Something a relay might hand back that is not a blob this build made."""
+    kind = rng.randrange(6)
+    if kind == 0:
+        return ""
+    if kind == 1:
+        return b64(bytes([1]))                       # a version byte and nothing else
+    if kind == 2:
+        return b64(bytes([1]) + bytes(rng.randrange(256) for _ in range(39)))
+    if kind == 3:
+        return b64(bytes([rng.choice([0, 2, 7, 255])])
+                   + bytes(rng.randrange(256) for _ in range(60)))
+    if kind == 4:
+        return "not base64url!!"
+    return b64(bytes(rng.randrange(256) for _ in range(rng.randrange(0, 45))))
+
+
 def a_key_ish(rng: random.Random) -> str:
     """Something a wallet might be handed as a key. Most are not valid."""
     kind = rng.randrange(7)
@@ -74,7 +97,7 @@ def main() -> int:
     for _ in range(count):
         op = rng.choice([
             "public_key", "sign_entry", "verify", "identity_seed",
-            "well_formed_key", "b64_round_trip",
+            "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
         ])
         if op == "public_key":
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
@@ -92,6 +115,15 @@ def main() -> int:
                 ["", "uview1abc", "uview1def", "日本語", "u" * 200])}, out)
         elif op == "well_formed_key":
             json.dump({"op": op, "key": a_key_ish(rng)}, out)
+        elif op == "seal_open":
+            json.dump({"op": op,
+                       "key": a_bill_key(rng),
+                       "openWith": a_bill_key(rng) if rng.random() < 0.3 else None,
+                       "entry": an_entry(rng),
+                       "tamper": rng.choice([0, 0, 1, 2])}, out)
+        elif op == "open_raw":
+            json.dump({"op": op, "key": a_bill_key(rng),
+                       "blob": a_raw_blob(rng)}, out)
         else:
             json.dump({"op": op, "text": a_key_ish(rng)}, out)
         out.write("\n")

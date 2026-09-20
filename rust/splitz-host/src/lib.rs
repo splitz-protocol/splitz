@@ -14,6 +14,7 @@
 pub mod error;
 pub mod fold;
 pub mod keys;
+pub mod sealing;
 pub mod signing;
 pub mod wallet;
 pub mod wallet_bill_host;
@@ -21,6 +22,7 @@ pub mod wallet_bill_host;
 pub use error::{HostError, Result};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
 pub use keys::{is_well_formed_key, SplitsKeys, IDENTITY_DOMAIN, KEY_LENGTH_BYTES};
+pub use sealing::{Sealing, BLOB_VERSION};
 pub use signing::{base64url_decode, base64url_encode, Signer, VerifiedLog, SEED_BYTES};
 pub use wallet::{
     InMemorySecretStore, Randomness, SecretStore, SplitsWallet, SystemRandomness, WalletAccount,

@@ -1,4 +1,8 @@
 //! A wallet that does nothing, for tests that are not about the wallet.
+//!
+//! Each test binary compiles this file separately and uses a different part
+//! of it, so what one leaves unused is not dead.
+#![allow(dead_code)]
 
 use std::cell::{Cell, RefCell};
 
