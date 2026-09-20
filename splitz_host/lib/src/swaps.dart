@@ -19,6 +19,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:splitz_core/splitz_core.dart' as protocol;
+
 import 'relay.dart' show JsonGet, JsonPost;
 
 /// A swap that could not be arranged.
@@ -100,7 +102,10 @@ class SwapQuote {
   final TradableAsset asset;
 
   /// After this the quote is not honoured and a new one is needed.
-  final DateTime deadline;
+  ///
+  /// A §9.3 instant. Fixed width, so two devices compare it as text and reach
+  /// one answer without a calendar between them.
+  final String deadline;
 
   /// The provider's own identifier for this swap.
   ///
@@ -110,8 +115,8 @@ class SwapQuote {
   /// address, in which case that is the reference.
   final String? reference;
 
-  /// Whether [now] is past [deadline].
-  bool hasExpired(DateTime now) => !now.isBefore(deadline);
+  /// Whether [now], a §9.3 instant, is at or past [deadline].
+  bool hasExpired(String now) => now.compareTo(deadline) >= 0;
 
   /// What a payment record should carry as its `reference` (§9.2).
   String get paymentReference => reference ?? depositAddress;
@@ -225,12 +230,11 @@ class OneClickSwaps implements SwapProvider {
     required this.zecAssetId,
     required JsonPost post,
     required JsonGet get,
+    required String Function() deadline,
     this.referral,
-    this.quoteValidity = const Duration(minutes: 10),
-    DateTime Function()? now,
   }) : _post = post,
        _get = get,
-       _now = now ?? DateTime.now;
+       _deadline = deadline;
 
   final Uri origin;
 
@@ -241,12 +245,14 @@ class OneClickSwaps implements SwapProvider {
   /// Identifies the integrator to the provider, where it asks for one.
   final String? referral;
 
-  /// How long a quote is asked to stand for.
-  final Duration quoteValidity;
+  /// How long the caller asks a quote to stand for, as a §9.3 instant.
+  ///
+  /// Supplied rather than computed: a clock and a calendar are the wallet's
+  /// (§15.1), and this package carries neither.
+  final String Function() _deadline;
 
   final JsonPost _post;
   final JsonGet _get;
-  final DateTime Function() _now;
 
   List<TradableAsset>? _tokens;
 
@@ -294,7 +300,7 @@ class OneClickSwaps implements SwapProvider {
         'A swap states both who receives it and where a refund goes',
       );
     }
-    final deadline = _now().toUtc().add(quoteValidity);
+    final deadline = _deadline();
     final request = <String, Object?>{
       'dry': false,
       'swapType': 'EXACT_INPUT',
@@ -306,7 +312,7 @@ class OneClickSwaps implements SwapProvider {
       'refundType': 'ORIGIN_CHAIN',
       'recipient': recipient,
       'recipientType': 'DESTINATION_CHAIN',
-      'deadline': deadline.toIso8601String(),
+      'deadline': deadline,
       'depositMode': 'SIMPLE',
       if (referral != null && referral!.isNotEmpty) 'referral': referral,
     };
@@ -408,6 +414,14 @@ class OneClickSwaps implements SwapProvider {
     return (v is String && v.isNotEmpty) ? v : null;
   }
 
-  static DateTime? _instant(Object? raw) =>
-      raw is String ? DateTime.tryParse(raw)?.toUtc() : null;
+  /// The provider's own deadline, as a §9.3 instant, or null when it states
+  /// none this reader can read.
+  static String? _instant(Object? raw) {
+    if (raw is! String) return null;
+    try {
+      return protocol.canonicalInstant(raw);
+    } on protocol.SplitError {
+      return null;
+    }
+  }
 }

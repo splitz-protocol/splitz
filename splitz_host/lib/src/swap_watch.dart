@@ -96,7 +96,9 @@ class SwapWatch {
       chain: assetChain,
       decimals: 0,
     ),
-    deadline: DateTime.utc(0),
+    // A watch is not a quote: nothing here is honoured, so the deadline is
+    // the earliest instant and every reader sees it as past.
+    deadline: '0000-01-01T00:00:00.000Z',
     reference: reference,
   );
 }

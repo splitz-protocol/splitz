@@ -48,7 +48,8 @@ provider({
       origin: Uri.parse(origin),
       zecAssetId: 'nep141:zec',
       referral: 'a-wallet',
-      now: () => DateTime.utc(2026, 10, 28, 19, 30),
+      // Ten minutes after the clock this test holds still.
+      deadline: () => '2026-10-28T19:40:00.000Z',
       get: (url) async {
         if (throwOnCall != null) throw throwOnCall;
         gets.add(url);
@@ -175,9 +176,9 @@ void main() {
         recipient: '0xcara',
         refundTo: 'u1ana',
       );
-      expect(quote.deadline, DateTime.utc(2026, 10, 28, 19, 40));
-      expect(quote.hasExpired(DateTime.utc(2026, 10, 28, 19, 39)), isFalse);
-      expect(quote.hasExpired(DateTime.utc(2026, 10, 28, 19, 41)), isTrue);
+      expect(quote.deadline, '2026-10-28T19:40:00.000Z');
+      expect(quote.hasExpired('2026-10-28T19:39:00.000Z'), isFalse);
+      expect(quote.hasExpired('2026-10-28T19:41:00.000Z'), isTrue);
     });
   });
 
@@ -260,7 +261,7 @@ void main() {
             amountInZatoshi: 1,
             amountOut: '1',
             asset: usdcOnBase(),
-            deadline: DateTime.utc(2026),
+            deadline: '2026-01-01T00:00:00.000Z',
           ),
         );
         expect(s.state, expected, reason: word);
@@ -277,7 +278,7 @@ void main() {
           amountInZatoshi: 1,
           amountOut: '1',
           asset: usdcOnBase(),
-          deadline: DateTime.utc(2026),
+          deadline: '2026-01-01T00:00:00.000Z',
         ),
       );
       expect(s.state, SwapState.processing);
@@ -294,7 +295,7 @@ void main() {
           amountInZatoshi: 1,
           amountOut: '1',
           asset: usdcOnBase(),
-          deadline: DateTime.utc(2026),
+          deadline: '2026-01-01T00:00:00.000Z',
         ),
       );
       expect(p.gets.last.queryParameters['depositMemo'], 'memo-1');
