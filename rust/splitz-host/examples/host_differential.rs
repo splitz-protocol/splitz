@@ -10,9 +10,70 @@ use serde_json::{json, Value};
 use splitz_core::{decode_bill, sha256, signing_message, SetAside};
 use splitz_host::{
     activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, is_well_formed_key,
-    BillEvent, BillStorage, BillStore, HostError, InMemoryBillStorage, Sealing, Signer,
-    IDENTITY_DOMAIN,
+    BillEvent, BillStorage, BillStore, DraftItem, HostError, InMemoryBillStorage, Sealing, Signer,
+    SplitDraft, SplitKind, IDENTITY_DOMAIN,
 };
+
+/// Rebuilds a split form from one operation's description of it.
+fn draft_from(op: &Value) -> SplitDraft {
+    let kind = match op["kind"].as_str().unwrap_or("equal") {
+        "exact" => SplitKind::Exact,
+        "percentage" => SplitKind::Percentage,
+        "shares" => SplitKind::Shares,
+        "itemized" => SplitKind::Itemized,
+        _ => SplitKind::Equal,
+    };
+    let strings = |key: &str| -> Vec<String> {
+        op[key]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let weights = |key: &str| -> std::collections::BTreeMap<String, i64> {
+        op[key]
+            .as_object()
+            .map(|o| {
+                o.iter()
+                    .filter_map(|(k, v)| v.as_i64().map(|n| (k.clone(), n)))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut draft = SplitDraft::new(kind);
+    draft.among = strings("among").into_iter().collect();
+    draft.amounts = weights("amounts");
+    draft.basis_points = weights("basisPoints");
+    draft.share_counts = weights("shareCounts");
+    draft.extra_minor_units = op["extra"].as_i64().unwrap_or(0);
+    draft.items = op["items"]
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| DraftItem {
+                    description: item["description"].as_str().unwrap_or("").to_owned(),
+                    minor_units: item["minorUnits"].as_i64().unwrap_or(0),
+                    shared_by: item["sharedBy"]
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(str::to_owned))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    for id in strings("toggle") {
+        draft.toggle(&id);
+    }
+    draft
+}
 
 /// One history line, as JSON, so the two implementations are compared line for
 /// line rather than by a summary either could get wrong the same way.
@@ -143,6 +204,17 @@ fn answer(op: &Value) -> Value {
             Ok(entry) => json!({ "opened": true, "entry": entry }),
             Err(e) => json!({ "opened": false, "why": tag(&e) }),
         },
+        "split_draft" => {
+            let draft = draft_from(op);
+            let total = op["total"].as_i64().unwrap_or(0);
+            json!({
+                "wireType": draft.kind.wire_type(),
+                "split": draft.to_split(),
+                "allocation": draft.allocation(total),
+                "refusalCode": draft.refusal_code(total),
+                "participants": draft.participants().into_iter().collect::<Vec<_>>(),
+            })
+        }
         "activity" => {
             let Ok(bill) = decode_bill(&op["bill"]) else {
                 return json!({ "decoded": false });

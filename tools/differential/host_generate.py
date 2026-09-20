@@ -138,6 +138,35 @@ def a_history_entry(rng: random.Random) -> dict:
     return base
 
 
+PEOPLE = ["ana", "ben", "cal", "dee"]
+
+
+def weights(rng: random.Random, span: tuple[int, int]) -> dict:
+    return {who: rng.randrange(*span)
+            for who in rng.sample(PEOPLE, rng.randrange(0, 4))}
+
+
+def a_draft(rng: random.Random) -> dict:
+    """A split form in whatever state somebody left it."""
+    return {
+        "kind": rng.choice(["equal", "exact", "percentage", "shares",
+                            "itemized"]),
+        "among": rng.sample(PEOPLE, rng.randrange(0, 4)),
+        "amounts": weights(rng, (-2000, 9000)),
+        "basisPoints": weights(rng, (0, 7000)),
+        "shareCounts": weights(rng, (0, 5)),
+        "items": [
+            {"description": rng.choice(["tacos", "beer", "", "café"]),
+             "minorUnits": rng.randrange(-500, 6000),
+             "sharedBy": rng.sample(PEOPLE, rng.randrange(0, 3))}
+            for _ in range(rng.randrange(0, 3))
+        ],
+        "extra": rng.choice([0, 0, 1000, -100]),
+        "toggle": rng.sample(PEOPLE, rng.randrange(0, 3)),
+        "total": rng.choice([9000, 1000, 0, -9000, 10**18]),
+    }
+
+
 def a_key_ish(rng: random.Random) -> str:
     """Something a wallet might be handed as a key. Most are not valid."""
     kind = rng.randrange(7)
@@ -167,7 +196,7 @@ def main() -> int:
         op = rng.choice([
             "public_key", "sign_entry", "verify", "identity_seed",
             "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
-            "store_read", "store_merge", "activity",
+            "store_read", "store_merge", "activity", "split_draft",
         ])
         if op == "public_key":
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
@@ -191,6 +220,8 @@ def main() -> int:
                        "openWith": a_bill_key(rng) if rng.random() < 0.3 else None,
                        "entry": an_entry(rng),
                        "tamper": rng.choice([0, 0, 1, 2])}, out)
+        elif op == "split_draft":
+            json.dump({"op": op, **a_draft(rng)}, out)
         elif op == "activity":
             entries = [a_history_entry(rng) for _ in range(rng.randrange(0, 7))]
             json.dump({"op": op,

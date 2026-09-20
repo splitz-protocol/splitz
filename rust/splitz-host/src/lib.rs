@@ -19,6 +19,7 @@ pub mod pricing;
 pub mod relay;
 pub mod sealing;
 pub mod signing;
+pub mod split_draft;
 pub mod store;
 pub mod swaps;
 pub mod sync;
@@ -37,6 +38,7 @@ pub use relay::{
 };
 pub use sealing::{Sealing, BLOB_VERSION};
 pub use signing::{base64url_decode, base64url_encode, Signer, VerifiedLog, SEED_BYTES};
+pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
 pub use swaps::{SwapQuote, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps};
 pub use sync::{SplitsSync, SyncResult};

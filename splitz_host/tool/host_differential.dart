@@ -14,6 +14,43 @@ import 'package:splitz_host/splitz_host.dart';
 
 final signer = SplitsSigner();
 
+/// Rebuilds a split form from one operation's description of it.
+SplitDraft draftFrom(Map<String, dynamic> op) {
+  final kind = switch (op['kind'] as String) {
+    'exact' => SplitKind.exact,
+    'percentage' => SplitKind.percentage,
+    'shares' => SplitKind.shares,
+    'itemized' => SplitKind.itemized,
+    _ => SplitKind.equal,
+  };
+  Map<String, int> weights(String key) => {
+    for (final e in (op[key] as Map).entries) e.key as String: e.value as int,
+  };
+  Set<String> strings(Object? raw) => {
+    for (final v in (raw as List? ?? const [])) v as String,
+  };
+  final draft = SplitDraft(
+    kind: kind,
+    among: strings(op['among']),
+    amounts: weights('amounts'),
+    basisPoints: weights('basisPoints'),
+    shareCounts: weights('shareCounts'),
+    items: [
+      for (final item in op['items'] as List)
+        DraftItem(
+          description: (item as Map)['description'] as String,
+          minorUnits: item['minorUnits'] as int,
+          sharedBy: strings(item['sharedBy']),
+        ),
+    ],
+    extraMinorUnits: op['extra'] as int,
+  );
+  for (final id in strings(op['toggle'])) {
+    draft.toggle(id);
+  }
+  return draft;
+}
+
 /// One history line, as JSON, so the two implementations are compared line for
 /// line rather than by a summary either could get wrong the same way.
 Map<String, Object?> eventJson(BillEvent e) => {
@@ -158,6 +195,17 @@ Future<Object?> answer(Map<String, dynamic> op) async {
       } on SealingException catch (e) {
         return {'opened': false, 'why': tag(e)};
       }
+    case 'split_draft':
+      final draft = draftFrom(op);
+      final total = op['total'] as int;
+      final allocation = draft.allocation(total);
+      return {
+        'wireType': draft.kind.wireType,
+        'split': draft.toSplit(),
+        'allocation': allocation,
+        'refusalCode': draft.refusalCode(total),
+        'participants': draft.participants.toList()..sort(),
+      };
     case 'activity':
       final protocol.Bill bill;
       try {
