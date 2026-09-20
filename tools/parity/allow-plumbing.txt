@@ -60,11 +60,6 @@ dart::FileSecretStore    # The same, for §15.3. A shipped build puts secrets in
 # rather than from a `--dart-define` that would be compiled into the binary.
 # It drives a Flutter integration test; the Rust crate has no such run and
 # would have no caller for any of it.
-dart::DevAccount         # One wallet such a run is pointed at: its index, and nothing secret.
-dart::dev_accounts       # The list of them.
-dart::dev_account_at     # One of them by index.
-dart::dev_account_named  # One of them by name.
-dart::july_first         # The fixed instant those runs hold their clock at.
 dart::SeedDriver         # The loopback listener a run fetches a phrase from.
 dart::SeedDriverException  # What it raises when it is not running or will not bind.
 dart::SeedFetch          # The call that fetches one.

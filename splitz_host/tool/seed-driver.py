@@ -17,7 +17,7 @@ which is what a person reading a run needs and all they need.
 Two routes, matching `SeedDriver` in lib/src/testing/seed_driver.dart:
 
     GET /health        -> {"ok": true, "wallets": <count>}
-    GET /seed/<index>  -> {"seed": "<phrase>", "name": "WALLET"}
+    GET /seed/<index>  -> {"seed": "<phrase>", "name": "<label>"}
 
 It binds to 127.0.0.1 only. A simulator reaches loopback on the host; a
 physical device does not, and that is the intended limit — a driver reachable
@@ -32,10 +32,10 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-# Index -> the name a run calls that wallet. Mirrors
-# lib/src/testing/dev_accounts.dart; the index is the identifier and the names
-# are how a person refers to them.
-NAMES = {0: "WALLET", 1: "WALLET", 2: "WALLET", 3: "WALLET"}
+# A label per index, for a person reading a run. The index is the identifier;
+# a caller that wants its own names holds them itself, so no wallet of anyone's
+# is described in this repository. `--names A,B,C` overrides, in index order.
+NAMES: dict[int, str] = {}
 
 
 def load(path: Path) -> list[tuple[str, str]]:

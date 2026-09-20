@@ -71,34 +71,6 @@ Future<String> Function(Uri) ioFetch() {
 }
 
 void main() {
-  test('the development wallets are named by index, and hold no secret', () {
-    // The whole table, so a change to it is a change somebody reviews.
-    expect(devAccounts.map((a) => '${a.seedIndex}:${a.name}'), [
-      '0:WALLET',
-      '1:WALLET',
-      '2:WALLET',
-      '3:WALLET',
-    ]);
-    expect(devAccountNamed('WALLET')!.seedIndex, 1);
-    expect(devAccountAt(2)!.name, 'WALLET');
-    expect(devAccountAt(9), isNull);
-
-    // Every wallet carries a birthday, and that is the point: a wallet scans
-    // from the earliest birthday ANY of its accounts holds, so one account
-    // without a height drags every other account back to Sapling activation.
-    for (final account in devAccounts) {
-      expect(
-        account.birthdayHeight,
-        isNotNull,
-        reason: '${account.name} would drag the whole wallet back',
-      );
-    }
-    expect(devAccountNamed('WALLET')!.birthdayHeight, 0);
-    expect(devAccountNamed('WALLET')!.birthdayHeight, 0);
-    expect(devAccountNamed('WALLET')!.birthdayHeight, julyFirst);
-    expect(devAccountNamed('WALLET')!.birthdayHeight, julyFirst);
-  });
-
   test('a build given no driver URL asks for nothing', () {
     // Which is the state every shipped build is in.
     expect(SeedDriver.fromEnvironment(fetch: ioFetch(), url: ''), isNull);
@@ -122,16 +94,12 @@ void main() {
 
     expect(await client.isUp, isTrue);
 
+    // The index is the identifier. A label, if the driver sends one, is
+    // passed through untouched; this package describes no wallet of its own.
     final two = await client.seedAt(1);
     expect(two.phrase, twelveWords('one'));
-    expect(
-      two.account!.name,
-      'WALLET',
-      reason: 'index 1 is the wallet that holds ZEC',
-    );
 
     final four = await client.seedAt(2);
-    expect(four.account!.name, 'WALLET');
     expect(four.phrase, isNot(two.phrase));
   });
 

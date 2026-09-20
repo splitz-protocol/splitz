@@ -13,8 +13,6 @@ library;
 
 import 'dart:convert';
 
-import 'dev_accounts.dart';
-
 /// Fetches a URL and returns the body. The wallet's own client, so a run takes
 /// the same network route the rest of the app does.
 typedef SeedFetch = Future<String> Function(Uri url);
@@ -34,7 +32,7 @@ class SeedDriverException implements Exception {
 /// Two routes:
 ///
 ///     GET /health        -> 200, so a script can wait for it
-///     GET /seed/<index>  -> {"seed": "<phrase>", "name": "WALLET"}
+///     GET /seed/<index>  -> {"seed": "<phrase>", "name": "<label>"}
 class SeedDriver {
   const SeedDriver({required this.origin, required SeedFetch fetch})
     : _fetch = fetch;
@@ -72,7 +70,7 @@ class SeedDriver {
   ///
   /// The phrase is returned and not stored. Whatever holds it decides how long
   /// it lives; this does not put it in a field where it would outlive the call.
-  Future<({String phrase, DevAccount? account})> seedAt(int seedIndex) async {
+  Future<({String phrase, String? name})> seedAt(int seedIndex) async {
     final String body;
     try {
       body = await _fetch(
@@ -99,6 +97,10 @@ class SeedDriver {
     if (phrase.trim().isEmpty) {
       throw SeedDriverException('The driver has no wallet at index $seedIndex');
     }
-    return (phrase: phrase, account: devAccountAt(seedIndex));
+    // The label is whatever the driver returned, so no wallet of anyone's is
+    // described in this package. A caller that wants its own names holds them
+    // itself and matches on the index, which is the identifier.
+    final name = decoded['name'];
+    return (phrase: phrase, name: name is String ? name : null);
   }
 }

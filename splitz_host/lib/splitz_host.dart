@@ -29,7 +29,6 @@ export 'src/sealing.dart';
 export 'src/signing.dart';
 export 'src/store.dart';
 export 'src/sync.dart';
-export 'src/testing/dev_accounts.dart';
 export 'src/testing/seed_driver.dart';
 export 'src/wallet.dart';
 export 'src/wallet_bill_host.dart';
