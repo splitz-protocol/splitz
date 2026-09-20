@@ -116,12 +116,22 @@ typedef JsonGet = Future<String> Function(Uri url);
 /// Tor it goes over Tor and fails closed while Tor is starting or broken,
 /// instead of being the one path that quietly leaves in the clear.
 class HttpSplitsRelay implements SplitsRelay {
-  const HttpSplitsRelay({
+  /// [origin] is a scheme, a host and an optional path. A query or a fragment
+  /// is refused: the channel is appended to the path, and an origin carrying
+  /// either would address something else entirely.
+  HttpSplitsRelay({
     required this.origin,
     required JsonPost post,
     required JsonGet get,
   }) : _post = post,
-       _get = get;
+       _get = get {
+    if (origin.hasQuery || origin.hasFragment) {
+      throw const SplitsRelayException(
+        'A relay origin carries no query and no fragment',
+        isTransient: false,
+      );
+    }
+  }
 
   final Uri origin;
   final JsonPost _post;

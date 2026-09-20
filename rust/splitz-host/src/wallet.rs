@@ -161,6 +161,78 @@ impl BillStorage for InMemoryBillStorage {
     }
 }
 
+/// A dumb store of ciphertext blobs, grouped into per-bill channels.
+///
+/// It moves bytes for the participant who left before dessert and cannot be
+/// handed a code across the table. It holds no key, so every blob is opaque.
+/// What it can observe is deliberately the minimum — that a channel has some
+/// blobs, how large they are, and when they last changed — and never who owes
+/// whom.
+///
+/// Optional, and meant to stay so: a bill works with no relay at all.
+///
+/// Specified in SPEC.md §15.5.
+pub trait SplitsRelay {
+    /// Adds `blobs` to `channel`. Pushing a blob already present is a no-op,
+    /// so a retry after a dropped connection cannot create duplicates.
+    fn push(&self, channel: &str, blobs: &[String]) -> Result<()>;
+
+    /// Every blob currently held for `channel`.
+    ///
+    /// The caller opens and merges by entry id, and merging is idempotent, so
+    /// returning blobs it already holds is harmless — the relay is not asked
+    /// to track per-caller state it has no identity to key on.
+    fn fetch(&self, channel: &str) -> Result<Vec<String>>;
+}
+
+/// A source of ZEC prices.
+///
+/// Injected, like everything else a wallet already has: a wallet showing
+/// balances in a currency has a price feed, and a second one here would be a
+/// second answer on one screen.
+///
+/// Specified in SPEC.md §15.6.
+pub trait ZecPrices {
+    /// Minor units of `currency` that one ZEC costs, or `None` when this
+    /// source cannot price it.
+    ///
+    /// Minor units, not a decimal. §7 snapshots the figure onto the bill as an
+    /// integer, so rounding it happens once, here, where the source's
+    /// precision is known — rather than at every place that reads it.
+    ///
+    /// `None` is an ordinary answer. A bill with no rate is an ordinary bill:
+    /// there is no §12 code for unpriced, and nothing should invent a price to
+    /// avoid showing that state.
+    fn minor_units_per_zec(&self, currency: &str) -> Result<Option<i64>>;
+}
+
+/// Arranges swaps off this chain.
+///
+/// Specified in SPEC.md §15.7.
+pub trait SwapProvider {
+    /// Every asset this provider will deliver.
+    ///
+    /// Read before quoting, so a payout naming an asset the provider does not
+    /// carry is refused before a person is asked to send anything.
+    fn tradable_assets(&self) -> Result<Vec<crate::swaps::TradableAsset>>;
+
+    /// Quotes sending `amount_in_zatoshi` of ZEC so that `recipient` is paid
+    /// in `asset`.
+    ///
+    /// `refund_to` is where the ZEC goes back to if the swap fails, and is the
+    /// payer's own address. A quote with no refund address risks the deposit.
+    fn quote(
+        &self,
+        asset: &crate::swaps::TradableAsset,
+        amount_in_zatoshi: i64,
+        recipient: &str,
+        refund_to: &str,
+    ) -> Result<crate::swaps::SwapQuote>;
+
+    /// What has happened to the swap `quote` arranged.
+    fn status_of(&self, quote: &crate::swaps::SwapQuote) -> Result<crate::swaps::SwapStatus>;
+}
+
 /// Which wallet account is speaking, and what makes its identity recoverable.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct WalletAccount {
@@ -211,26 +283,4 @@ pub trait SplitsWallet {
 
     /// Bytes nobody can predict. See [`Randomness`].
     fn random_bytes(&self, byte_count: usize) -> Vec<u8>;
-}
-
-/// Bytes nobody can predict.
-///
-/// §9.4 derives a bill's id from a nonce, so two bills created in the same
-/// second by the same person are the same bill unless this is unpredictable.
-/// The wallet supplies it because the wallet knows what secure randomness
-/// means on its platform.
-pub trait Randomness {
-    fn bytes(&self, count: usize) -> Vec<u8>;
-}
-
-/// The platform's own entropy.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SystemRandomness;
-
-impl Randomness for SystemRandomness {
-    fn bytes(&self, count: usize) -> Vec<u8> {
-        let mut out = vec![0u8; count];
-        getrandom::fill(&mut out).expect("the platform has no entropy source");
-        out
-    }
 }

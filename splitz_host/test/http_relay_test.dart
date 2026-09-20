@@ -283,6 +283,33 @@ void main() {
     );
   });
 
+  test('an origin carrying a query or a fragment is refused', () {
+    // The channel is appended to the path. An origin carrying either would put
+    // it after them, addressing something else entirely.
+    for (final origin in [
+      'https://relay.example?t=1',
+      'https://relay.example#top',
+    ]) {
+      expect(
+        () => HttpSplitsRelay(
+          origin: Uri.parse(origin),
+          post: (url, body) async => '{"ok":true}',
+          get: (url) async => '{"blobs":[]}',
+        ),
+        throwsA(isA<SplitsRelayException>()),
+        reason: origin,
+      );
+    }
+    expect(
+      HttpSplitsRelay(
+        origin: Uri.parse('https://relay.example/base'),
+        post: (url, body) async => '{"ok":true}',
+        get: (url) async => '{"blobs":[]}',
+      ).origin.path,
+      '/base',
+    );
+  });
+
   test('a channel nobody has pushed to is empty, not an error', () async {
     expect(await relay.fetch(SplitsChannel.forBill('b-unknown')), isEmpty);
   });

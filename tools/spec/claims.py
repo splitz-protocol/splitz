@@ -22,6 +22,8 @@ What is checkable is checked here:
                    what that case measures
   sections-resolve every §N cross-reference points at a section that exists
   seam-declared    every interface §15 names is declared in the host package,
+  seam-declared-rust  the same seven in the Rust host crate, its operation
+                   names compared in snake case
                    with every operation §15 names on it, and no interface the
                    package declares is missing from §15
 
@@ -199,6 +201,31 @@ def case_names(cases: dict[str, dict]) -> set[str]:
     return {key.split(":", 1)[1] for key in cases}
 
 
+def seam_source_rust() -> dict[str, str]:
+    """Each `pub trait` in the Rust host crate's seam module, with its body.
+
+    The body runs to the first line that closes it at column zero, which is
+    how `cargo fmt` writes every one of them.
+    """
+    bodies: dict[str, str] = {}
+    # One module, and only that one: `wallet.rs` is the seam, and a trait
+    # somewhere else in the crate is a shape a caller passes rather than an
+    # interface a wallet implements. A check over the whole crate would ask
+    # §15 to specify every closure the plumbing takes.
+    for path in [ROOT / "rust" / "splitz-host" / "src" / "wallet.rs"]:
+        src = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"^pub trait (\w+)[^{]*\{", src, re.M):
+            tail = src[match.end():]
+            close = re.search(r"^\}", tail, re.M)
+            bodies[match.group(1)] = tail[:close.start()] if close else tail
+    return bodies
+
+
+def snake(name: str) -> str:
+    """`minorUnitsPerZec` -> `minor_units_per_zec`."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
 def main() -> int:
     text = spec_text()
     failures: list[str] = []
@@ -370,6 +397,31 @@ def main() -> int:
             f"`splitz_host/lib/` declares the interface `{name}`, which §15 "
             f"does not specify")
     check("seam-declared", subjects, bad_seam)
+
+    # The same seven, in the Rust host crate. §15 says a binding names them in
+    # its own idiom, so the operation names are compared in snake case.
+    declared_rust = seam_source_rust()
+    bad_rust: list[str] = []
+    subjects_rust = 0
+    for name, ops in sorted(claimed.items()):
+        subjects_rust += 1
+        body = declared_rust.get(name)
+        if body is None:
+            bad_rust.append(
+                f"§15 names `{name}`, which `rust/splitz-host/src/wallet.rs` "
+                f"does not declare as a public trait")
+            continue
+        for op in ops:
+            subjects_rust += 1
+            if not re.search(rf"\bfn {snake(op)}\s*[(<]", body):
+                bad_rust.append(
+                    f"§15 names `{name}.{op}`, which the Rust trait does not "
+                    f"carry as `{snake(op)}`")
+    for name in sorted(set(declared_rust) - set(claimed)):
+        bad_rust.append(
+            f"`rust/splitz-host/src/wallet.rs` declares the public trait "
+            f"`{name}`, which §15 does not specify")
+    check("seam-declared-rust", subjects_rust, bad_rust)
 
     # A check with no subjects is broken rather than passing.
     for name, n in sorted(counts.items()):

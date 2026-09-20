@@ -4,7 +4,7 @@ use splitz_core::sha256;
 
 use crate::error::{HostError, Result};
 use crate::signing::{base64url_decode, base64url_encode};
-use crate::wallet::{Randomness, SecretStore, WalletAccount};
+use crate::wallet::{SecretStore, WalletAccount};
 
 const BILL_PREFIX: &str = "splitz_bill_key_";
 const IDENTITY_PREFIX: &str = "splitz_identity_seed_";
@@ -23,6 +23,28 @@ pub const KEY_LENGTH_BYTES: usize = 32;
 /// Changing it changes every identity derived afterwards, so it is versioned
 /// rather than edited.
 pub const IDENTITY_DOMAIN: &str = "splitz.identity.v1";
+
+/// Bytes nobody can predict.
+///
+/// §9.4 derives a bill's id from a nonce, so two bills created in the same
+/// second by the same person are the same bill unless this is unpredictable.
+/// The wallet supplies it because the wallet knows what secure randomness
+/// means on its platform.
+pub trait Randomness {
+    fn bytes(&self, count: usize) -> Vec<u8>;
+}
+
+/// The platform's own entropy.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemRandomness;
+
+impl Randomness for SystemRandomness {
+    fn bytes(&self, count: usize) -> Vec<u8> {
+        let mut out = vec![0u8; count];
+        getrandom::fill(&mut out).expect("the platform has no entropy source");
+        out
+    }
+}
 
 /// Holds the symmetric key each bill's contents are sealed under, and the
 /// Ed25519 seed this account signs with.

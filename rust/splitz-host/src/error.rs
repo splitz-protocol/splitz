@@ -17,6 +17,21 @@ pub enum HostError {
     Storage(String),
     /// A blob could not be sealed or opened (§11.3).
     Sealing(String),
+    /// The relay could not be reached, refused, or answered with something
+    /// that is not a channel (§15.5).
+    ///
+    /// `transient` is whether retrying later could plausibly succeed. It is
+    /// false for a relay this build cannot use at all. Reported, never
+    /// swallowed: a bill works with no relay, so a transport that quietly does
+    /// nothing looks exactly like one that is working.
+    Relay { message: String, transient: bool },
+    /// A bill cannot be synced.
+    Sync(String),
+    /// A swap could not be arranged (§15.7).
+    ///
+    /// `transient` is true when retrying the same request could succeed — a
+    /// timeout, a 5xx. A quote the provider refused on its merits is not.
+    Swap { message: String, transient: bool },
 }
 
 impl fmt::Display for HostError {
@@ -25,6 +40,9 @@ impl fmt::Display for HostError {
             HostError::Malformed(why) => write!(f, "{why}"),
             HostError::Storage(why) => write!(f, "{why}"),
             HostError::Sealing(why) => write!(f, "{why}"),
+            HostError::Relay { message, .. } => write!(f, "{message}"),
+            HostError::Sync(why) => write!(f, "{why}"),
+            HostError::Swap { message, .. } => write!(f, "{message}"),
         }
     }
 }
