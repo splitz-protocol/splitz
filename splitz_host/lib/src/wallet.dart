@@ -52,6 +52,8 @@ class WalletSendOutcome {
 /// people signs once. Splitting it into one transaction per recipient would
 /// cost four fees and four rounds of proving, and would let a person walk away
 /// after the second.
+///
+/// Specified in SPEC.md §15.2.
 abstract interface class WalletSender {
   /// Builds and signs a transaction paying every output in [paymentRequestUri],
   /// then broadcasts it.
@@ -70,6 +72,8 @@ abstract interface class WalletSender {
 /// The platform keychain in a real build. An interface so a test can exercise
 /// key handling without a plugin, and so the backing store can change without
 /// the callers noticing.
+///
+/// Specified in SPEC.md §15.3.
 abstract interface class SecretStore {
   Future<String?> read(String key);
   Future<void> write(String key, String value);
@@ -119,6 +123,8 @@ class WalletAccount {
 ///
 /// One object rather than loose callbacks, so a host implements one thing and
 /// a test fakes one thing.
+///
+/// Specified in SPEC.md §15.1.
 abstract interface class SplitsWallet {
   WalletAccount get account;
   WalletSender get sender;

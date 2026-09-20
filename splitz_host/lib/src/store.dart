@@ -10,6 +10,8 @@ import 'package:splitz_core/splitz_core.dart' as protocol;
 /// Entries, not folded bills. §10.2 merges by set union, so a device holds
 /// entries and derives everything else; a stored summary is a second source of
 /// truth that goes stale without saying so.
+///
+/// Specified in SPEC.md §15.4.
 abstract interface class BillStorage {
   Future<String?> read(String key);
   Future<void> write(String key, String value);

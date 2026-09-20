@@ -21,6 +21,9 @@ What is checkable is checked here:
   figures-pinned   every number SPEC.md quotes beside a named case matches
                    what that case measures
   sections-resolve every §N cross-reference points at a section that exists
+  seam-declared    every interface §15 names is declared in the host package,
+                   with every operation §15 names on it, and no interface the
+                   package declares is missing from §15
 
 What is not checkable is not pretended: a MUST that is prose about a host, a
 rationale, or a rule whose subject is an implementation this repository does
@@ -151,6 +154,44 @@ def corpus_cases() -> dict[str, dict]:
             if isinstance(case, dict) and "name" in case:
                 cases[f"{path.name}:{case['name']}"] = case
     return cases
+
+
+def seam_claims(text: str) -> dict[str, list[str]]:
+    """The interfaces §15 names, each with the operations it names on it.
+
+    One heading per interface, `### 15.N `Name``, followed by a line that
+    begins `**Operations.**` and lists them in backticks. A heading with no
+    such line is a claim with nothing to check and is reported as a failure
+    rather than skipped.
+    """
+    start = text.index("## 15. The wallet seam")
+    body = text[start:]
+    end = body.find("\n## ", 1)
+    body = body[:end] if end > 0 else body
+    claims: dict[str, list[str]] = {}
+    blocks = re.split(r"^### 15\.\d+ `([A-Za-z]+)`", body, flags=re.M)
+    for name, chunk in zip(blocks[1::2], blocks[2::2]):
+        line = re.search(r"^\*\*Operations\.\*\*(.+)$", chunk, re.M)
+        claims[name] = re.findall(r"`([A-Za-z][A-Za-z0-9]*)`", line.group(1)) \
+            if line else []
+    return claims
+
+
+def seam_source() -> dict[str, str]:
+    """Each `abstract interface class` in the host package, with its body.
+
+    The body runs to the first line that closes it at column zero, which is
+    how the package formats every one of them.
+    """
+    bodies: dict[str, str] = {}
+    for path in sorted((ROOT / "splitz_host" / "lib").rglob("*.dart")):
+        src = path.read_text(encoding="utf-8")
+        for match in re.finditer(
+                r"^abstract interface class (\w+)[^{]*\{", src, re.M):
+            tail = src[match.end():]
+            close = re.search(r"^\}", tail, re.M)
+            bodies[match.group(1)] = tail[:close.start()] if close else tail
+    return bodies
 
 
 def case_names(cases: dict[str, dict]) -> set[str]:
@@ -299,6 +340,36 @@ def main() -> int:
                 bad_counts.append(
                     f"{name} says {m.group(2)} files, `vectors/` holds {files}")
     check("corpus-size", counted, bad_counts)
+
+    # Every interface §15 names is declared in the host package, with every
+    # operation §15 names on it. A seam written down is a contract, and a
+    # contract nothing checks is a sentence.
+    claimed = seam_claims(text)
+    declared_seam = seam_source()
+    bad_seam: list[str] = []
+    subjects = 0
+    for name, ops in sorted(claimed.items()):
+        subjects += 1
+        if not ops:
+            bad_seam.append(f"§15 names `{name}` with no **Operations.** line")
+            continue
+        body = declared_seam.get(name)
+        if body is None:
+            bad_seam.append(
+                f"§15 names `{name}`, which `splitz_host/lib/` does not "
+                f"declare as an abstract interface class")
+            continue
+        for op in ops:
+            subjects += 1
+            if not re.search(rf"\b(get\s+{op}\b|{op}\s*\()", body):
+                bad_seam.append(
+                    f"§15 names `{name}.{op}`, which its declaration does "
+                    f"not carry")
+    for name in sorted(set(declared_seam) - set(claimed)):
+        bad_seam.append(
+            f"`splitz_host/lib/` declares the interface `{name}`, which §15 "
+            f"does not specify")
+    check("seam-declared", subjects, bad_seam)
 
     # A check with no subjects is broken rather than passing.
     for name, n in sorted(counts.items()):

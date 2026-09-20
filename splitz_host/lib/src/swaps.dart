@@ -151,6 +151,8 @@ class SwapStatus {
 ///
 /// Implemented against a provider by the embedding wallet, or by
 /// [OneClickSwaps] for a provider speaking the 1Click shape.
+///
+/// Specified in SPEC.md §15.7.
 abstract interface class SwapProvider {
   /// Every asset this provider will deliver.
   ///

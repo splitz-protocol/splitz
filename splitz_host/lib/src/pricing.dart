@@ -6,6 +6,8 @@ library;
 /// Injected, like everything else a wallet already has: a wallet showing
 /// balances in a currency has a price feed, and a second one here would be a
 /// second answer on one screen.
+///
+/// Specified in SPEC.md §15.6.
 abstract interface class ZecPrices {
   /// Minor units of [currency] that one ZEC costs, or null when this source
   /// cannot price that currency.

@@ -46,7 +46,10 @@ users to the wrong fix.
 This document specifies computation and encoding. Transport, encryption,
 storage, key management, address validation, transaction construction and
 signing are the wallet's; §13 lists them so they are not mistaken for
-omissions.
+omissions. §14 states what this protocol nonetheless requires of a host, and
+§15 specifies the seam through which a wallet supplies the rest. Conformance
+with §15 is a separate claim from conformance with the corpus: a wallet may
+keep one and not the other.
 
 ## 2. Money and amounts
 
@@ -1994,3 +1997,158 @@ A wallet computing them MUST distinguish three states: the peer holds
 everything; the peer is missing entries that fit; the peer is missing entries
 that do not. Reporting the third as the first tells somebody their bill is up
 to date while entries on it have never reached them.
+
+## 15. The wallet seam
+
+§13 lists what this protocol leaves to a wallet and §14 what it requires of
+one. Both are about the protocol itself. This section specifies the seam one
+layer out: the interfaces a wallet implements so that everything between the
+protocol and a screen — the log a device keeps, the sync that moves a bill
+between devices, the sealing of §11.3, the rate of §7 and the settlement of a
+debt owed in another asset — is written once and adopted unchanged.
+
+Seven interfaces. They are stated here in language-neutral terms; a binding
+names them in its own idiom. A host conforms with this section when each
+interface exists with the operations named for it and keeps the rules stated
+under it. That is a separate claim from reproducing the corpus: §1's
+conformance is about answers, this one is about the contract a wallet signs.
+
+**An error is raised, never returned as a value that reads as success.** Where
+an interface below has no answer to give — no price, no address, nothing
+stored — it says so with an explicit empty answer that a caller must handle,
+and that empty answer is an ordinary state rather than a failure. An interface
+that fails silently is indistinguishable from one that is working, and the
+difference is money.
+
+### 15.1 `SplitsWallet`
+
+**Operations.** `account`, `sender`, `secrets`, `now`, `randomBytes`.
+
+The device itself: who it speaks as, what it can spend, where its secrets go.
+
+- `account` carries the participant id every entry this device writes is
+  authored by, and §10.4 decides what that id authorises. It MUST be stable for
+  the life of an installed wallet; an id that changes between runs makes this
+  device a new participant on every bill it has already touched.
+- `account` MAY carry a viewing key and MAY carry none. When it carries one it
+  MUST be derived from the wallet's seed, so that reinstalling from the same
+  mnemonic yields the same signing identity. An identifier the wallet's own
+  database assigns MUST NOT be supplied in its place: it is handed out at
+  import time, so an identity filed under it is a stranger to every bill naming
+  it after a restore. No viewing key means the identity is unrecoverable; it
+  still signs correctly.
+- `now` MUST produce a §9.3 instant. It MUST be read when an entry is written
+  and MUST NOT be read while folding: §10.2 orders a log by instant, so a fold
+  that consulted a clock would answer differently for one unchanged entry set.
+- `randomBytes` MUST be unpredictable. §9.4 derives a bill's id from a nonce,
+  so two bills opened in the same second by the same participant are one bill
+  when it can be guessed.
+
+### 15.2 `WalletSender`
+
+**Operations.** `send`, `payToAddress`.
+
+- `send` takes one whole §8 payment request URI and MUST build, sign and
+  broadcast a **single** transaction paying every output in it. One transaction
+  per recipient is a different thing: it costs a fee and a proof each, and it
+  lets a payer stop after the second while the bill records the first two as
+  settled.
+- `send` MUST report which of §14.3's three outcomes occurred rather than
+  returning a transaction id or raising. Where an implementation distinguishes
+  a refusal it chose from one the network gave, both are §14.3's second
+  outcome — nothing was spent — and they differ only in what a person is told.
+- A transaction id MUST be present when and only when the send succeeded. It
+  becomes the id of the payment entry §10.5 records, so the record of a payment
+  and the transaction that made it carry one identifier.
+- `payToAddress` MAY be absent. A participant with no address is reported under
+  §8.4 and MUST NOT be dropped from a request, so absence is a state to show
+  and not an error.
+
+### 15.3 `SecretStore`
+
+**Operations.** `read`, `write`, `delete`.
+
+Where this layer's secrets live — a platform keychain in a shipped build.
+
+- A value written MUST be readable after the process that wrote it has ended.
+  A bill key that does not outlive the process cannot decrypt that bill
+  tomorrow, so an in-memory store is a test fixture and MUST NOT be the one a
+  build ships.
+- Reading a key that was never written, or was deleted, MUST answer empty
+  rather than raising.
+
+### 15.4 `BillStorage`
+
+**Operations.** `read`, `write`, `delete`, `keys`, `sweepUnfinishedWrites`.
+
+Durable storage for this device's bills, **as raw entries**.
+
+- Entries, not folded bills. §10.2 merges by set union, so a device holds
+  entries and derives everything else; a stored summary is a second source of
+  truth that goes stale without announcing it.
+- `keys` MUST answer with every key currently stored under the given prefix,
+  and MUST NOT include one whose write did not finish.
+- `sweepUnfinishedWrites` MUST remove whatever an unfinished write left behind
+  and MUST report how many it removed. A store that cannot leave anything
+  behind reports zero. It is called once when the feature loads: a leftover is
+  already invisible to `keys`, and this is what stops them accumulating across
+  a year of crashes.
+
+### 15.5 `SplitsRelay`
+
+**Operations.** `push`, `fetch`.
+
+A store of opaque blobs grouped into per-bill channels, for the participant who
+left before dessert and cannot be handed a code across the table.
+
+- **Optional, and meant to stay so.** A bill is created, split and settled with
+  no relay at all and shared by §11.2 payload; only asynchronous catch-up is
+  missing without one.
+- The channel a bill syncs under is the SHA-256 of its bill id, hex encoded —
+  never the id itself, which is live in every invite and every scanned payload.
+  Every participant knows the bill id and so derives the same channel, and an
+  observer of relay traffic alone cannot run it back to the id.
+- A relay holds no key. Every blob it carries is a §11.3 sealed entry and is
+  opaque to it. What it may observe is the minimum: that a channel has blobs,
+  how large they are, and when they last changed. It MUST NOT be given anything
+  from which it can learn who owes whom.
+- `push` MUST be idempotent: pushing a blob a channel already holds changes
+  nothing, so a retry after a dropped connection cannot create a duplicate.
+- `fetch` MUST answer with every blob the channel currently holds. The caller
+  merges by entry id and §10.2's merge is idempotent, so returning blobs the
+  caller already has is harmless — a relay has no caller identity to key
+  per-caller state on and MUST NOT be asked to keep any.
+- A relay that cannot be reached, refuses, or answers with something that is
+  not a channel MUST raise, and the raised error MUST say whether retrying
+  later could plausibly succeed. It MUST NOT be swallowed: a bill works with no
+  relay, so a transport that quietly does nothing looks exactly like one that
+  is working.
+
+### 15.6 `ZecPrices`
+
+**Operations.** `minorUnitsPerZec`.
+
+- The answer is what one ZEC costs in the **minor units** of the named
+  currency, as an integer — never a decimal. §7 snapshots that figure onto the
+  bill as an integer, so the source's precision is rounded away once, here,
+  where it is known, rather than at every place that reads it.
+- A source that cannot price a currency MUST answer empty. That is an ordinary
+  answer: a bill with no rate is an ordinary bill, there is no §12 code for an
+  unpriced one, and an implementation MUST NOT invent a figure to avoid showing
+  that state.
+
+### 15.7 `SwapProvider`
+
+**Operations.** `tradableAssets`, `quote`, `statusOf`.
+
+Settles a debt whose payout is owed in some asset other than ZEC.
+
+- `tradableAssets` MUST be read before quoting, so a payout naming an asset the
+  provider does not carry is refused before a person is asked to send anything.
+- `quote` MUST be given a refund address, and it is the payer's own. A quote
+  arranged without one risks the deposit if the swap fails.
+- `statusOf` reports whether the swap is in flight, delivered, or will not
+  complete. A transaction hash it reports is on the **destination** chain, and
+  MUST NOT be recorded as the §10.5 payment for a debt settled on this one.
+- A provider a build has not configured MUST raise and say why. Every operation
+  failing loudly is the alternative to a swap that silently does nothing.

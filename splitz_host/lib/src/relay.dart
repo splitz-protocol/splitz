@@ -16,6 +16,8 @@ import 'package:splitz_core/splitz_core.dart' as splitz;
 /// Optional, and meant to stay so: a bill works with no relay at all. It is
 /// created, split and settled locally and shared by QR; only the asynchronous
 /// catch-up is missing without one.
+///
+/// Specified in SPEC.md §15.5.
 abstract interface class SplitsRelay {
   /// Adds [blobs] to [channel]. Pushing a blob already present is a no-op, so
   /// a retry after a dropped connection cannot create duplicates.
