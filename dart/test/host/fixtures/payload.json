@@ -1,0 +1,121 @@
+{
+  "note": "The decode half of the protocol's scanned-payload corpus, taken from the commit pinned in pubspec.yaml. A git dependency delivers only the package directory, so these travel with the tests that read them.",
+  "source": "vectors/payload.json, SPEC.md section 11.2",
+  "cases": [
+    {
+      "name": "decode_a_bill",
+      "payload": "splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ"
+    },
+    {
+      "name": "decode_a_delta",
+      "payload": "splitzd1:eyJsb2ciOltdLCJ2IjoxfQ"
+    },
+    {
+      "name": "decode_strips_scan_padding",
+      "payload": "\ufeff  splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ\n"
+    },
+    {
+      "name": "padding_does_not_count_toward_the_cap",
+      "payload": "                                                  splitz1:eyJsb2ciOlt7ImF0IjoiMjAyNi0xMC0yOFQxOTozMDowMC4wMDBaIiwiYXV0aG9yIjoiYW5hIiwiaWQiOiJlMSIsImtpbmQiOiJhZGRFeHBlbnNlIiwidiI6MX1dLCJ2IjoxfQ                                                  "
+    },
+    {
+      "name": "not_a_payload_at_all",
+      "payload": "zcash:u1abc?amount=1",
+      "error": "payload_not_a_payload"
+    },
+    {
+      "name": "a_prefix_with_nothing_after",
+      "payload": "splitz1:",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "base64_that_does_not_decode",
+      "payload": "splitz1:!!!!",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_that_is_not_json",
+      "payload": "splitz1:bm90IGpzb24",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_that_is_not_an_object",
+      "payload": "splitz1:WzEsMiwzXQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "no_version",
+      "payload": "splitz1:eyJsb2ciOltdfQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_version_written_as_a_string",
+      "payload": "splitz1:eyJ2IjoiMSIsImxvZyI6W119",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_version_from_the_future",
+      "payload": "splitz1:eyJ2IjoyLCJsb2ciOltdfQ",
+      "error": "payload_future_version"
+    },
+    {
+      "name": "no_log_at_all",
+      "payload": "splitz1:eyJ2IjoxfQ",
+      "error": "payload_missing_body"
+    },
+    {
+      "name": "a_log_that_is_not_a_list",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOnt9fQ",
+      "error": "payload_missing_body"
+    },
+    {
+      "name": "one_byte_past_the_cap",
+      "payload": "splitz1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "error": "payload_too_large"
+    },
+    {
+      "name": "a_version_one_past_the_bound",
+      "payload": "splitz1:eyJ2Ijo5MjIzMzcyMDM2ODU0Nzc1ODA4LCJsb2ciOltdfQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_version_of_twenty_six_digits",
+      "payload": "splitz1:eyJ2Ijo5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OSwibG9nIjpbXX0",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "an_invite_that_is_a_string",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOiJhIHN0cmluZyJ9"
+    },
+    {
+      "name": "an_invite_that_is_a_number",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOjV9"
+    },
+    {
+      "name": "an_invite_that_is_a_list",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOlsxLDJdfQ"
+    },
+    {
+      "name": "an_invite_on_a_bill_payload",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOnsiYiI6IkFiMyIsImsiOiJLayIsInYiOjF9fQ"
+    },
+    {
+      "name": "a_body_at_the_depth_limit",
+      "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbMV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dLCJ2IjoxfQ"
+    },
+    {
+      "name": "a_body_one_level_too_deep",
+      "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbWzFdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV0sInYiOjF9",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_nested_two_hundred_deep",
+      "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbWzFdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV0sInYiOjF9",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_delta_carries_no_invite",
+      "payload": "splitzd1:eyJ2IjoxLCJsb2ciOltdLCJpbnZpdGUiOnsiYiI6IkFiMyIsImsiOiJLayIsInYiOjF9fQ"
+    }
+  ]
+}
