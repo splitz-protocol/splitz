@@ -256,7 +256,7 @@ void main() {
   });
 
   group('what the fold would not apply', () {
-    test('a refused entry stays in the history, with its reason', () {
+    test('a refused entry stays in the history, with its code', () {
       // An entry that vanished silently is indistinguishable from one that
       // was never sent.
       final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
@@ -287,7 +287,6 @@ void main() {
         log,
       ).firstWhere((e) => e.kind == BillEventKind.paymentRecorded);
       expect(refused.refusedCode, 'self_payment');
-      expect(refused.refusedReason, isNotNull);
       expect(refused.applied, isFalse);
     });
   });

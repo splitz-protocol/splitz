@@ -310,8 +310,7 @@ MergeResult mergeLogs(List<List<Map<String, dynamic>>> logs) {
         // Coerced rather than cast: the refusal path must be total over
         // every value checkEntry refuses, including a non-string id.
         final reported = entry['id'];
-        refused.add(SetAside(
-            reported is String ? reported : '', e.code, 'refused at ingress'));
+        refused.add(SetAside(reported is String ? reported : '', e.code));
         continue;
       }
       final id = entry['id'] as String;
@@ -347,10 +346,15 @@ class MergeResult {
 
 /// An entry the fold could not apply, and why.
 class SetAside {
-  const SetAside(this.id, this.code, this.reason);
+  const SetAside(this.id, this.code);
   final String id;
+
+  /// The §12 code, and nothing else.
+  ///
+  /// The code is what a wallet turns into a sentence for its user (§1), so a
+  /// sentence written here would be a second source for that text, in English
+  /// only, that no wallet should render.
   final String code;
-  final String reason;
 }
 
 /// An address a rejoin replaced.
@@ -420,8 +424,7 @@ FoldResult foldLog(List<Object?> rawEntries,
       admitted.add(checkEntry(raw));
     } on SplitError catch (e) {
       final id = raw is Map ? raw['id'] : null;
-      refusedAtIngress
-          .add(SetAside(id is String ? id : '', e.code, 'refused at ingress'));
+      refusedAtIngress.add(SetAside(id is String ? id : '', e.code));
     }
   }
   // §10.3. One id names one entry in the fold as in the merge: a re-sent
@@ -448,8 +451,8 @@ FoldResult foldLog(List<Object?> rawEntries,
         if (!verify(e, e['creatorKey'] as String? ?? '')) e
     ];
     for (final e in unverified) {
-      refusedAtIngress.add(SetAside(e['id'] as String,
-          SplitCode.unauthorizedEntry, 'a create entry whose signature fails'));
+      refusedAtIngress
+          .add(SetAside(e['id'] as String, SplitCode.unauthorizedEntry));
     }
     creates = [
       for (final e in creates)
@@ -482,8 +485,8 @@ FoldResult foldLog(List<Object?> rawEntries,
   final amendments = <String, Map<String, dynamic>>{};
   final voided = <String>{};
 
-  void aside(Map<String, dynamic> e, String code, String reason) =>
-      setAside.add(SetAside(e['id'] as String, code, reason));
+  void aside(Map<String, dynamic> e, String code) =>
+      setAside.add(SetAside(e['id'] as String, code));
 
   // Amendments: authored by the author of their target, carrying a payload of
   // the target's kind. An amendment replaces its target wholesale, so one
@@ -492,17 +495,16 @@ FoldResult foldLog(List<Object?> rawEntries,
     if (e['kind'] != 'amendEntry') continue;
     final target = byId[e['targetId']];
     if (target == null) {
-      aside(e, SplitCode.unknownEntry, 'amends an entry the log does not hold');
+      aside(e, SplitCode.unknownEntry);
       continue;
     }
     if (e['author'] != target['author']) {
-      aside(e, SplitCode.unauthorizedEntry, 'amends an entry it did not write');
+      aside(e, SplitCode.unauthorizedEntry);
       continue;
     }
     final wanted = payloadForKind[target['kind']];
     if (wanted != null && !e.containsKey(wanted)) {
-      aside(e, SplitCode.amendKindMismatch,
-          'carries no payload of its target\'s kind');
+      aside(e, SplitCode.amendKindMismatch);
       continue;
     }
     amendments[e['targetId'] as String] = e;
@@ -525,8 +527,7 @@ FoldResult foldLog(List<Object?> rawEntries,
   for (final e in voids) {
     final target = byId[e['targetId']];
     if (target == null) {
-      aside(e, SplitCode.unknownEntry,
-          'withdraws an entry the log does not hold');
+      aside(e, SplitCode.unknownEntry);
       authorised[e['id'] as String] = false;
       continue;
     }
@@ -554,7 +555,7 @@ FoldResult foldLog(List<Object?> rawEntries,
         allowed = {target['author'] as String};
     }
     if (!allowed.contains(e['author'])) {
-      aside(e, SplitCode.unauthorizedEntry, 'may not withdraw a $kind');
+      aside(e, SplitCode.unauthorizedEntry);
       authorised[e['id'] as String] = false;
       continue;
     }
@@ -627,8 +628,7 @@ FoldResult foldLog(List<Object?> rawEntries,
       // so without this, removing the person who spent the most silently drops
       // every expense they paid for.
       voided.remove(e['targetId']);
-      aside(e, SplitCode.participantStillNamed,
-          'a surviving entry still names that participant');
+      aside(e, SplitCode.participantStillNamed);
     }
   }
 
@@ -646,7 +646,7 @@ FoldResult foldLog(List<Object?> rawEntries,
     try {
       decodeRate(payload);
     } on SplitError catch (err) {
-      aside(e, err.code, 'carries a rate this reader cannot decode');
+      aside(e, err.code);
       continue;
     }
     rate = (payload as Map).cast<String, dynamic>();
@@ -663,7 +663,7 @@ FoldResult foldLog(List<Object?> rawEntries,
     // §9.1. An empty id is not a name anyone can be settled to: two readers
     // disagreeing about it fold different bills from one log.
     if (id is! String || id.isEmpty) {
-      aside(e, SplitCode.billMissingEntryPayload, 'names no participant');
+      aside(e, SplitCode.billMissingEntryPayload);
       continue;
     }
     // The decoder decides what a participant is, here rather than once the
@@ -672,13 +672,13 @@ FoldResult foldLog(List<Object?> rawEntries,
     try {
       decodeParticipant(p);
     } on SplitError catch (err) {
-      aside(e, err.code, 'carries a participant this reader cannot decode');
+      aside(e, err.code);
       continue;
     }
     if (participants.containsKey(id) && e['author'] != id) {
       // Without this, one join naming another participant's id and carrying
       // your own address redirects every later settlement to that person.
-      aside(e, SplitCode.unauthorizedEntry, 'changes a record it does not own');
+      aside(e, SplitCode.unauthorizedEntry);
       continue;
     }
     if (participants.containsKey(id) &&
@@ -703,17 +703,14 @@ FoldResult foldLog(List<Object?> rawEntries,
       if (!ex.containsKey('currency')) {
         ex['currency'] = billCurrency;
       } else if (!isCurrency(ex['currency'])) {
-        aside(e, SplitCode.billBadCurrency,
-            'states a value that is not a currency');
+        aside(e, SplitCode.billBadCurrency);
         continue;
       } else if (ex['currency'] != billCurrency) {
-        aside(e, SplitCode.currencyMismatch,
-            'states a currency the bill does not use');
+        aside(e, SplitCode.currencyMismatch);
         continue;
       }
       if (!participants.containsKey(ex['paidBy'])) {
-        aside(e, SplitCode.unknownParticipant,
-            'paid by somebody not on the bill');
+        aside(e, SplitCode.unknownParticipant);
         continue;
       }
       try {
@@ -725,7 +722,7 @@ FoldResult foldLog(List<Object?> rawEntries,
         // `netBalances` once the bill is already built.
         splitExpense(decoded.amount, decoded.split);
       } on SplitError catch (err) {
-        aside(e, err.code, 'carries an expense this reader cannot apply');
+        aside(e, err.code);
         continue;
       }
       expenses.add(ex);
@@ -734,34 +731,31 @@ FoldResult foldLog(List<Object?> rawEntries,
       // A payment moves both parties' balances, so without this any holder of
       // the invite could clear a debt neither of them had settled.
       if (e['author'] != pay['from'] && e['author'] != pay['to']) {
-        aside(e, SplitCode.unauthorizedPayment, 'written by neither party');
+        aside(e, SplitCode.unauthorizedPayment);
         continue;
       }
       if (!participants.containsKey(pay['from']) ||
           !participants.containsKey(pay['to'])) {
-        aside(
-            e, SplitCode.unknownParticipant, 'names somebody not on the bill');
+        aside(e, SplitCode.unknownParticipant);
         continue;
       }
       if (pay['from'] == pay['to']) {
-        aside(e, SplitCode.selfPayment, 'pays its own author');
+        aside(e, SplitCode.selfPayment);
         continue;
       }
       if (!pay.containsKey('currency')) {
         pay['currency'] = billCurrency;
       } else if (!isCurrency(pay['currency'])) {
-        aside(e, SplitCode.billBadCurrency,
-            'states a value that is not a currency');
+        aside(e, SplitCode.billBadCurrency);
         continue;
       } else if (pay['currency'] != billCurrency) {
-        aside(e, SplitCode.currencyMismatch,
-            'states a currency the bill does not use');
+        aside(e, SplitCode.currencyMismatch);
         continue;
       }
       try {
         decodePayment(pay, billCurrency, participants.keys.toSet());
       } on SplitError catch (err) {
-        aside(e, err.code, 'carries a payment this reader cannot decode');
+        aside(e, err.code);
         continue;
       }
       payments.add(pay);
@@ -779,26 +773,22 @@ FoldResult foldLog(List<Object?> rawEntries,
         (effective(e)['confirmation'] as Map?)?.cast<String, dynamic>() ?? {};
     final rule = confirmationMethods[c['method']];
     if (rule == null) {
-      aside(
-          e, SplitCode.billUnknownConfirmationMethod, 'method ${c['method']}');
+      aside(e, SplitCode.billUnknownConfirmationMethod);
       continue;
     }
     if (!known.contains(c['paymentId'])) {
-      aside(e, SplitCode.unknownPayment,
-          'vouches for a payment the bill does not hold');
+      aside(e, SplitCode.unknownPayment);
       continue;
     }
     if (!participants.containsKey(e['author'])) {
-      aside(e, SplitCode.unknownParticipant,
-          'written by somebody not on the bill');
+      aside(e, SplitCode.unknownParticipant);
       continue;
     }
     final pay = payments.firstWhere((p) => p['id'] == c['paymentId']);
     if (rule.speaksFor != null && e['author'] != pay[rule.speaksFor]) {
       // A confirmation's whole weight is in who gave it, so a method anyone
       // may claim is a method that says nothing.
-      aside(e, SplitCode.unauthorizedConfirmation,
-          '${c['method']} speaks for the payment\'s ${rule.speaksFor}');
+      aside(e, SplitCode.unauthorizedConfirmation);
       continue;
     }
     final reference = c['reference'];
@@ -807,8 +797,7 @@ FoldResult foldLog(List<Object?> rawEntries,
       // chain. A number or a list is not a transaction id either, and reading
       // "present" three different ways settles a debt on one device and
       // leaves it open on another.
-      aside(e, SplitCode.confirmationMissingReference,
-          '${c['method']} names no transaction');
+      aside(e, SplitCode.confirmationMissingReference);
       continue;
     }
     if (rule.settles) confirmed.add(c['paymentId'] as String);

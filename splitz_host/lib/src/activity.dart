@@ -44,7 +44,6 @@ class BillEvent {
     this.reference,
     this.withdrawn = false,
     this.refusedCode,
-    this.refusedReason,
     this.confirmed = false,
   });
 
@@ -79,8 +78,11 @@ class BillEvent {
   final bool withdrawn;
 
   /// Set when the fold would not apply this entry (§10.3).
+  ///
+  /// The §12 code, which is what a wallet turns into a sentence for its user
+  /// (§1). This library writes no such sentence: one written here would be
+  /// English only, and no wallet should render it.
   final String? refusedCode;
-  final String? refusedReason;
 
   /// For [BillEventKind.paymentRecorded]: whether §10.5 has settled it.
   ///
@@ -149,7 +151,6 @@ BillEvent _event(
     at: (entry['at'] ?? '') as String,
     withdrawn: withdrawn.contains(id),
     refusedCode: refusal?.code,
-    refusedReason: refusal?.reason,
   );
 
   BillEvent make(
@@ -172,7 +173,6 @@ BillEvent _event(
     reference: reference,
     withdrawn: base.withdrawn,
     refusedCode: base.refusedCode,
-    refusedReason: base.refusedReason,
     confirmed: isConfirmed,
   );
 
