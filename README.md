@@ -19,6 +19,8 @@ from the specification text alone — that produces them.
 │                   implementation (serde_json, for the wire format)
 ├── splitz_host/    `splitz_host`, what a wallet needs around the protocol:
 │                   entry signing, sealing, the log, the sync, the store
+│                   (`rust/splitz-host` is the same layer, and
+│                   `rust/splitz-ffi` carries it to Kotlin and Swift)
 └── tools/          the lanes a fixed corpus cannot be
 ```
 
@@ -128,6 +130,8 @@ by a test in each implementation whose string type can hold the input.
 | `vectors/` | Both implementations against one fixed corpus. |
 | `tools/differential` | Inputs nobody wrote an expectation for, answered by every implementation and diffed against each other. Catches what a corpus generated from one reference structurally cannot. |
 | `tools/differential/host.sh` | The two host implementations — `splitz_host` in Dart and `splitz-host` in Rust — on one generated operation list: public keys, signatures over §10.6's message, verification against a key a wallet was handed, derived identities, and what counts as a well-formed key. Nothing in `vectors/` can reach this layer, because a vector carries no private key. |
+| `tools/ffi/kotlin.sh` | A wallet written against the generated Kotlin and nothing else. It implements all seven of §15's interfaces and drives one bill across two devices — opened, shared by invite, split, priced, settled, confirmed and read back as a history — calling into Kotlin for storage, secrets, the clock, randomness, the relay and the send at every step. A binding that compiles is not a binding that carries a callback. |
+| `tools/ffi/swift.sh` | That the generated Swift module builds. A record field named for something the target language already puts on that type compiles in Rust and not in Swift or Kotlin, and the generator will produce one. Local only: the runner has no Swift. |
 | `tools/parity` | The three public surface pairs — the protocol, the wallet seam and the plumbing. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
 | `tools/spec` | `SPEC.md` against the tree that has to keep it: every §12 code declared, thrown and covered in all three implementations, every `vectors/…` file and case the text names by name, every figure it quotes beside a named case, every §N cross-reference. Nothing else in this repository reads the specification, and every implementation written from it inherits its mistakes. |
 | `rust/splitz-core/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |

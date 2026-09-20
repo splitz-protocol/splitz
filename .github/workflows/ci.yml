@@ -106,6 +106,19 @@ jobs:
       - run: tools/differential/host.sh 2 1200
       - run: tools/differential/host.sh 3 1200
 
+  bindings:
+    # A binding that compiles is not a binding that carries a callback. This
+    # builds the foreign library, generates Kotlin from it, and runs a wallet
+    # written against that Kotlin alone: it implements all seven of §15's
+    # interfaces and drives one bill across two devices — opened, shared by
+    # invite, split, priced, settled, confirmed — calling back into Kotlin for
+    # storage, secrets, the clock, randomness, the relay and the send.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: tools/ffi/kotlin.sh
+
   spec:
     # The corpus checks values, the differential lane checks that three
     # implementations answer alike, and the parity lane checks the two public
