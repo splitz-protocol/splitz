@@ -4,6 +4,14 @@ The whole surface is four steps: net the bill, plan the settlement, price it,
 render one payer's obligation as a payment request. `renderObligation` does the
 last two of those, so the shortest wallet makes three calls.
 
+There are two imports, and a wallet usually wants both. The protocol —
+`package:splitz/splitz.dart`, `splitz::` — is what this page's first two
+sections show. The wallet seam — `package:splitz/host.dart`,
+`splitz::host::` — is the layer above it: something that assembles an entry
+and derives §9.5's id, a log that merges and folds, the two scans that move a
+bill between phones, and one payer's obligation from a folded bill. See **The
+wallet seam** below.
+
 ## Dart
 
 ```dart
@@ -38,8 +46,11 @@ for (final settlement in plan.settlements) {
 broadcast(renderUri(payments));                 // one transaction
 
 // A bill closes because a payment is confirmed, not because one was sent.
-// This library exports no entry builder: the wallet assembles the map and
-// derives its §9.5 id with `deriveEntryId`, then appends it to its own log.
+// The protocol import exports no entry builder: at this level the wallet
+// assembles the map and derives its §9.5 id with `deriveEntryId`, then
+// appends it to its own log. `package:splitz/host.dart` has `recordPayment`
+// and the rest, which do exactly this and hand back an entry whose id is
+// already the digest; see **The wallet seam**.
 // `canonicalInstant` takes a string, not a clock value: this library exports
 // nothing that reads a clock, because a clock is the host's (§13).
 final nowIso = DateTime.now().toUtc().toIso8601String();
@@ -74,6 +85,72 @@ let zatoshi = splitz::fiat_to_zatoshi(
 )?;
 let uri = splitz::render_uri(&payments, true)?;
 ```
+
+## The wallet seam
+
+One import above the protocol, in both languages. It holds no key, opens no
+socket and reads no clock of its own: everything it cannot do is declared as
+one interface the wallet implements.
+
+```dart
+import 'package:splitz/splitz.dart' as splitz;
+import 'package:splitz/host.dart';
+
+class MyWallet extends BillHost {
+  @override String get me => 'ana';
+  @override String? get payToAddress => 'u1ana…';
+  @override Clock get now => DateTime.now;
+  @override Randomness get randomBytes => secureRandom;
+  @override Broadcast get broadcast => (uri) async => Sent.sent(await send(uri));
+  // `sign` and `verify` default to null. Without them §10.7 binds no key and
+  // a folded bill reports no identity binding rather than claiming one.
+}
+
+final host = MyWallet();
+final log = BillLog(host)
+  ..add([createBill(host: host, name: 'Dinner', currency: 'EUR',
+                    creatorKey: myEd25519PublicKeyBase64Url)]);
+
+final folded = log.fold();                     // §10.3, plus what it refused
+final owed = obligationFor(host, folded);      // null when the bill has no rate
+if (owed != null) await settle(host, log, owed);
+```
+
+```rust
+use splitz::host::{create_bill, obligation_for, settle, BillHost, BillLog, Sent};
+
+impl BillHost for MyWallet {
+    fn me(&self) -> &str { "ana" }
+    fn pay_to_address(&self) -> Option<&str> { Some("u1ana…") }
+    // An RFC 3339 instant, not a date type: this crate depends on no calendar
+    // library, and `canonical_instant` refuses anything that is not one.
+    fn now(&self) -> String { self.clock.now_rfc3339() }
+    fn random_bytes(&self, n: usize) -> Vec<u8> { self.rng.fill(n) }
+    // Synchronous, because this crate pulls in no async runtime and so cannot
+    // own the executor a future would need. Block here, where you know yours.
+    fn broadcast(&self, uri: &str) -> Sent { Sent::sent(self.send(uri)) }
+}
+```
+
+What the seam adds, in both:
+
+| | Dart | Rust |
+|---|---|---|
+| The wallet's obligations | `BillHost` | `splitz::host::BillHost` |
+| Entries, with §9.5's id already derived | `createBill`, `joinBill`, `addExpense`, `recordPayment`, `confirmPayment`, `setRate`, `voidEntry` | the same names in snake case |
+| A signature over §10.6's message | `signEntry` | `sign_entry` |
+| One bill's log, merged and folded | `BillLog`, `FoldedBill` | `BillLog`, `FoldedBill` |
+| What a camera produced | `readScan`, `inviteFor`, `shareableBill`, `deltaFor`, `acceptScan` | the same names in snake case |
+| One payer's obligation, and sending it | `obligationFor`, `settle` | `obligation_for`, `settle` |
+
+`tools/parity/surface.py` diffs the two seams the way it diffs the two
+protocol surfaces, and records every divergence with its reason in
+`tools/parity/allow-host.txt`.
+
+Three differences are idiom and are stated at the declarations: Dart names
+each obligation as a typedef and Rust declares it as a trait method; Dart's
+`broadcast` and `sign` return futures and Rust's are synchronous; Dart's scan
+outcomes are a sealed class hierarchy and Rust's are one enum.
 
 ## Ten things the wallet owns
 

@@ -4,20 +4,24 @@ A shared-bill protocol for Zcash wallets. Expenses go in; out come the fewest
 payments that settle them, and the ZIP 321 payment request URI that carries one
 payer's whole obligation in a single transaction.
 
-No wallet dependency, no network, no storage, no framework. Two
-implementations, one specification, one set of vectors that both run.
+No wallet dependency, no network, no storage, no framework. One specification,
+two shipped implementations that run one set of vectors, and a third — written
+from the specification text alone — that produces them.
 
 ```
 ├── SPEC.md         the protocol
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
+├── CONFORMANCE.md  what conformance means, and what a green suite does not say
 ├── vectors/        435 language-neutral conformance cases
 ├── dart/           reference implementation  (0 dependencies)
-└── rust/           second implementation     (serde_json, for the wire format)
+│                   `splitz.dart` the protocol, `host.dart` the wallet seam
+├── rust/           second implementation     (serde_json, for the wire format)
+└── tools/          the lanes a fixed corpus cannot be
 ```
 
 ```
-cd dart && dart test                 # 427 tests, 408 of them the corpus
-cd rust && cargo test                # the same 408 cases, plus the oracle
+cd dart && dart test                 # 489 tests, 435 of them the corpus
+cd rust && cargo test                # the same 435 cases, plus the oracle
 cd rust && cargo test --release      # and again with overflow checks off
 tools/differential/run.sh 1 1200     # three implementations, one operation list,
                                      #   diffed against each other and against
@@ -27,6 +31,8 @@ python3 tools/oracle/instants.py     # §9.3's instants, against a reader
                                      #   nobody here wrote
 python3 tools/parity/surface.py      # the two public surfaces, diffed
 tools/web-target/run.sh              # asserts it still does not compile to JS
+tools/examples/run.sh                # every sample run, not merely compiled
+cd rust && cargo clippy --all-targets -- -D warnings
 cd dart && dart run example/dinner.dart
 ```
 
@@ -110,14 +116,17 @@ lone surrogate, which a conformant JSON reader refuses, so a vector carrying
 one would make the corpus unreadable rather than test the code. It is covered
 by a test in each implementation whose string type can hold the input.
 
-## The five lanes, and what each catches that the others cannot
+## The eight lanes, and what each catches that the others cannot
 
 | Lane | What it sees |
 |---|---|
 | `vectors/` | Both implementations against one fixed corpus. |
 | `tools/differential` | Inputs nobody wrote an expectation for, answered by every implementation and diffed against each other. Catches what a corpus generated from one reference structurally cannot. |
 | `tools/parity` | The two public surfaces. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
+| `tools/spec` | `SPEC.md` against the tree that has to keep it: every §12 code declared, thrown and covered in all three implementations, every `vectors/…` file and case the text names by name, every figure it quotes beside a named case, every §N cross-reference. Nothing else in this repository reads the specification, and every implementation written from it inherits its mistakes. |
 | `rust/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |
+| `tools/oracle/instants.py` | §9.3's instants against CPython's `datetime`, written by other people for another purpose. §9.3 is deliberately narrower than RFC 3339, so the relation checked is containment and agreement, and the strings the stdlib accepts and §9.3 refuses are counted rather than assumed. |
+| `tools/examples` | Every sample under `dart/example/`, plus `rust/examples/seam.rs`, run with its exit code read. `dart analyze` type-checks them; it does not call them, and a sample that only compiles proves the names exist rather than that the calls in it are ones a caller may make in that order with those values. |
 | `tools/web-target` | That the package still refuses to compile to JavaScript. A JS number is exact only to 2^53−1; amounts here are 64-bit, so compiling would round them silently rather than fail. |
 
 ## Integrating it into a wallet
