@@ -16,17 +16,12 @@ import 'package:splitz_core/splitz_core.dart' as splitz;
 /// The five, and only the five (§4).
 enum SplitKind { equal, exact, percentage, shares, itemized }
 
-extension SplitKindText on SplitKind {
-  String get label => switch (this) {
-    SplitKind.equal => 'Equally',
-    SplitKind.exact => 'Exact amounts',
-    SplitKind.percentage => 'Percentages',
-    SplitKind.shares => 'Shares',
-    SplitKind.itemized => 'By item',
-  };
-
-  /// The §4 discriminator. `itemized` is one word in the wire format and two
-  /// in English, so it is written here rather than derived from [name].
+extension SplitKindWire on SplitKind {
+  /// The §4 discriminator.
+  ///
+  /// What a person is shown for each kind is the wallet's: a name written
+  /// here would be English only, and every wallet that is not in English
+  /// would carry a second one anyway.
   String get wireType => name;
 }
 
@@ -132,65 +127,18 @@ class SplitDraft {
     }
   }
 
-  /// Why the protocol will not accept this yet, in words, or null when it
-  /// will.
+  /// Why the protocol will not accept this yet, as its §12 code, or null when
+  /// it will.
   ///
-  /// The code comes from §12 and the sentence is chosen for it here: a screen
-  /// showing `percentage_not_full_scale` tells a person nothing they can act
-  /// on.
-  String? refusal(int totalMinorUnits) {
+  /// The code, not a sentence. §1 says the code is what a wallet turns into a
+  /// sentence for its user, and one written here would be English only.
+  String? refusalCode(int totalMinorUnits) {
     try {
       splitz.splitExpense(totalMinorUnits, toSplit());
       return null;
     } on splitz.SplitError catch (e) {
-      return wordFor(e.code, totalMinorUnits);
+      return e.code;
     }
-  }
-
-  /// What a person is told about [code].
-  ///
-  /// [code] is §12's own string, not an enum: the code is part of the
-  /// protocol and the prose beside it is not, so a sentence is chosen for a
-  /// code rather than parsed out of a message.
-  String wordFor(String code, int totalMinorUnits) => switch (code) {
-    splitz.SplitCode.emptySplit => 'Nobody is sharing this',
-    splitz.SplitCode.exactTotalMismatch =>
-      'The amounts come to ${_sum(amounts.values)}, not $totalMinorUnits',
-    splitz.SplitCode.percentageNotFullScale =>
-      'The percentages come to ${_percent(_sum(basisPoints.values))}, '
-          'not 100%',
-    splitz.SplitCode.zeroWeightSum => 'Somebody needs at least one share',
-    splitz.SplitCode.negativeShare =>
-      'A share cannot run the opposite way to the expense',
-    splitz.SplitCode.itemizedNoItems => 'Add at least one item',
-    splitz.SplitCode.itemizedUnassignedItem =>
-      'Every item needs somebody who shared it',
-    splitz.SplitCode.itemizedTotalMismatch =>
-      'The items and extras come to '
-          '${_sum([for (final i in items) i.minorUnits]) + extraMinorUnits}, '
-          'not $totalMinorUnits',
-    splitz.SplitCode.amountOverflow => 'Those figures are too large to add',
-    splitz.SplitCode.unknownParticipant =>
-      'Somebody named here is not on this bill',
-    // Every other §12 code reaching a split form is a fault rather than a
-    // typo, and saying so is better than guessing a friendly sentence for
-    // it.
-    _ => 'This split cannot be used ($code)',
-  };
-
-  static int _sum(Iterable<int> values) {
-    var total = 0;
-    for (final value in values) {
-      total += value;
-    }
-    return total;
-  }
-
-  /// Basis points as a percentage, without a double touching it.
-  static String _percent(int basisPoints) {
-    final whole = basisPoints ~/ 100;
-    final fraction = (basisPoints % 100).abs().toString().padLeft(2, '0');
-    return '$whole.$fraction%';
   }
 
   /// Everyone this draft names, whichever kind it is.

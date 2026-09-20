@@ -1,8 +1,8 @@
 /// A split being edited, against the protocol that decides what it may be.
 ///
 /// Every refusal asserted here is produced by building the real §4 payload and
-/// splitting a real expense with it — so none of these sentences can outlive
-/// the rule that causes them, and none can be invented.
+/// splitting a real expense with it — so none of these codes can outlive the
+/// rule that causes them, and none can be invented.
 library;
 
 import 'package:splitz_core/splitz_core.dart' as splitz;
@@ -13,7 +13,7 @@ void main() {
   group('each of the five reaches the protocol', () {
     test('equal', () {
       final draft = SplitDraft(kind: SplitKind.equal, among: {'ana', 'ben'});
-      expect(draft.refusal(9000), isNull);
+      expect(draft.refusalCode(9000), isNull);
       expect(draft.allocation(9000), {'ana': 4500, 'ben': 4500});
     });
 
@@ -34,7 +34,7 @@ void main() {
         kind: SplitKind.exact,
         amounts: {'ana': 6000, 'ben': 3000},
       );
-      expect(draft.refusal(9000), isNull);
+      expect(draft.refusalCode(9000), isNull);
       expect(draft.allocation(9000), {'ana': 6000, 'ben': 3000});
     });
 
@@ -44,7 +44,7 @@ void main() {
         kind: SplitKind.percentage,
         basisPoints: {'ana': 3333, 'ben': 6667},
       );
-      expect(draft.refusal(9000), isNull);
+      expect(draft.refusalCode(9000), isNull);
       expect(draft.allocation(9000)!.values.reduce((a, b) => a + b), 9000);
     });
 
@@ -53,7 +53,7 @@ void main() {
         kind: SplitKind.shares,
         shareCounts: {'ana': 2, 'ben': 1},
       );
-      expect(draft.refusal(9000), isNull);
+      expect(draft.refusalCode(9000), isNull);
       expect(draft.allocation(9000), {'ana': 6000, 'ben': 3000});
     });
 
@@ -70,7 +70,7 @@ void main() {
         ],
         extraMinorUnits: 1000,
       );
-      expect(draft.refusal(9000), isNull);
+      expect(draft.refusalCode(9000), isNull);
       final allocated = draft.allocation(9000)!;
       expect(allocated.values.reduce((a, b) => a + b), 9000);
       // Ana ate more, so she carries more of the tip.
@@ -78,10 +78,10 @@ void main() {
     });
   });
 
-  group('what the protocol refuses, said in words', () {
+  group('what the protocol refuses, by its code', () {
     test('nobody sharing it', () {
       final draft = SplitDraft(kind: SplitKind.equal);
-      expect(draft.refusal(9000), 'Nobody is sharing this');
+      expect(draft.refusalCode(9000), splitz.SplitCode.emptySplit);
     });
 
     test('exact amounts that do not come to the total', () {
@@ -89,7 +89,7 @@ void main() {
         kind: SplitKind.exact,
         amounts: {'ana': 6000, 'ben': 2000},
       );
-      expect(draft.refusal(9000), contains('8000'));
+      expect(draft.refusalCode(9000), splitz.SplitCode.exactTotalMismatch);
       expect(draft.allocation(9000), isNull);
     });
 
@@ -98,8 +98,7 @@ void main() {
         kind: SplitKind.percentage,
         basisPoints: {'ana': 3000, 'ben': 6000},
       );
-      // Rendered without a double touching it: 9000bp is 90.00%.
-      expect(draft.refusal(9000), contains('90.00%'));
+      expect(draft.refusalCode(9000), splitz.SplitCode.percentageNotFullScale);
     });
 
     test('everybody on zero shares', () {
@@ -107,12 +106,12 @@ void main() {
         kind: SplitKind.shares,
         shareCounts: {'ana': 0, 'ben': 0},
       );
-      expect(draft.refusal(9000), 'Somebody needs at least one share');
+      expect(draft.refusalCode(9000), splitz.SplitCode.zeroWeightSum);
     });
 
     test('an itemized split with no items', () {
       final draft = SplitDraft(kind: SplitKind.itemized);
-      expect(draft.refusal(9000), 'Add at least one item');
+      expect(draft.refusalCode(9000), splitz.SplitCode.itemizedNoItems);
     });
 
     test('an item nobody shared', () {
@@ -120,7 +119,7 @@ void main() {
         kind: SplitKind.itemized,
         items: [DraftItem(description: 'tacos', minorUnits: 9000)],
       );
-      expect(draft.refusal(9000), 'Every item needs somebody who shared it');
+      expect(draft.refusalCode(9000), splitz.SplitCode.itemizedUnassignedItem);
     });
 
     test('items that do not come to the total', () {
@@ -131,7 +130,7 @@ void main() {
         ],
         extraMinorUnits: 1000,
       );
-      expect(draft.refusal(9000), contains('6000'));
+      expect(draft.refusalCode(9000), splitz.SplitCode.itemizedTotalMismatch);
     });
 
     test('a share running the opposite way to the expense', () {
@@ -139,19 +138,7 @@ void main() {
         kind: SplitKind.exact,
         amounts: {'ana': 10000, 'ben': -1000},
       );
-      expect(
-        draft.refusal(9000),
-        'A share cannot run the opposite way to the expense',
-      );
-    });
-
-    test('a code with no sentence of its own still says the code', () {
-      // Better than guessing a friendly wording for a fault.
-      final draft = SplitDraft(kind: SplitKind.equal);
-      expect(
-        draft.wordFor('some_future_code', 0),
-        contains('some_future_code'),
-      );
+      expect(draft.refusalCode(9000), splitz.SplitCode.negativeShare);
     });
   });
 
@@ -173,7 +160,7 @@ void main() {
       final draft = SplitDraft(kind: SplitKind.shares);
       draft.toggle('ana');
       expect(draft.shareCounts['ana'], 1);
-      expect(draft.refusal(9000), isNull);
+      expect(draft.refusalCode(9000), isNull);
     });
 
     test('the payload is the protocol shape, whatever the form holds', () {
