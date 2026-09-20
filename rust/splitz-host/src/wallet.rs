@@ -98,6 +98,69 @@ impl SecretStore for InMemorySecretStore {
     }
 }
 
+/// Durable storage for this device's bills, as raw entries.
+///
+/// Entries, not folded bills. §10.2 merges by set union, so a device holds
+/// entries and derives everything else; a stored summary is a second source of
+/// truth that goes stale without saying so.
+///
+/// Specified in SPEC.md §15.4.
+pub trait BillStorage {
+    fn read(&self, key: &str) -> Result<Option<String>>;
+    fn write(&self, key: &str, value: &str) -> Result<()>;
+    fn delete(&self, key: &str) -> Result<()>;
+    fn keys(&self, prefix: &str) -> Result<Vec<String>>;
+
+    /// Removes whatever a write that did not finish left behind, and returns
+    /// how many. Zero for a store that cannot leave anything.
+    ///
+    /// Called once when the feature loads. A leftover is already invisible to
+    /// [`BillStorage::keys`]; this stops them accumulating across the crashes
+    /// of a year.
+    fn sweep_unfinished_writes(&self) -> Result<usize>;
+}
+
+/// Storage that does not outlive the process. For tests.
+#[derive(Debug, Default)]
+pub struct InMemoryBillStorage {
+    values: std::sync::Mutex<std::collections::BTreeMap<String, String>>,
+}
+
+impl BillStorage for InMemoryBillStorage {
+    fn read(&self, key: &str) -> Result<Option<String>> {
+        Ok(self.values.lock().unwrap().get(key).cloned())
+    }
+
+    fn write(&self, key: &str, value: &str) -> Result<()> {
+        self.values
+            .lock()
+            .unwrap()
+            .insert(key.to_owned(), value.to_owned());
+        Ok(())
+    }
+
+    fn delete(&self, key: &str) -> Result<()> {
+        self.values.lock().unwrap().remove(key);
+        Ok(())
+    }
+
+    fn keys(&self, prefix: &str) -> Result<Vec<String>> {
+        Ok(self
+            .values
+            .lock()
+            .unwrap()
+            .keys()
+            .filter(|k| k.starts_with(prefix))
+            .cloned()
+            .collect())
+    }
+
+    /// Nothing to sweep: a map cannot be half written.
+    fn sweep_unfinished_writes(&self) -> Result<usize> {
+        Ok(0)
+    }
+}
+
 /// Which wallet account is speaking, and what makes its identity recoverable.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct WalletAccount {

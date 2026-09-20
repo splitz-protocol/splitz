@@ -98,6 +98,7 @@ def main() -> int:
         op = rng.choice([
             "public_key", "sign_entry", "verify", "identity_seed",
             "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
+            "store_read", "store_merge",
         ])
         if op == "public_key":
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
@@ -121,6 +122,16 @@ def main() -> int:
                        "openWith": a_bill_key(rng) if rng.random() < 0.3 else None,
                        "entry": an_entry(rng),
                        "tamper": rng.choice([0, 0, 1, 2])}, out)
+        elif op == "store_read":
+            json.dump({"op": op, "stored": rng.choice([
+                "", "not json", '{"not":"a list"}', "[1,2,3]", "null",
+                json.dumps([an_entry(rng) for _ in range(rng.randrange(0, 4))]),
+                json.dumps([an_entry(rng), 7, None]),
+            ])}, out)
+        elif op == "store_merge":
+            json.dump({"op": op,
+                       "held": [an_entry(rng) for _ in range(rng.randrange(0, 3))],
+                       "incoming": [an_entry(rng) for _ in range(rng.randrange(0, 3))]}, out)
         elif op == "open_raw":
             json.dump({"op": op, "key": a_bill_key(rng),
                        "blob": a_raw_blob(rng)}, out)

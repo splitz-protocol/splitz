@@ -9,8 +9,8 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Value};
 use splitz_core::{sha256, signing_message};
 use splitz_host::{
-    base64url_decode, base64url_encode, is_well_formed_key, HostError, Sealing, Signer,
-    IDENTITY_DOMAIN,
+    base64url_decode, base64url_encode, is_well_formed_key, BillStorage, BillStore, HostError,
+    InMemoryBillStorage, Sealing, Signer, IDENTITY_DOMAIN,
 };
 
 /// The two implementations word their refusals differently; what has to match
@@ -122,6 +122,33 @@ fn answer(op: &Value) -> Value {
             Ok(entry) => json!({ "opened": true, "entry": entry }),
             Err(e) => json!({ "opened": false, "why": tag(&e) }),
         },
+        "store_read" => {
+            let storage = InMemoryBillStorage::default();
+            storage
+                .write("splitz_bill_b1", op["stored"].as_str().unwrap())
+                .unwrap();
+            let entries = BillStore::new(&storage).read("b1").unwrap();
+            json!({ "count": entries.len(), "entries": entries })
+        }
+        "store_merge" => {
+            let storage = InMemoryBillStorage::default();
+            let store = BillStore::new(&storage);
+            let held: Vec<Value> = op["held"].as_array().cloned().unwrap_or_default();
+            let incoming: Vec<Value> = op["incoming"].as_array().cloned().unwrap_or_default();
+            match store
+                .merge("b1", held)
+                .and_then(|_| store.merge("b1", incoming))
+            {
+                Err(_) => json!({ "merged": false }),
+                Ok(merged) => json!({
+                    "merged": true,
+                    "ids": merged.entries.iter()
+                        .map(|e| e["id"].clone()).collect::<Vec<_>>(),
+                    "refused": merged.refused.len(),
+                    "readBack": store.read("b1").unwrap().len(),
+                }),
+            }
+        }
         "well_formed_key" => json!(is_well_formed_key(op["key"].as_str().unwrap())),
         "b64_round_trip" => match base64url_decode(op["text"].as_str().unwrap()) {
             None => json!(Value::Null),

@@ -132,6 +132,31 @@ Future<Object?> answer(Map<String, dynamic> op) async {
       } on SealingException catch (e) {
         return {'opened': false, 'why': tag(e)};
       }
+    case 'store_read':
+      final storage = InMemoryBillStorage();
+      await storage.write('splitz_bill_b1', op['stored'] as String);
+      final entries = await BillStore(storage).read('b1');
+      return {'count': entries.length, 'entries': entries};
+    case 'store_merge':
+      final store = BillStore(InMemoryBillStorage());
+      final held = (op['held'] as List)
+          .map((e) => (e as Map).cast<String, dynamic>())
+          .toList();
+      final incoming = (op['incoming'] as List)
+          .map((e) => (e as Map).cast<String, dynamic>())
+          .toList();
+      try {
+        await store.merge('b1', held);
+        final merged = await store.merge('b1', incoming);
+        return {
+          'merged': true,
+          'ids': [for (final e in merged.entries) e['id']],
+          'refused': merged.refused.length,
+          'readBack': (await store.read('b1')).length,
+        };
+      } on protocol.SplitError {
+        return {'merged': false};
+      }
     case 'well_formed_key':
       return SplitsKeys.isWellFormedKey(op['key'] as String);
     case 'b64_round_trip':
