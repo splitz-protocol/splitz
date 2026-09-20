@@ -39,12 +39,6 @@ class Settlement {
   /// debts that produced them. [settleBill] populates it.
   final List<DirectDebt> covers;
 
-  /// Whether any part of this payment discharges a debt owed to somebody other
-  /// than [to] (§6.3).
-  ///
-  /// Membership is not the test. A payment covering a little of what the payee
-  /// lent and a great deal of what two other people lent is still a payment the
-  /// payer cannot account for by looking at the payee.
   /// The part of this payment no direct debt explains (§6.3).
   ///
   /// Anybody holding the invite may write an expense, and §4 admits a negative
@@ -61,6 +55,12 @@ class Settlement {
     return amount > covered ? amount - covered : 0;
   }
 
+  /// Whether any part of this payment discharges a debt owed to somebody other
+  /// than [to] (§6.3).
+  ///
+  /// Membership is not the test. A payment covering a little of what the payee
+  /// lent and a great deal of what two other people lent is still a payment the
+  /// payer cannot account for by looking at the payee.
   bool get isRerouted {
     var elsewhere = 0;
     for (final c in covers) {

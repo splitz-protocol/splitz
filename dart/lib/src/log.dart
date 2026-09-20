@@ -147,13 +147,6 @@ const String entryIdDomain = 'splitz-entry-id-v1';
 String deriveEntryId(Map<String, dynamic> entry) =>
     _deriveId(entryIdDomain, entry);
 
-/// Checks an entry before it reaches a log (§10.1).
-///
-/// An entry carrying more than one payload is refused because the currency
-/// fallback and the fold would otherwise read different ones. One carrying
-/// none is refused because removing a member makes an entry's canonical
-/// encoding sort higher than the same entry with it, so the merge would keep
-/// the stripped copy.
 /// `value` as a map, or an empty one.
 ///
 /// For the passes that read inside a payload before it has been decoded: §10.1
@@ -166,6 +159,13 @@ Map<String, dynamic> _mapOf(Object? value) =>
 /// `value` as a list, or an empty one. See [_mapOf].
 List<Object?> _listOf(Object? value) => value is List ? value : const [];
 
+/// Checks an entry before it reaches a log (§10.1).
+///
+/// An entry carrying more than one payload is refused because the currency
+/// fallback and the fold would otherwise read different ones. One carrying
+/// none is refused because removing a member makes an entry's canonical
+/// encoding sort higher than the same entry with it, so the merge would keep
+/// the stripped copy.
 Map<String, dynamic> checkEntry(Object? raw) {
   if (raw is! Map) {
     raise(SplitCode.billTypeError, 'An entry is an object, got $raw');

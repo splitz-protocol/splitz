@@ -130,13 +130,6 @@ fn derive_id(domain: &str, entry: &Value) -> Result<String> {
     Ok(base64url(&sha256(message.as_bytes())[..16]))
 }
 
-/// Checks an entry before it reaches a log (§10.1).
-///
-/// An entry carrying more than one payload is refused because the currency
-/// fallback and the fold would otherwise read different ones. One carrying
-/// none is refused because removing a member makes an entry's canonical
-/// encoding sort higher than the same entry with it, so the merge would keep
-/// the stripped copy.
 /// The members of a payload that name a participant or an entry (§10.1).
 fn id_members_of(wanted: &str) -> &'static [&'static str] {
     match wanted {
@@ -149,6 +142,13 @@ fn id_members_of(wanted: &str) -> &'static [&'static str] {
     }
 }
 
+/// Checks an entry before it reaches a log (§10.1).
+///
+/// An entry carrying more than one payload is refused because the currency
+/// fallback and the fold would otherwise read different ones. One carrying
+/// none is refused because removing a member makes an entry's canonical
+/// encoding sort higher than the same entry with it, so the merge would keep
+/// the stripped copy.
 pub fn check_entry(entry: &Value) -> Result<()> {
     if !entry.is_object() {
         return Err(SplitError::new(

@@ -137,7 +137,6 @@ fn payout_of(value: &Value) -> Result<Payout> {
     })
 }
 
-/// Decodes a bill document.
 /// Decodes one participant payload (§9.1).
 ///
 /// Shared with the fold, which applies it to each `joinBill` before the
@@ -331,6 +330,7 @@ pub fn decode_payment(
     })
 }
 
+/// Decodes a bill document.
 pub fn decode_bill(doc: &Value) -> Result<Bill> {
     if !doc.is_object() {
         return Err(type_error("an object"));

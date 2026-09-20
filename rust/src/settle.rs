@@ -35,12 +35,6 @@ pub struct Settlement {
 }
 
 impl Settlement {
-    /// Whether any part of this payment discharges a debt owed to somebody
-    /// other than `to` (§6.3).
-    ///
-    /// Membership is not the test. A payment covering a little of what the
-    /// payee lent and a great deal of what two other people lent is still a
-    /// payment the payer cannot account for by looking at the payee.
     /// The part of this payment no direct debt explains (§6.3).
     ///
     /// Anybody holding the invite may write an expense, and §4 admits a
@@ -52,6 +46,12 @@ impl Settlement {
         (self.amount - covered).max(0)
     }
 
+    /// Whether any part of this payment discharges a debt owed to somebody
+    /// other than `to` (§6.3).
+    ///
+    /// Membership is not the test. A payment covering a little of what the
+    /// payee lent and a great deal of what two other people lent is still a
+    /// payment the payer cannot account for by looking at the payee.
     pub fn is_rerouted(&self) -> bool {
         self.covers
             .iter()

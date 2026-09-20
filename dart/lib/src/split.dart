@@ -38,11 +38,6 @@ Map<String, int> _equal(int total, Map<String, dynamic> spec) {
   return _zip(among, allocateEvenly(total, among.length));
 }
 
-/// True when `value` carries the sign opposite to `total` (§4).
-///
-/// The rule is sign agreement rather than non-negativity because §10.4 makes a
-/// refund an expense with a negative total, and every method must divide one.
-/// Refuses an id list holding anything but strings (§10.1, §4).
 /// Every participant id a split names, whatever method it uses.
 ///
 /// Kept beside the split methods so a new method cannot add a place an id
@@ -77,6 +72,10 @@ Set<String> splitParticipants(Map<String, dynamic> spec) {
   return out;
 }
 
+/// Refuses an id list holding anything but strings (§10.1, §4).
+///
+/// Dropping a member a reader cannot read reassigns that participant's share
+/// to the others: three people splitting 9000 become two paying 4500 each.
 void checkIdLists(Map<String, dynamic> spec) {
   for (final key in const ['among', 'sharedBy']) {
     final list = spec[key];
@@ -107,6 +106,10 @@ void checkIdLists(Map<String, dynamic> spec) {
   }
 }
 
+/// True when `value` carries the sign opposite to `total` (§4).
+///
+/// The rule is sign agreement rather than non-negativity because §10.4 makes a
+/// refund an expense with a negative total, and every method must divide one.
 bool _against(int value, int total) => total < 0 ? value > 0 : value < 0;
 
 Map<String, int> _exact(int total, Map<String, dynamic> spec) {

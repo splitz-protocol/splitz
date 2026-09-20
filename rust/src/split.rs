@@ -52,10 +52,6 @@ fn id_list(value: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Refuses an id list holding anything but strings (§10.1, §4).
-///
-/// Dropping a member a reader cannot read reassigns that participant's share
-/// to the others: three people splitting 9000 become two paying 4500 each.
 /// Every participant id a split names, whatever method it uses.
 ///
 /// Kept beside the split methods so a new method cannot add a place an id
@@ -84,6 +80,10 @@ pub fn split_participants(spec: &Value) -> BTreeSet<String> {
     out
 }
 
+/// Refuses an id list holding anything but strings (§10.1, §4).
+///
+/// Dropping a member a reader cannot read reassigns that participant's share
+/// to the others: three people splitting 9000 become two paying 4500 each.
 pub fn check_id_lists(spec: &Value) -> Result<()> {
     for key in ["among", "sharedBy"] {
         if let Some(list) = spec.get(key).and_then(Value::as_array) {
