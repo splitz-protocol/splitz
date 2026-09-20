@@ -13,6 +13,32 @@ import 'package:splitz_core/splitz_core.dart' as protocol;
 import 'package:splitz_host/splitz_host.dart';
 
 final signer = SplitsSigner();
+
+/// One history line, as JSON, so the two implementations are compared line for
+/// line rather than by a summary either could get wrong the same way.
+Map<String, Object?> eventJson(BillEvent e) => {
+  'entryId': e.entryId,
+  'kind': rustName(e.kind),
+  'author': e.author,
+  'at': e.at,
+  'subject': e.subject,
+  'amount': e.amountMinorUnits,
+  'description': e.description,
+  'method': e.method,
+  'reference': e.reference,
+  'withdrawn': e.withdrawn,
+  'refusedCode': e.refusedCode,
+  'confirmed': e.confirmed,
+  'applied': e.applied,
+};
+
+/// `BillEventKind.addressChanged` -> `AddressChanged`, the name Rust's
+/// `Debug` prints, so the two answers are one string.
+String rustName(BillEventKind kind) {
+  final name = kind.name;
+  return name[0].toUpperCase() + name.substring(1);
+}
+
 final sealing = SplitsSealing();
 
 /// The two implementations word their refusals differently; what has to match
@@ -132,6 +158,43 @@ Future<Object?> answer(Map<String, dynamic> op) async {
       } on SealingException catch (e) {
         return {'opened': false, 'why': tag(e)};
       }
+    case 'activity':
+      final protocol.Bill bill;
+      try {
+        bill = protocol.decodeBill((op['bill'] as Map).cast<String, dynamic>());
+      } on protocol.SplitError {
+        return {'decoded': false};
+      }
+      final entries = [
+        for (final e in op['entries'] as List)
+          (e as Map).cast<String, dynamic>(),
+      ];
+      final setAside = [
+        for (final s in op['setAside'] as List)
+          protocol.SetAside((s as Map)['id'] as String, s['code'] as String),
+      ];
+      final withdrawn = [for (final w in op['withdrawn'] as List) w as String];
+      final history = activityOf(
+        entries,
+        bill,
+        setAside: setAside,
+        withdrawn: withdrawn,
+      );
+      final awaiting = awaitingConfirmationBy(bill, op['me'] as String);
+      return {
+        'decoded': true,
+        'history': [for (final e in history) eventJson(e)],
+        'awaiting': [
+          for (final p in awaiting)
+            {
+              'id': p.id,
+              'from': p.from,
+              'to': p.to,
+              'amount': p.amount,
+              'at': p.at,
+            },
+        ],
+      };
     case 'store_read':
       final storage = InMemoryBillStorage();
       await storage.write('splitz_bill_b1', op['stored'] as String);

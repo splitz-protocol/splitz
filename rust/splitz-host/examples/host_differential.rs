@@ -7,11 +7,32 @@
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Value};
-use splitz_core::{sha256, signing_message};
+use splitz_core::{decode_bill, sha256, signing_message, SetAside};
 use splitz_host::{
-    base64url_decode, base64url_encode, is_well_formed_key, BillStorage, BillStore, HostError,
-    InMemoryBillStorage, Sealing, Signer, IDENTITY_DOMAIN,
+    activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, is_well_formed_key,
+    BillEvent, BillStorage, BillStore, HostError, InMemoryBillStorage, Sealing, Signer,
+    IDENTITY_DOMAIN,
 };
+
+/// One history line, as JSON, so the two implementations are compared line for
+/// line rather than by a summary either could get wrong the same way.
+fn event_json(e: &BillEvent) -> Value {
+    json!({
+        "entryId": e.entry_id,
+        "kind": format!("{:?}", e.kind),
+        "author": e.author,
+        "at": e.at,
+        "subject": e.subject,
+        "amount": e.amount_minor_units,
+        "description": e.description,
+        "method": e.method,
+        "reference": e.reference,
+        "withdrawn": e.withdrawn,
+        "refusedCode": e.refused_code,
+        "confirmed": e.confirmed,
+        "applied": e.applied(),
+    })
+}
 
 /// The two implementations word their refusals differently; what has to match
 /// is *which* refusal. Both drivers map to this vocabulary.
@@ -122,6 +143,48 @@ fn answer(op: &Value) -> Value {
             Ok(entry) => json!({ "opened": true, "entry": entry }),
             Err(e) => json!({ "opened": false, "why": tag(&e) }),
         },
+        "activity" => {
+            let Ok(bill) = decode_bill(&op["bill"]) else {
+                return json!({ "decoded": false });
+            };
+            let entries: Vec<Value> = op["entries"].as_array().cloned().unwrap_or_default();
+            let set_aside: Vec<SetAside> = op["setAside"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .map(|s| SetAside {
+                    id: s["id"].as_str().unwrap_or_default().to_owned(),
+                    // The library's codes are constants; a driver reading one
+                    // from a file has to hand it a `'static` and this process
+                    // is one operation list long.
+                    code: Box::leak(
+                        s["code"]
+                            .as_str()
+                            .unwrap_or_default()
+                            .to_owned()
+                            .into_boxed_str(),
+                    ),
+                })
+                .collect();
+            let withdrawn: Vec<String> = op["withdrawn"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect();
+            let history = activity_of(&entries, &bill, &set_aside, &withdrawn);
+            let awaiting = awaiting_confirmation_by(&bill, op["me"].as_str().unwrap_or(""));
+            json!({
+                "decoded": true,
+                "history": history.iter().map(event_json).collect::<Vec<_>>(),
+                "awaiting": awaiting.iter().map(|p| json!({
+                    "id": p.id, "from": p.from, "to": p.to,
+                    "amount": p.amount, "at": p.at,
+                })).collect::<Vec<_>>(),
+            })
+        }
         "store_read" => {
             let storage = InMemoryBillStorage::default();
             storage

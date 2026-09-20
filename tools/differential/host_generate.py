@@ -69,6 +69,75 @@ def a_raw_blob(rng: random.Random) -> str:
     return b64(bytes(rng.randrange(256) for _ in range(rng.randrange(0, 45))))
 
 
+CODES = ["self_payment", "unauthorized_entry", "unknown_entry", "currency_mismatch",
+         "bill_bad_currency", "unknown_participant", "participant_still_named"]
+
+
+def a_bill(rng: random.Random) -> dict:
+    """A bill document, in the shape §9 writes one."""
+    people = ["ana", "ben", "cal"][:rng.randrange(2, 4)]
+    payments = []
+    for i in range(rng.randrange(0, 3)):
+        payer, payee = rng.sample(people, 2)
+        payments.append({
+            "id": f"p{i}",
+            "from": payer,
+            "to": payee,
+            "amount": rng.randrange(1, 5000),
+            "currency": "EUR",
+            "method": rng.choice(["shieldedZec", "cash", "swap"]),
+            "at": f"2026-10-28T20:{i:02}:00Z",
+        })
+    confirmed = [p["id"] for p in payments if rng.random() < 0.5]
+    return {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [{"id": who, "name": who.title()} for who in people],
+        "expenses": [],
+        "payments": payments,
+        "confirmedPayments": confirmed,
+    }
+
+
+def a_history_entry(rng: random.Random) -> dict:
+    """An entry shaped the way one kind of history line reads."""
+    who = rng.choice(["ana", "ben", "cal"])
+    at = f"2026-10-28T19:{rng.randrange(60):02}:{rng.randrange(60):02}Z"
+    base = {"v": 1, "id": b64(bytes(rng.randrange(256) for _ in range(16))),
+            "author": who, "at": at}
+    kind = rng.choice(["createBill", "joinBill", "joinBill", "addExpense",
+                       "amendEntry", "voidEntry", "recordPayment",
+                       "confirmPayment", "setRate", "somethingElse"])
+    base["kind"] = kind
+    if kind == "createBill":
+        base["bill"] = {"name": rng.choice(["Dinner", "Trip", ""])}
+    elif kind == "joinBill":
+        participant = {"id": who, "name": who.title()}
+        if rng.random() < 0.7:
+            participant["payTo"] = f"u1{who}"
+        base["participant"] = participant
+    elif kind == "addExpense":
+        base["expense"] = {"paidBy": who, "amount": rng.randrange(-500, 9000),
+                           "description": rng.choice(["Wine", "", "café"])}
+    elif kind == "voidEntry":
+        base["void"] = {"target": "e-gone"}
+    elif kind == "recordPayment":
+        base["payment"] = {"id": rng.choice(["p0", "p1", "p9"]), "to": who,
+                           "amount": rng.randrange(1, 5000),
+                           "method": rng.choice(["shieldedZec", "swap", "cash"]),
+                           "reference": rng.choice(["ref-1", None])}
+    elif kind == "confirmPayment":
+        base["confirmation"] = {"paymentId": rng.choice(["p0", "p1"]),
+                                "method": "shieldedZec", "reference": "tx-1"}
+    elif kind == "setRate":
+        base["rate"] = {"minorUnitsPerZec": rng.randrange(1, 10**6),
+                        "source": rng.choice(["a feed", ""])}
+    return base
+
+
 def a_key_ish(rng: random.Random) -> str:
     """Something a wallet might be handed as a key. Most are not valid."""
     kind = rng.randrange(7)
@@ -98,7 +167,7 @@ def main() -> int:
         op = rng.choice([
             "public_key", "sign_entry", "verify", "identity_seed",
             "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
-            "store_read", "store_merge",
+            "store_read", "store_merge", "activity",
         ])
         if op == "public_key":
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
@@ -122,6 +191,16 @@ def main() -> int:
                        "openWith": a_bill_key(rng) if rng.random() < 0.3 else None,
                        "entry": an_entry(rng),
                        "tamper": rng.choice([0, 0, 1, 2])}, out)
+        elif op == "activity":
+            entries = [a_history_entry(rng) for _ in range(rng.randrange(0, 7))]
+            json.dump({"op": op,
+                       "bill": a_bill(rng),
+                       "entries": entries,
+                       "setAside": [{"id": e["id"], "code": rng.choice(CODES)}
+                                    for e in entries if rng.random() < 0.3],
+                       "withdrawn": [e["id"] for e in entries
+                                     if rng.random() < 0.2],
+                       "me": rng.choice(["ana", "ben", "cal", "zzz"])}, out)
         elif op == "store_read":
             json.dump({"op": op, "stored": rng.choice([
                 "", "not json", '{"not":"a list"}', "[1,2,3]", "null",

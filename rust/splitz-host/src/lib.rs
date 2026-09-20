@@ -11,6 +11,7 @@
 //! synchronous callback into Kotlin and Swift, and nothing here needs to wait
 //! on two things at once.
 
+pub mod activity;
 pub mod error;
 pub mod fold;
 pub mod keys;
@@ -24,6 +25,7 @@ pub mod sync;
 pub mod wallet;
 pub mod wallet_bill_host;
 
+pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKind};
 pub use error::{HostError, Result};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
 pub use keys::{
