@@ -281,7 +281,11 @@ fun main() {
 ### Dart
 
 `configureDefaultBindings` is the generated entry point: it takes the path to
-the library and must be called before anything else.
+the library and must be called before anything else. It works the same under
+Flutter's test harness as under the standalone VM — `tools/ffi/flutter.sh`
+asserts that, because the two are different hosts and only one of them is what
+a wallet ships. Cross-compiling the cdylib for a phone and bundling it with the
+app is the wallet's build system; nothing here does it.
 
 ```dart file=tools/ffi/dart/doc.dart
 import 'dart:convert';
