@@ -165,6 +165,127 @@ impl SwapProvider for UnconfiguredSwaps {
     }
 }
 
+// --- the 1Click shape, as values rather than calls -------------------------
+//
+// A provider is reached over HTTP, and HTTP is the wallet's. What is not the
+// wallet's is the shape of the request and what the answer means, so those are
+// functions over text: a caller that makes its own request still reads the
+// answer the way every other implementation does.
+
+/// The body a quote request carries.
+///
+/// `deadline` is a §9.3 instant the caller chose: a clock and a calendar are
+/// the wallet's (§15.1) and this crate carries neither.
+pub fn quote_request_body(
+    zec_asset_id: &str,
+    asset: &TradableAsset,
+    amount_in_zatoshi: i64,
+    recipient: &str,
+    refund_to: &str,
+    deadline: &str,
+    referral: Option<&str>,
+) -> Result<String, HostError> {
+    if amount_in_zatoshi <= 0 {
+        return Err(swap_error("A swap sends more than nothing", false));
+    }
+    if recipient.is_empty() || refund_to.is_empty() {
+        // A quote with no refund address risks the whole deposit if the swap
+        // fails, which is the one failure the payer cannot recover from.
+        return Err(swap_error(
+            "A swap states both who receives it and where a refund goes",
+            false,
+        ));
+    }
+    let mut request = json!({
+        "dry": false,
+        "swapType": "EXACT_INPUT",
+        "originAsset": zec_asset_id,
+        "depositType": "ORIGIN_CHAIN",
+        "destinationAsset": asset.asset_id,
+        "amount": amount_in_zatoshi.to_string(),
+        "refundTo": refund_to,
+        "refundType": "ORIGIN_CHAIN",
+        "recipient": recipient,
+        "recipientType": "DESTINATION_CHAIN",
+        "deadline": deadline,
+        "depositMode": "SIMPLE",
+    });
+    if let Some(referral) = referral.filter(|r| !r.is_empty()) {
+        request["referral"] = Value::from(referral);
+    }
+    Ok(request.to_string())
+}
+
+/// Every asset a provider's token list says it will deliver.
+pub fn assets_from_tokens(body: &str) -> Result<Vec<TradableAsset>, HostError> {
+    let body = decode_body(body, "tokens")?;
+    let raw = if body.is_array() {
+        body.clone()
+    } else {
+        body.get("tokens").cloned().unwrap_or(Value::Null)
+    };
+    let Some(list) = raw.as_array() else {
+        return Err(swap_error("The provider listed no tokens", false));
+    };
+    list.iter()
+        .filter(|t| t.is_object())
+        .map(asset_from)
+        .collect()
+}
+
+/// The quote a provider's answer states.
+pub fn quote_from_response(
+    body: &str,
+    asset: &TradableAsset,
+    amount_in_zatoshi: i64,
+    asked_deadline: &str,
+) -> Result<SwapQuote, HostError> {
+    let body = decode_body(body, "quote")?;
+    if !body.is_object() {
+        return Err(swap_error("Malformed quote response", false));
+    }
+    let Some(quote) = body.get("quote").filter(|q| q.is_object()) else {
+        return Err(swap_error("A quote response carries a quote", false));
+    };
+    Ok(SwapQuote {
+        deposit_address: required(quote, "depositAddress")?,
+        deposit_memo: optional(quote, "depositMemo"),
+        amount_in_zatoshi,
+        amount_out: required(quote, "amountOut")?,
+        asset: asset.clone(),
+        // The provider's own deadline where it states one: honouring a longer
+        // one of ours would quote a price it has stopped holding.
+        deadline: optional(quote, "deadline")
+            .and_then(|raw| splitz_core::canonical_instant(&raw).ok())
+            .unwrap_or_else(|| asked_deadline.to_owned()),
+        reference: optional(&body, "correlationId"),
+    })
+}
+
+/// What a provider's status answer means.
+pub fn status_from_response(body: &str) -> Result<SwapStatus, HostError> {
+    let body = decode_body(body, "status")?;
+    if !body.is_object() {
+        return Err(swap_error("Malformed status response", false));
+    }
+    let status = body
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_uppercase();
+    Ok(SwapStatus {
+        state: state_of(&status),
+        destination_tx_hash: optional(&body, "destinationTxHash")
+            .or_else(|| optional(&body, "destinationChainTxHash")),
+        detail: optional(&body, "message"),
+    })
+}
+
+fn decode_body(text: &str, what: &str) -> Result<Value, HostError> {
+    serde_json::from_str(text)
+        .map_err(|_| swap_error(format!("The {what} response is not JSON"), false))
+}
+
 /// A [`SwapProvider`] speaking the 1Click request shape.
 ///
 /// Four endpoints, relative to `origin`: `GET /v0/tokens`, `POST /v0/quote`,
@@ -229,16 +350,14 @@ impl<'a> OneClickSwaps<'a> {
         url
     }
 
-    /// Reads a response body, or says why the provider could not be reached.
-    fn read(&self, body: Result<String, String>, what: &str) -> Result<Value, HostError> {
-        // The transport is the wallet's, so its failures are its own. A
-        // network fault is retryable; nothing here can tell which, so the
-        // caller is told it may be.
-        let text = body.map_err(|e| {
-            swap_error(format!("The swap provider could not be reached: {e}"), true)
-        })?;
-        serde_json::from_str(&text)
-            .map_err(|_| swap_error(format!("The {what} response is not JSON"), false))
+    /// The response body, or why the provider could not be reached.
+    ///
+    /// The transport is the wallet's, so its failures are its own. A network
+    /// fault is retryable; nothing here can tell which, so the caller is told
+    /// it may be. What the body *means* is the business of the functions
+    /// above, which a caller making its own request uses too.
+    fn read(&self, body: Result<String, String>) -> Result<String, HostError> {
+        body.map_err(|e| swap_error(format!("The swap provider could not be reached: {e}"), true))
     }
 }
 
@@ -286,20 +405,8 @@ impl SwapProvider for OneClickSwaps<'_> {
         if let Some(cached) = self.tokens.borrow().as_ref() {
             return Ok(cached.clone());
         }
-        let body = self.read(self.transport.get(&self.url("/v0/tokens", &[])), "tokens")?;
-        let raw = if body.is_array() {
-            body.clone()
-        } else {
-            body.get("tokens").cloned().unwrap_or(Value::Null)
-        };
-        let Some(list) = raw.as_array() else {
-            return Err(swap_error("The provider listed no tokens", false));
-        };
-        let tokens: Vec<TradableAsset> = list
-            .iter()
-            .filter(|t| t.is_object())
-            .map(asset_from)
-            .collect::<Result<_, _>>()?;
+        let body = self.read(self.transport.get(&self.url("/v0/tokens", &[])))?;
+        let tokens = assets_from_tokens(&body)?;
         *self.tokens.borrow_mut() = Some(tokens.clone());
         Ok(tokens)
     }
@@ -311,61 +418,18 @@ impl SwapProvider for OneClickSwaps<'_> {
         recipient: &str,
         refund_to: &str,
     ) -> Result<SwapQuote, HostError> {
-        if amount_in_zatoshi <= 0 {
-            return Err(swap_error("A swap sends more than nothing", false));
-        }
-        if recipient.is_empty() || refund_to.is_empty() {
-            // A quote with no refund address risks the whole deposit if the
-            // swap fails, which is the one failure the payer cannot recover
-            // from.
-            return Err(swap_error(
-                "A swap states both who receives it and where a refund goes",
-                false,
-            ));
-        }
         let deadline = (self.deadline)();
-        let mut request = json!({
-            "dry": false,
-            "swapType": "EXACT_INPUT",
-            "originAsset": self.zec_asset_id,
-            "depositType": "ORIGIN_CHAIN",
-            "destinationAsset": asset.asset_id,
-            "amount": amount_in_zatoshi.to_string(),
-            "refundTo": refund_to,
-            "refundType": "ORIGIN_CHAIN",
-            "recipient": recipient,
-            "recipientType": "DESTINATION_CHAIN",
-            "deadline": deadline,
-            "depositMode": "SIMPLE",
-        });
-        if let Some(referral) = self.referral.as_deref().filter(|r| !r.is_empty()) {
-            request["referral"] = Value::from(referral);
-        }
-
-        let body = self.read(
-            self.transport
-                .post(&self.url("/v0/quote", &[]), &request.to_string()),
-            "quote",
-        )?;
-        if !body.is_object() {
-            return Err(swap_error("Malformed quote response", false));
-        }
-        let Some(quote) = body.get("quote").filter(|q| q.is_object()) else {
-            return Err(swap_error("A quote response carries a quote", false));
-        };
-        Ok(SwapQuote {
-            deposit_address: required(quote, "depositAddress")?,
-            deposit_memo: optional(quote, "depositMemo"),
+        let request = quote_request_body(
+            &self.zec_asset_id,
+            asset,
             amount_in_zatoshi,
-            amount_out: required(quote, "amountOut")?,
-            asset: asset.clone(),
-            // The provider's own deadline where it states one: honouring a
-            // longer one of ours would quote a price it has stopped holding.
-            deadline: optional(quote, "deadline")
-                .and_then(|raw| splitz_core::canonical_instant(&raw).ok())
-                .unwrap_or(deadline),
-            reference: optional(&body, "correlationId"),
-        })
+            recipient,
+            refund_to,
+            &deadline,
+            self.referral.as_deref(),
+        )?;
+        let body = self.read(self.transport.post(&self.url("/v0/quote", &[]), &request))?;
+        quote_from_response(&body, asset, amount_in_zatoshi, &deadline)
     }
 
     fn status_of(&self, quote: &SwapQuote) -> Result<SwapStatus, HostError> {
@@ -373,23 +437,7 @@ impl SwapProvider for OneClickSwaps<'_> {
         if let Some(memo) = quote.deposit_memo.as_deref().filter(|m| !m.is_empty()) {
             query.push(("depositMemo", memo));
         }
-        let body = self.read(
-            self.transport.get(&self.url("/v0/status", &query)),
-            "status",
-        )?;
-        if !body.is_object() {
-            return Err(swap_error("Malformed status response", false));
-        }
-        let status = body
-            .get("status")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_uppercase();
-        Ok(SwapStatus {
-            state: state_of(&status),
-            destination_tx_hash: optional(&body, "destinationTxHash")
-                .or_else(|| optional(&body, "destinationChainTxHash")),
-            detail: optional(&body, "message"),
-        })
+        let body = self.read(self.transport.get(&self.url("/v0/status", &query)))?;
+        status_from_response(&body)
     }
 }

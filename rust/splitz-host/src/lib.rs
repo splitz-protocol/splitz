@@ -42,6 +42,7 @@ pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
 pub use swap_watch::{SwapWatch, SwapWatchList};
 pub use swaps::{
+    assets_from_tokens, quote_from_response, quote_request_body, status_from_response,
     OneClickSwaps, SwapQuote, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
 };
 pub use sync::{SplitsSync, SyncResult};

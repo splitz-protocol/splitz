@@ -68,3 +68,14 @@ dart::july_first         # The fixed instant those runs hold their clock at.
 dart::SeedDriver         # The loopback listener a run fetches a phrase from.
 dart::SeedDriverException  # What it raises when it is not running or will not bind.
 dart::SeedFetch          # The call that fetches one.
+
+# --- the 1Click shape, as values rather than calls ---------------------------
+# A provider is reached over HTTP and HTTP is the wallet's; what the request
+# looks like and what the answer means are not. Rust states those four as
+# functions over text so that a caller making its own request — a foreign
+# binding, a wallet with its own client — reads the answer the way
+# `OneClickSwaps` does. Dart's `OneClickSwaps` keeps them inside itself.
+rust::quote_request_body   # The body a quote request carries. Dart builds it inside `OneClickSwaps.quote`.
+rust::assets_from_tokens   # What a `/v0/tokens` answer lists. Dart's `_asset` and the loop in `tradableAssets`.
+rust::quote_from_response  # What a `/v0/quote` answer states. Dart reads it inline in `quote`.
+rust::status_from_response # What a `/v0/status` answer means. Dart reads it inline in `statusOf`.
