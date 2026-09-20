@@ -7,6 +7,11 @@ description = "A shared-bill protocol for Zcash wallets. Exact integer money, de
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/KamaIOps/Splitz-protocol"
 readme = "README.md"
+# Held back from crates.io. A publish there cannot be undone — there is no
+# delete, only yank, and a yanked version stays visible — so the crate carries
+# the same guard the Dart package carries in its `publish_to: none`. Both come
+# off together when the product is released.
+publish = false
 # The conformance corpus lives at the repository root, one level above this
 # package, so a published crate cannot carry it. `tests/` is therefore left
 # out as well: a suite with no corpus to run asserts nothing, and cargo has no
