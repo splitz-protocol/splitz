@@ -87,6 +87,25 @@ jobs:
       - run: tools/differential/run.sh 6 1200
       - run: tools/differential/run.sh 7 1200
 
+  host-differential:
+    # Nothing in `vectors/` can reach the host layer: a vector carries no
+    # private key, so no case covers a curve operation, a derived identity or
+    # a key a wallet was handed from outside. This generates the inputs and
+    # asks both host implementations, which is the only check that notices one
+    # of them being quietly wrong on its own.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - uses: dtolnay/rust-toolchain@stable
+      - run: dart pub get
+        working-directory: splitz_host
+      - run: tools/differential/host.sh 1 600
+      - run: tools/differential/host.sh 2 600
+      - run: tools/differential/host.sh 3 600
+
   spec:
     # The corpus checks values, the differential lane checks that three
     # implementations answer alike, and the parity lane checks the two public
