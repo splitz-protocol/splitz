@@ -3,7 +3,7 @@
 
 SPEC.md sections 11.2 and 11.3.
 """
-import base64, json, pathlib, sys
+import base64, hashlib, json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (ADDRESSES, encode_payload, decode_payload, parse_sealed_frame,
                    b64url, canonical_json, check_entry, seal_log, Refused,
@@ -209,11 +209,51 @@ def sealed_cases():
     return out
 
 
+def seal_cases():
+    """§11.3's derived values: the plaintext, the nonce, the channel.
+
+    The cipher is the host's, so these are the parts every implementation
+    must agree on byte for byte. A case carries either an entry to seal or a
+    bill id to derive a channel from.
+    """
+    out = []
+    for name, entry in [
+        ("an_expense_entry", ENTRY),
+        ("keys_out_of_order", {"kind": "joinBill", "at": AT, "v": 1}),
+        ("the_same_keys_in_order", {"v": 1, "kind": "joinBill", "at": AT}),
+        ("a_unicode_name", {"v": 1, "kind": "joinBill", "name": "Ana\u00e9"}),
+        ("an_empty_object", {}),
+    ]:
+        plaintext = canonical_json(entry).encode("utf-8")
+        out.append({
+            "name": name,
+            "entry": entry,
+            "expect": {
+                "plaintext": canonical_json(entry),
+                "nonce": b64url(hashlib.sha256(plaintext).digest()[:NONCE_BYTES]),
+            },
+        })
+    for name, bill_id in [
+        ("a_derived_bill_id", "HqA9d4fLlNHBmVZHGH3s6w"),
+        ("a_short_id", "b"),
+        ("an_id_with_base64url_symbols", "a-b_c"),
+    ]:
+        out.append({
+            "name": name,
+            "billId": bill_id,
+            "expect": {
+                "channel": hashlib.sha256(bill_id.encode("utf-8")).hexdigest(),
+            },
+        })
+    return out
+
+
 def main():
     root = pathlib.Path(__file__).resolve().parents[2] / "vectors"
     for fname, desc, cases in [
         ("payload.json", "Scanned payloads. SPEC.md section 11.2.", payload_cases()),
         ("sealed.json", "Sealed entry frames. SPEC.md section 11.3.", sealed_cases()),
+        ("seal.json", "Sealing a frame: plaintext, nonce, channel. SPEC.md section 11.3.", seal_cases()),
     ]:
         doc = {"description": desc, "count": len(cases), "cases": cases}
         (root / fname).write_text(json.dumps(doc, indent=2) + "\n")

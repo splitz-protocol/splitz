@@ -1,0 +1,85 @@
+{
+  "description": "Sealing a frame: plaintext, nonce, channel. SPEC.md section 11.3.",
+  "count": 8,
+  "cases": [
+    {
+      "name": "an_expense_entry",
+      "entry": {
+        "v": 1,
+        "id": "e1",
+        "author": "ana",
+        "kind": "addExpense",
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "expect": {
+        "plaintext": "{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"e1\",\"kind\":\"addExpense\",\"v\":1}",
+        "nonce": "lJuthLYGj4pV-3NI_S-3xtJxVQJxiJRI"
+      }
+    },
+    {
+      "name": "keys_out_of_order",
+      "entry": {
+        "kind": "joinBill",
+        "at": "2026-10-28T19:30:00.000Z",
+        "v": 1
+      },
+      "expect": {
+        "plaintext": "{\"at\":\"2026-10-28T19:30:00.000Z\",\"kind\":\"joinBill\",\"v\":1}",
+        "nonce": "1JCrKzPu1lwi2scMZihUH_u9PFsT9R0B"
+      }
+    },
+    {
+      "name": "the_same_keys_in_order",
+      "entry": {
+        "v": 1,
+        "kind": "joinBill",
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "expect": {
+        "plaintext": "{\"at\":\"2026-10-28T19:30:00.000Z\",\"kind\":\"joinBill\",\"v\":1}",
+        "nonce": "1JCrKzPu1lwi2scMZihUH_u9PFsT9R0B"
+      }
+    },
+    {
+      "name": "a_unicode_name",
+      "entry": {
+        "v": 1,
+        "kind": "joinBill",
+        "name": "Ana\u00e9"
+      },
+      "expect": {
+        "plaintext": "{\"kind\":\"joinBill\",\"name\":\"Ana\u00e9\",\"v\":1}",
+        "nonce": "hwulKT8_2wFBI2CbO25mxk1fuy4uERef"
+      }
+    },
+    {
+      "name": "an_empty_object",
+      "entry": {},
+      "expect": {
+        "plaintext": "{}",
+        "nonce": "RBNvo1WzZ4oRRq0W9-hknpT7T8If536D"
+      }
+    },
+    {
+      "name": "a_derived_bill_id",
+      "billId": "HqA9d4fLlNHBmVZHGH3s6w",
+      "expect": {
+        "channel": "e6b7effb3a24f4bc26db069b711e6a159c223058033285d8d9d2e6679632589b"
+      }
+    },
+    {
+      "name": "a_short_id",
+      "billId": "b",
+      "expect": {
+        "channel": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+      }
+    },
+    {
+      "name": "an_id_with_base64url_symbols",
+      "billId": "a-b_c",
+      "expect": {
+        "channel": "0b7808a048719d8b5ca6693cd2a6f2209df71d81873b4edb3891971186e97a83"
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import 'canonical_json.dart';
 import 'errors.dart';
 import 'invite.dart';
 import 'log.dart';
+import 'sha256.dart';
 
 /// What a version-40 QR code holds in byte mode at error-correction level M.
 ///
@@ -248,3 +249,60 @@ Delta deltaFor(List<Map<String, dynamic>> entries, Set<String> theyHave) {
     return TooBigForOneSquare(missing.length, e.code);
   }
 }
+
+// --- §11.3, the producing half ---------------------------------------------
+//
+// The cipher itself is the host's: this library depends on nothing that could
+// hold a key. What it owns is every value §11.3 fixes — the plaintext, the
+// nonce derived from it, the frame around the cipher's output, and the
+// channel. Those are the parts two devices must agree on byte for byte, and a
+// wallet that derives them a second time is a second place for them to drift.
+
+/// The bytes an entry is sealed as (§11.3).
+///
+/// Canonical JSON (§9.3), UTF-8. The canonical form is what makes the seal
+/// idempotent: two devices holding one entry produce one plaintext, therefore
+/// one nonce, therefore one blob.
+List<int> sealedPlaintext(Map<String, dynamic> entry) =>
+    utf8.encode(canonicalJson(entry));
+
+/// The nonce [plaintext] seals under: `SHA-256(plaintext)` truncated to
+/// [nonceBytes] (§11.3).
+///
+/// Derived rather than random, so the same entry always seals to the same
+/// blob and a relay stores it once however many times it is pushed. Two
+/// different plaintexts never share a nonce, which is the one condition the
+/// cipher requires.
+///
+/// **Never derive this from the entry id.** Two payloads can carry one id, and
+/// a stream cipher under a repeated (key, nonce) hands a relay the xor of two
+/// plaintexts it holds no key for.
+List<int> sealedNonce(List<int> plaintext) =>
+    sha256(plaintext).sublist(0, nonceBytes);
+
+/// Frames a sealed [body] for a transport (§11.3).
+///
+/// [body] is the cipher's own output — ciphertext followed by its tag — and
+/// this library never produces it. The frame is one version byte, the
+/// [nonceBytes]-byte [nonce], then [body], the whole unpadded base64url. A
+/// reader knowing the fixed nonce and tag lengths splits it apart with no
+/// length fields.
+String frameSealed(List<int> nonce, List<int> body) {
+  if (nonce.length != nonceBytes) {
+    raise(SplitCode.sealedMalformed,
+        'A nonce is $nonceBytes bytes, got ${nonce.length}');
+  }
+  if (body.length < tagBytes) {
+    raise(SplitCode.sealedMalformed,
+        'A body carries at least a $tagBytes-byte tag, got ${body.length}');
+  }
+  return _b64(<int>[sealedVersion, ...nonce, ...body]);
+}
+
+/// The channel a bill's blobs are pushed to and pulled from (§11.3).
+///
+/// The bill id's SHA-256, lower-case hex. A digest rather than the id itself,
+/// because the id is a live address printed in every invite: every
+/// participant knows it and computes the same channel, and a relay that only
+/// ever sees traffic cannot run it backwards.
+String channelFor(String billId) => sha256Hex(utf8.encode(billId));

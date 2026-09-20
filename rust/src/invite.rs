@@ -9,6 +9,7 @@ use std::collections::BTreeSet;
 
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
+use crate::sha256::{sha256, sha256_hex};
 use crate::zip321::base64url;
 
 const PREFIX: &str = "splitz://join";
@@ -491,6 +492,81 @@ pub fn parse_sealed_frame(text: &str) -> Result<SealedFrame> {
         nonce: base64url(&raw[1..1 + NONCE_BYTES]),
         body_bytes: raw.len() - 1 - NONCE_BYTES,
     })
+}
+
+// --- §11.3, the producing half ---------------------------------------------
+//
+// The cipher itself is the host's: this crate depends on nothing that could
+// hold a key. What it owns is every value §11.3 fixes — the plaintext, the
+// nonce derived from it, the frame around the cipher's output, and the
+// channel. Those are the parts two devices must agree on byte for byte, and a
+// wallet that derives them a second time is a second place for them to drift.
+
+/// The bytes an entry is sealed as (§11.3).
+///
+/// Canonical JSON (§9.3), UTF-8. The canonical form is what makes the seal
+/// idempotent: two devices holding one entry produce one plaintext, therefore
+/// one nonce, therefore one blob.
+pub fn sealed_plaintext(entry: &Value) -> Result<Vec<u8>> {
+    Ok(canonical_json(entry)?.into_bytes())
+}
+
+/// The nonce `plaintext` seals under: `SHA-256(plaintext)` truncated to
+/// [`NONCE_BYTES`] (§11.3).
+///
+/// Derived rather than random, so the same entry always seals to the same
+/// blob and a relay stores it once however many times it is pushed. Two
+/// different plaintexts never share a nonce, which is the one condition the
+/// cipher requires.
+///
+/// **Never derive this from the entry id.** Two payloads can carry one id, and
+/// a stream cipher under a repeated (key, nonce) hands a relay the xor of two
+/// plaintexts it holds no key for.
+pub fn sealed_nonce(plaintext: &[u8]) -> [u8; NONCE_BYTES] {
+    let digest = sha256(plaintext);
+    let mut nonce = [0u8; NONCE_BYTES];
+    nonce.copy_from_slice(&digest[..NONCE_BYTES]);
+    nonce
+}
+
+/// Frames a sealed `body` for a transport (§11.3).
+///
+/// `body` is the cipher's own output — ciphertext followed by its tag — and
+/// this crate never produces it. The frame is one version byte, the
+/// [`NONCE_BYTES`]-byte `nonce`, then `body`, the whole unpadded base64url. A
+/// reader knowing the fixed nonce and tag lengths splits it apart with no
+/// length fields.
+pub fn frame_sealed(nonce: &[u8], body: &[u8]) -> Result<String> {
+    if nonce.len() != NONCE_BYTES {
+        return Err(SplitError::new(
+            code::SEALED_MALFORMED,
+            format!("A nonce is {NONCE_BYTES} bytes, got {}", nonce.len()),
+        ));
+    }
+    if body.len() < TAG_BYTES {
+        return Err(SplitError::new(
+            code::SEALED_MALFORMED,
+            format!(
+                "A body carries at least a {TAG_BYTES}-byte tag, got {}",
+                body.len()
+            ),
+        ));
+    }
+    let mut raw = Vec::with_capacity(1 + nonce.len() + body.len());
+    raw.push(SEALED_VERSION);
+    raw.extend_from_slice(nonce);
+    raw.extend_from_slice(body);
+    Ok(base64url(&raw))
+}
+
+/// The channel a bill's blobs are pushed to and pulled from (§11.3).
+///
+/// The bill id's SHA-256, lower-case hex. A digest rather than the id itself,
+/// because the id is a live address printed in every invite: every
+/// participant knows it and computes the same channel, and a relay that only
+/// ever sees traffic cannot run it backwards.
+pub fn channel_for(bill_id: &str) -> String {
+    sha256_hex(bill_id.as_bytes())
 }
 
 /// What a peer has not seen, and whether it fits one square (section 14.5).

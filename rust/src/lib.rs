@@ -34,9 +34,10 @@ pub use canonical_json::canonical_json;
 pub use error::{code, Result, SplitError};
 pub use instant::canonical_instant;
 pub use invite::{
-    decode_payload, delta_for, encode_payload, parse_invite, parse_sealed_frame, render_invite,
-    strip_scan_padding, within_depth, Delta, Invite, ScannedPayload, SealedFrame, BILL_PREFIX,
-    DELTA_PREFIX, INVITE_VERSION, MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP,
+    channel_for, decode_payload, delta_for, encode_payload, frame_sealed, parse_invite,
+    parse_sealed_frame, render_invite, sealed_nonce, sealed_plaintext, strip_scan_padding,
+    within_depth, Delta, Invite, ScannedPayload, SealedFrame, BILL_PREFIX, DELTA_PREFIX,
+    INVITE_VERSION, MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP,
     PAYLOAD_VERSION, SCAN_PADDING, SEALED_VERSION, TAG_BYTES,
 };
 pub use log::{
@@ -57,8 +58,9 @@ pub use rate::{
     ZATOSHI_PER_ZEC,
 };
 pub use serialization::{
-    decode_bill, decode_expense, decode_participant, decode_payment, decode_rate, BILL_VERSION,
-    SPLIT_MODES,
+    bill_to_json, decode_bill, decode_expense, decode_participant, decode_payment, decode_rate,
+    expense_to_json, participant_to_json, payment_to_json, payout_to_json, rate_to_json,
+    BILL_VERSION, SPLIT_MODES,
 };
 pub use settle::{
     attribute_coverage, settle_balances, settle_bill, Settlement, SettlementPlan,
