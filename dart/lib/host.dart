@@ -25,12 +25,16 @@ export 'splitz.dart'
         Contested,
         Delta,
         DeltaSquare,
+        Bill,
         NothingMissing,
+        Participant,
+        Payout,
         Settlement,
         TooBigForOneSquare;
 
 export 'src/host/bill_log.dart';
 export 'src/host/entries.dart';
 export 'src/host/host.dart';
+export 'src/host/lanes.dart';
 export 'src/host/settle_flow.dart';
 export 'src/host/sharing.dart';

@@ -166,9 +166,27 @@ fn every_entry_kind_this_layer_writes_passes_ingress() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let written: Vec<Value> = vec![
         create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap(),
-        join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&fake_key("ana"))).unwrap(),
+        join_bill(
+            &ana,
+            Some("Ana"),
+            Some("u1ana"),
+            Some(&fake_key("ana")),
+            None,
+        )
+        .unwrap(),
         add_expense(&ana, "x1", "ana", 9000, equal_split(&["ana"]), Some("food")).unwrap(),
-        record_payment(&ana, "tx1", "ben", 4500, "shieldedZec").unwrap(),
+        record_payment(
+            &ana,
+            "tx1",
+            "ben",
+            4500,
+            "shieldedZec",
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap(),
         confirm_payment(&ana, "tx1", "shieldedZec", Some("memo")).unwrap(),
         set_rate(&ana, "EUR", 51234, Some("test")).unwrap(),
         void_entry(&ana, "e1").unwrap(),
@@ -184,7 +202,7 @@ fn every_entry_kind_this_layer_writes_passes_ingress() {
 fn a_wallet_that_does_not_sign_gets_its_entry_back_unsigned() {
     let ana = FakeHost::new("ana");
     assert!(ana.signer().is_none());
-    let entry = join_bill(&ana, Some("Ana"), None, None).unwrap();
+    let entry = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
     let signed = sign_entry(&ana, &entry).unwrap();
 
     // Not an error, and not an empty signature either: §10.7 binds no key and
@@ -196,7 +214,7 @@ fn a_wallet_that_does_not_sign_gets_its_entry_back_unsigned() {
 #[test]
 fn signing_does_not_move_the_id_and_covers_the_id() {
     let ana = signing_host("ana", &fake_key("ana"), Some("u1ana"));
-    let entry = join_bill(&ana, Some("Ana"), Some("u1ana"), None).unwrap();
+    let entry = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
     let signed = sign_entry(&ana, &entry).unwrap();
 
     // §9.5's digest covers every member but `id`, `sig` and `v`.
@@ -225,9 +243,9 @@ fn a_wallet_with_no_address_to_be_paid_at_is_still_a_host() {
 #[test]
 fn the_clock_and_the_randomness_come_from_the_host() {
     let ana = FakeHost::new("ana");
-    let before = join_bill(&ana, Some("Ana"), None, None).unwrap();
+    let before = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
     ana.tick();
-    let after = join_bill(&ana, Some("Ana"), None, None).unwrap();
+    let after = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
 
     assert_ne!(before.get("at"), after.get("at"));
     assert_eq!(
@@ -243,10 +261,10 @@ fn the_clock_and_the_randomness_come_from_the_host() {
 fn dinner(ana: &FakeHost, ben: &FakeHost) -> Vec<Value> {
     let create = create_bill(ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
     ana.tick();
-    let join_ana = join_bill(ana, Some("Ana"), ana.pay_to_address(), None).unwrap();
+    let join_ana = join_bill(ana, Some("Ana"), ana.pay_to_address(), None, None).unwrap();
     ben.tick();
     ben.tick();
-    let join_ben = join_bill(ben, Some("Ben"), ben.pay_to_address(), None).unwrap();
+    let join_ben = join_bill(ben, Some("Ben"), ben.pay_to_address(), None, None).unwrap();
     ana.tick();
     let expense = add_expense(ana, "x1", "ana", 9000, equal_split(&["ana", "ben"]), None).unwrap();
     ana.tick();
@@ -326,7 +344,7 @@ fn an_unpriced_bill_is_an_ordinary_bill_not_a_refusal() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
     ana.tick();
-    let join = join_bill(&ana, Some("Ana"), Some("u1ana"), None).unwrap();
+    let join = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
     let mut log = BillLog::new(&ana);
     log.add(vec![create, join]).unwrap();
     let folded = log.fold().unwrap();
@@ -503,7 +521,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
     entries.push(
         sign_entry(
             &ana,
-            &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key)).unwrap(),
+            &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap(),
         )
         .unwrap(),
     );
@@ -512,7 +530,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
     entries.push(
         sign_entry(
             &ben,
-            &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key)).unwrap(),
+            &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap(),
         )
         .unwrap(),
     );
@@ -537,6 +555,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
             Some("Ben"),
             Some("u1impostor"),
             Some(&impostor_key),
+            None,
         )
         .unwrap(),
     )
@@ -567,7 +586,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
     entries.push(
         sign_entry(
             &ana,
-            &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key)).unwrap(),
+            &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap(),
         )
         .unwrap(),
     );
@@ -576,7 +595,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
     entries.push(
         sign_entry(
             &ben,
-            &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key)).unwrap(),
+            &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap(),
         )
         .unwrap(),
     );
@@ -612,6 +631,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
             Some("Ben"),
             Some("u1impostor"),
             Some(&impostor_key),
+            None,
         )
         .unwrap(),
     )
@@ -655,7 +675,7 @@ fn an_invite_round_trips_through_the_protocol_parser() {
     let key = fake_key("ana");
     let create = create_bill(&ana, "Dinner", "EUR", "equal", &key).unwrap();
     ana.tick();
-    let join = join_bill(&ana, Some("Ana"), Some("u1ana"), None).unwrap();
+    let join = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
     let mut log = BillLog::new(&ana);
     log.add(vec![create, join]).unwrap();
     let bill = log.fold().unwrap().bill;
@@ -678,7 +698,7 @@ fn a_whole_bill_travels_in_one_square_and_opens_on_the_other_side() {
     let key = fake_key("ana");
     let create = create_bill(&ana, "Dinner", "EUR", "equal", &key).unwrap();
     ana.tick();
-    let join = join_bill(&ana, Some("Ana"), None, None).unwrap();
+    let join = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
     let mut log = BillLog::new(&ana);
     log.add(vec![create, join]).unwrap();
     let bill = log.fold().unwrap().bill;
@@ -704,7 +724,7 @@ fn a_delta_carries_only_what_the_peer_has_not_seen_and_no_key() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
     ana.tick();
-    let join = join_bill(&ana, Some("Ana"), None, None).unwrap();
+    let join = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
     let mut log = BillLog::new(&ana);
     log.add(vec![create.clone(), join]).unwrap();
 

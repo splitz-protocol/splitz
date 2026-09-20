@@ -18,16 +18,19 @@ pub mod bill_log;
 pub mod entries;
 #[allow(clippy::module_inception)]
 pub mod host;
+pub mod lanes;
 pub mod settle_flow;
 pub mod sharing;
 
 pub use bill_log::{BillLog, FoldedBill};
 pub use entries::{
-    add_expense, base64url_no_pad, confirm_payment, create_bill, join_bill, record_payment,
-    set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION, NONCE_BYTES,
+    add_expense, amend_entry, base64url_no_pad, confirm_payment, create_bill, join_bill,
+    record_payment, set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION,
+    NONCE_BYTES,
 };
 pub use host::{BillHost, SendResult, Sent, SignEntry, VerifyEntry};
-pub use settle_flow::{obligation_for, settle, PayerObligation, Settled};
+pub use lanes::{in_lane, lane_debts, lane_for, LanedDebt, SettleLane};
+pub use settle_flow::{obligation_for, settle, settle_cash, settle_swap, PayerObligation, Settled};
 pub use sharing::{
     accept_scan, delta_for, has_joined, invite_for, read_scan, shareable_bill, Scanned, ScannedBill,
 };

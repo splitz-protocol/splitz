@@ -62,11 +62,16 @@ Map<String, dynamic> joinBill({
   String? name,
   String? payTo,
   String? identityKey,
+  List<Map<String, dynamic>>? payouts,
 }) {
   final participant = <String, dynamic>{'id': host.me};
   if (name != null) participant['name'] = name;
   if (payTo != null) participant['payTo'] = payTo;
   if (identityKey != null) participant['identityKey'] = identityKey;
+  // §9.1's own shape, passed through untouched and in the order given:
+  // order is the preference order, and a reader that reorders it settles to
+  // a different address than the one asked for.
+  if (payouts != null) participant['payouts'] = payouts;
   return _sealed(host, <String, dynamic>{
     'kind': 'joinBill',
     'participant': participant,
@@ -104,23 +109,41 @@ Map<String, dynamic> addExpense({
 ///
 /// `paymentId` is the transaction id, so the record and the transaction carry
 /// one identifier and a reader can check the second from the first.
+///
+/// `amount` is minor units of the bill's currency and is what settles the
+/// debt. `zatoshi` and `paidAtRate` record what actually left the wallet and
+/// the rate it was converted at; §9.2 makes both advisory, and neither takes
+/// any part in §5 or §6.
+///
+/// `reference` identifies a `swap` off this chain — the provider's intent id,
+/// or the transaction on the destination chain. It is not a Zcash txid, and a
+/// reader that renders it as one is wrong for every swap (§9.2).
 Map<String, dynamic> recordPayment({
   required BillHost host,
   required String paymentId,
   required String to,
   required int amount,
   String method = 'shieldedZec',
+  String? reference,
+  int? zatoshi,
+  Map<String, dynamic>? paidAtRate,
+  String? note,
 }) {
+  final payment = <String, dynamic>{
+    'id': paymentId,
+    'from': host.me,
+    'to': to,
+    'amount': amount,
+    'method': method,
+    'at': _at(host),
+  };
+  if (reference != null) payment['reference'] = reference;
+  if (zatoshi != null) payment['zatoshi'] = zatoshi;
+  if (paidAtRate != null) payment['paidAtRate'] = paidAtRate;
+  if (note != null) payment['note'] = note;
   return _sealed(host, <String, dynamic>{
     'kind': 'recordPayment',
-    'payment': <String, dynamic>{
-      'id': paymentId,
-      'from': host.me,
-      'to': to,
-      'amount': amount,
-      'method': method,
-      'at': _at(host),
-    },
+    'payment': payment,
   });
 }
 
@@ -159,6 +182,29 @@ Map<String, dynamic> setRate({
   return _sealed(host, <String, dynamic>{
     'kind': 'setRate',
     'rate': rate,
+  });
+}
+
+/// Corrects an entry by replacing it wholesale (§10.4).
+///
+/// [payload] is the corrected body, under the member name its kind uses —
+/// `splitz.payloadForKind` holds that mapping, and it is the one the fold
+/// reads rather than a copy of it. **An amendment replaces its target entirely**, so a payload that
+/// leaves a field out deletes that field rather than keeping it: build it from
+/// the current entry, not from the part being changed.
+///
+/// Only the author of the target may amend it (`unauthorized_entry`), and the
+/// payload must be of the target's own kind (`amend_kind_mismatch`).
+Map<String, dynamic> amendEntry({
+  required BillHost host,
+  required String targetId,
+  required String member,
+  required Map<String, dynamic> payload,
+}) {
+  return _sealed(host, <String, dynamic>{
+    'kind': 'amendEntry',
+    'targetId': targetId,
+    member: payload,
   });
 }
 

@@ -43,6 +43,7 @@ fn main() -> splitz::Result<()> {
         Some("Ana"),
         host.pay_to_address(),
         None,
+        None,
     )?])?;
 
     let folded = log.fold()?; // §10.3, plus what it set aside

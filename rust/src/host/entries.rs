@@ -81,6 +81,7 @@ pub fn join_bill(
     name: Option<&str>,
     pay_to: Option<&str>,
     identity_key: Option<&str>,
+    payouts: Option<Vec<Value>>,
 ) -> Result<Value> {
     let mut participant = Map::new();
     participant.insert("id".to_owned(), Value::from(host.me()));
@@ -92,6 +93,12 @@ pub fn join_bill(
     }
     if let Some(key) = identity_key {
         participant.insert("identityKey".to_owned(), Value::from(key));
+    }
+    // §9.1's own shape, passed through untouched and in the order given:
+    // order is the preference order, and a reader that reorders it settles to
+    // a different address than the one asked for.
+    if let Some(payouts) = payouts {
+        participant.insert("payouts".to_owned(), Value::Array(payouts));
     }
     let mut body = Map::new();
     body.insert("kind".to_owned(), Value::from("joinBill"));
@@ -131,12 +138,26 @@ pub fn add_expense(
 ///
 /// `payment_id` is the transaction id, so the record and the transaction carry
 /// one identifier and a reader can check the second from the first.
+///
+/// `amount` is minor units of the bill's currency and is what settles the
+/// debt. `zatoshi` and `paid_at_rate` record what actually left the wallet and
+/// the rate it was converted at; §9.2 makes both advisory, and neither takes
+/// any part in §5 or §6.
+///
+/// `reference` identifies a `swap` off this chain — the provider's intent id,
+/// or the transaction on the destination chain. It is not a Zcash txid, and a
+/// reader that renders it as one is wrong for every swap (§9.2).
+#[allow(clippy::too_many_arguments)]
 pub fn record_payment(
     host: &dyn BillHost,
     payment_id: &str,
     to: &str,
     amount: i64,
     method: &str,
+    reference: Option<&str>,
+    zatoshi: Option<i64>,
+    paid_at_rate: Option<Value>,
+    note: Option<&str>,
 ) -> Result<Value> {
     let mut payment = Map::new();
     payment.insert("id".to_owned(), Value::from(payment_id));
@@ -145,6 +166,18 @@ pub fn record_payment(
     payment.insert("amount".to_owned(), Value::from(amount));
     payment.insert("method".to_owned(), Value::from(method));
     payment.insert("at".to_owned(), Value::from(at(host)?));
+    if let Some(reference) = reference {
+        payment.insert("reference".to_owned(), Value::from(reference));
+    }
+    if let Some(zatoshi) = zatoshi {
+        payment.insert("zatoshi".to_owned(), Value::from(zatoshi));
+    }
+    if let Some(rate) = paid_at_rate {
+        payment.insert("paidAtRate".to_owned(), rate);
+    }
+    if let Some(note) = note {
+        payment.insert("note".to_owned(), Value::from(note));
+    }
     let mut body = Map::new();
     body.insert("kind".to_owned(), Value::from("recordPayment"));
     body.insert("payment".to_owned(), Value::Object(payment));
@@ -191,6 +224,28 @@ pub fn set_rate(
     let mut body = Map::new();
     body.insert("kind".to_owned(), Value::from("setRate"));
     body.insert("rate".to_owned(), Value::Object(rate));
+    sealed(host, body)
+}
+
+/// Corrects an entry by replacing it wholesale (§10.4).
+///
+/// `payload` is the corrected body, under the member name its kind uses.
+/// **An amendment replaces its target entirely**, so a payload that leaves a
+/// field out deletes that field rather than keeping it: build it from the
+/// current entry, not from the part being changed.
+///
+/// Only the author of the target may amend it (`unauthorized_entry`), and the
+/// payload must be of the target's own kind (`amend_kind_mismatch`).
+pub fn amend_entry(
+    host: &dyn BillHost,
+    target_id: &str,
+    member: &str,
+    payload: Value,
+) -> Result<Value> {
+    let mut body = Map::new();
+    body.insert("kind".to_owned(), Value::from("amendEntry"));
+    body.insert("targetId".to_owned(), Value::from(target_id));
+    body.insert(member.to_owned(), payload);
     sealed(host, body)
 }
 

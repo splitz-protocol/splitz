@@ -8,7 +8,9 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::Result;
-use crate::obligation::{render_obligation, withholdings, Awaiting, Contested, Obligation};
+use crate::obligation::{
+    render_obligation, withholdings, Awaiting, Contested, Obligation, Unpayable,
+};
 use crate::settle::{settle_bill, Settlement, DEFAULT_EXACT_LIMIT};
 
 use super::bill_log::{BillLog, FoldedBill};
@@ -52,6 +54,13 @@ pub struct PayerObligation {
 impl PayerObligation {
     pub fn uri(&self) -> Option<&str> {
         self.request.uri.as_deref()
+    }
+
+    /// Who the request could not carry, and why: `no_address` when nothing is
+    /// published, `payout_not_zec` when the preferred payout is a swap or
+    /// cash. The two need different remedies (§8.5).
+    pub fn unpayable(&self) -> &[Unpayable] {
+        &self.request.unpayable
     }
 
     /// True when every debt this device owes is in the request. A request that
@@ -154,9 +163,31 @@ pub fn settle(
 
     // Captured first, deliberately: after `broadcast` returns, this device may
     // be anywhere. Records to one recipient sum, as they do in §14.
+    //
+    // **What the request carries, not what the payer owes.** The two differ
+    // whenever a recipient's preferred payout is not a Zcash address: §8.5
+    // leaves them out of the URI and reports them, and recording them here
+    // would claim a transaction settled a debt it never paid — a debt the
+    // payee then has to contest rather than simply still be owed.
+    let unpayable: BTreeSet<&str> = obligation
+        .unpayable()
+        .iter()
+        .map(|u| u.id.as_str())
+        .collect();
     let mut owed: BTreeMap<&str, i64> = BTreeMap::new();
     for settlement in &obligation.settlements {
+        if unpayable.contains(settlement.to.as_str()) {
+            continue;
+        }
         *owed.entry(settlement.to.as_str()).or_insert(0) += settlement.amount;
+    }
+    if owed.is_empty() {
+        return Ok(Settled {
+            result: SendResult::Failed,
+            txid: None,
+            detail: Some("there is nothing this request can carry".to_owned()),
+            records: Vec::new(),
+        });
     }
 
     let sent: Sent = host.broadcast(uri);
@@ -186,7 +217,17 @@ pub fn settle(
 
     let mut records = Vec::new();
     for (to, amount) in owed {
-        let record = record_payment(host, &txid, to, amount, "shieldedZec")?;
+        let record = record_payment(
+            host,
+            &txid,
+            to,
+            amount,
+            "shieldedZec",
+            None,
+            None,
+            None,
+            None,
+        )?;
         log.add(vec![record.clone()])?;
         records.push(record);
     }
@@ -196,4 +237,73 @@ pub fn settle(
         detail: None,
         records,
     })
+}
+
+/// Records a debt settled in cash (§9.2).
+///
+/// Nothing is sent and nothing is verified: cash moved outside this protocol,
+/// and the only evidence it ever has is the recipient's confirmation (§10.5).
+/// **A caller must not present this with the confidence of an on-chain
+/// payment** — anyone on the bill can write one.
+///
+/// `payment_id` is the caller's, because there is no transaction to take one
+/// from. It MUST be unique on the bill: two cash payments sharing an id are
+/// one payment to every reader that folds the log.
+pub fn settle_cash(
+    host: &dyn BillHost,
+    log: &mut BillLog,
+    payment_id: &str,
+    to: &str,
+    amount: i64,
+    note: Option<&str>,
+) -> Result<Value> {
+    let record = record_payment(host, payment_id, to, amount, "cash", None, None, None, note)?;
+    log.add(vec![record.clone()])?;
+    Ok(record)
+}
+
+/// Records a debt settled by a swap off this chain (§9.2).
+///
+/// **Verifiable only in half.** What left this wallet is ZEC and is recorded
+/// in `zatoshi`; what the recipient was owed arrives as another asset on
+/// another chain, which this bill cannot see. A caller MUST NOT present this
+/// as confirmed on the strength of the ZEC leg alone — that the deposit was
+/// sent is not that the recipient was paid, and only the recipient can say
+/// the latter (§10.5).
+///
+/// `reference` identifies the swap: the provider's intent id, or the
+/// transaction on the destination chain. **It is not a Zcash txid**, and a
+/// reader that renders it as one is wrong for every swap. The chain it names
+/// is the chain of the `swap` payout being settled.
+///
+/// Where a participant's payout may change after this is recorded, that chain
+/// stops being derivable from the current payout; pass it in `note`.
+#[allow(clippy::too_many_arguments)]
+pub fn settle_swap(
+    host: &dyn BillHost,
+    log: &mut BillLog,
+    reference: &str,
+    to: &str,
+    amount: i64,
+    zatoshi: Option<i64>,
+    paid_at_rate: Option<Value>,
+    note: Option<&str>,
+) -> Result<Value> {
+    let record = record_payment(
+        host,
+        // The swap's own identifier is what a reader checks this record
+        // against, so it is the payment id as well as the reference. A second
+        // identifier here would be one nothing outside this bill has ever
+        // heard of.
+        reference,
+        to,
+        amount,
+        "swap",
+        Some(reference),
+        zatoshi,
+        paid_at_rate,
+        note,
+    )?;
+    log.add(vec![record.clone()])?;
+    Ok(record)
 }
