@@ -1,8 +1,12 @@
 //! SPEC.md §15's interfaces, as a foreign caller implements them.
 //!
-//! One trait per §15 subsection, each exported so the wallet — Kotlin, Swift
-//! or anything else uniffi reaches — supplies it. Every call is synchronous: a
-//! foreign callback is, and nothing in this layer waits on two things at once.
+//! One trait per §15 subsection, each exported so the wallet — Kotlin, Swift,
+//! Dart or TypeScript — supplies it. Every call is synchronous: a foreign
+//! callback is, and nothing in this layer waits on two things at once.
+//!
+//! `with_foreign` rather than the bare `foreign` flag: the Dart, JavaScript
+//! and React Native generators all pin uniffi 0.31, which has only the older
+//! spelling, and 0.32 still accepts it.
 //!
 //! The traits are named exactly as §15 names them. The adapters below turn
 //! each into the `splitz-host` trait of the same name, which differs only in
@@ -26,7 +30,7 @@ fn host_error(e: SplitzError) -> HostError {
 }
 
 /// Specified in SPEC.md §15.3.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait SecretStore: Send + Sync {
     fn read(&self, key: String) -> Result<Option<String>, SplitzError>;
     fn write(&self, key: String, value: String) -> Result<(), SplitzError>;
@@ -34,7 +38,7 @@ pub trait SecretStore: Send + Sync {
 }
 
 /// Specified in SPEC.md §15.4.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait BillStorage: Send + Sync {
     fn read(&self, key: String) -> Result<Option<String>, SplitzError>;
     fn write(&self, key: String, value: String) -> Result<(), SplitzError>;
@@ -44,27 +48,27 @@ pub trait BillStorage: Send + Sync {
 }
 
 /// Specified in SPEC.md §15.5.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait SplitsRelay: Send + Sync {
     fn push(&self, channel: String, blobs: Vec<String>) -> Result<(), SplitzError>;
     fn fetch(&self, channel: String) -> Result<Vec<String>, SplitzError>;
 }
 
 /// Specified in SPEC.md §15.2.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait WalletSender: Send + Sync {
     fn send(&self, payment_request_uri: String) -> WalletSendOutcome;
     fn pay_to_address(&self) -> Option<String>;
 }
 
 /// Specified in SPEC.md §15.6.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait ZecPrices: Send + Sync {
     fn minor_units_per_zec(&self, currency: String) -> Result<Option<i64>, SplitzError>;
 }
 
 /// Specified in SPEC.md §15.7.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait SwapProvider: Send + Sync {
     fn tradable_assets(&self) -> Result<Vec<TradableAsset>, SplitzError>;
     fn quote(
@@ -82,7 +86,7 @@ pub trait SwapProvider: Send + Sync {
 /// `account_id` and `viewing_key` are read once, when a session is opened:
 /// §15.1 requires the id to be stable for the life of an installed wallet, and
 /// one fold must see one answer.
-#[uniffi::export(foreign)]
+#[uniffi::export(with_foreign)]
 pub trait SplitsWallet: Send + Sync {
     fn account_id(&self) -> String;
     fn viewing_key(&self) -> Option<String>;

@@ -119,6 +119,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: tools/ffi/kotlin.sh
 
+  bindings-node:
+    # A third language over the same foreign library, with no static types to
+    # lean on. It implements all seven of §15's interfaces and drives one bill
+    # to a confirmed payment. The generator is third-party and pinned; so is
+    # the uniffi version, because every generator outside the uniffi tree
+    # targets 0.31.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: tools/ffi/node.sh
+
   spec:
     # The corpus checks values, the differential lane checks that three
     # implementations answer alike, and the parity lane checks the two public

@@ -68,7 +68,15 @@ fi
   generate --library "$library" --language kotlin --no-format --out-dir "$work/kt")
 
 "$kotlinc" -nowarn -classpath "$jna" \
-  "$work/kt/uniffi/splitz_ffi/splitz_ffi.kt" "$root/tools/ffi/kotlin/Consumer.kt" \
+  "$work/kt/uniffi/splitz_ffi/splitz_ffi.kt" \
+  "$root/tools/ffi/kotlin/Minimal.kt" \
+  "$root/tools/ffi/kotlin/Consumer.kt" \
   -d "$work/classes"
+
+# The smallest wallet INTEGRATING.md tells somebody to write, run rather than
+# only compiled: a sample that compiles proves the names exist, not that the
+# calls in it are ones a caller may make in that order with those values.
+echo "the sample in INTEGRATING.md, run"
+java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" MinimalKt
 
 java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" ConsumerKt
