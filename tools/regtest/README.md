@@ -2,15 +2,15 @@
 
 Every other lane in this repository stops at the URI. `rust/splitz-core/tests/oracle.rs`
 checks that librustzcash's `zip321` parses back exactly what §8 rendered, which
-is the strongest claim that can be made without a node: **no transaction has
-ever been broadcast from a URI this library produced.**
+is the strongest claim that can be made without a node.
 
-This is the harness for closing that. It stands up a regtest chain, funds a
-wallet on it, and carries one payment request as far as it currently goes.
+This one stands up a regtest chain, funds a wallet on it, and carries one
+payment request the rest of the way: **a transaction built from a URI this
+library rendered is broadcast, mined, and the payee's balance read back.**
 
 ## State
 
-**Working, and observed running:**
+Working, and observed running end to end:
 
 - `zebrad` in regtest, no peers, every upgrade through NU5 active at height 1.
   `zebrad.toml.in` owns that list.
@@ -22,36 +22,24 @@ wallet on it, and carries one payment request as far as it currently goes.
 - The chain mines to an address derived from the wallet's own seed
   (`prover miner-address`), templated into `zebrad.toml` at run time so the
   two cannot drift.
-- `prover prove` opens a throwaway `zcash_client_sqlite` wallet, creates an
-  account at a birthday of height 1, and syncs the chain through
-  `zcash_client_backend::sync::run` over a compact-block cache held in memory.
-  It sees the coinbase.
+- `prover prove` opens a throwaway `zcash_client_sqlite` wallet, creates the
+  spending account **and the payee account** at a birthday of height 1, and
+  syncs the chain through `zcash_client_backend::sync::run` over a
+  compact-block cache held in memory.
 - It shields the matured coinbase into Orchard: proposed, proved with the
-  Sapling parameters, signed, **broadcast to the node, mined, and confirmed**,
-  with the resulting Orchard balance read back afterwards.
-- splitz renders one payer's obligation as a ZIP 321 URI and **librustzcash's
-  `zip321` parses it**, on a real unified address of the chain the transaction
-  would go to.
+  Sapling parameters, signed, broadcast, mined and confirmed.
+- splitz renders one payer's obligation as a ZIP 321 URI, librustzcash's
+  `zip321` parses it, and the wallet builds, proves, signs and broadcasts a
+  transfer from what it parsed.
+- The payee's Orchard balance is read either side of the transfer and the
+  difference compared to the figure splitz named. **That comparison is the
+  lane**: everything before it is setup. It is a difference and not a total, so
+  `prove` can be run repeatedly against one chain — each run pays the same
+  address again.
 
-**Where it stops.** `propose_transfer` cannot select a note. The wallet's
-`block_fully_scanned()` stays `None` however many times the chain is scanned:
-`suggest_scan_ranges` keeps returning one `Historic` range covering the whole
-chain, so the anchor handed to the input selector sits at the end of the first
-scan batch and every note above it is invisible to selection. The failure
-surfaces as `Insufficient balance (have 0, …)` while the same notes are
-reported as spendable in the wallet summary. `prove` checks for this before
-proposing and says so rather than letting the misleading message stand.
+## Three things this has caught
 
-Two things not yet ruled out: that the in-memory `BlockCache` in `src/cache.rs`
-is at fault, and that a chain too short for lightwalletd to report any
-completed subtree root (`get_subtree_roots` returns none here) leaves the
-commitment tree unable to satisfy the scan queue. **Until a transfer built from
-a splitz URI is mined and the payee's balance read, the claim in `README.md`
-stands unchanged.**
-
-## Two things this already caught
-
-Both would have reached a wallet author first.
+Each would have reached a wallet author first.
 
 - **The wallet's consensus parameters have to be the chain's.** Built against
   `Network::TestNetwork`, the wallet treats a 110-block chain as entirely
@@ -61,6 +49,15 @@ Both would have reached a wallet author first.
   branch id the node reports against the one it would build at before it
   builds anything: they are configured in two files and the first version of
   this harness had them disagree.
+- **Creating an account re-queues the chain from its birthday.** A second
+  account made after the sync — here, the one standing in for the payee —
+  empties `block_fully_scanned`, which reads the first `Scanned` range
+  starting at or below the wallet birthday and finds none. The anchor
+  `get_target_and_anchor_heights` hands the input selector then falls back to
+  the end of the first scan batch, every note above it is invisible to
+  selection, and `propose_transfer` fails with `Insufficient balance
+  (have 0, …)` while the wallet summary reports the same notes as spendable.
+  Both accounts are created before `sync::run`, so one sync covers both.
 - **A coinbase output cannot be spent for 100 blocks, and the input selector
   does not know that.** With a one-confirmation policy it picks the largest
   UTXO it can see, which on a freshly mined chain is an immature one, and the
@@ -72,7 +69,7 @@ Both would have reached a wallet author first.
 ```
 tools/regtest/run.sh up      # derive the miner address, start the node,
                              #   mine past coinbase maturity, start lightwalletd
-tools/regtest/run.sh prove   # sync, shield, render, parse — see State
+tools/regtest/run.sh prove   # sync, shield, render, parse, send, check
 tools/regtest/run.sh down    # tear the chain down, state and all
 ```
 
@@ -83,4 +80,5 @@ doing.
 
 The chain is ephemeral by design: `state.ephemeral = true`, and `down` removes
 the volumes. A proof that only reproduces on a chain somebody kept is not a
-proof anybody else can run.
+proof anybody else can run. `prove` needs no teardown between runs: it opens a
+throwaway wallet each time and checks a balance difference.

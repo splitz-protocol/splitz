@@ -134,6 +134,24 @@ async fn prove() -> Result<()> {
         .map_err(|e| anyhow!("creating the account: {e}"))?;
     println!("   account:          {account_id:?}");
 
+    // A second account stands in for the payee, so its balance can be read
+    // directly after the transfer — the only check that answers "does the
+    // money arrive".
+    //
+    // **Both accounts are created before the first sync.** An account is born
+    // at a height, and creating one re-queues every block from that height so
+    // the new account's notes can be found. Doing that after a sync empties
+    // `block_fully_scanned`, because that reads the first `Scanned` range
+    // starting at or below the wallet birthday and there is no longer one; the
+    // anchor then falls back to the end of the first scan batch and every note
+    // above it is invisible to input selection, which surfaces as
+    // "insufficient balance (have 0)" while the summary calls the same notes
+    // spendable.
+    let (payee_id, _) = db
+        .create_account("payee", &SecretVec::new(SEED.to_vec()), &birthday, None)
+        .map_err(|e| anyhow!("creating the payee account: {e}"))?;
+    println!("   payee account:    {payee_id:?}");
+
     // `sync::run` sets this itself on its first pass, but the transparent
     // sweep that runs in the same pass reads it, so it is set here first.
     db.update_chain_tip(BlockHeight::from_u32(tip.height as u32))
@@ -211,13 +229,6 @@ async fn prove() -> Result<()> {
     report_balances(&db, "after shielding")?;
 
     // --- the part this harness exists for ------------------------------------
-    //
-    // A second account stands in for the payee. It is in the same wallet so
-    // its balance can be read directly, which is the only check that answers
-    // "does the money arrive".
-    let (payee_id, _) = db
-        .create_account("payee", &SecretVec::new(SEED.to_vec()), &birthday, None)
-        .map_err(|e| anyhow!("creating the payee account: {e}"))?;
     let (payee_address, _) = db
         .get_next_available_address(payee_id, UnifiedAddressRequest::ALLOW_ALL)
         .map_err(|e| anyhow!("deriving the payee's address: {e}"))?
@@ -238,18 +249,22 @@ async fn prove() -> Result<()> {
 
     println!("== sending ==");
 
+    // What the payee holds before the transfer. The check below is a delta, not
+    // a total: the chain outlives one `prove`, so a second run pays the same
+    // address again and a total would read as twice the bill.
+    let held_before = payee_orchard(&db, payee_id)?;
+
     // The wallet will not spend a note it cannot anchor, and it cannot anchor
-    // one until the scan queue says the chain below it is fully scanned. On
-    // this chain it never does: `suggest_scan_ranges` keeps returning one
-    // `Historic` range covering the whole chain however many times it is
-    // scanned, `block_fully_scanned` stays `None`, and the anchor
-    // `get_target_and_anchor_heights` hands the input selector sits at the end
-    // of the first batch. Every note received above that height is invisible
-    // to selection, which is reported as "insufficient balance (have 0)" even
-    // though the same notes are counted as spendable in the wallet summary.
+    // one until the scan queue says the chain below it is fully scanned. When
+    // it does not, the anchor `get_target_and_anchor_heights` hands the input
+    // selector sits at the end of the first scan batch, every note above it is
+    // invisible to selection, and `propose_transfer` reports "insufficient
+    // balance (have 0)" while the wallet summary counts the same notes as
+    // spendable.
     //
     // Checked here rather than at the failure, because the failure names the
-    // symptom and not this.
+    // symptom and not the cause. Anything that reopens the scan queue after
+    // the sync reaches this — creating an account is the usual one.
     let fully_scanned = db
         .block_fully_scanned()
         .map_err(|e| anyhow!("reading the fully-scanned height: {e}"))?
@@ -272,9 +287,9 @@ async fn prove() -> Result<()> {
         }
         return Err(anyhow!(
             "the wallet has no fully-scanned height, so no shielded note can be \
-             anchored and the transfer cannot be built. Everything above this \
-             line ran: the chain, the sync, a shielding transaction broadcast \
-             and mined, and the request splitz rendered parsed by librustzcash. \
+             anchored and the transfer cannot be built. The scan queue was \
+             reopened after the sync; creating an account re-queues every block \
+             from its birthday, so both accounts must exist before sync::run. \
              See tools/regtest/README.md."
         ));
     }
@@ -316,27 +331,36 @@ async fn prove() -> Result<()> {
     resync(&mut client, &cache, &mut db).await?;
     report_balances(&db, "after the payment")?;
 
-    // The claim, checked: what the payee holds is what splitz said they were
+    // The claim, checked: what reached the payee is what splitz said they were
     // owed, to the zatoshi.
-    let summary = db
-        .get_wallet_summary(ConfirmationsPolicy::MIN)
-        .map_err(|e| anyhow!("reading the wallet summary: {e}"))?
-        .ok_or_else(|| anyhow!("no wallet summary after the payment"))?;
-    let arrived = summary
-        .account_balances()
-        .get(&payee_id)
-        .map(|b| u64::from(b.orchard_balance().total()))
-        .unwrap_or(0);
+    let held_after = payee_orchard(&db, payee_id)?;
+    let arrived = held_after.saturating_sub(held_before);
     println!("== the check ==");
-    println!("   splitz said:  {owed_zatoshi} zatoshi");
-    println!("   payee holds:  {arrived} zatoshi");
+    println!("   splitz said:   {owed_zatoshi} zatoshi");
+    println!("   payee gained:  {arrived} zatoshi ({held_before} -> {held_after})");
     if arrived != owed_zatoshi {
         return Err(anyhow!(
-            "the payee holds {arrived} zatoshi and splitz said {owed_zatoshi}"
+            "the payee gained {arrived} zatoshi and splitz said {owed_zatoshi}"
         ));
     }
     println!("   the money that arrived is the money splitz said.");
     Ok(())
+}
+
+/// The payee's confirmed Orchard balance, in zatoshi.
+fn payee_orchard<DbT: WalletRead>(db: &DbT, payee_id: DbT::AccountId) -> Result<u64>
+where
+    DbT::Error: std::fmt::Display,
+{
+    let summary = db
+        .get_wallet_summary(ConfirmationsPolicy::MIN)
+        .map_err(|e| anyhow!("reading the wallet summary: {e}"))?
+        .ok_or_else(|| anyhow!("no wallet summary"))?;
+    Ok(summary
+        .account_balances()
+        .get(&payee_id)
+        .map(|b| u64::from(b.orchard_balance().total()))
+        .unwrap_or(0))
 }
 
 /// One payer's obligation on a two-person bill, as splitz renders it.
@@ -370,7 +394,8 @@ fn splitz_request(payee_address: &str) -> Result<(String, i64, u64)> {
         },
     });
 
-    let bill = splitz_core::decode_bill(&document).map_err(|e| anyhow!("decoding the bill: {e}"))?;
+    let bill =
+        splitz_core::decode_bill(&document).map_err(|e| anyhow!("decoding the bill: {e}"))?;
     let rate = bill
         .rate
         .clone()
