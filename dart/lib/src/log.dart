@@ -26,7 +26,6 @@ const Set<String> entryKinds = {
   'voidEntry',
   'recordPayment',
   'confirmPayment',
-  'vouchIdentity',
   'setRate',
 };
 
@@ -36,7 +35,6 @@ const Map<String, String> payloadForKind = {
   'addExpense': 'expense',
   'recordPayment': 'payment',
   'confirmPayment': 'confirmation',
-  'vouchIdentity': 'vouch',
   'setRate': 'rate',
 };
 
@@ -45,7 +43,6 @@ const List<String> _payloadNames = [
   'expense',
   'payment',
   'confirmation',
-  'vouch',
 ];
 
 /// Every member that is a payload, including the one no kind lists as
@@ -120,7 +117,6 @@ const Map<String, List<String>> _idMembersOf = {
   'expense': ['id', 'paidBy'],
   'payment': ['id', 'from', 'to'],
   'confirmation': ['paymentId'],
-  'vouch': ['subject'],
 };
 
 void _checkPayloadIds(Map<String, dynamic> payload, String wanted) {

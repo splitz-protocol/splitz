@@ -932,20 +932,20 @@ union.
 ### 10.1 Entries
 
 `createBill`, `joinBill`, `addExpense`, `amendEntry`, `voidEntry`,
-`recordPayment`, `confirmPayment`, `vouchIdentity`, `setRate`.
+`recordPayment`, `confirmPayment`, `setRate`.
 
 Each carries `id`, `author`, `kind`, `at`, and only the payload its kind uses.
 An unrecognised kind is refused with `bill_unknown_entry_kind`.
 
 **An entry MUST carry the payload its kind uses and no other.** One carrying
-more than one of `expense`, `payment`, `confirmation` and `vouch` is refused
+more than one of `expense`, `payment` and `confirmation` is refused
 with `bill_ambiguous_entry`, because the currency fallback of §9.1 and the fold
 of §10.3 would otherwise read different ones.
 
 One carrying none is refused with `bill_missing_entry_payload`, and MUST be
 refused before it reaches a log: `joinBill` needs `participant`, `addExpense`
 `expense`, `recordPayment` `payment`, `confirmPayment` `confirmation`,
-`vouchIdentity` `vouch`, and `voidEntry` and `amendEntry` a `targetId`.
+and `voidEntry` and `amendEntry` a `targetId`.
 
 **Admitting one is not the harmless no-op it appears to be.** Removing a member
 makes an entry's canonical encoding sort *higher* than the same entry with it:

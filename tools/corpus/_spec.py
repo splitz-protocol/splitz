@@ -1203,11 +1203,11 @@ def settle_bill(bill, exact_limit=DEFAULT_EXACT_LIMIT):
 # --- Section 10: the log ----------------------------------------------------
 
 ENTRY_KINDS = ("createBill", "joinBill", "addExpense", "amendEntry", "voidEntry",
-               "recordPayment", "confirmPayment", "vouchIdentity", "setRate")
+               "recordPayment", "confirmPayment", "setRate")
 PAYLOAD_FOR = {"joinBill": "participant", "addExpense": "expense",
                "recordPayment": "payment", "confirmPayment": "confirmation",
-               "vouchIdentity": "vouch", "setRate": "rate"}
-PAYLOADS = ("rate", "expense", "payment", "confirmation", "vouch")
+               "setRate": "rate"}
+PAYLOADS = ("rate", "expense", "payment", "confirmation")
 # Every member that is a payload. PAYLOADS drives the ambiguity check and
 # omits `participant`; the type check at ingress must not, because an
 # amendEntry may carry any of them and every later pass indexes what it finds.
@@ -1253,7 +1253,6 @@ _ID_MEMBERS_OF = {
     "expense": ("id", "paidBy"),
     "payment": ("id", "from", "to"),
     "confirmation": ("paymentId",),
-    "vouch": ("subject",),
 }
 
 

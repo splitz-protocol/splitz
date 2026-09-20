@@ -16,7 +16,7 @@ use crate::money::{check_currency, is_currency};
 use crate::sha256::sha256;
 use crate::zip321::base64url;
 
-pub const ENTRY_KINDS: [&str; 9] = [
+pub const ENTRY_KINDS: [&str; 8] = [
     "createBill",
     "joinBill",
     "addExpense",
@@ -24,11 +24,10 @@ pub const ENTRY_KINDS: [&str; 9] = [
     "voidEntry",
     "recordPayment",
     "confirmPayment",
-    "vouchIdentity",
     "setRate",
 ];
 
-const PAYLOAD_NAMES: [&str; 5] = ["rate", "expense", "payment", "confirmation", "vouch"];
+const PAYLOAD_NAMES: [&str; 4] = ["rate", "expense", "payment", "confirmation"];
 
 /// Every member that is a payload, including the one no kind lists as
 /// ambiguous (§10.1).
@@ -36,14 +35,7 @@ const PAYLOAD_NAMES: [&str; 5] = ["rate", "expense", "payment", "confirmation", 
 /// `PAYLOAD_NAMES` drives the ambiguity check and omits `participant`; the
 /// type check at ingress must not, because an `amendEntry` may carry any of
 /// them and every later pass indexes what it finds.
-const PAYLOAD_MEMBERS: [&str; 6] = [
-    "rate",
-    "expense",
-    "payment",
-    "confirmation",
-    "vouch",
-    "participant",
-];
+const PAYLOAD_MEMBERS: [&str; 5] = ["rate", "expense", "payment", "confirmation", "participant"];
 
 /// The domain separator the bill id digest covers.
 pub const BILL_ID_DOMAIN: &str = "splitz-bill-id-v1";
@@ -61,7 +53,6 @@ pub fn payload_for(kind: &str) -> Option<&'static str> {
         "addExpense" => Some("expense"),
         "recordPayment" => Some("payment"),
         "confirmPayment" => Some("confirmation"),
-        "vouchIdentity" => Some("vouch"),
         "setRate" => Some("rate"),
         _ => None,
     }
@@ -137,7 +128,6 @@ fn id_members_of(wanted: &str) -> &'static [&'static str] {
         "expense" => &["id", "paidBy"],
         "payment" => &["id", "from", "to"],
         "confirmation" => &["paymentId"],
-        "vouch" => &["subject"],
         _ => &[],
     }
 }

@@ -461,8 +461,7 @@ ENTRY_CASES = [
 # bill by anybody and the bill is unopenable on every device that holds it.
 for _kind, _member in (("joinBill", "participant"), ("addExpense", "expense"),
                        ("recordPayment", "payment"),
-                       ("confirmPayment", "confirmation"),
-                       ("vouchIdentity", "vouch")):
+                       ("confirmPayment", "confirmation")):
     ENTRY_CASES.append((f"a_scalar_{_member}_is_not_a_payload",
                         {"v": 1, "id": "s1", "author": "ana", "kind": _kind,
                          "at": AT(6), _member: 5}))

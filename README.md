@@ -12,7 +12,7 @@ from the specification text alone — that produces them.
 ├── SPEC.md         the protocol
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
 ├── CONFORMANCE.md  what conformance means, and what a green suite does not say
-├── vectors/        435 language-neutral conformance cases
+├── vectors/        448 language-neutral conformance cases
 ├── dart/           reference implementation  (0 dependencies)
 │                   `splitz.dart` the protocol, `host.dart` the wallet seam
 ├── rust/           second implementation     (serde_json, for the wire format)
@@ -20,8 +20,8 @@ from the specification text alone — that produces them.
 ```
 
 ```
-cd dart && dart test                 # 489 tests, 435 of them the corpus
-cd rust && cargo test                # the same 435 cases, plus the oracle
+cd dart && dart test                 # 540 tests, 448 of them the corpus
+cd rust && cargo test                # the same 448 cases, plus the oracle
 cd rust && cargo test --release      # and again with overflow checks off
 tools/differential/run.sh 1 1200     # three implementations, one operation list,
                                      #   diffed against each other and against
