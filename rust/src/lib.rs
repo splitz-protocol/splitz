@@ -10,6 +10,7 @@ pub mod authority;
 pub mod balances;
 pub mod canonical_json;
 pub mod error;
+pub mod host;
 pub mod instant;
 pub mod invite;
 pub mod log;
