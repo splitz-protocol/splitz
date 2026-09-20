@@ -131,8 +131,28 @@ class SplitsSigner {
   static String encode(List<int> bytes) =>
       base64Url.encode(bytes).replaceAll('=', '');
 
-  static List<int> decode(String value) =>
-      base64Url.decode(value.padRight((value.length + 3) & ~3, '='));
+  /// The alphabet §9.4, §10.6 and §11.1 write, and no other.
+  static const String _alphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+
+  /// Reads unpadded base64url, and tolerates trailing `=` padding.
+  ///
+  /// The alphabet is checked before decoding. `base64Url.decode` also accepts
+  /// standard base64's `+` and `/` and silently re-encodes them as `-` and
+  /// `_`, so without this a key in the wrong alphabet decodes here, is stored
+  /// as it arrived, and then matches nothing the protocol produced.
+  static List<int> decode(String value) {
+    var body = value;
+    while (body.endsWith('=')) {
+      body = body.substring(0, body.length - 1);
+    }
+    for (final unit in body.codeUnits) {
+      if (!_alphabet.contains(String.fromCharCode(unit))) {
+        throw FormatException('not base64url', value);
+      }
+    }
+    return base64Url.decode(body.padRight((body.length + 3) & ~3, '='));
+  }
 }
 
 /// Signature answers for one log, ready for a synchronous fold.

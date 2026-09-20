@@ -52,6 +52,21 @@ void main() {
     },
   );
 
+  test("a key in standard base64's alphabet is not a key", () async {
+    // `base64Url.decode` accepts `+` and `/` and re-encodes them as `-` and
+    // `_`. Left unchecked, such a key decodes to 32 bytes, is stored as it
+    // arrived, and then matches nothing §11.1 will ever hand over.
+    const wrongAlphabet = '+/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+    expect(wrongAlphabet.length, 43);
+    expect(SplitsKeys.isWellFormedKey(wrongAlphabet), isFalse);
+    expect(
+      () => keys.storeBillKey('b1', wrongAlphabet),
+      throwsA(isA<ArgumentError>()),
+    );
+    // The same 32 bytes in the alphabet §9.4 writes are a key.
+    expect(SplitsKeys.isWellFormedKey('-_${'A' * 41}'), isTrue);
+  });
+
   test('a well-formed key from an invite is stored as it arrived', () async {
     final key = keys.generateKey();
     await keys.storeBillKey('b1', key);
