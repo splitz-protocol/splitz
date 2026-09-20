@@ -53,3 +53,18 @@ rust::component_encode   # The same, for `Uri.encodeComponent`, which keys a swa
 # --- deliberately not in the crate ------------------------------------------
 dart::FileBillStorage    # A file-backed §15.4 store. The Rust crate is reached across a foreign binding, where the wallet supplies storage — one in the crate would have no caller. `InMemoryBillStorage` is there for tests on both sides.
 dart::FileSecretStore    # The same, for §15.3. A shipped build puts secrets in the platform keychain, which is the wallet's.
+
+# --- a development run's own fixtures, Dart only ----------------------------
+# `lib/src/testing/` exists so a real-transaction run on a device can be
+# pointed at known wallets and fetch a seed phrase from loopback at run time
+# rather than from a `--dart-define` that would be compiled into the binary.
+# It drives a Flutter integration test; the Rust crate has no such run and
+# would have no caller for any of it.
+dart::DevAccount         # One wallet such a run is pointed at: its index, and nothing secret.
+dart::dev_accounts       # The list of them.
+dart::dev_account_at     # One of them by index.
+dart::dev_account_named  # One of them by name.
+dart::july_first         # The fixed instant those runs hold their clock at.
+dart::SeedDriver         # The loopback listener a run fetches a phrase from.
+dart::SeedDriverException  # What it raises when it is not running or will not bind.
+dart::SeedFetch          # The call that fetches one.

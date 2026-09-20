@@ -151,9 +151,16 @@ RENAMES = {
 }
 
 
-def dart_surface(source: Path) -> set[str]:
+def dart_surface(source: Path, recurse: bool = False) -> set[str]:
+    """Top-level declarations under `source`.
+
+    Not recursive by default: the protocol and the seam are two directories,
+    one inside the other, and are compared separately. A package whose barrel
+    exports a subdirectory passes `recurse`, or the lane would say two
+    surfaces match while never reading part of one.
+    """
     names: set[str] = set()
-    for path in sorted(source.glob("*.dart")):
+    for path in sorted(source.rglob("*.dart") if recurse else source.glob("*.dart")):
         text = path.read_text(encoding="utf-8")
         # Top-level declarations only: anything indented belongs to a class.
         for match in re.finditer(
@@ -236,10 +243,10 @@ def _param_text(text: str, open_paren: int) -> str | None:
     return None
 
 
-def dart_signatures(source: Path) -> dict[str, list[str]]:
+def dart_signatures(source: Path, recurse: bool = False) -> dict[str, list[str]]:
     """Top-level function name -> its parameter declarations."""
     sigs: dict[str, list[str]] = {}
-    for path in sorted(source.glob("*.dart")):
+    for path in sorted(source.rglob("*.dart") if recurse else source.glob("*.dart")):
         text = path.read_text(encoding="utf-8")
         for match in re.finditer(
             r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*\(", text, re.M
@@ -314,9 +321,10 @@ def compare(
     rust_sigs: Path,
     allow_path: Path,
     auto_snake: bool = False,
+    recurse: bool = False,
 ) -> int:
     """One surface pair. Returns the number of divergences neither side owns."""
-    dart = {normalise(n, auto_snake) for n in dart_surface(dart_src)}
+    dart = {normalise(n, auto_snake) for n in dart_surface(dart_src, recurse)}
     rust = rust_surface(rust_names)
     allowed = _allowed(allow_path)
 
@@ -328,7 +336,7 @@ def compare(
     # type on the other is worse, because the typed side cannot be handed the
     # value that the untyped side has to decide about.
     d_sigs = {normalise(n, auto_snake): ps
-              for n, ps in dart_signatures(dart_src).items()}
+              for n, ps in dart_signatures(dart_src, recurse).items()}
     r_sigs = rust_signatures(rust_sigs)
     shape: list[str] = []
     for name in sorted(set(d_sigs) & set(r_sigs)):
@@ -391,6 +399,7 @@ def main() -> int:
         ROOT / "rust" / "splitz-host" / "src",
         here / "allow-plumbing.txt",
         auto_snake=True,
+        recurse=True,
     )
     return 1 if open_items else 0
 
