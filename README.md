@@ -38,6 +38,8 @@ python3 tools/spec/claims.py         # SPEC.md's claims, against the tree
 python3 tools/oracle/instants.py     # §9.3's instants, against a reader
                                      #   nobody here wrote
 python3 tools/parity/surface.py      # the two public surfaces, diffed
+python3 tools/docs/blocks.py         # every sample a document shows is the
+                                     #   file a lane runs
 tools/web-target/run.sh              # asserts it still does not compile to JS
 tools/examples/run.sh                # every sample run, not merely compiled
 cd rust && cargo clippy --all-targets -- -D warnings
@@ -131,15 +133,16 @@ by a test in each implementation whose string type can hold the input.
 | `vectors/` | Both implementations against one fixed corpus. |
 | `tools/differential` | Inputs nobody wrote an expectation for, answered by every implementation and diffed against each other. Catches what a corpus generated from one reference structurally cannot. |
 | `tools/differential/host.sh` | The two host implementations — `splitz_host` in Dart and `splitz-host` in Rust — on one generated operation list: public keys, signatures over §10.6's message, verification against a key a wallet was handed, derived identities, and what counts as a well-formed key. Nothing in `vectors/` can reach this layer, because a vector carries no private key. |
-| `tools/ffi/kotlin.sh` | A wallet written against the generated Kotlin and nothing else, driving one bill across two devices — opened, shared by a scanned code, synced through a relay, split, priced, settled, confirmed and read back as a history. A binding that compiles is not a binding that works. |
-| `tools/ffi/dart.sh` | The same wallet in Dart, over a third-party generator. |
-| `tools/ffi/node.sh` | The same again in JavaScript, over a different third-party generator. Three languages and three generators agreeing is what says the surface is the library's and not one generator's — and a language with no static types reads it differently. |
+| `tools/ffi/kotlin.sh` | A wallet written against the generated Kotlin and nothing else, driving one bill across two devices — opened, shared by a scanned code, synced through a relay, split, priced, settled, confirmed and read back as a history. A binding that compiles is not a binding that works. It also runs `tools/ffi/kotlin/Doc.kt`, the sample `INTEGRATING.md` shows. |
+| `tools/ffi/dart.sh` | The same wallet in Dart, over a third-party generator, and `INTEGRATING.md`'s Dart sample. |
+| `tools/ffi/node.sh` | The same again in JavaScript, over a different third-party generator. Three languages and three generators agreeing is what says the surface is the library's and not one generator's — and a language with no static types reads it differently. `INTEGRATING.md`'s JavaScript sample runs here. |
 | `tools/ffi/swift.sh` | That the generated Swift module builds. A record field named for something the target language already puts on that type compiles in Rust and not in Swift or Kotlin, and the generator will produce one. Local only: the runner has no Swift. |
 | `tools/parity` | The three public surface pairs — the protocol, the wallet seam and the plumbing. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
 | `tools/spec` | `SPEC.md` against the tree that has to keep it: every §12 code declared, thrown and covered in all three implementations, every `vectors/…` file and case the text names by name, every figure it quotes beside a named case, every §N cross-reference. Nothing else in this repository reads the specification, and every implementation written from it inherits its mistakes. |
 | `rust/splitz-core/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |
 | `tools/oracle/instants.py` | §9.3's instants against CPython's `datetime`, written by other people for another purpose. §9.3 is deliberately narrower than RFC 3339, so the relation checked is containment and agreement, and the strings the stdlib accepts and §9.3 refuses are counted rather than assumed. |
 | `tools/examples` | Every sample under `dart/example/`, plus `rust/splitz-core/examples/seam.rs`, run with its exit code read. `dart analyze` type-checks them; it does not call them, and a sample that only compiles proves the names exist rather than that the calls in it are ones a caller may make in that order with those values. |
+| `tools/docs` | That a sample a document shows is the file a lane runs, byte for byte. A code block is a claim about the library and is the first thing an integrator copies; no other lane compiles one, so a block is the one kind of code here that can rot while every suite stays green. |
 | `tools/web-target` | That the package still refuses to compile to JavaScript. A JS number is exact only to 2^53−1; amounts here are 64-bit, so compiling would round them silently rather than fail. |
 
 ## Integrating it into a wallet

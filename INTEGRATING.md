@@ -12,6 +12,10 @@ and derives §9.5's id, a log that merges and folds, the two scans that move a
 bill between phones, and one payer's obligation from a folded bill. See **The
 wallet seam** below.
 
+A wallet in Kotlin, Swift, JavaScript or Python reaches the same protocol
+through `splitz-ffi`, which is those two layers across a foreign function
+boundary. See **Kotlin, Dart and JavaScript**.
+
 ## Dart
 
 ```dart
@@ -151,6 +155,322 @@ Three differences are idiom and are stated at the declarations: Dart names
 each obligation as a typedef and Rust declares it as a trait method; Dart's
 `broadcast` and `sign` return futures and Rust's are synchronous; Dart's scan
 outcomes are a sealed class hierarchy and Rust's are one enum.
+
+## Kotlin, Dart and JavaScript
+
+A wallet in a third language reaches the same protocol through `splitz-ffi`, a
+cdylib with a uniffi binding generated from it. Build it, generate the module
+for your language, and link the library:
+
+```
+cargo build -p splitz-ffi --release
+cargo run --bin uniffi-bindgen -p splitz-ffi -- generate --no-format \
+    --library target/release/libsplitz_ffi.dylib --language kotlin --out-dir .
+```
+
+That writes `uniffi/splitz_ffi/splitz_ffi.kt`. `--no-format` skips a ktlint
+pass that warns rather than fails when ktlint is not installed. The languages
+uniffi's own generator carries are `kotlin`, `swift`, `python` and `ruby`;
+Dart and JavaScript come from third parties, below.
+
+**Nothing in it calls back.** The seam above declares seven interfaces a
+wallet implements, and across a foreign boundary those are seven sets of
+callbacks — the part of a binding every generator gets wrong differently. So a
+wallet passes the facts it owns and gets an answer:
+
+| `HostFacts` | what it is |
+|---|---|
+| `me` | the participant id every entry this device writes is authored by |
+| `payTo` | the address this device is paid at, or none |
+| `now` | a §9.3 instant. Read when an entry is written, never while folding: §10.2 orders a log by instant, so a fold that read a clock would answer differently for one unchanged entry set |
+| `nonce` | sixteen bytes nobody can predict, for §9.4. Two bills opened in one second by one person are one bill when this can be guessed |
+
+Storage, the keychain, the relay and the send stay in the wallet's own
+language. An entry crosses as the JSON §9.3 canonicalises — it is the
+protocol's own wire format and a wallet never inspects one — and everything a
+person is shown crosses as a typed record. A refusal crosses as its §12 code.
+
+The three samples below are one program in three languages, and each is a file
+a lane runs: `tools/ffi/kotlin.sh`, `tools/ffi/dart.sh` and `tools/ffi/node.sh`
+compile and execute exactly these, and `tools/docs/blocks.py` fails if what is
+printed here and what is run ever differ.
+
+Two names to expect. The generated module follows each language's convention —
+`identityKeyFromSeed` in Kotlin and Dart, `identity_key_from_seed` in
+JavaScript — and the JavaScript generator spells record *fields* as Rust does,
+so a wallet passes `pay_to` there and `payTo` in the other two.
+
+### Kotlin
+
+```kotlin file=tools/ffi/kotlin/Doc.kt
+import uniffi.splitz_ffi.*
+
+/// The facts §15.1 says a wallet owns, for one call. A §9.3 instant and
+/// sixteen unpredictable bytes are the wallet's to supply: this library reads
+/// no clock (§13) and owns no entropy.
+fun facts(me: String, payTo: String, at: String, nonce: Int) =
+    HostFacts(me, payTo, at, ByteArray(16) { (nonce + it).toByte() })
+
+/// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
+/// key: 32 bytes, unpadded base64url.
+fun seed(first: Int): String = java.util.Base64.getUrlEncoder().withoutPadding()
+    .encodeToString(ByteArray(32) { (first + it).toByte() })
+
+fun main() {
+    val anaSeed = seed(1)
+    val benSeed = seed(90)
+
+    // Ana's device writes four entries. Each comes back as the JSON §9.3
+    // canonicalises, with §9.5's id already derived; the wallet stores the
+    // string and never inspects it.
+    val anaLog = listOf(
+        createBillEntry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
+            "Dinner", "EUR", "equal", identityKeyFromSeed(anaSeed), anaSeed),
+        joinBillEntry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2),
+            "Ana", "u1ana", identityKeyFromSeed(anaSeed), anaSeed),
+        addExpenseEntry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3),
+            "x1", "ana", 9000, """{"type":"equal","among":["ana","ben"]}""",
+            "dinner", anaSeed),
+        // §7 snapshots one rate onto the bill, so six devices do not price one
+        // dinner six ways. 300000 minor units per ZEC is €3000.00.
+        setRateEntry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4),
+            "EUR", 300000, "a fixed feed", anaSeed),
+    )
+
+    // Ben's own device writes Ben's join: §10.4 decides what an entry's author
+    // may say, and a participant joins for themselves.
+    val benLog = listOf(
+        joinBillEntry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5),
+            "Ben", "u1ben", identityKeyFromSeed(benSeed), benSeed),
+    )
+
+    // Merging is how two devices come to agree (§10.2). It is a set union by
+    // id, in either direction, any number of times.
+    val log = mergeEntries(anaLog, benLog).entries
+
+    val benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6)
+    val folded = foldEntries(benFacts, log)
+    println("on the bill: " + folded.bill.participants.joinToString { it.id })
+    // Render these. An entry the fold set aside is one a person cannot see
+    // otherwise, and its §12 code is what a wallet turns into a sentence.
+    println("set aside: " + folded.setAside)
+
+    // Null when the bill carries no rate: an unpriced bill is an ordinary
+    // bill, not a refusal. The second argument names the contested
+    // participants the payer has been shown and chosen to pay anyway (§10.7).
+    val owed = obligationOf(benFacts, log, listOf())
+        ?: error("a bill with a rate owes something")
+
+    val settlement = owed.settlements.single()
+    println("ben pays ${settlement.amount} to ${settlement.to}")
+    // The wallet broadcasts this; sending is not the library's (§13.3).
+    println("request: ${owed.request.uri}")
+    // Never dropped. A request that silently covers three debts of four is
+    // indistinguishable, to the payer, from one that covers all of them.
+    println("withheld: ${owed.request.withheldMinorUnits}")
+
+    check(settlement.to == "ana" && settlement.amount == 4500L) {
+        "half of 9000 is 4500 to ana, saw ${settlement.amount} to ${settlement.to}"
+    }
+    check(owed.request.uri!!.startsWith("zcash:u1ana")) { "${owed.request.uri}" }
+    check(owed.request.withheldMinorUnits == 0L) { "${owed.request.withheldMinorUnits}" }
+    println("DOC RESULT: kotlin")
+}
+```
+
+### Dart
+
+`configureDefaultBindings` is the generated entry point: it takes the path to
+the library and must be called before anything else.
+
+```dart file=tools/ffi/dart/doc.dart
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:splitz_dart_consumer/splitz_ffi.dart';
+
+/// The facts §15.1 says a wallet owns, for one call. A §9.3 instant and
+/// sixteen unpredictable bytes are the wallet's to supply: this library reads
+/// no clock (§13) and owns no entropy.
+HostFacts facts(String me, String payTo, String at, int nonce) => HostFacts(
+    me: me,
+    payTo: payTo,
+    now: at,
+    nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)));
+
+/// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
+/// key: 32 bytes, unpadded base64url.
+String seed(int first) =>
+    base64Url.encode(List.generate(32, (i) => (first + i) & 0xff)).replaceAll('=', '');
+
+void main(List<String> args) {
+  configureDefaultBindings(libraryPath: args[0]);
+
+  final anaSeed = seed(1);
+  final benSeed = seed(90);
+
+  // Ana's device writes four entries. Each comes back as the JSON §9.3
+  // canonicalises, with §9.5's id already derived; the wallet stores the
+  // string and never inspects it.
+  final anaLog = [
+    createBillEntry(facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
+        'Dinner', 'EUR', 'equal', identityKeyFromSeed(anaSeed), anaSeed),
+    joinBillEntry(facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2), 'Ana',
+        'u1ana', identityKeyFromSeed(anaSeed), anaSeed),
+    addExpenseEntry(facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3), 'x1',
+        'ana', 9000, '{"type":"equal","among":["ana","ben"]}', 'dinner', anaSeed),
+    // §7 snapshots one rate onto the bill, so six devices do not price one
+    // dinner six ways. 300000 minor units per ZEC is €3000.00.
+    setRateEntry(facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4), 'EUR',
+        300000, 'a fixed feed', anaSeed),
+  ];
+
+  // Ben's own device writes Ben's join: §10.4 decides what an entry's author
+  // may say, and a participant joins for themselves.
+  final benLog = [
+    joinBillEntry(facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5), 'Ben',
+        'u1ben', identityKeyFromSeed(benSeed), benSeed),
+  ];
+
+  // Merging is how two devices come to agree (§10.2). It is a set union by
+  // id, in either direction, any number of times.
+  final log = mergeEntries(anaLog, benLog).entries;
+
+  final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
+  final folded = foldEntries(benFacts, log);
+  print('on the bill: ${folded.bill.participants.map((p) => p.id).join(', ')}');
+  // Render these. An entry the fold set aside is one a person cannot see
+  // otherwise, and its §12 code is what a wallet turns into a sentence.
+  print('set aside: ${folded.setAside}');
+
+  // Null when the bill carries no rate: an unpriced bill is an ordinary bill,
+  // not a refusal. The third argument names the contested participants the
+  // payer has been shown and chosen to pay anyway (§10.7).
+  final owed = obligationOf(benFacts, log, const []);
+  if (owed == null) throw StateError('a bill with a rate owes something');
+
+  final settlement = owed.settlements.single;
+  print('ben pays ${settlement.amount} to ${settlement.to}');
+  // The wallet broadcasts this; sending is not the library's (§13.3).
+  print('request: ${owed.request.uri}');
+  // Never dropped. A request that silently covers three debts of four is
+  // indistinguishable, to the payer, from one that covers all of them.
+  print('withheld: ${owed.request.withheldMinorUnits}');
+
+  if (settlement.to != 'ana' || settlement.amount != 4500) {
+    throw StateError('half of 9000 is 4500 to ana, saw '
+        '${settlement.amount} to ${settlement.to}');
+  }
+  if (!owed.request.uri!.startsWith('zcash:u1ana')) throw StateError(owed.request.uri!);
+  if (owed.request.withheldMinorUnits != 0) {
+    throw StateError('${owed.request.withheldMinorUnits}');
+  }
+  print('DOC RESULT: dart');
+}
+```
+
+### JavaScript
+
+```javascript file=tools/ffi/node/doc.mjs
+import * as splitz from "./splitz_ffi.js";
+import { load } from "./splitz_ffi-ffi.js";
+
+load(process.argv[2]);
+
+// The facts §15.1 says a wallet owns, for one call. A §9.3 instant and sixteen
+// unpredictable bytes are the wallet's to supply: this library reads no clock
+// (§13) and owns no entropy. The generated record spells its fields as Rust
+// does, so it is `pay_to` here and `payTo` in Kotlin and Dart.
+const facts = (me, payTo, at, nonce) => ({
+  me,
+  pay_to: payTo,
+  now: at,
+  nonce: Uint8Array.from({ length: 16 }, (_, i) => (nonce + i) & 0xff),
+});
+
+// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
+// key: 32 bytes, unpadded base64url.
+const seed = (first) =>
+  Buffer.from(Array.from({ length: 32 }, (_, i) => (first + i) & 0xff)).toString(
+    "base64url",
+  );
+
+const anaSeed = seed(1);
+const benSeed = seed(90);
+
+// Ana's device writes four entries. Each comes back as the JSON §9.3
+// canonicalises, with §9.5's id already derived; the wallet stores the string
+// and never inspects it.
+const anaLog = [
+  splitz.create_bill_entry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
+    "Dinner", "EUR", "equal", splitz.identity_key_from_seed(anaSeed), anaSeed),
+  splitz.join_bill_entry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2),
+    "Ana", "u1ana", splitz.identity_key_from_seed(anaSeed), anaSeed),
+  splitz.add_expense_entry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3),
+    "x1", "ana", 9000, '{"type":"equal","among":["ana","ben"]}', "dinner", anaSeed),
+  // §7 snapshots one rate onto the bill, so six devices do not price one
+  // dinner six ways. 300000 minor units per ZEC is €3000.00.
+  splitz.set_rate_entry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4),
+    "EUR", 300000, "a fixed feed", anaSeed),
+];
+
+// Ben's own device writes Ben's join: §10.4 decides what an entry's author may
+// say, and a participant joins for themselves.
+const benLog = [
+  splitz.join_bill_entry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5),
+    "Ben", "u1ben", splitz.identity_key_from_seed(benSeed), benSeed),
+];
+
+// Merging is how two devices come to agree (§10.2). It is a set union by id,
+// in either direction, any number of times.
+const log = splitz.merge_entries(anaLog, benLog).entries;
+
+const benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6);
+const folded = splitz.fold_entries(benFacts, log);
+console.log("on the bill: " + folded.bill.participants.map((p) => p.id).join(", "));
+// Render these. An entry the fold set aside is one a person cannot see
+// otherwise, and its §12 code is what a wallet turns into a sentence.
+console.log("set aside: " + JSON.stringify(folded.set_aside));
+
+// Undefined when the bill carries no rate: an unpriced bill is an ordinary
+// bill, not a refusal. The third argument names the contested participants the
+// payer has been shown and chosen to pay anyway (§10.7).
+const owed = splitz.obligation_of(benFacts, log, []);
+if (owed === undefined) throw new Error("a bill with a rate owes something");
+
+const settlement = owed.settlements[0];
+console.log(`ben pays ${settlement.amount} to ${settlement.to}`);
+// The wallet broadcasts this; sending is not the library's (§13.3).
+console.log(`request: ${owed.request.uri}`);
+// Never dropped. A request that silently covers three debts of four is
+// indistinguishable, to the payer, from one that covers all of them.
+console.log(`withheld: ${owed.request.withheld_minor_units}`);
+
+if (settlement.to !== "ana" || Number(settlement.amount) !== 4500) {
+  throw new Error(`half of 9000 is 4500 to ana, saw ${settlement.amount} to ${settlement.to}`);
+}
+if (!owed.request.uri.startsWith("zcash:u1ana")) throw new Error(owed.request.uri);
+if (Number(owed.request.withheld_minor_units) !== 0) {
+  throw new Error(`${owed.request.withheld_minor_units}`);
+}
+console.log("DOC RESULT: javascript");
+```
+
+### Generators
+
+The crate pins `uniffi = "=0.31.0"`, because every bindings generator outside
+uniffi's own tree targets 0.31. The third-party ones carry two requirements
+their own documentation does not state:
+
+- The crate must build with uniffi's `scaffolding-ffi-buffer-fns` feature, or
+  the Dart generator's output links against symbols the library does not
+  export.
+- `uniffi-bindgen-dart` needs `--crate <name>`, or it looks up
+  `ffi_uniffi_<name>_rustbuffer_*` where the library exports
+  `ffi_<name>_rustbuffer_*`.
+
+The Swift module compiles (`tools/ffi/swift.sh`) and nothing drives it: there
+is no Swift sample here because there is no Swift sample that has run.
 
 ## Ten things the wallet owns
 

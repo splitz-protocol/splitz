@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # A Kotlin wallet, written against the generated binding and nothing else.
 #
-# A binding that compiles is not a binding that carries a callback. This builds
-# the cdylib, generates Kotlin from it, and runs a consumer that implements all
-# seven of SPEC.md §15's interfaces and drives one bill across two devices —
-# opened, joined, shared by invite, split, priced, settled, confirmed and read
-# back as a history — calling into Kotlin for storage, secrets, the clock,
-# randomness, the relay and the send at every step.
+# This builds the cdylib, generates Kotlin from it, and runs two programs over
+# the generated module. `Consumer.kt` drives one bill across two devices —
+# opened, joined, shared by a code, split, priced, settled, confirmed and read
+# back as a history — keeping its storage, its clock, its randomness, its relay
+# and its send in Kotlin and passing the library facts. `Doc.kt` is the sample
+# INTEGRATING.md quotes: it runs here so the document's code is code that ran.
 #
 # Needs a Kotlin compiler and JNA. Point KOTLINC and JNA_JAR at them, or let
 # this find Android Studio's kotlinc and fetch JNA into the work directory.
@@ -69,6 +69,8 @@ fi
 
 "$kotlinc" -nowarn -classpath "$jna" \
   "$work/kt/uniffi/splitz_ffi/splitz_ffi.kt" "$root/tools/ffi/kotlin/Consumer.kt" \
+  "$root/tools/ffi/kotlin/Doc.kt" \
   -d "$work/classes"
 
 java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" ConsumerKt
+java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" DocKt

@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # A JavaScript wallet, written against the generated Node package.
 #
-# A third language over the same foreign library: it implements all seven of
-# SPEC.md §15's interfaces and drives one bill from opening it to a confirmed
-# payment. Kotlin proves the binding carries a callback; this proves the
-# generator is not the only one that can, and that the surface reads the same
-# from a language with no static types.
+# A third language over the same foreign library, driving one bill from opening
+# it to a confirmed payment, and reading the same surface from a language with
+# no static types. `doc.mjs` is the sample INTEGRATING.md quotes: it runs here
+# so the document's code is code that ran.
 #
 # Needs node and npm. `uniffi-bindgen-node-js` is installed into the work
 # directory rather than the machine, pinned: it and every other third-party
@@ -41,7 +40,8 @@ rm -rf "$work/node"
 # Run from the workspace: the generator reads `cargo metadata` from its own
 # working directory to resolve the crate.
 (cd "$root/rust" && "$generator" generate --out-dir "$work/node" "$library")
-cp "$root/tools/ffi/node/consumer.mjs" "$work/node/"
+cp "$root/tools/ffi/node/consumer.mjs" "$root/tools/ffi/node/doc.mjs" "$work/node/"
 (cd "$work/node" && npm install --silent --no-fund --no-audit)
 
 node "$work/node/consumer.mjs" "$library"
+node "$work/node/doc.mjs" "$library"

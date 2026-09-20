@@ -165,6 +165,15 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 tools/oracle/instants.py
 
+  docs:
+    # A sample in a document is a claim about the library, and one nothing
+    # else here reaches: no other lane compiles a code block. This asserts
+    # every block that quotes a file is that file, and that a lane runs it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/docs/blocks.py
+
   parity:
     # An API one implementation has and the other does not never reaches the
     # wire, so neither the corpus nor the differential lane can see it.

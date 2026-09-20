@@ -52,6 +52,9 @@ dependencies:
   ffi: ^2.1.0
 YAML
 (cd "$root/rust" && "$generator" generate --crate splitz_ffi --out-dir "$pkg/lib" "$library")
-cp "$root/tools/ffi/dart/consumer.dart" "$pkg/bin/"
+cp "$root/tools/ffi/dart/consumer.dart" "$root/tools/ffi/dart/doc.dart" "$pkg/bin/"
 (cd "$pkg" && dart pub get >/dev/null && dart analyze)
 (cd "$pkg" && dart run bin/consumer.dart "$library")
+# The sample INTEGRATING.md quotes, run here so the document's code is code
+# that ran.
+(cd "$pkg" && dart run bin/doc.dart "$library")
