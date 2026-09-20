@@ -101,11 +101,13 @@ void main() {
     ).writeAsString('half a log');
 
     expect(await storage.read('splitz_bill_b1'), 'first');
-    expect(
-      await storage.keys('splitz_bill_'),
-      ['splitz_bill_b1'],
-      reason: 'a half-written file is not a bill',
-    );
+    // The list is bound first because a collection literal passed straight to
+    // `expect` is wrapped differently by two formatter versions, and this
+    // package is formatted by whichever one a checkout has.
+    final listed = await storage.keys('splitz_bill_');
+    expect(listed, [
+      'splitz_bill_b1',
+    ], reason: 'a half-written file is not a bill');
 
     expect(await storage.sweepUnfinishedWrites(), 1);
     expect(await storage.sweepUnfinishedWrites(), 0);
