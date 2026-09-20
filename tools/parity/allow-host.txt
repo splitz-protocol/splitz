@@ -1,0 +1,18 @@
+# Divergences between the two wallet seams that are idiom rather than gap.
+#
+# The Rust side is `rust/src/host/mod.rs`'s `pub use` block — what a consumer
+# reaches as `splitz::host::…`. The Dart side is what
+# `package:splitz/host.dart` re-exports from `dart/lib/src/host/`.
+#
+# The seam is compared separately from the protocol because it is separately
+# importable on both sides: a protocol name absent from it is correct rather
+# than missing. Every line states why a name exists on one side and not the
+# other; a line with no reason is a suppression, and a stale line fails this
+# lane so the list cannot outlive what it describes.
+
+# --- names Dart has and Rust does not ---------------------------------------
+dart::Clock        # Dart names each thing the wallet lends as a function typedef a host stores; Rust declares them as methods on the `BillHost` trait, which has no separate name to export. `BillHost` itself is on both sides and is what a host implements. The seam's shape is identical: the same four obligations, taken from the host and never from a clock or a socket this library reads.
+dart::Randomness   # As `Clock`: a trait method in Rust, so there is no type name to pair with. §9.4's nonce comes from the host in both.
+dart::Broadcast    # As `Clock`. One further difference is behavioural and is stated at the declaration: Dart's returns a `Future`, Rust's is synchronous, because this crate depends on no async runtime and so cannot own the executor a future would need. A host whose send is asynchronous blocks on it where it already knows its runtime.
+dart::ScannedInvite  # §11's three scan outcomes are a sealed class hierarchy in Dart and the three variants of one `enum Scanned` in Rust. A Rust enum variant is not a module-root name, so it has nothing to pair with; `Scanned` is on both sides and is what a consumer matches on. `ScannedBill` is the exception and IS on both, because `accept_scan` takes only that one — a signature that admitted an invite or a refusal would need a refusal for a caller mistake the type system can decide.
+dart::ScanRefused    # §11's three scan outcomes are a sealed class hierarchy in Dart and the three variants of one `enum Scanned` in Rust. A Rust enum variant is not a module-root name, so it has nothing to pair with; `Scanned` is on both sides and is what a consumer matches on.

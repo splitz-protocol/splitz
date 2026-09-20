@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Diffs the two implementations' public surfaces.
 
+Two surfaces, not one: the protocol (`package:splitz/splitz.dart` against
+`splitz::`) and the wallet seam (`package:splitz/host.dart` against
+`splitz::host::`). They are compared separately because they are separately
+importable — a name that is on the crate root and not on `host` is not a gap,
+and a consumer reaching for the seam gets only what the seam exports.
+
 The corpus compares serialised values and the differential lane compares
 answers, so an API one side has and the other does not — a getter a consumer
 reads, a constant a caller branches on — is invisible to both. It never reaches
@@ -108,16 +114,34 @@ RENAMES = {
     "billIdDomain": "BILL_ID_DOMAIN",
     "payloadForKind": "payload_for",
     "confirmationMethods": "confirmation_rule",
+    # --- the wallet seam ---
+    "createBill": "create_bill",
+    "joinBill": "join_bill",
+    "addExpense": "add_expense",
+    "recordPayment": "record_payment",
+    "confirmPayment": "confirm_payment",
+    "setRate": "set_rate",
+    "voidEntry": "void_entry",
+    "signEntry": "sign_entry",
+    "base64UrlNoPad": "base64url_no_pad",
+    "entryVersion": "ENTRY_VERSION",
+    "creatorKeyBytes": "CREATOR_KEY_BYTES",
+    "readScan": "read_scan",
+    "inviteFor": "invite_for",
+    "shareableBill": "shareable_bill",
+    "acceptScan": "accept_scan",
+    "hasJoined": "has_joined",
+    "obligationFor": "obligation_for",
 }
 
 
-def dart_surface() -> set[str]:
+def dart_surface(source: Path) -> set[str]:
     names: set[str] = set()
-    for path in (ROOT / "dart" / "lib" / "src").glob("*.dart"):
+    for path in sorted(source.glob("*.dart")):
         text = path.read_text(encoding="utf-8")
         # Top-level declarations only: anything indented belongs to a class.
         for match in re.finditer(
-            r"^(?:abstract\s+final\s+|final\s+|sealed\s+)?"
+            r"^(?:abstract\s+|final\s+|sealed\s+|base\s+|interface\s+)*"
             r"(?:class|enum|mixin|extension|typedef)\s+([A-Z]\w*)",
             text,
             re.M,
@@ -126,7 +150,7 @@ def dart_surface() -> set[str]:
         for match in re.finditer(r"^const\s+(?:\w[\w<>,? ]*\s+)?(\w+)\s*=", text, re.M):
             names.add(match.group(1))
         for match in re.finditer(
-            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\] ]*\s+)(\w+)\s*\(", text, re.M
+            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*\(", text, re.M
         ):
             name = match.group(1)
             if not name.startswith("_") and name not in {"if", "for", "while", "switch"}:
@@ -134,7 +158,7 @@ def dart_surface() -> set[str]:
     return {n for n in names if not n.startswith("_")}
 
 
-def rust_surface() -> set[str]:
+def rust_surface(source: Path) -> set[str]:
     """What `splitz::` re-exports — the surface a consumer actually reaches.
 
     Not every `pub` item in every module. A module is `pub mod`, so a name can
@@ -143,7 +167,7 @@ def rust_surface() -> set[str]:
     comparing module-level `pub` against it says two surfaces match when one
     of them is reachable only by spelling out the module.
     """
-    text = (ROOT / "rust" / "src" / "lib.rs").read_text(encoding="utf-8")
+    text = source.read_text(encoding="utf-8")
     names: set[str] = set()
     for match in re.finditer(r"^pub use [\w:]+\{([^}]*)\};", text, re.M | re.S):
         for item in match.group(1).split(","):
@@ -173,26 +197,55 @@ def _split_params(text: str) -> list[str]:
     return out
 
 
-def dart_signatures() -> dict[str, list[str]]:
+def _param_text(text: str, open_paren: int) -> str | None:
+    """The parameter list starting at `open_paren`, brackets balanced.
+
+    Scanned rather than matched. Dart writes named parameters inside braces —
+    `foldLog(List<Object?> raw, {String? billId})` — and a regex that stops at
+    the first `{` reads that declaration as no declaration at all, so every
+    function with a named parameter fell out of the comparison and its arity
+    was never checked against Rust's.
+    """
+    depth = 0
+    for i in range(open_paren, len(text)):
+        ch = text[i]
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren + 1 : i]
+        elif ch == ";" and depth == 1:
+            return None
+    return None
+
+
+def dart_signatures(source: Path) -> dict[str, list[str]]:
     """Top-level function name -> its parameter declarations."""
     sigs: dict[str, list[str]] = {}
-    for path in (ROOT / "dart" / "lib" / "src").glob("*.dart"):
+    for path in sorted(source.glob("*.dart")):
         text = path.read_text(encoding="utf-8")
         for match in re.finditer(
-            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\] ]*\s+)(\w+)\s*\(([^;{]*?)\)\s*(?:\{|=>)",
-            text,
-            re.M | re.S,
+            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*\(", text, re.M
         ):
-            name, params = match.group(1), match.group(2)
-            if name.startswith("_"):
+            name = match.group(1)
+            if name.startswith("_") or name in {"if", "for", "while", "switch"}:
                 continue
-            sigs[name] = [p for p in _split_params(params.replace("{", "").replace("}", ""))]
+            params = _param_text(text, match.end() - 1)
+            if params is None:
+                continue
+            body = text[match.end() - 1 + len(params) + 2 :].lstrip()
+            # A declaration, not a call: what follows the list is a body.
+            if not (body.startswith("{") or body.startswith("=>")):
+                continue
+            cleaned = params.replace("{", "").replace("}", "")
+            sigs[name] = _split_params(cleaned)
     return sigs
 
 
-def rust_signatures() -> dict[str, list[str]]:
+def rust_signatures(source: Path) -> dict[str, list[str]]:
     sigs: dict[str, list[str]] = {}
-    for path in (ROOT / "rust" / "src").glob("*.rs"):
+    for path in sorted(source.glob("*.rs")):
         text = path.read_text(encoding="utf-8")
         text = re.split(r"^#\[cfg\(test\)\]", text, maxsplit=1, flags=re.M)[0]
         for match in re.finditer(
@@ -208,19 +261,30 @@ def normalise(name: str) -> str:
     return RENAMES.get(name, name)
 
 
-def main() -> int:
-    dart = {normalise(n) for n in dart_surface()}
-    rust = rust_surface()
-
-    allow_path = ROOT / "tools" / "parity" / "allow.txt"
+def _allowed(path: Path) -> dict[str, str]:
     allowed: dict[str, str] = {}
-    if allow_path.exists():
-        for line in allow_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            name, _, reason = line.partition("#")
-            allowed[name.strip()] = reason.strip()
+    if not path.exists():
+        return allowed
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, _, reason = line.partition("#")
+        allowed[name.strip()] = reason.strip()
+    return allowed
+
+
+def compare(
+    label: str,
+    dart_src: Path,
+    rust_names: Path,
+    rust_sigs: Path,
+    allow_path: Path,
+) -> int:
+    """One surface pair. Returns the number of divergences neither side owns."""
+    dart = {normalise(n) for n in dart_surface(dart_src)}
+    rust = rust_surface(rust_names)
+    allowed = _allowed(allow_path)
 
     only_dart = sorted(f"dart::{n}" for n in dart - rust)
     only_rust = sorted(f"rust::{n}" for n in rust - dart)
@@ -229,8 +293,8 @@ def main() -> int:
     # consumer's compile error; an `Object?` on one side against a concrete
     # type on the other is worse, because the typed side cannot be handed the
     # value that the untyped side has to decide about.
-    d_sigs = {normalise(n): ps for n, ps in dart_signatures().items()}
-    r_sigs = rust_signatures()
+    d_sigs = {normalise(n): ps for n, ps in dart_signatures(dart_src).items()}
+    r_sigs = rust_signatures(rust_sigs)
     shape: list[str] = []
     for name in sorted(set(d_sigs) & set(r_sigs)):
         dp, rp = d_sigs[name], r_sigs[name]
@@ -252,7 +316,7 @@ def main() -> int:
     stale = [name for name in allowed if name not in divergences]
 
     print(
-        f"{len(dart & rust)} shared names, "
+        f"{label}: {len(dart & rust)} shared names, "
         f"{len(set(d_sigs) & set(r_sigs))} shared signatures, "
         f"{len(divergences)} divergences: "
         f"{len(explained)} recorded, {len(unexplained)} unexplained"
@@ -262,7 +326,28 @@ def main() -> int:
     for name in unexplained:
         print(f"  UNEXPLAINED {name}")
 
-    return 1 if unexplained or stale else 0
+    return len(unexplained) + len(stale)
+
+
+def main() -> int:
+    here = ROOT / "tools" / "parity"
+    open_items = compare(
+        "protocol",
+        ROOT / "dart" / "lib" / "src",
+        ROOT / "rust" / "src" / "lib.rs",
+        ROOT / "rust" / "src",
+        here / "allow.txt",
+    )
+    # The seam is its own import on both sides, so it is its own comparison.
+    # A protocol name missing from it is correct, not a gap.
+    open_items += compare(
+        "host",
+        ROOT / "dart" / "lib" / "src" / "host",
+        ROOT / "rust" / "src" / "host" / "mod.rs",
+        ROOT / "rust" / "src" / "host",
+        here / "allow-host.txt",
+    )
+    return 1 if open_items else 0
 
 
 if __name__ == "__main__":
