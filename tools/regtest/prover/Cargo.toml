@@ -11,10 +11,10 @@ description = "Broadcasts a transaction built from a splitz payment request on a
 [dependencies]
 splitz = { path = "../../../rust" }
 
-zcash_client_backend = { version = "0.24", features = ["lightwalletd-tonic-transport", "orchard"] }
-zcash_client_sqlite = { version = "0.22", features = ["orchard"] }
+zcash_client_backend = { version = "0.24", features = ["lightwalletd-tonic-transport", "orchard", "sync", "transparent-inputs"] }
+zcash_client_sqlite = { version = "0.22", features = ["orchard", "transparent-inputs"] }
 zcash_keys = { version = "0.16", features = ["orchard", "transparent-inputs"] }
-zcash_protocol = "0.10"
+zcash_protocol = { version = "0.10", features = ["local-consensus"] }
 zcash_address = "0.13"
 zcash_transparent = { version = "0.10", features = ["transparent-inputs"] }
 zip32 = "0.2"
@@ -23,5 +23,13 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 secrecy = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 serde_json = "1"
-ureq = "2"
+ureq = { version = "2", features = ["json"] }
 anyhow = "1"
+async-trait = "0.1"
+tempfile = "3"
+rand = "0.8"
+prost = "0.14"
+nonempty = "0.11"
+tonic = "0.14"
+zcash_proofs = { version = "0.30.0", features = ["download-params"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
