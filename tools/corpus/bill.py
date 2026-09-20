@@ -112,6 +112,51 @@ BILL_CASES = [
          {"id": "p1", "from": "ben", "to": "ana", "amount": 100,
           "currency": "EUR", "method": "shieldedZec", "at": AT2,
           "paidAtRate": {"currency": "USD", "minorUnitsPerZec": 51234, "at": AT}}]))),
+
+    # A bill's rate is snapshotted onto it (§7), and a document that carries
+    # one must read back carrying it: a reader that dropped it would price
+    # every device's settlement by whatever it looked up instead.
+    ("a_bill_carrying_a_rate",
+     mutate(lambda d: d.__setitem__("rate",
+         {"currency": "EUR", "minorUnitsPerZec": 51234, "at": AT}))),
+    ("a_rate_naming_its_source",
+     mutate(lambda d: d.__setitem__("rate",
+         {"currency": "EUR", "minorUnitsPerZec": 51234, "at": AT,
+          "source": "a named feed"}))),
+
+    # §9.2's advisory halves. `reference` identifies a swap off this chain and
+    # is not a Zcash txid; a document that dropped it would leave the swap
+    # unidentifiable after one re-share.
+    ("a_swap_payment_with_its_reference",
+     mutate(lambda d: d.__setitem__("payments", [
+         {"id": "near-intent-7f3a", "from": "ana", "to": "ben", "amount": 100,
+          "currency": "EUR", "method": "swap", "at": AT2,
+          "reference": "near-intent-7f3a", "zatoshi": 1000000,
+          "note": "USDC on base"}]))),
+    ("a_cash_payment_with_a_note",
+     mutate(lambda d: d.__setitem__("payments", [
+         {"id": "c1", "from": "ana", "to": "ben", "amount": 100,
+          "currency": "EUR", "method": "cash", "at": AT2,
+          "note": "handed over at the table"}]))),
+    ("a_payment_priced_at_the_rate_it_was_paid_at",
+     mutate(lambda d: d.__setitem__("payments", [
+         {"id": "p1", "from": "ana", "to": "ben", "amount": 100,
+          "currency": "EUR", "method": "shieldedZec", "at": AT2,
+          "zatoshi": 195234,
+          "paidAtRate": {"currency": "EUR", "minorUnitsPerZec": 51234,
+                         "at": AT, "source": "a named feed"}}]))),
+
+    # §9.1's payout preferences, in their order: the order IS the preference,
+    # and a reader that reordered them settles to a different address.
+    ("participants_declaring_every_payout_type",
+     mutate(lambda d: d.__setitem__("participants", [
+         {"id": "ana", "name": "Ana",
+          "payouts": [{"type": "zec", "address": ADDRESSES[0]}]},
+         {"id": "ben", "name": "Ben",
+          "payouts": [{"type": "swap", "asset": "USDC", "chain": "base",
+                       "address": "0xben"},
+                      {"type": "cash"}]},
+         {"id": "cai", "name": "Cai", "payouts": [{"type": "cash"}]}]))),
 ]
 
 

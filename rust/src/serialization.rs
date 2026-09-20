@@ -5,7 +5,7 @@
 //! defaulted to zero makes §4.5's total check pass on a bill whose tax has
 //! vanished.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 
 use crate::error::{code, Result, SplitError};
@@ -469,4 +469,143 @@ pub fn decode_bill(doc: &Value) -> Result<Bill> {
         confirmed_payments,
         rate,
     })
+}
+
+// --- the encoder ------------------------------------------------------------
+
+/// Writes `bill` as a §9 document.
+///
+/// **Every field [`decode_bill`] reads, this writes.** A field the decoder
+/// admits and the encoder drops is a value that survives one hop and vanishes
+/// on the next — a swap's `reference` becoming unreadable after a re-share,
+/// a snapshotted rate silently re-looked-up per device. `bill_round_trips`
+/// pins the pair together.
+///
+/// An absent optional is left out rather than written as null: §9.3's
+/// canonical form has no null, and a reader that admitted one would be
+/// admitting a shape this never emits.
+pub fn bill_to_json(bill: &Bill) -> Value {
+    let mut doc = Map::new();
+    doc.insert("v".to_owned(), Value::from(BILL_VERSION));
+    doc.insert("id".to_owned(), Value::from(bill.id.clone()));
+    doc.insert("name".to_owned(), Value::from(bill.name.clone()));
+    doc.insert("currency".to_owned(), Value::from(bill.currency.clone()));
+    doc.insert("splitMode".to_owned(), Value::from(bill.split_mode.clone()));
+    doc.insert(
+        "participants".to_owned(),
+        Value::Array(bill.participants.iter().map(participant_to_json).collect()),
+    );
+    doc.insert(
+        "expenses".to_owned(),
+        Value::Array(bill.expenses.iter().map(expense_to_json).collect()),
+    );
+    doc.insert(
+        "payments".to_owned(),
+        Value::Array(bill.payments.iter().map(payment_to_json).collect()),
+    );
+    doc.insert(
+        "confirmedPayments".to_owned(),
+        Value::Array(
+            bill.confirmed_payments
+                .iter()
+                .map(|id| Value::from(id.clone()))
+                .collect(),
+        ),
+    );
+    if let Some(rate) = &bill.rate {
+        doc.insert("rate".to_owned(), rate_to_json(rate));
+    }
+    Value::Object(doc)
+}
+
+/// Writes a participant, including the payout preferences in their order:
+/// §9.1 makes the order the preference order.
+pub fn participant_to_json(p: &Participant) -> Value {
+    let mut o = Map::new();
+    o.insert("id".to_owned(), Value::from(p.id.clone()));
+    o.insert("name".to_owned(), Value::from(p.name.clone()));
+    if let Some(a) = &p.pay_to {
+        o.insert("payTo".to_owned(), Value::from(a.clone()));
+    }
+    if let Some(k) = &p.identity_key {
+        o.insert("identityKey".to_owned(), Value::from(k.clone()));
+    }
+    if !p.payouts.is_empty() {
+        o.insert(
+            "payouts".to_owned(),
+            Value::Array(p.payouts.iter().map(payout_to_json).collect()),
+        );
+    }
+    Value::Object(o)
+}
+
+/// Writes one payout preference.
+pub fn payout_to_json(p: &Payout) -> Value {
+    let mut o = Map::new();
+    o.insert("type".to_owned(), Value::from(p.kind.clone()));
+    if let Some(a) = &p.address {
+        o.insert("address".to_owned(), Value::from(a.clone()));
+    }
+    if let Some(a) = &p.asset {
+        o.insert("asset".to_owned(), Value::from(a.clone()));
+    }
+    if let Some(c) = &p.chain {
+        o.insert("chain".to_owned(), Value::from(c.clone()));
+    }
+    Value::Object(o)
+}
+
+/// Writes an expense. `split` is §4's own shape and is passed through
+/// untouched.
+pub fn expense_to_json(e: &Expense) -> Value {
+    let mut o = Map::new();
+    o.insert("id".to_owned(), Value::from(e.id.clone()));
+    o.insert("description".to_owned(), Value::from(e.description.clone()));
+    o.insert("paidBy".to_owned(), Value::from(e.paid_by.clone()));
+    o.insert("amount".to_owned(), Value::from(e.amount));
+    o.insert("currency".to_owned(), Value::from(e.currency.clone()));
+    o.insert("at".to_owned(), Value::from(e.at.clone()));
+    o.insert("split".to_owned(), e.split.clone());
+    Value::Object(o)
+}
+
+/// Writes a payment record, including the advisory halves §9.2 allows:
+/// `zatoshi`, `paidAtRate`, the swap `reference` and a `note`.
+pub fn payment_to_json(p: &PaymentRecord) -> Value {
+    let mut o = Map::new();
+    o.insert("id".to_owned(), Value::from(p.id.clone()));
+    o.insert("from".to_owned(), Value::from(p.from.clone()));
+    o.insert("to".to_owned(), Value::from(p.to.clone()));
+    o.insert("amount".to_owned(), Value::from(p.amount));
+    o.insert("currency".to_owned(), Value::from(p.currency.clone()));
+    o.insert("method".to_owned(), Value::from(p.method.clone()));
+    o.insert("at".to_owned(), Value::from(p.at.clone()));
+    if let Some(z) = p.zatoshi {
+        o.insert("zatoshi".to_owned(), Value::from(z));
+    }
+    if let Some(r) = &p.paid_at_rate {
+        o.insert("paidAtRate".to_owned(), rate_to_json(r));
+    }
+    if let Some(r) = &p.reference {
+        o.insert("reference".to_owned(), Value::from(r.clone()));
+    }
+    if let Some(n) = &p.note {
+        o.insert("note".to_owned(), Value::from(n.clone()));
+    }
+    Value::Object(o)
+}
+
+/// Writes a rate. `source` is the only optional §7 leaves.
+pub fn rate_to_json(r: &ExchangeRate) -> Value {
+    let mut o = Map::new();
+    o.insert("currency".to_owned(), Value::from(r.currency.clone()));
+    o.insert(
+        "minorUnitsPerZec".to_owned(),
+        Value::from(r.minor_units_per_zec),
+    );
+    o.insert("at".to_owned(), Value::from(r.at.clone()));
+    if let Some(s) = &r.source {
+        o.insert("source".to_owned(), Value::from(s.clone()));
+    }
+    Value::Object(o)
 }

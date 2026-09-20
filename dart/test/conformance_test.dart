@@ -318,6 +318,19 @@ void main() {
     });
   });
 
+  runCases('seal.json', (c, produce) {
+    // Either an entry to seal, or a bill id to derive a channel from.
+    if (c.containsKey('billId')) {
+      produce({'channel': channelFor(c['billId'] as String)});
+      return;
+    }
+    final plaintext = sealedPlaintext(c['entry'] as Map<String, dynamic>);
+    produce({
+      'plaintext': utf8.decode(plaintext),
+      'nonce': base64UrlEncode(sealedNonce(plaintext)).replaceAll('=', ''),
+    });
+  });
+
   runCases('invite.json', (c, produce) {
     if (c.containsKey('uri')) {
       final invite = parseInvite(c['uri'] as String);
@@ -359,71 +372,7 @@ void main() {
   });
 
   runCases('bill-json.json', (c, produce) {
-    final bill = decodeBill(c['json']);
-    produce({
-      'v': billVersion,
-      'id': bill.id,
-      'name': bill.name,
-      'currency': bill.currency,
-      'splitMode': bill.splitMode,
-      'participants': [
-        for (final p in bill.participants)
-          {
-            'id': p.id,
-            'name': p.name,
-            if (p.payTo != null) 'payTo': p.payTo,
-            if (p.identityKey != null) 'identityKey': p.identityKey,
-            if (p.payouts.isNotEmpty)
-              'payouts': [
-                for (final o in p.payouts)
-                  {
-                    'type': o.type,
-                    if (o.address != null) 'address': o.address,
-                    if (o.asset != null) 'asset': o.asset,
-                    if (o.chain != null) 'chain': o.chain,
-                  },
-              ],
-          },
-      ],
-      'expenses': [
-        for (final e in bill.expenses)
-          {
-            'id': e.id,
-            'description': e.description,
-            'paidBy': e.paidBy,
-            'amount': e.amount,
-            'currency': e.currency,
-            'at': e.at,
-            'split': e.split,
-          },
-      ],
-      'payments': [
-        for (final p in bill.payments)
-          {
-            'id': p.id,
-            'from': p.from,
-            'to': p.to,
-            'amount': p.amount,
-            'currency': p.currency,
-            'method': p.method,
-            'at': p.at,
-            if (p.zatoshi != null) 'zatoshi': p.zatoshi,
-            if (p.paidAtRate != null)
-              'paidAtRate': {
-                'currency': p.paidAtRate!.currency,
-                'minorUnitsPerZec': p.paidAtRate!.minorUnitsPerZec,
-                'at': p.paidAtRate!.at,
-              },
-          },
-      ],
-      'confirmedPayments': sortedUtf8(bill.confirmedPayments),
-      if (bill.rate != null)
-        'rate': {
-          'currency': bill.rate!.currency,
-          'minorUnitsPerZec': bill.rate!.minorUnitsPerZec,
-          'at': bill.rate!.at,
-        },
-    });
+    produce(billToJson(decodeBill(c['json'])));
   });
 
   runCases('settlement.json', (c, produce) {

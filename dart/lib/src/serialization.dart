@@ -330,3 +330,85 @@ int _integer(Object? value) {
   }
   return value;
 }
+
+// --- the encoder ------------------------------------------------------------
+
+/// Writes [bill] as a §9 document.
+///
+/// **Every field [decodeBill] reads, this writes.** A field the decoder
+/// admits and the encoder drops is a value that survives one hop and vanishes
+/// on the next — a swap's `reference` becoming unreadable after a re-share, a
+/// snapshotted rate silently re-looked-up per device.
+///
+/// An absent optional is left out rather than written as null: §9.3's
+/// canonical form has no null, and a reader that admitted one would be
+/// admitting a shape this never emits.
+Map<String, dynamic> billToJson(Bill bill) => <String, dynamic>{
+      'v': billVersion,
+      'id': bill.id,
+      'name': bill.name,
+      'currency': bill.currency,
+      'splitMode': bill.splitMode,
+      'participants': [
+        for (final p in bill.participants) participantToJson(p),
+      ],
+      'expenses': [for (final e in bill.expenses) expenseToJson(e)],
+      'payments': [for (final p in bill.payments) paymentToJson(p)],
+      'confirmedPayments': bill.confirmedPayments.toList(),
+      if (bill.rate != null) 'rate': rateToJson(bill.rate!),
+    };
+
+/// Writes a participant, including the payout preferences in their order:
+/// §9.1 makes the order the preference order.
+Map<String, dynamic> participantToJson(Participant p) => <String, dynamic>{
+      'id': p.id,
+      'name': p.name,
+      if (p.payTo != null) 'payTo': p.payTo,
+      if (p.identityKey != null) 'identityKey': p.identityKey,
+      if (p.payouts.isNotEmpty)
+        'payouts': [for (final o in p.payouts) payoutToJson(o)],
+    };
+
+/// Writes one payout preference.
+Map<String, dynamic> payoutToJson(Payout p) => <String, dynamic>{
+      'type': p.type,
+      if (p.address != null) 'address': p.address,
+      if (p.asset != null) 'asset': p.asset,
+      if (p.chain != null) 'chain': p.chain,
+    };
+
+/// Writes an expense. `split` is §4's own shape and is passed through
+/// untouched.
+Map<String, dynamic> expenseToJson(Expense e) => <String, dynamic>{
+      'id': e.id,
+      'description': e.description,
+      'paidBy': e.paidBy,
+      'amount': e.amount,
+      'currency': e.currency,
+      'at': e.at,
+      'split': e.split,
+    };
+
+/// Writes a payment record, including the advisory halves §9.2 allows:
+/// `zatoshi`, `paidAtRate`, the swap `reference` and a `note`.
+Map<String, dynamic> paymentToJson(PaymentRecord p) => <String, dynamic>{
+      'id': p.id,
+      'from': p.from,
+      'to': p.to,
+      'amount': p.amount,
+      'currency': p.currency,
+      'method': p.method,
+      'at': p.at,
+      if (p.zatoshi != null) 'zatoshi': p.zatoshi,
+      if (p.paidAtRate != null) 'paidAtRate': rateToJson(p.paidAtRate!),
+      if (p.reference != null) 'reference': p.reference,
+      if (p.note != null) 'note': p.note,
+    };
+
+/// Writes a rate. `source` is the only optional §7 leaves.
+Map<String, dynamic> rateToJson(ExchangeRate r) => <String, dynamic>{
+      'currency': r.currency,
+      'minorUnitsPerZec': r.minorUnitsPerZec,
+      'at': r.at,
+      if (r.source != null) 'source': r.source,
+    };

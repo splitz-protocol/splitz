@@ -1,6 +1,6 @@
 {
   "description": "Decoding a bill. SPEC.md sections 2 and 9.",
-  "count": 34,
+  "count": 40,
   "cases": [
     {
       "name": "a_plain_bill",
@@ -1948,6 +1948,688 @@
         ]
       },
       "error": "rate_currency_mismatch"
+    },
+    {
+      "name": "a_bill_carrying_a_rate",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [],
+        "rate": {
+          "currency": "EUR",
+          "minorUnitsPerZec": 51234,
+          "at": "2026-10-28T19:30:00.000Z"
+        }
+      },
+      "expect": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [],
+        "confirmedPayments": [],
+        "rate": {
+          "currency": "EUR",
+          "minorUnitsPerZec": 51234,
+          "at": "2026-10-28T19:30:00.000Z"
+        }
+      }
+    },
+    {
+      "name": "a_rate_naming_its_source",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [],
+        "rate": {
+          "currency": "EUR",
+          "minorUnitsPerZec": 51234,
+          "at": "2026-10-28T19:30:00.000Z",
+          "source": "a named feed"
+        }
+      },
+      "expect": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [],
+        "confirmedPayments": [],
+        "rate": {
+          "currency": "EUR",
+          "minorUnitsPerZec": 51234,
+          "at": "2026-10-28T19:30:00.000Z",
+          "source": "a named feed"
+        }
+      }
+    },
+    {
+      "name": "a_swap_payment_with_its_reference",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "near-intent-7f3a",
+            "from": "ana",
+            "to": "ben",
+            "amount": 100,
+            "currency": "EUR",
+            "method": "swap",
+            "at": "2026-10-28T19:31:00.000Z",
+            "reference": "near-intent-7f3a",
+            "zatoshi": 1000000,
+            "note": "USDC on base"
+          }
+        ]
+      },
+      "expect": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "near-intent-7f3a",
+            "from": "ana",
+            "to": "ben",
+            "amount": 100,
+            "currency": "EUR",
+            "method": "swap",
+            "at": "2026-10-28T19:31:00.000Z",
+            "zatoshi": 1000000,
+            "reference": "near-intent-7f3a",
+            "note": "USDC on base"
+          }
+        ],
+        "confirmedPayments": []
+      }
+    },
+    {
+      "name": "a_cash_payment_with_a_note",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "c1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 100,
+            "currency": "EUR",
+            "method": "cash",
+            "at": "2026-10-28T19:31:00.000Z",
+            "note": "handed over at the table"
+          }
+        ]
+      },
+      "expect": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "c1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 100,
+            "currency": "EUR",
+            "method": "cash",
+            "at": "2026-10-28T19:31:00.000Z",
+            "note": "handed over at the table"
+          }
+        ],
+        "confirmedPayments": []
+      }
+    },
+    {
+      "name": "a_payment_priced_at_the_rate_it_was_paid_at",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 100,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:31:00.000Z",
+            "zatoshi": 195234,
+            "paidAtRate": {
+              "currency": "EUR",
+              "minorUnitsPerZec": 51234,
+              "at": "2026-10-28T19:30:00.000Z",
+              "source": "a named feed"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 100,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:31:00.000Z",
+            "zatoshi": 195234,
+            "paidAtRate": {
+              "currency": "EUR",
+              "minorUnitsPerZec": 51234,
+              "at": "2026-10-28T19:30:00.000Z",
+              "source": "a named feed"
+            }
+          }
+        ],
+        "confirmedPayments": []
+      }
+    },
+    {
+      "name": "participants_declaring_every_payout_type",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+              }
+            ]
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xben"
+              },
+              {
+                "type": "cash"
+              }
+            ]
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": []
+      },
+      "expect": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+              }
+            ]
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xben"
+              },
+              {
+                "type": "cash"
+              }
+            ]
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9000,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": [],
+        "confirmedPayments": []
+      }
     }
   ]
 }

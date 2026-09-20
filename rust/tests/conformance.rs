@@ -140,58 +140,6 @@ fn payments_of(c: &serde_json::Value) -> Vec<splitz::Zip321Payment> {
         .unwrap_or_default()
 }
 
-fn bill_to_json(bill: &splitz::model::Bill) -> Value {
-    json!({
-        "v": splitz::BILL_VERSION,
-        "id": bill.id,
-        "name": bill.name,
-        "currency": bill.currency,
-        "splitMode": bill.split_mode,
-        "participants": bill.participants.iter().map(|p| {
-            let mut o = serde_json::Map::new();
-            o.insert("id".into(), json!(p.id));
-            o.insert("name".into(), json!(p.name));
-            if let Some(a) = &p.pay_to { o.insert("payTo".into(), json!(a)); }
-            if let Some(k) = &p.identity_key { o.insert("identityKey".into(), json!(k)); }
-            if !p.payouts.is_empty() {
-                o.insert("payouts".into(), json!(p.payouts.iter().map(|po| {
-                    let mut q = serde_json::Map::new();
-                    q.insert("type".into(), json!(po.kind));
-                    if let Some(a) = &po.address { q.insert("address".into(), json!(a)); }
-                    if let Some(a) = &po.asset { q.insert("asset".into(), json!(a)); }
-                    if let Some(c) = &po.chain { q.insert("chain".into(), json!(c)); }
-                    Value::Object(q)
-                }).collect::<Vec<_>>()));
-            }
-            Value::Object(o)
-        }).collect::<Vec<_>>(),
-        "expenses": bill.expenses.iter().map(|e| json!({
-            "id": e.id, "description": e.description, "paidBy": e.paid_by,
-            "amount": e.amount, "currency": e.currency, "at": e.at, "split": e.split,
-        })).collect::<Vec<_>>(),
-        "payments": bill.payments.iter().map(|p| {
-            let mut o = serde_json::Map::new();
-            o.insert("id".into(), json!(p.id));
-            o.insert("from".into(), json!(p.from));
-            o.insert("to".into(), json!(p.to));
-            o.insert("amount".into(), json!(p.amount));
-            o.insert("currency".into(), json!(p.currency));
-            o.insert("method".into(), json!(p.method));
-            o.insert("at".into(), json!(p.at));
-            if let Some(z) = p.zatoshi { o.insert("zatoshi".into(), json!(z)); }
-            if let Some(r) = &p.paid_at_rate {
-                o.insert("paidAtRate".into(), json!({
-                    "currency": r.currency,
-                    "minorUnitsPerZec": r.minor_units_per_zec,
-                    "at": r.at,
-                }));
-            }
-            Value::Object(o)
-        }).collect::<Vec<_>>(),
-        "confirmedPayments": bill.confirmed_payments.iter().collect::<Vec<_>>(),
-    })
-}
-
 #[test]
 fn signing() {
     run_cases("signing.json", |c| {
@@ -476,6 +424,21 @@ fn sealed() {
 }
 
 #[test]
+fn seal() {
+    run_cases("seal.json", |c| {
+        // Either an entry to seal, or a bill id to derive a channel from.
+        if let Some(bill_id) = c["billId"].as_str() {
+            return Ok(json!({"channel": splitz::channel_for(bill_id)}));
+        }
+        let plaintext = splitz::sealed_plaintext(&c["entry"])?;
+        Ok(json!({
+            "plaintext": String::from_utf8(plaintext.clone()).unwrap(),
+            "nonce": splitz::host::base64url_no_pad(&splitz::sealed_nonce(&plaintext)),
+        }))
+    });
+}
+
+#[test]
 fn settlement() {
     run_cases("settlement.json", |c| {
         let net: std::collections::BTreeMap<String, i64> = c["balances"]
@@ -553,18 +516,7 @@ fn balances() {
 fn bill_json() {
     run_cases("bill-json.json", |c| {
         let bill = splitz::decode_bill(&c["json"])?;
-        let mut out = bill_to_json(&bill);
-        if let Some(r) = &bill.rate {
-            out.as_object_mut().expect("an object").insert(
-                "rate".into(),
-                json!({
-                    "currency": r.currency,
-                    "minorUnitsPerZec": r.minor_units_per_zec,
-                    "at": r.at,
-                }),
-            );
-        }
-        Ok(out)
+        Ok(splitz::bill_to_json(&bill))
     });
 }
 
