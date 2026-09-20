@@ -3,4 +3,4 @@
 # plumbing and the foreign bindings — join it here.
 [workspace]
 resolver = "2"
-members = ["splitz-core"]
+members = ["splitz-core", "splitz-host"]

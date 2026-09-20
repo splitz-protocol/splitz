@@ -1,0 +1,21 @@
+[package]
+name = "splitz-host"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "What a Zcash wallet needs around the splitz protocol: the seam it plugs into, entry signing, sealing, the log, the sync, and where keys live."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/KamaIOps/Splitz-protocol"
+# Held back from crates.io for the same reason `splitz-core` is: a publish
+# there cannot be undone. Both come off together when the product is released.
+publish = false
+
+[dependencies]
+splitz-core = { path = "../splitz-core" }
+serde_json = { version = "1", features = ["preserve_order"] }
+# §10.6's curve operation. Signing is deterministic, which is what keeps a
+# sealed entry idempotent: the same entry pushed twice is one blob.
+ed25519-dalek = "2"
+# The platform's own entropy for §9.4's nonce and for a bill key. No PRNG
+# seeded here: a guessable nonce makes two bills opened in one second one bill.
+getrandom = "0.3"

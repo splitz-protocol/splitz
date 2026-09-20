@@ -120,6 +120,49 @@ pub fn base64url(raw: &[u8]) -> String {
     out
 }
 
+/// The base64url alphabet and nothing else — no padding, no whitespace.
+pub fn is_b64url(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+/// The inverse of [`base64url`]. `None` for anything outside the alphabet,
+/// and for a trailing group of one character, which encodes no byte.
+pub fn unbase64url(text: &str) -> Option<Vec<u8>> {
+    if !is_b64url(text) {
+        return None;
+    }
+    const fn index(b: u8) -> Option<u32> {
+        match b {
+            b'A'..=b'Z' => Some((b - b'A') as u32),
+            b'a'..=b'z' => Some((b - b'a') as u32 + 26),
+            b'0'..=b'9' => Some((b - b'0') as u32 + 52),
+            b'-' => Some(62),
+            b'_' => Some(63),
+            _ => None,
+        }
+    }
+    let mut out = Vec::new();
+    for chunk in text.as_bytes().chunks(4) {
+        if chunk.len() == 1 {
+            return None;
+        }
+        let mut acc: u32 = 0;
+        for (i, b) in chunk.iter().enumerate() {
+            acc |= index(*b)? << (18 - 6 * i);
+        }
+        out.push((acc >> 16) as u8);
+        if chunk.len() > 2 {
+            out.push((acc >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            out.push(acc as u8);
+        }
+    }
+    Some(out)
+}
+
 fn render_fiat(price: &FiatPrice) -> Result<String> {
     if !is_currency(&price.currency) {
         return Err(SplitError::new(

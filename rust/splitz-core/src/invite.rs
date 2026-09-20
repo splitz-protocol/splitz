@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
 use crate::sha256::{sha256, sha256_hex};
-use crate::zip321::base64url;
+use crate::zip321::{base64url, is_b64url, unbase64url};
 
 const PREFIX: &str = "splitz://join";
 
@@ -48,12 +48,6 @@ pub struct Invite {
 /// The same characters anywhere inside are content.
 pub fn strip_scan_padding(text: &str) -> &str {
     text.trim_matches(|c| SCAN_PADDING.contains(&c))
-}
-
-fn is_b64url(value: &str) -> bool {
-    value
-        .bytes()
-        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 /// Percent-decodes one parameter value.
@@ -311,40 +305,6 @@ pub struct ScannedPayload {
     pub version: i64,
     pub log: Vec<Value>,
     pub invite: Option<Value>,
-}
-
-fn unbase64url(text: &str) -> Option<Vec<u8>> {
-    if !is_b64url(text) {
-        return None;
-    }
-    const fn index(b: u8) -> Option<u32> {
-        match b {
-            b'A'..=b'Z' => Some((b - b'A') as u32),
-            b'a'..=b'z' => Some((b - b'a') as u32 + 26),
-            b'0'..=b'9' => Some((b - b'0') as u32 + 52),
-            b'-' => Some(62),
-            b'_' => Some(63),
-            _ => None,
-        }
-    }
-    let mut out = Vec::new();
-    for chunk in text.as_bytes().chunks(4) {
-        if chunk.len() == 1 {
-            return None;
-        }
-        let mut acc: u32 = 0;
-        for (i, b) in chunk.iter().enumerate() {
-            acc |= index(*b)? << (18 - 6 * i);
-        }
-        out.push((acc >> 16) as u8);
-        if chunk.len() > 2 {
-            out.push((acc >> 8) as u8);
-        }
-        if chunk.len() > 3 {
-            out.push(acc as u8);
-        }
-    }
-    Some(out)
 }
 
 /// Encodes `body` under `prefix`.
