@@ -20,6 +20,10 @@ jobs:
         working-directory: dart
       - run: dart test
         working-directory: dart
+      # `dart analyze` type-checks the samples; it does not call them. A
+      # sample that only compiles proves the names exist, not that the calls
+      # in it are ones a caller may make in that order with those values.
+      - run: tools/examples/run.sh
 
   rust:
     runs-on: ubuntu-latest
