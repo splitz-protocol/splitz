@@ -102,9 +102,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: dart pub get
         working-directory: splitz_host
-      - run: tools/differential/host.sh 1 600
-      - run: tools/differential/host.sh 2 600
-      - run: tools/differential/host.sh 3 600
+      - run: tools/differential/host.sh 1 1200
+      - run: tools/differential/host.sh 2 1200
+      - run: tools/differential/host.sh 3 1200
 
   spec:
     # The corpus checks values, the differential lane checks that three

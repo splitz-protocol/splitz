@@ -14,6 +14,65 @@ import 'package:splitz_host/splitz_host.dart';
 
 final signer = SplitsSigner();
 
+/// The swap refusals, by which one rather than by its wording.
+String swapTag(SwapException e) {
+  final m = e.message;
+  final which = m.startsWith('A swap sends more than nothing')
+      ? 'nothing'
+      : m.startsWith('A swap states both')
+      ? 'no_refund'
+      : m.startsWith('The provider omitted')
+      ? 'omitted'
+      : m.startsWith('Malformed')
+      ? 'malformed'
+      : m.startsWith('A quote response carries')
+      ? 'no_quote'
+      : m.contains('could not be reached')
+      ? 'unreachable'
+      : m.contains('is not JSON')
+      ? 'not_json'
+      : 'unclassified';
+  return '$which/${e.isTransient}';
+}
+
+TradableAsset usdcOnBase() => const TradableAsset(
+  assetId: 'nep141:base-usdc',
+  symbol: 'USDC',
+  chain: 'base',
+  decimals: 6,
+);
+
+Map<String, Object?> quoteJson(SwapQuote q) => {
+  'depositAddress': q.depositAddress,
+  'depositMemo': q.depositMemo,
+  'amountInZatoshi': q.amountInZatoshi,
+  'amountOut': q.amountOut,
+  'deadline': q.deadline,
+  'reference': q.reference,
+  'paymentReference': q.paymentReference,
+};
+
+/// A provider that answers with one scripted body and records its URLs.
+({OneClickSwaps swaps, List<Uri> urls}) scripted(String body, String deadline) {
+  final urls = <Uri>[];
+  return (
+    swaps: OneClickSwaps(
+      origin: Uri.parse('https://swap.example'),
+      zecAssetId: 'nep141:zec',
+      deadline: () => deadline,
+      post: (url, _) async {
+        urls.add(url);
+        return body;
+      },
+      get: (url) async {
+        urls.add(url);
+        return body;
+      },
+    ),
+    urls: urls,
+  );
+}
+
 /// Rebuilds a split form from one operation's description of it.
 SplitDraft draftFrom(Map<String, dynamic> op) {
   final kind = switch (op['kind'] as String) {
@@ -71,8 +130,8 @@ Map<String, Object?> eventJson(BillEvent e) => {
 
 /// `BillEventKind.addressChanged` -> `AddressChanged`, the name Rust's
 /// `Debug` prints, so the two answers are one string.
-String rustName(BillEventKind kind) {
-  final name = kind.name;
+String rustName(Enum value) {
+  final name = value.name;
   return name[0].toUpperCase() + name.substring(1);
 }
 
@@ -195,6 +254,57 @@ Future<Object?> answer(Map<String, dynamic> op) async {
       } on SealingException catch (e) {
         return {'opened': false, 'why': tag(e)};
       }
+    case 'swap_encode':
+      final text = op['text'] as String;
+      return {
+        'query': Uri.encodeQueryComponent(text),
+        'component': Uri.encodeComponent(text),
+      };
+    case 'swap_status':
+      final p = scripted(jsonEncode(op['body']), '');
+      final quote = SwapQuote(
+        depositAddress: 'u1provider',
+        depositMemo: op['memo'] as String?,
+        amountInZatoshi: 1,
+        amountOut: '1',
+        asset: usdcOnBase(),
+        deadline: '2026-01-01T00:00:00.000Z',
+      );
+      try {
+        final status = await p.swaps.statusOf(quote);
+        return {
+          'ok': true,
+          'state': rustName(status.state),
+          'hash': status.destinationTxHash,
+          'detail': status.detail,
+          'url': p.urls.isEmpty ? null : p.urls.last.toString(),
+        };
+      } on SwapException catch (e) {
+        return {'ok': false, 'why': swapTag(e)};
+      }
+    case 'swap_quote':
+      final p = scripted(jsonEncode(op['body']), op['deadline'] as String);
+      try {
+        final quote = await p.swaps.quote(
+          asset: usdcOnBase(),
+          amountInZatoshi: op['amount'] as int,
+          recipient: op['recipient'] as String,
+          refundTo: op['refundTo'] as String,
+        );
+        return {'ok': true, 'quote': quoteJson(quote)};
+      } on SwapException catch (e) {
+        return {'ok': false, 'why': swapTag(e)};
+      }
+    case 'swap_watch':
+      final watch = SwapWatch.fromJson(
+        (op['json'] as Map).cast<String, dynamic>(),
+      );
+      if (watch == null) return {'parsed': false};
+      return {
+        'parsed': true,
+        'json': watch.toJson(),
+        'quote': quoteJson(watch.asQuote),
+      };
     case 'split_draft':
       final draft = draftFrom(op);
       final total = op['total'] as int;

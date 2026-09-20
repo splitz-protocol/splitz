@@ -9,10 +9,75 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Value};
 use splitz_core::{decode_bill, sha256, signing_message, SetAside};
 use splitz_host::{
-    activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, is_well_formed_key,
-    BillEvent, BillStorage, BillStore, DraftItem, HostError, InMemoryBillStorage, Sealing, Signer,
-    SplitDraft, SplitKind, IDENTITY_DOMAIN,
+    activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, component_encode,
+    is_well_formed_key, query_encode, BillEvent, BillStorage, BillStore, DraftItem, HostError,
+    HttpTransport, InMemoryBillStorage, OneClickSwaps, Sealing, Signer, SplitDraft, SplitKind,
+    SwapProvider, SwapQuote, SwapWatch, TradableAsset, IDENTITY_DOMAIN,
 };
+
+/// A provider that answers with one scripted body and records its URLs.
+struct ScriptedProvider {
+    body: String,
+    urls: std::cell::RefCell<Vec<String>>,
+}
+
+impl HttpTransport for ScriptedProvider {
+    fn post(&self, url: &str, _body: &str) -> Result<String, String> {
+        self.urls.borrow_mut().push(url.to_owned());
+        Ok(self.body.clone())
+    }
+
+    fn get(&self, url: &str) -> Result<String, String> {
+        self.urls.borrow_mut().push(url.to_owned());
+        Ok(self.body.clone())
+    }
+}
+
+/// The swap refusals, by which one rather than by its wording.
+fn swap_tag(e: &HostError) -> String {
+    let HostError::Swap { message, transient } = e else {
+        return "other".to_owned();
+    };
+    let which = if message.starts_with("A swap sends more than nothing") {
+        "nothing"
+    } else if message.starts_with("A swap states both") {
+        "no_refund"
+    } else if message.starts_with("The provider omitted") {
+        "omitted"
+    } else if message.starts_with("Malformed") {
+        "malformed"
+    } else if message.starts_with("A quote response carries") {
+        "no_quote"
+    } else if message.contains("could not be reached") {
+        "unreachable"
+    } else if message.contains("is not JSON") {
+        "not_json"
+    } else {
+        "unclassified"
+    };
+    format!("{which}/{transient}")
+}
+
+fn usdc_on_base() -> TradableAsset {
+    TradableAsset {
+        asset_id: "nep141:base-usdc".to_owned(),
+        symbol: "USDC".to_owned(),
+        chain: "base".to_owned(),
+        decimals: 6,
+    }
+}
+
+fn quote_json(q: &SwapQuote) -> Value {
+    json!({
+        "depositAddress": q.deposit_address,
+        "depositMemo": q.deposit_memo,
+        "amountInZatoshi": q.amount_in_zatoshi,
+        "amountOut": q.amount_out,
+        "deadline": q.deadline,
+        "reference": q.reference,
+        "paymentReference": q.payment_reference(),
+    })
+}
 
 /// Rebuilds a split form from one operation's description of it.
 fn draft_from(op: &Value) -> SplitDraft {
@@ -203,6 +268,80 @@ fn answer(op: &Value) -> Value {
         {
             Ok(entry) => json!({ "opened": true, "entry": entry }),
             Err(e) => json!({ "opened": false, "why": tag(&e) }),
+        },
+        "swap_encode" => {
+            let text = op["text"].as_str().unwrap_or("");
+            json!({ "query": query_encode(text), "component": component_encode(text) })
+        }
+        "swap_status" => {
+            let provider = ScriptedProvider {
+                body: op["body"].to_string(),
+                urls: std::cell::RefCell::new(Vec::new()),
+            };
+            let deadline = || String::new();
+            let swaps = OneClickSwaps::new(
+                "https://swap.example",
+                "nep141:zec",
+                &provider,
+                &deadline,
+                None,
+            )
+            .unwrap();
+            let mut quote = SwapQuote {
+                deposit_address: "u1provider".to_owned(),
+                deposit_memo: op["memo"].as_str().map(str::to_owned),
+                amount_in_zatoshi: 1,
+                amount_out: "1".to_owned(),
+                asset: usdc_on_base(),
+                deadline: "2026-01-01T00:00:00.000Z".to_owned(),
+                reference: None,
+            };
+            if quote.deposit_memo.as_deref() == Some("") {
+                quote.deposit_memo = Some(String::new());
+            }
+            match swaps.status_of(&quote) {
+                Err(e) => json!({ "ok": false, "why": swap_tag(&e) }),
+                Ok(status) => json!({
+                    "ok": true,
+                    "state": format!("{:?}", status.state),
+                    "hash": status.destination_tx_hash,
+                    "detail": status.detail,
+                    "url": provider.urls.borrow().last(),
+                }),
+            }
+        }
+        "swap_quote" => {
+            let provider = ScriptedProvider {
+                body: op["body"].to_string(),
+                urls: std::cell::RefCell::new(Vec::new()),
+            };
+            let stated = op["deadline"].as_str().unwrap_or("").to_owned();
+            let deadline = move || stated.clone();
+            let swaps = OneClickSwaps::new(
+                "https://swap.example",
+                "nep141:zec",
+                &provider,
+                &deadline,
+                None,
+            )
+            .unwrap();
+            match swaps.quote(
+                &usdc_on_base(),
+                op["amount"].as_i64().unwrap_or(0),
+                op["recipient"].as_str().unwrap_or(""),
+                op["refundTo"].as_str().unwrap_or(""),
+            ) {
+                Err(e) => json!({ "ok": false, "why": swap_tag(&e) }),
+                Ok(q) => json!({ "ok": true, "quote": quote_json(&q) }),
+            }
+        }
+        "swap_watch" => match SwapWatch::from_json(&op["json"]) {
+            None => json!({ "parsed": false }),
+            Some(watch) => json!({
+                "parsed": true,
+                "json": watch.to_json(),
+                "quote": quote_json(&watch.as_quote()),
+            }),
         },
         "split_draft" => {
             let draft = draft_from(op);

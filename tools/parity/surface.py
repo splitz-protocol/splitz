@@ -273,8 +273,25 @@ def rust_signatures(source: Path) -> dict[str, list[str]]:
     return sigs
 
 
-def normalise(name: str) -> str:
-    return RENAMES.get(name, name)
+def _snake(name: str) -> str:
+    """`minorUnitsPerZec` -> `minor_units_per_zec`."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+
+def normalise(name: str, auto_snake: bool = False) -> str:
+    """The name both languages are compared under.
+
+    `RENAMES` is explicit for the protocol surface, where a spelling that
+    differs for a reason is worth writing down. The host surface is large and
+    mechanically cased, so `auto_snake` maps what is left — a function or a
+    constant — rather than adding fifty lines that say only "Rust writes snake
+    case". A type keeps its capitals in both languages and is left alone.
+    """
+    if name in RENAMES:
+        return RENAMES[name]
+    if auto_snake and not name[:1].isupper():
+        return _snake(name)
+    return name
 
 
 def _allowed(path: Path) -> dict[str, str]:
@@ -296,9 +313,10 @@ def compare(
     rust_names: Path,
     rust_sigs: Path,
     allow_path: Path,
+    auto_snake: bool = False,
 ) -> int:
     """One surface pair. Returns the number of divergences neither side owns."""
-    dart = {normalise(n) for n in dart_surface(dart_src)}
+    dart = {normalise(n, auto_snake) for n in dart_surface(dart_src)}
     rust = rust_surface(rust_names)
     allowed = _allowed(allow_path)
 
@@ -309,7 +327,8 @@ def compare(
     # consumer's compile error; an `Object?` on one side against a concrete
     # type on the other is worse, because the typed side cannot be handed the
     # value that the untyped side has to decide about.
-    d_sigs = {normalise(n): ps for n, ps in dart_signatures(dart_src).items()}
+    d_sigs = {normalise(n, auto_snake): ps
+              for n, ps in dart_signatures(dart_src).items()}
     r_sigs = rust_signatures(rust_sigs)
     shape: list[str] = []
     for name in sorted(set(d_sigs) & set(r_sigs)):
@@ -362,6 +381,16 @@ def main() -> int:
         ROOT / "rust" / "splitz-core" / "src" / "host" / "mod.rs",
         ROOT / "rust" / "splitz-core" / "src" / "host",
         here / "allow-host.txt",
+    )
+    # The plumbing a wallet needs around the protocol: two packages rather
+    # than two modules of one, so their surfaces are compared on their own.
+    open_items += compare(
+        "plumbing",
+        ROOT / "splitz_host" / "lib" / "src",
+        ROOT / "rust" / "splitz-host" / "src" / "lib.rs",
+        ROOT / "rust" / "splitz-host" / "src",
+        here / "allow-plumbing.txt",
+        auto_snake=True,
     )
     return 1 if open_items else 0
 

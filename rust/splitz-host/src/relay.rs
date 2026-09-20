@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use std::sync::Mutex;
 
 use crate::error::HostError;
+use crate::transport::HttpTransport;
 use crate::wallet::SplitsRelay;
 
 /// Raised when the relay could not be reached, refused, or answered with
@@ -90,19 +91,6 @@ impl SplitsRelay for InMemorySplitsRelay {
     }
 }
 
-/// The two calls [`HttpSplitsRelay`] makes.
-///
-/// Injected rather than made by this crate, so bill sync takes the same
-/// network route as the rest of the wallet. On a build that routes through Tor
-/// it goes over Tor and fails closed while Tor is starting or broken, instead
-/// of being the one path that quietly leaves in the clear.
-pub trait RelayTransport {
-    /// Posts `body` to `url` and returns the response body, or why not.
-    fn post(&self, url: &str, body: &str) -> Result<String, String>;
-    /// Fetches `url` and returns the response body, or why not.
-    fn get(&self, url: &str) -> Result<String, String>;
-}
-
 /// A relay backed by an HTTP blob store.
 ///
 /// Two routes under `origin`: `POST /c/<channel>` with `{"blobs":[…]}` adds
@@ -110,7 +98,7 @@ pub trait RelayTransport {
 /// keyed by the channel hash — never the bill id, never plaintext.
 pub struct HttpSplitsRelay<'a> {
     origin: String,
-    transport: &'a dyn RelayTransport,
+    transport: &'a dyn HttpTransport,
 }
 
 impl<'a> HttpSplitsRelay<'a> {
@@ -121,7 +109,7 @@ impl<'a> HttpSplitsRelay<'a> {
     /// `origin` is a scheme, a host and an optional path. A query or a
     /// fragment is refused: the channel is appended to the path, and an origin
     /// carrying either would put it after them, addressing something else.
-    pub fn new(origin: &str, transport: &'a dyn RelayTransport) -> Result<Self, HostError> {
+    pub fn new(origin: &str, transport: &'a dyn HttpTransport) -> Result<Self, HostError> {
         if origin.contains('?') || origin.contains('#') {
             return Err(relay_error(
                 "A relay origin carries no query and no fragment",

@@ -21,8 +21,10 @@ pub mod sealing;
 pub mod signing;
 pub mod split_draft;
 pub mod store;
+pub mod swap_watch;
 pub mod swaps;
 pub mod sync;
+pub mod transport;
 pub mod wallet;
 pub mod wallet_bill_host;
 
@@ -33,15 +35,17 @@ pub use keys::{
     is_well_formed_key, Randomness, SplitsKeys, SystemRandomness, IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
 };
 pub use pricing::{FixedZecPrices, NoZecPrices};
-pub use relay::{
-    channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, RelayTransport, UnconfiguredSplitsRelay,
-};
+pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use sealing::{Sealing, BLOB_VERSION};
 pub use signing::{base64url_decode, base64url_encode, Signer, VerifiedLog, SEED_BYTES};
 pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
-pub use swaps::{SwapQuote, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps};
+pub use swap_watch::{SwapWatch, SwapWatchList};
+pub use swaps::{
+    OneClickSwaps, SwapQuote, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
+};
 pub use sync::{SplitsSync, SyncResult};
+pub use transport::{component_encode, query_encode, HttpTransport};
 pub use wallet::{
     BillStorage, InMemoryBillStorage, InMemorySecretStore, SecretStore, SplitsRelay, SplitsWallet,
     SwapProvider, WalletAccount, WalletSendOutcome, WalletSendPhase, WalletSender, ZecPrices,

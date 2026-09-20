@@ -1,0 +1,55 @@
+# Divergences between the two plumbing surfaces that are idiom rather than gap.
+#
+# The Dart side is `package:splitz_host`'s `lib/src/`, which its barrel
+# re-exports whole. The Rust side is `rust/splitz-host/src/lib.rs`'s `pub use`
+# block — the names a consumer reaches as `splitz_host::…`. A name that is
+# `pub` inside a module but not re-exported is not surface.
+#
+# Names are compared with Rust's snake case mapped onto Dart's camel case
+# automatically, because that difference carries no meaning. A type keeps its
+# capitals in both languages.
+#
+# Every line states why a name exists on one side and not the other. A line
+# with no reason is a suppression, and a stale line fails this lane so the
+# list cannot outlive what it describes.
+
+# --- a refusal is a thrown exception in Dart and a returned error in Rust ---
+dart::SealingException   # Rust returns `HostError::Sealing`. One enum for every refusal this layer makes, because a Rust caller matches on it rather than catching by type.
+dart::SplitsRelayException  # `HostError::Relay { transient }` — §15.5's "could retrying succeed" is a field there and a constructor argument here.
+dart::SplitsSyncException   # `HostError::Sync`.
+dart::SwapException         # `HostError::Swap { transient }`.
+dart::UnansweredSignatureQuestion  # `FoldFailure::Unanswered`, one of the two ways a verified fold fails. Dart throws it past a fold that returns.
+rust::HostError          # The enum the four above collapse into.
+rust::Result             # `Result<T> = core::result::Result<T, HostError>`. Dart throws, so there is no alias to name.
+rust::FoldFailure        # A verified fold fails either because the log was refused or because a signature question went unanswered; Rust returns the pair, Dart throws two types.
+
+# --- Dart hangs a constant or a helper on a class; Rust puts it on the crate
+# --- root, which is where a consumer reaches it.
+dart::SplitsSigner       # Rust's `Signer`. Its `encode`/`decode`/`seedBytes` statics are `base64url_encode`, `base64url_decode` and `SEED_BYTES` below.
+dart::SplitsSealing      # Rust's `Sealing`. Its `blobVersion` static is `BLOB_VERSION` below.
+dart::SplitsChannel      # A class holding one static, `forBill`. Rust's `channel_for_bill` is the function itself.
+rust::Signer             # Named without the prefix: a crate is already a namespace.
+rust::Sealing            # The same.
+rust::channel_for_bill   # `SplitsChannel.forBill`.
+rust::base64url_encode   # `SplitsSigner.encode`.
+rust::base64url_decode   # `SplitsSigner.decode`.
+rust::is_well_formed_key # `SplitsKeys.isWellFormedKey`.
+rust::SEED_BYTES         # `SplitsSigner.seedBytes`.
+rust::BLOB_VERSION       # `SplitsSealing.blobVersion`.
+rust::KEY_LENGTH_BYTES   # `SplitsKeys.keyLengthBytes`.
+rust::IDENTITY_DOMAIN    # `SplitsKeys.identityDomain`.
+
+# --- a shape one language needs a name for and the other does not -----------
+dart::JsonPost           # Dart names the two calls as two typedefs; Rust takes one `HttpTransport` trait with both, because a Rust caller implements one thing.
+dart::JsonGet            # The other half of the same pair.
+rust::HttpTransport      # The trait those two typedefs become.
+dart::ZecAssetId         # A typedef for `String`. Rust takes the id as a `&str` parameter, which needs no name.
+dart::SplitKindWire      # An extension carrying `wireType`. Rust puts the method on `SplitKind` itself, where an enum may have one.
+rust::Randomness         # Dart's `SplitsKeys` takes `dart:math`'s `Random`; Rust has no such type in its standard library, so the seam names the shape it needs.
+rust::SystemRandomness   # The platform entropy behind it. Dart reaches `Random.secure()` directly.
+rust::query_encode       # Dart builds a URL with `Uri.replace(queryParameters:)`; Rust states the encoding rather than depending on a URL crate, because two libraries disagree about the sub-delimiters and a status query that addresses a different swap is not a cosmetic difference.
+rust::component_encode   # The same, for `Uri.encodeComponent`, which keys a swap watch.
+
+# --- deliberately not in the crate ------------------------------------------
+dart::FileBillStorage    # A file-backed §15.4 store. The Rust crate is reached across a foreign binding, where the wallet supplies storage — one in the crate would have no caller. `InMemoryBillStorage` is there for tests on both sides.
+dart::FileSecretStore    # The same, for §15.3. A shipped build puts secrets in the platform keychain, which is the wallet's.

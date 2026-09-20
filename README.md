@@ -24,7 +24,7 @@ from the specification text alone — that produces them.
 
 ```
 cd dart && dart test                 # 539 tests, 448 of them the corpus
-cd rust && cargo test                # 150: the same 448 cases, the oracle,
+cd rust && cargo test                # 172: the same 448 cases, the oracle,
                                      #   and the host layer's own
 cd rust && cargo test --release      # and again with overflow checks off
 cd splitz_host && dart test          # 111 over the wallet seam
@@ -128,7 +128,7 @@ by a test in each implementation whose string type can hold the input.
 | `vectors/` | Both implementations against one fixed corpus. |
 | `tools/differential` | Inputs nobody wrote an expectation for, answered by every implementation and diffed against each other. Catches what a corpus generated from one reference structurally cannot. |
 | `tools/differential/host.sh` | The two host implementations — `splitz_host` in Dart and `splitz-host` in Rust — on one generated operation list: public keys, signatures over §10.6's message, verification against a key a wallet was handed, derived identities, and what counts as a well-formed key. Nothing in `vectors/` can reach this layer, because a vector carries no private key. |
-| `tools/parity` | The two public surfaces. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
+| `tools/parity` | The three public surface pairs — the protocol, the wallet seam and the plumbing. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
 | `tools/spec` | `SPEC.md` against the tree that has to keep it: every §12 code declared, thrown and covered in all three implementations, every `vectors/…` file and case the text names by name, every figure it quotes beside a named case, every §N cross-reference. Nothing else in this repository reads the specification, and every implementation written from it inherits its mistakes. |
 | `rust/splitz-core/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. **No transaction has been broadcast from a URI this library produced** — that is a wallet's milestone, not a library's, and the oracle is the closest thing to it here. |
 | `tools/oracle/instants.py` | §9.3's instants against CPython's `datetime`, written by other people for another purpose. §9.3 is deliberately narrower than RFC 3339, so the relation checked is containment and agreement, and the strings the stdlib accepts and §9.3 refuses are counted rather than assumed. |

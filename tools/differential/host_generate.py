@@ -167,6 +167,42 @@ def a_draft(rng: random.Random) -> dict:
     }
 
 
+STATUS_WORDS = ["PENDING_DEPOSIT", "KNOWN_DEPOSIT_TX", "SUCCESS", "FAILED",
+                "REFUNDED", "EXPIRED", "PROCESSING", "something_new", "", "3"]
+
+TEXTS = ["plain", "a b", "a+b", "a/b", "a&b=c", "café", "a~_-.b", "💸",
+         "!'()*", "", "%2F", "a\tb"]
+
+
+def a_quote_body(rng: random.Random) -> dict:
+    quote = {}
+    if rng.random() < 0.85:
+        quote["depositAddress"] = rng.choice(["u1provider", ""])
+    if rng.random() < 0.85:
+        quote["amountOut"] = rng.choice(["12340000", ""])
+    if rng.random() < 0.5:
+        quote["depositMemo"] = rng.choice(["memo-1", ""])
+    if rng.random() < 0.5:
+        quote["deadline"] = rng.choice(["2026-10-28T19:35:00Z", "not a time",
+                                        "2026-10-28T19:35:00.500Z"])
+    body = {"quote": quote} if rng.random() < 0.9 else {}
+    if rng.random() < 0.6:
+        body["correlationId"] = rng.choice(["near-intent-7f3a", ""])
+    return body
+
+
+def a_watch_json(rng: random.Random) -> dict:
+    out = {}
+    for key in ["billId", "reference", "to", "depositAddress", "depositMemo",
+                "assetSymbol", "assetChain"]:
+        if rng.random() < 0.8:
+            out[key] = rng.choice(["b1", "r1", "ben", "u1provider", "memo-1",
+                                   "USDC", "base", "", "a/b"])
+    if rng.random() < 0.1:
+        out["billId"] = 7
+    return out
+
+
 def a_key_ish(rng: random.Random) -> str:
     """Something a wallet might be handed as a key. Most are not valid."""
     kind = rng.randrange(7)
@@ -197,6 +233,7 @@ def main() -> int:
             "public_key", "sign_entry", "verify", "identity_seed",
             "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
             "store_read", "store_merge", "activity", "split_draft",
+            "swap_encode", "swap_status", "swap_quote", "swap_watch",
         ])
         if op == "public_key":
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
@@ -220,6 +257,25 @@ def main() -> int:
                        "openWith": a_bill_key(rng) if rng.random() < 0.3 else None,
                        "entry": an_entry(rng),
                        "tamper": rng.choice([0, 0, 1, 2])}, out)
+        elif op == "swap_encode":
+            json.dump({"op": op, "text": rng.choice(TEXTS)}, out)
+        elif op == "swap_status":
+            body = {"status": rng.choice(STATUS_WORDS)}
+            for key in ["destinationTxHash", "destinationChainTxHash",
+                        "message"]:
+                if rng.random() < 0.4:
+                    body[key] = rng.choice(["0xdead", "", "a note"])
+            json.dump({"op": op, "body": body,
+                       "memo": rng.choice(["memo-1", "", None, "a/b"])}, out)
+        elif op == "swap_quote":
+            json.dump({"op": op,
+                       "amount": rng.choice([0, -1, 1, 1000000]),
+                       "recipient": rng.choice(["0xcara", ""]),
+                       "refundTo": rng.choice(["u1ana", ""]),
+                       "deadline": "2026-10-28T19:40:00.000Z",
+                       "body": a_quote_body(rng)}, out)
+        elif op == "swap_watch":
+            json.dump({"op": op, "json": a_watch_json(rng)}, out)
         elif op == "split_draft":
             json.dump({"op": op, **a_draft(rng)}, out)
         elif op == "activity":

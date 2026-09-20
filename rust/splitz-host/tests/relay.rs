@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use splitz_host::{
-    channel_for_bill, HostError, HttpSplitsRelay, InMemorySplitsRelay, RelayTransport, SplitsRelay,
+    channel_for_bill, HostError, HttpSplitsRelay, HttpTransport, InMemorySplitsRelay, SplitsRelay,
     UnconfiguredSplitsRelay,
 };
 
@@ -22,7 +22,7 @@ impl FakeServer {
     }
 }
 
-impl RelayTransport for FakeServer {
+impl HttpTransport for FakeServer {
     fn post(&self, url: &str, body: &str) -> Result<String, String> {
         self.urls.borrow_mut().push(url.to_owned());
         if self.unreachable {
