@@ -1,6 +1,6 @@
 {
   "description": "Entries, merge and folding. SPEC.md sections 9.4 and 10.",
-  "count": 106,
+  "count": 117,
   "cases": [
     {
       "name": "a_bill_with_one_expense",
@@ -11203,6 +11203,2977 @@
         }
       ],
       "error": "ambiguous_create"
+    },
+    {
+      "name": "three_payout_lanes_on_one_bill",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "a_payout_type_nobody_defines",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "2RU1bR519UdZr2wLzxQ7vg",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "giftCard",
+                "address": "g1"
+              }
+            ]
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            }
+          ],
+          "expenses": [],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "2RU1bR519UdZr2wLzxQ7vg",
+            "code": "bill_unknown_payout_method"
+          }
+        ],
+        "balances": {
+          "ana": 0
+        }
+      }
+    },
+    {
+      "name": "a_swap_payout_states_the_asset_and_the_chain",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "JXYuElqA8nxKkDTKdwvjuQ",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "s1",
+            "from": "ana",
+            "to": "cara",
+            "amount": 1000,
+            "method": "swap",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "near-intent-7f3a",
+            "zatoshi": 100000
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "s1",
+              "from": "ana",
+              "to": "cara",
+              "amount": 1000,
+              "method": "swap",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "near-intent-7f3a",
+              "zatoshi": 100000,
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "a_shielded_payment_carries_its_transaction",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "j0p4CLoi1YYPotAG66AjgA",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9:ben",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "tx-9:ben",
+              "from": "ana",
+              "to": "ben",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "one_transaction_paying_two_people",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "j0p4CLoi1YYPotAG66AjgA",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9:ben",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        },
+        {
+          "v": 1,
+          "id": "Osub_n5dZBkRU4HN6x1Dnw",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9:cara",
+            "from": "ana",
+            "to": "cara",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "tx-9:cara",
+              "from": "ana",
+              "to": "cara",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            },
+            {
+              "id": "tx-9:ben",
+              "from": "ana",
+              "to": "ben",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "two_recipients_of_one_transaction_under_one_id",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "D0WhDWXE0m0KtolgknM9sg",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        },
+        {
+          "v": 1,
+          "id": "mGxkiBVnaXziSHMr4QwUFg",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9",
+            "from": "ana",
+            "to": "cara",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "tx-9",
+              "from": "ana",
+              "to": "ben",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "mGxkiBVnaXziSHMr4QwUFg",
+            "code": "duplicate_payment"
+          }
+        ],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "each_payee_confirms_the_record_addressed_to_them",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "j0p4CLoi1YYPotAG66AjgA",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9:ben",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        },
+        {
+          "v": 1,
+          "id": "Pkwd0lgny_kxXz-lz91-bA",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "s2",
+            "from": "ana",
+            "to": "cara",
+            "amount": 1000,
+            "method": "swap",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "near-intent-7f3a",
+            "zatoshi": 100000
+          }
+        },
+        {
+          "v": 1,
+          "id": "FIwmVYNI7cwjbSZ_NfpR6Q",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "c-dan-1",
+            "from": "ana",
+            "to": "dan",
+            "amount": 1000,
+            "method": "cash",
+            "at": "2026-10-28T19:08:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "bT98ycAdyvliHWzCFmbNmg",
+          "author": "ben",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:09:00.000Z",
+          "confirmation": {
+            "paymentId": "tx-9:ben",
+            "method": "walletReceived"
+          }
+        },
+        {
+          "v": 1,
+          "id": "nMnzXHyvstxMn4_yO3_YrA",
+          "author": "cara",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:09:00.000Z",
+          "confirmation": {
+            "paymentId": "s2",
+            "method": "recipientConfirmed"
+          }
+        },
+        {
+          "v": 1,
+          "id": "By6R-pmo3lMIekwBVigtlQ",
+          "author": "dan",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:09:00.000Z",
+          "confirmation": {
+            "paymentId": "c-dan-1",
+            "method": "recipientConfirmed"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "c-dan-1",
+              "from": "ana",
+              "to": "dan",
+              "amount": 1000,
+              "method": "cash",
+              "at": "2026-10-28T19:08:00.000Z",
+              "currency": "EUR"
+            },
+            {
+              "id": "s2",
+              "from": "ana",
+              "to": "cara",
+              "amount": 1000,
+              "method": "swap",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "near-intent-7f3a",
+              "zatoshi": 100000,
+              "currency": "EUR"
+            },
+            {
+              "id": "tx-9:ben",
+              "from": "ana",
+              "to": "ben",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": [
+            "c-dan-1",
+            "s2",
+            "tx-9:ben"
+          ]
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": 0,
+          "ben": 0,
+          "cara": 0,
+          "dan": 0
+        }
+      }
+    },
+    {
+      "name": "a_payee_confirms_a_record_addressed_to_somebody_else",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "j0p4CLoi1YYPotAG66AjgA",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9:ben",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        },
+        {
+          "v": 1,
+          "id": "yWJgRhjOIPtHDkliJOMzhg",
+          "author": "cara",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:09:00.000Z",
+          "confirmation": {
+            "paymentId": "tx-9:ben",
+            "method": "recipientConfirmed"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "tx-9:ben",
+              "from": "ana",
+              "to": "ben",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "yWJgRhjOIPtHDkliJOMzhg",
+            "code": "unauthorized_confirmation"
+          }
+        ],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "any_participant_may_say_a_transaction_landed",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "j0p4CLoi1YYPotAG66AjgA",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "tx-9:ben",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "tx-9"
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMOHLdF2jp9m6X3_y182AA",
+          "author": "dan",
+          "kind": "confirmPayment",
+          "at": "2026-10-28T19:09:00.000Z",
+          "confirmation": {
+            "paymentId": "tx-9:ben",
+            "method": "onChain",
+            "reference": "tx-9"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [
+            {
+              "id": "tx-9:ben",
+              "from": "ana",
+              "to": "ben",
+              "amount": 1000,
+              "method": "shieldedZec",
+              "at": "2026-10-28T19:08:00.000Z",
+              "reference": "tx-9",
+              "currency": "EUR"
+            }
+          ],
+          "confirmedPayments": [
+            "tx-9:ben"
+          ]
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [],
+        "balances": {
+          "ana": -2000,
+          "ben": 0,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "a_swap_payment_whose_zec_leg_is_zero",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "J_fcYEMGhQvRc7DV4Sqyzw",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "s3",
+            "from": "ana",
+            "to": "cara",
+            "amount": 1000,
+            "method": "swap",
+            "at": "2026-10-28T19:08:00.000Z",
+            "reference": "near-intent-7f3a",
+            "zatoshi": 0
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "J_fcYEMGhQvRc7DV4Sqyzw",
+            "code": "negative_amount"
+          }
+        ],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
+    },
+    {
+      "name": "a_settlement_method_nobody_defines",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+        },
+        {
+          "v": 1,
+          "id": "PTdfEJ_Bx2dEWYejZqabfQ",
+          "author": "ana",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          }
+        },
+        {
+          "v": 1,
+          "id": "FKfOYDpSvfdtsvIg7T4H5Q",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:02:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "payouts": [
+              {
+                "type": "zec",
+                "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "LreDG7A_p8JZGX3UG8hS7Q",
+          "author": "cara",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:03:00.000Z",
+          "participant": {
+            "id": "cara",
+            "name": "Cara",
+            "payouts": [
+              {
+                "type": "swap",
+                "asset": "USDC",
+                "chain": "base",
+                "address": "0xcara"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "QMii7if-C9ukW5QsHshNQQ",
+          "author": "dan",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:04:00.000Z",
+          "participant": {
+            "id": "dan",
+            "name": "Dan",
+            "payouts": [
+              {
+                "type": "cash"
+              }
+            ]
+          }
+        },
+        {
+          "v": 1,
+          "id": "AtdTTtGiJ_78IyFZHosU6g",
+          "author": "ben",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:05:00.000Z",
+          "expense": {
+            "id": "x-ben",
+            "paidBy": "ben",
+            "amount": 2000,
+            "at": "2026-10-28T19:05:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "VKS8-9r6l6fZMvevEL4FWQ",
+          "author": "cara",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:06:00.000Z",
+          "expense": {
+            "id": "x-cara",
+            "paidBy": "cara",
+            "amount": 2000,
+            "at": "2026-10-28T19:06:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "cara"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "TnovUYPC0pb0Fet2EZ_fFQ",
+          "author": "dan",
+          "kind": "addExpense",
+          "at": "2026-10-28T19:07:00.000Z",
+          "expense": {
+            "id": "x-dan",
+            "paidBy": "dan",
+            "amount": 2000,
+            "at": "2026-10-28T19:07:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "dan"
+              ]
+            }
+          }
+        },
+        {
+          "v": 1,
+          "id": "SDrGxlRsIoZO-2-sfyfvOQ",
+          "author": "ana",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:08:00.000Z",
+          "payment": {
+            "id": "g1",
+            "from": "ana",
+            "to": "dan",
+            "amount": 1000,
+            "method": "giftCard",
+            "at": "2026-10-28T19:08:00.000Z"
+          }
+        }
+      ],
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
+      "expect": {
+        "bill": {
+          "v": 1,
+          "id": "g0a5mrH6D5nx5bJ7KrgwVA",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "participants": [
+            {
+              "id": "ana",
+              "name": "Ana",
+              "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+            },
+            {
+              "id": "ben",
+              "name": "Ben",
+              "payouts": [
+                {
+                  "type": "zec",
+                  "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+                }
+              ]
+            },
+            {
+              "id": "cara",
+              "name": "Cara",
+              "payouts": [
+                {
+                  "type": "swap",
+                  "asset": "USDC",
+                  "chain": "base",
+                  "address": "0xcara"
+                }
+              ]
+            },
+            {
+              "id": "dan",
+              "name": "Dan",
+              "payouts": [
+                {
+                  "type": "cash"
+                }
+              ]
+            }
+          ],
+          "expenses": [
+            {
+              "id": "x-ben",
+              "paidBy": "ben",
+              "amount": 2000,
+              "at": "2026-10-28T19:05:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "ben"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-cara",
+              "paidBy": "cara",
+              "amount": 2000,
+              "at": "2026-10-28T19:06:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "cara"
+                ]
+              },
+              "currency": "EUR"
+            },
+            {
+              "id": "x-dan",
+              "paidBy": "dan",
+              "amount": 2000,
+              "at": "2026-10-28T19:07:00.000Z",
+              "split": {
+                "type": "equal",
+                "among": [
+                  "ana",
+                  "dan"
+                ]
+              },
+              "currency": "EUR"
+            }
+          ],
+          "payments": [],
+          "confirmedPayments": []
+        },
+        "creator": "ana",
+        "identities": {
+          "bound": {},
+          "contested": []
+        },
+        "replacedAddresses": [],
+        "withdrawn": [],
+        "setAside": [
+          {
+            "id": "SDrGxlRsIoZO-2-sfyfvOQ",
+            "code": "bill_unknown_settlement_method"
+          }
+        ],
+        "balances": {
+          "ana": -3000,
+          "ben": 1000,
+          "cara": 1000,
+          "dan": 1000
+        }
+      }
     },
     {
       "name": "a_create_entry_derives_its_id",

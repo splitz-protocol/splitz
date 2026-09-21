@@ -57,6 +57,120 @@ def void(eid, author, target, minute):
             "at": AT(minute), "targetId": target}
 
 
+# --- §9.2's three lanes, and the payments that settle them -------------------
+#
+# Every other payment fixture here is `cash`, which is the one method that
+# carries no reference and no zatoshi. A corpus that never sees `shieldedZec`
+# or `swap` leaves the two members those methods bring — a transaction and a
+# ZEC leg — to be read only by code checking itself.
+
+USDC_ON_BASE = {"type": "swap", "asset": "USDC", "chain": "base",
+                "address": "0xcara"}
+
+J_BEN_ZEC = {"v": 1, "id": "l2", "author": "ben", "kind": "joinBill",
+             "at": AT(2),
+             "participant": {"id": "ben", "name": "Ben",
+                             "payouts": [{"type": "zec",
+                                          "address": ADDRESSES[1]}]}}
+J_CARA_SWAP = {"v": 1, "id": "l3", "author": "cara", "kind": "joinBill",
+               "at": AT(3),
+               "participant": {"id": "cara", "name": "Cara",
+                               "payouts": [USDC_ON_BASE]}}
+J_DAN_CASH = {"v": 1, "id": "l4", "author": "dan", "kind": "joinBill",
+              "at": AT(4),
+              "participant": {"id": "dan", "name": "Dan",
+                              "payouts": [{"type": "cash"}]}}
+
+
+def lane_expense(eid, who, minute):
+    """`who` covers 20.00 shared with ana, so ana owes them 10.00."""
+    return {"v": 1, "id": eid, "author": who, "kind": "addExpense",
+            "at": AT(minute),
+            "expense": {"id": f"x-{who}", "paidBy": who, "amount": 2000,
+                        "at": AT(minute),
+                        "split": {"type": "equal",
+                                  "among": sorted(["ana", who])}}}
+
+
+LANES = [C, J_ANA, J_BEN_ZEC, J_CARA_SWAP, J_DAN_CASH,
+         lane_expense("l5", "ben", 5),
+         lane_expense("l6", "cara", 6),
+         lane_expense("l7", "dan", 7)]
+
+
+def paid(eid, pid, to, minute, method, amount=1000, ref=None, zatoshi=None):
+    payment = {"id": pid, "from": "ana", "to": to, "amount": amount,
+               "method": method, "at": AT(minute)}
+    if ref is not None:
+        payment["reference"] = ref
+    if zatoshi is not None:
+        payment["zatoshi"] = zatoshi
+    return {"v": 1, "id": eid, "author": "ana", "kind": "recordPayment",
+            "at": AT(minute), "payment": payment}
+
+
+LANE_CASES = [
+    ("three_payout_lanes_on_one_bill", LANES, C["id"]),
+    # A payout type a reader does not define is refused rather than skipped:
+    # skipping settles to the next preference down, which is a different
+    # address.
+    ("a_payout_type_nobody_defines",
+     [C, J_ANA,
+      {"v": 1, "id": "l8", "author": "ben", "kind": "joinBill", "at": AT(2),
+       "participant": {"id": "ben", "name": "Ben",
+                       "payouts": [{"type": "giftCard", "address": "g1"}]}}],
+     C["id"]),
+    ("a_swap_payout_states_the_asset_and_the_chain",
+     LANES + [paid("l9", "s1", "cara", 8, "swap",
+                   ref="near-intent-7f3a", zatoshi=100000)],
+     C["id"]),
+    ("a_shielded_payment_carries_its_transaction",
+     LANES + [paid("l10", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9")],
+     C["id"]),
+    # §10.5: one transaction paying two people is two records, each with its
+    # own id. Under one id the second is set aside and the payment it records
+    # is lost, so its payee is still owed and cannot confirm.
+    ("one_transaction_paying_two_people",
+     LANES + [paid("l11", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              paid("l12", "tx-9:cara", "cara", 8, "shieldedZec", ref="tx-9")],
+     C["id"]),
+    ("two_recipients_of_one_transaction_under_one_id",
+     LANES + [paid("l13", "tx-9", "ben", 8, "shieldedZec", ref="tx-9"),
+              paid("l14", "tx-9", "cara", 8, "shieldedZec", ref="tx-9")],
+     C["id"]),
+    # Each payee vouches for the record addressed to them, in a method §10.5
+    # lets them author. The three lanes clear independently.
+    ("each_payee_confirms_the_record_addressed_to_them",
+     LANES + [paid("l15", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              paid("l16", "s2", "cara", 8, "swap",
+                   ref="near-intent-7f3a", zatoshi=100000),
+              paid("l17", "c-dan-1", "dan", 8, "cash"),
+              conf("l18", "ben", "walletReceived", 9, pid="tx-9:ben"),
+              conf("l19", "cara", "recipientConfirmed", 9, pid="s2"),
+              conf("l20", "dan", "recipientConfirmed", 9, pid="c-dan-1")],
+     C["id"]),
+    # A confirmation's whole weight is in who gave it, so one payee cannot
+    # clear another's debt.
+    ("a_payee_confirms_a_record_addressed_to_somebody_else",
+     LANES + [paid("l21", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              conf("l22", "cara", "recipientConfirmed", 9, pid="tx-9:ben")],
+     C["id"]),
+    # `onChain` is the one method any participant may author, and the one that
+    # needs a reference.
+    ("any_participant_may_say_a_transaction_landed",
+     LANES + [paid("l23", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              conf("l24", "dan", "onChain", 9, "tx-9", pid="tx-9:ben")],
+     C["id"]),
+    # A swap's ZEC leg is advisory and must still be a real amount.
+    ("a_swap_payment_whose_zec_leg_is_zero",
+     LANES + [paid("l25", "s3", "cara", 8, "swap",
+                   ref="near-intent-7f3a", zatoshi=0)],
+     C["id"]),
+    ("a_settlement_method_nobody_defines",
+     LANES + [paid("l26", "g1", "dan", 8, "giftCard")],
+     C["id"]),
+]
+
 FOLD_CASES = [
     ("a_bill_with_one_expense", BASE, C["id"]),
     ("a_recorded_payment_is_not_yet_confirmed", BASE, C["id"]),
@@ -423,6 +537,8 @@ FOLD_CASES = [
     ("two_create_entries",
      [C, create(name="Other"), J_ANA], None),
 ]
+
+FOLD_CASES += LANE_CASES
 
 def at_depth(total):
     """An entry whose deepest value sits at level `total` (§10.1).
