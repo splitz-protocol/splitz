@@ -612,14 +612,20 @@ pub fn payment_entries_for_send(
     }
     let mut records = Vec::with_capacity(owed.len());
     for (to, amount) in owed {
+        // One transaction paying several people is several records, and §10.5
+        // requires each to carry its own id: a confirmation names one record,
+        // so two under one id would let one recipient's word settle a debt
+        // another never vouched for. The transaction goes in `reference`,
+        // which is what `onChain` reads and what ties these to the chain.
+        let payment_id = format!("{txid}:{to}");
         records.push(build(&facts, &seed, |host| {
             record_payment(
                 host,
-                &txid,
+                &payment_id,
                 to,
                 amount,
                 "shieldedZec",
-                None,
+                Some(&txid),
                 None,
                 None,
                 None,

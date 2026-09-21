@@ -1737,6 +1737,15 @@ def fold(entries, bill_id=None, verify=None):
             except Refused as r:
                 aside(e, r.code, "carries a payment this reader cannot decode")
                 continue
+            # SPEC.md 10.5: a confirmation names one record, and a method that
+            # speaks for the payment's `to` is checked against that record's
+            # `to`. Two records under one id name a payee ambiguously, so one
+            # recipient's confirmation would settle a debt another never
+            # vouched for. The first stands; the second is refused.
+            if any(p["id"] == pay["id"] for p in payments):
+                aside(e, "duplicate_payment",
+                      "carries a payment id the bill already holds")
+                continue
             payments.append(pay)
 
     # Confirmations, in a pass of their own once every payment is on the bill.

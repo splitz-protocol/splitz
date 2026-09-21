@@ -1255,7 +1255,16 @@ entry carries the second kind.
 ```
 
 `paymentId` is the `id` of the **`PaymentRecord`**, not of the entry that
-recorded it; `targetId` names entries and is not used here. `by` is the entry's
+recorded it; `targetId` names entries and is not used here.
+
+**A `PaymentRecord` id MUST be unique within a bill** (`duplicate_payment`). A
+confirmation names one record, and a method that speaks for the payment's `to`
+is checked against that record's `to`, so an id held by two records names a
+payee ambiguously: one recipient's confirmation would settle a debt another
+recipient never vouched for. One transaction paying several people is several
+records, and they MUST NOT share an id — the transaction goes in `reference`,
+which is what `onChain` reads and what ties the records to the chain. A second
+record carrying an id the bill already holds is set aside; the first stands. `by` is the entry's
 `author` and the instant is the entry's `at`; neither is restated in the
 payload. `reference` and `note` are optional.
 
@@ -1829,6 +1838,7 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `exact_total_mismatch`, `percentage_not_full_scale`, `itemized_no_items`,
 `itemized_unassigned_item`, `itemized_total_mismatch`, `currency_mismatch`,
 `unknown_participant`, `unknown_entry`, `duplicate_participant`,
+`duplicate_payment`,
 `self_payment`, `bill_bad_participant_id`,
 `unknown_payment`, `unauthorized_confirmation`,
 `confirmation_missing_reference`, `unauthorized_payment`,

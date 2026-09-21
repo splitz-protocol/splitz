@@ -758,6 +758,16 @@ FoldResult foldLog(List<Object?> rawEntries,
         aside(e, err.code);
         continue;
       }
+      // §10.5: a confirmation names one record, and a method that speaks for
+      // the payment's `to` is checked against that record's `to`. Two records
+      // under one id name a payee ambiguously, so one recipient's
+      // confirmation would settle a debt another never vouched for. The first
+      // record stands and the second is refused; one transaction paying
+      // several people carries the transaction in `reference`, not in the id.
+      if (payments.any((p) => p['id'] == pay['id'])) {
+        aside(e, SplitCode.duplicatePayment);
+        continue;
+      }
       payments.add(pay);
     }
   }

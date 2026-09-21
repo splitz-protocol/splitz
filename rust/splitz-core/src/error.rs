@@ -29,6 +29,7 @@ pub mod code {
     pub const UNKNOWN_PARTICIPANT: &str = "unknown_participant";
     pub const UNKNOWN_ENTRY: &str = "unknown_entry";
     pub const DUPLICATE_PARTICIPANT: &str = "duplicate_participant";
+    pub const DUPLICATE_PAYMENT: &str = "duplicate_payment";
     pub const SELF_PAYMENT: &str = "self_payment";
     pub const BALANCES_NONZERO_RESIDUAL: &str = "balances_nonzero_residual";
     pub const EXACT_LIMIT_TOO_LARGE: &str = "exact_limit_too_large";

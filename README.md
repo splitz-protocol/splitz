@@ -12,7 +12,7 @@ from the specification text alone — that produces them.
 ├── SPEC.md         the protocol
 ├── INTEGRATING.md  what a wallet supplies, and what it does not get
 ├── CONFORMANCE.md  what conformance means, and what a green suite does not say
-├── vectors/        448 language-neutral conformance cases
+├── vectors/        449 language-neutral conformance cases
 ├── dart/           `splitz_core`, the reference implementation (0 dependencies)
 │                   `splitz_core.dart` the protocol, `host.dart` the wallet seam
 ├── rust/           a cargo workspace; `splitz-core` is the second
@@ -26,8 +26,8 @@ from the specification text alone — that produces them.
 ```
 
 ```
-cd dart && dart test                 # 539 tests, 448 of them the corpus
-cd rust && cargo test                # 172: the same 448 cases, the oracle,
+cd dart && dart test                 # 541 tests, 449 of them the corpus
+cd rust && cargo test                # 173: the same 449 cases, the oracle,
                                      #   and the host layer's own
 cd rust && cargo test --release      # and again with overflow checks off
 cd splitz_host && dart test          # 111 over the wallet seam

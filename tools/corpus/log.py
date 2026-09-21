@@ -78,6 +78,20 @@ FOLD_CASES = [
     ("a_confirmation_arriving_before_its_payment",
      [C, J_ANA, J_BEN, E1, conf("c9", "ana", "recipientConfirmed", 1), P1], C["id"]),
 
+    # One transaction paying two people, recorded as the same id twice. The
+    # second record is refused: a confirmation names one record, and two under
+    # one id would let Dee's word settle what Ana is owed.
+    ("two_payments_sharing_one_id",
+     [C, J_ANA, J_BEN, J_DEE, E1,
+      {"v": 1, "id": "p4", "author": "ben", "kind": "recordPayment",
+       "at": AT(4),
+       "payment": {"id": "tx9", "from": "ben", "to": "ana", "amount": 4500,
+                   "method": "cash", "at": AT(4)}},
+      {"v": 1, "id": "p5", "author": "ben", "kind": "recordPayment",
+       "at": AT(5),
+       "payment": {"id": "tx9", "from": "ben", "to": "dee", "amount": 10,
+                   "method": "cash", "at": AT(5)}}], C["id"]),
+
     ("a_payment_neither_party_wrote",
      BASE + [{"v": 1, "id": "p2", "author": "ana", "kind": "recordPayment",
               "at": AT(6),

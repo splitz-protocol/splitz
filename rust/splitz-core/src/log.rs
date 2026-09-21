@@ -939,6 +939,18 @@ pub fn fold_log_verified(
                     aside!(entry, e.code);
                     continue;
                 }
+                // §10.5: a confirmation names one record, and a method that
+                // speaks for the payment's `to` is checked against that
+                // record's `to`. Two records under one id name a payee
+                // ambiguously, so one recipient's confirmation would settle a
+                // debt another never vouched for. The first record stands and
+                // the second is refused; one transaction paying several people
+                // carries the transaction in `reference`, not in the id.
+                let pay_id = field(&pay, "id").to_owned();
+                if payments.iter().any(|p| field(p, "id") == pay_id) {
+                    aside!(entry, code::DUPLICATE_PAYMENT);
+                    continue;
+                }
                 payments.push(pay);
             }
             _ => {}

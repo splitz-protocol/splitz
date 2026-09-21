@@ -29,6 +29,7 @@ abstract final class SplitCode {
   static const unknownParticipant = 'unknown_participant';
   static const unknownEntry = 'unknown_entry';
   static const duplicateParticipant = 'duplicate_participant';
+  static const duplicatePayment = 'duplicate_payment';
   static const selfPayment = 'self_payment';
   static const balancesNonzeroResidual = 'balances_nonzero_residual';
   static const exactLimitTooLarge = 'exact_limit_too_large';

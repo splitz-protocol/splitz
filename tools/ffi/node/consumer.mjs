@@ -146,7 +146,11 @@ check("so ben is asked for nothing twice",
       splitz.obligation_of(ben.facts(), ben.entries, []).settlements.length === 0,
       JSON.stringify(splitz.obligation_of(ben.facts(), ben.entries, []).settlements));
 
-ana.add(splitz.confirm_payment_entry(ana.facts(), "tx-ben-1", "recipientConfirmed",
+// A payee confirms a payment they can see, by the id the bill carries. One
+// transaction paying several people writes one record each, so the id is not
+// the transaction's — the transaction is in `reference`.
+const toConfirm = afterPayment.bill.payments[0].id;
+ana.add(splitz.confirm_payment_entry(ana.facts(), toConfirm, "recipientConfirmed",
     undefined, ana.seed));
 ben.take(ana);
 const settled = splitz.obligation_of(ben.facts(), ben.entries, []);

@@ -150,7 +150,11 @@ fun main() {
     check("and is told what is in flight", stillOwed.awaiting.single().paid == 4500L,
           "${stillOwed.awaiting}")
 
-    ana.add(confirmPaymentEntry(ana.facts(), "tx-ben-1", "recipientConfirmed", null, ana.seed))
+    // A payee confirms a payment they can see, by the id the bill carries. One
+    // transaction paying several people writes one record each, so the id is
+    // not the transaction's — the transaction is in `reference`.
+    val toConfirm = afterPayment.bill.payments.single().id
+    ana.add(confirmPaymentEntry(ana.facts(), toConfirm, "recipientConfirmed", null, ana.seed))
     ben.take(ana)
     val settled = obligationOf(ben.facts(), ben.entries, listOf())!!
     check("once confirmed, the debt is gone",
