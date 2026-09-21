@@ -1,0 +1,17 @@
+[package]
+name = "splitz-testnet-mint"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Mints testnet development wallets: phrases to a file, addresses to the terminal."
+
+# Deliberately not a workspace member of ../../../rust, for the same reason
+# tools/regtest/prover is not: the protocol crate takes one dependency and this
+# takes the whole wallet stack.
+[dependencies]
+bip0039 = "0.12"
+zcash_keys = { version = "0.16", features = ["orchard", "transparent-inputs", "sapling"] }
+zcash_protocol = "0.10"
+zip32 = "0.2"
+rand = "0.8"
+anyhow = "1"
