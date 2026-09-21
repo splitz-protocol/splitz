@@ -130,6 +130,10 @@ class Device implements splitz.BillHost {
   }
 }
 
+/// Bound rather than written inline: Dart 3.11's formatter and 3.13's wrap
+/// a collection literal in an argument list differently, and CI runs 3.13.
+const List<splitz.Settlement> noSettlements = [];
+
 void main() {
   late Process relay;
   late Uri origin;
@@ -237,7 +241,7 @@ void main() {
 
     final owed = splitz.obligationFor(ana, after);
     expect(
-      owed?.settlements ?? const [],
+      owed?.settlements ?? noSettlements,
       isEmpty,
       reason: 'a contested payee is held back until the payer is asked',
     );
@@ -263,7 +267,12 @@ void main() {
 
     // Overriding is the payer's to make, and it pays what the bill shows —
     // which is why the two reports above have to be right.
-    final anyway = splitz.obligationFor(ana, after, payAnyway: const {'ben'})!;
+    const shownAndAccepted = {'ben'};
+    final anyway = splitz.obligationFor(
+      ana,
+      after,
+      payAnyway: shownAndAccepted,
+    )!;
     expect(anyway.settlements.single.to, 'ben');
     expect(
       anyway.request.uri,
@@ -382,9 +391,10 @@ void main() {
       expect(f.setAside, isEmpty);
       // §10.7 over a log every device assembled differently: each participant
       // signed its own entries, so each key is bound and none is contested.
+      const everyone = {'ana', 'ben', 'cai', 'dee'};
       expect(
         f.identities.bound.keys.toSet(),
-        {'ana', 'ben', 'cai', 'dee'},
+        everyone,
         reason: 'every participant signed for the key its join named',
       );
       expect(f.identities.contested, isEmpty);
@@ -397,7 +407,7 @@ void main() {
     for (final who in [ben, cai, dee]) {
       final theirs = splitz.obligationFor(who, folds[who.me]!);
       expect(
-        theirs?.settlements ?? const [],
+        theirs?.settlements ?? noSettlements,
         isEmpty,
         reason: '${who.me} is owed, so ${who.me} pays nobody',
       );
