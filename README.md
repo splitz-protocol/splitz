@@ -30,7 +30,7 @@ cd dart && dart test                 # 541 tests, 449 of them the corpus
 cd rust && cargo test                # 173: the same 449 cases, the oracle,
                                      #   and the host layer's own
 cd rust && cargo test --release      # and again with overflow checks off
-cd splitz_host && dart test          # 115 over the wallet seam
+cd splitz_host && dart test          # 116 over the wallet seam
 tools/differential/run.sh 1 1200     # three implementations, one operation list,
                                      #   diffed against each other and against
                                      #   §10.2's own properties
@@ -139,6 +139,7 @@ by a test in each implementation whose string type can hold the input.
 | `tools/ffi/node.sh` | The same again in JavaScript, over a different third-party generator. Three languages and three generators agreeing is what says the surface is the library's and not one generator's — and a language with no static types reads it differently. `INTEGRATING.md`'s JavaScript sample runs here. |
 | `tools/ffi/swift.sh` | That the generated Swift module builds. A record field named for something the target language already puts on that type compiles in Rust and not in Swift or Kotlin, and the generator will produce one. Local only: the runner has no Swift. |
 | `tools/parity` | The three public surface pairs — the protocol, the wallet seam and the plumbing. An API one side has and the other does not never reaches the wire, so nothing watching the wire can see it. |
+| `splitz_host/test/rehearsal_test.dart` | Four devices, one bill, one relay. Each holds its own storage and its own keychain and shares nothing but a socket, so a device learns what the others did only by syncing and an entry that never reached the relay is one the others never see. It asserts §10.2's claim directly: four logs that arrived in different orders materialise the same bill, byte for byte, and agree on who owes whom. |
 | `tools/relay` | The relay a bill syncs through, as a process a test drives over a socket. §11.3 fixes the sealed blob and the channel; moving them is the wallet's, and this is the smallest server that does it. It holds ciphertext under a key it does not have, in a channel that is the bill id's digest, so it can say how many blobs a channel holds and nothing else. `splitz_host/test/relay_server_test.dart` runs it against the real `HttpSplitsRelay` rather than against a second server written beside the client. |
 | `tools/spec` | `SPEC.md` against the tree that has to keep it: every §12 code declared, thrown and covered in all three implementations, every `vectors/…` file and case the text names by name, every figure it quotes beside a named case, every §N cross-reference. Nothing else in this repository reads the specification, and every implementation written from it inherits its mistakes. |
 | `rust/splitz-core/tests/oracle.rs` | Our payment request URIs against `librustzcash`'s `zip321` crate, byte for byte and round-tripped, over real mainnet addresses. Every other lane compares implementations written from one specification by one author; they can all be wrong together. |
