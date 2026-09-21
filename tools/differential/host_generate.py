@@ -222,6 +222,94 @@ def a_key_ish(rng: random.Random) -> str:
     return "+/" + "A" * 41  # standard base64's alphabet, not url's
 
 
+def a_settle_case(rng: random.Random) -> dict:
+    """A whole bill, and one participant settling what it says they owe.
+
+    Both runners build the entries themselves from this, so the operation
+    compares entry construction, the fold, the obligation and §14's
+    withholding as well as the records a send is allowed to write. The
+    instants are supplied rather than derived, because a clock is the one
+    thing the two implementations cannot be asked to agree about on their own.
+
+    The shapes are chosen rather than left to chance. A bill drawn at random
+    leaves the settling participant in credit almost every time, and an
+    operation that settles nothing compares nothing: `many` is the shape that
+    reaches one transaction paying several people, which is where a record's
+    own id matters.
+    """
+    n = rng.randrange(2, 5)
+    who = PEOPLE[:n]
+    # §9.2's lanes, so the operation also diffs which payees §8.5 carries and
+    # which it withholds, and for which of the two reasons.
+    def a_payout(p: str):
+        r = rng.random()
+        if r < 0.45:
+            return None
+        if r < 0.65:
+            return [{"type": "zec", "address": f"u1{p}"}]
+        if r < 0.8:
+            return [{"type": "swap", "asset": "USDC", "chain": "base",
+                     "address": f"0x{p}"}]
+        if r < 0.95:
+            return [{"type": "cash"}]
+        return [{"type": "giftCard", "address": f"g-{p}"}]
+
+    people = [
+        {
+            "id": p,
+            "payTo": f"u1{p}" if rng.random() < 0.8 else None,
+            "payouts": a_payout(p),
+        }
+        for p in who
+    ]
+    shape = rng.choice(["one", "many", "many", "any"])
+    if shape == "one":
+        # Everybody else owes the one person who paid.
+        payers = [who[0]] * rng.randrange(1, 4)
+        me = rng.choice(who[1:])
+    elif shape == "many":
+        # Each of the others pays one expense and the last person pays none,
+        # so that one settles a debt to several people at once.
+        payers = who[:-1]
+        me = who[-1]
+    else:
+        payers = [rng.choice(who) for _ in range(rng.randrange(1, 4))]
+        me = rng.choice(who)
+    # In `many` the payers must all end up in credit, or the one who paid
+    # least owes as well and the plan nets down to a single payment — the case
+    # this shape exists to avoid. Comparable amounts keep every payer a
+    # creditor; elsewhere the amount is free, including the ones §5 refuses.
+    base = rng.randrange(6000, 120000)
+    expenses = [
+        {
+            "id": f"x{i}",
+            "paidBy": payer,
+            "amount": (base + rng.randrange(-base // 40, base // 40 + 1)
+                       if shape == "many" else rng.randrange(-200, 120000)),
+            "among": (who if shape != "any"
+                      else sorted(rng.sample(who, rng.randrange(1, n + 1)))),
+        }
+        for i, payer in enumerate(payers)
+    ]
+    rate = None if rng.random() < 0.15 else rng.randrange(1, 10**7)
+    # create, one join each, the expenses, the rate if there is one, and one
+    # more for the send itself.
+    steps = 1 + n + len(expenses) + (1 if rate is not None else 0) + 1
+    return {
+        "op": "settle_records",
+        "people": people,
+        "expenses": expenses,
+        "rate": rate,
+        "me": me,
+        "shape": shape,
+        "creatorKey": b64(bytes(rng.randrange(256) for _ in range(32))),
+        "txid": ("" if rng.random() < 0.1
+                 else "tx-" + b64(bytes(rng.randrange(256) for _ in range(8)))),
+        "instants": [f"2026-10-28T19:{i // 60:02}:{i % 60:02}Z"
+                     for i in range(steps)],
+    }
+
+
 def main() -> int:
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 400
@@ -234,7 +322,12 @@ def main() -> int:
             "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
             "store_read", "store_merge", "activity", "split_draft",
             "swap_encode", "swap_status", "swap_quote", "swap_watch",
+            "settle_records",
         ])
+        if op == "settle_records":
+            json.dump(a_settle_case(rng), out)
+            out.write("\n")
+            continue
         if op == "public_key":
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
         elif op == "sign_entry":

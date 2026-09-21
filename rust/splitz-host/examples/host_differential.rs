@@ -7,6 +7,9 @@
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Value};
+use splitz_core::host::{
+    add_expense, create_bill, join_bill, obligation_for, set_rate, settle, BillLog, SendResult,
+};
 use splitz_core::{decode_bill, sha256, signing_message, SetAside};
 use splitz_host::{
     activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, component_encode,
@@ -201,9 +204,185 @@ fn tamper_blob(blob: &str, how: i64) -> String {
     base64url_encode(&bytes)
 }
 
+// --- a whole bill, and one participant settling it ---------------------------
+
+/// A wallet for the settle operation: a fixed instant, a fixed transaction id,
+/// and no signing. The instant is supplied per entry so both implementations
+/// write the same `at` without either deriving one.
+struct DiffHost {
+    me: String,
+    pay_to: Option<String>,
+    at: String,
+    txid: String,
+}
+
+impl splitz_core::host::BillHost for DiffHost {
+    fn me(&self) -> &str {
+        &self.me
+    }
+    fn pay_to_address(&self) -> Option<&str> {
+        self.pay_to.as_deref()
+    }
+    fn now(&self) -> String {
+        self.at.clone()
+    }
+    fn random_bytes(&self, byte_count: usize) -> Vec<u8> {
+        (0..byte_count).map(|i| i as u8).collect()
+    }
+    fn broadcast(&self, _uri: &str) -> splitz_core::host::Sent {
+        if self.txid.is_empty() {
+            splitz_core::host::Sent::failed(Some("no transaction id".to_owned()))
+        } else {
+            splitz_core::host::Sent::sent(self.txid.clone())
+        }
+    }
+}
+
+fn settle_records(op: &Value) -> Value {
+    type Person = (String, Option<String>, Option<Vec<Value>>);
+    let people: Vec<Person> = op["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| {
+            (
+                p["id"].as_str().unwrap().to_owned(),
+                p["payTo"].as_str().map(str::to_owned),
+                p["payouts"].as_array().cloned(),
+            )
+        })
+        .collect();
+    let instants: Vec<String> = op["instants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_str().unwrap().to_owned())
+        .collect();
+    let me = op["me"].as_str().unwrap();
+    let txid = op["txid"].as_str().unwrap_or("");
+
+    let host_at = |step: usize, who: &str, pay_to: Option<&str>| DiffHost {
+        me: who.to_owned(),
+        pay_to: pay_to.map(str::to_owned),
+        at: instants[step].clone(),
+        txid: txid.to_owned(),
+    };
+
+    let mut step = 0usize;
+    let (first_id, first_pay, _) = people[0].clone();
+    let mut entries = Vec::new();
+    let creator = host_at(step, &first_id, first_pay.as_deref());
+    step += 1;
+    match create_bill(
+        &creator,
+        "Dinner",
+        "EUR",
+        "equal",
+        op["creatorKey"].as_str().unwrap(),
+    ) {
+        Ok(entry) => entries.push(entry),
+        Err(e) => return json!({ "folded": false, "error": e.code }),
+    }
+    for (id, pay_to, payouts) in &people {
+        let h = host_at(step, id, pay_to.as_deref());
+        step += 1;
+        match join_bill(
+            &h,
+            Some(id.as_str()),
+            pay_to.as_deref(),
+            None,
+            payouts.clone(),
+        ) {
+            Ok(entry) => entries.push(entry),
+            Err(e) => return json!({ "folded": false, "error": e.code }),
+        }
+    }
+    for expense in op["expenses"].as_array().unwrap() {
+        let paid_by = expense["paidBy"].as_str().unwrap();
+        let h = host_at(step, paid_by, None);
+        step += 1;
+        match add_expense(
+            &h,
+            expense["id"].as_str().unwrap(),
+            paid_by,
+            expense["amount"].as_i64().unwrap(),
+            json!({ "type": "equal", "among": expense["among"] }),
+            None,
+        ) {
+            Ok(entry) => entries.push(entry),
+            Err(e) => return json!({ "folded": false, "error": e.code }),
+        }
+    }
+    if let Some(rate) = op["rate"].as_i64() {
+        let h = host_at(step, &first_id, first_pay.as_deref());
+        step += 1;
+        match set_rate(&h, "EUR", rate, None) {
+            Ok(entry) => entries.push(entry),
+            Err(e) => return json!({ "folded": false, "error": e.code }),
+        }
+    }
+
+    let mine = people.iter().find(|(id, ..)| id == me).unwrap();
+    let host = host_at(step, me, mine.1.as_deref());
+    let mut log = BillLog::new(&host);
+    let refused = match log.add(entries) {
+        Ok(refused) => refused,
+        Err(e) => return json!({ "folded": false, "error": e.code }),
+    };
+    let folded = match log.fold() {
+        Ok(folded) => folded,
+        Err(e) => return json!({ "folded": false, "error": e.code }),
+    };
+    let refused_codes: Vec<&str> = refused.iter().map(|r| r.code).collect();
+    let set_aside_codes: Vec<&str> = folded.set_aside.iter().map(|s| s.code).collect();
+    let owed = match obligation_for(&host, &folded, &std::collections::BTreeSet::new()) {
+        Ok(Some(owed)) => owed,
+        Ok(None) => {
+            return json!({
+                "folded": true,
+                "refused": refused_codes,
+                "setAside": set_aside_codes,
+                "priced": false,
+            })
+        }
+        Err(e) => return json!({ "folded": false, "error": e.code }),
+    };
+    let settled = match settle(&host, &mut log, &owed) {
+        Ok(settled) => settled,
+        Err(e) => return json!({ "folded": false, "error": e.code }),
+    };
+    json!({
+        "folded": true,
+        "refused": refused_codes,
+        "setAside": set_aside_codes,
+        "priced": true,
+        "settlements": owed.settlements.iter()
+            .map(|s| json!({ "to": s.to, "amount": s.amount }))
+            .collect::<Vec<_>>(),
+        "unpayable": owed.unpayable().iter()
+            .map(|u| json!({ "id": u.id, "reason": u.reason }))
+            .collect::<Vec<_>>(),
+        "awaiting": owed.awaiting.iter()
+            .map(|a| json!({ "to": a.to, "owed": a.owed, "paid": a.paid }))
+            .collect::<Vec<_>>(),
+        "uri": owed.uri(),
+        "result": match settled.result {
+            SendResult::Sent => "sent",
+            SendResult::Pending => "pending",
+            SendResult::Failed => "failed",
+        },
+        "detail": settled.detail,
+        "txid": settled.txid,
+        // The whole payload, `at` included: the clock is fixed, so an instant
+        // that differs is a real divergence rather than a race.
+        "records": settled.records.iter().map(|r| r["payment"].clone()).collect::<Vec<_>>(),
+    })
+}
+
 fn answer(op: &Value) -> Value {
     let name = op.get("op").and_then(Value::as_str).unwrap_or("");
     match name {
+        "settle_records" => settle_records(op),
         "public_key" => {
             let seed = base64url_decode(op["seed"].as_str().unwrap()).unwrap_or_default();
             json!(Signer.public_key_from_seed(&seed))

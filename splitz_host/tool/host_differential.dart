@@ -6,9 +6,11 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart' as hashing;
+import 'package:splitz_core/host.dart' as seam;
 import 'package:splitz_core/splitz_core.dart' as protocol;
 import 'package:splitz_host/splitz_host.dart';
 
@@ -178,8 +180,154 @@ String tamperBlob(String blob, int how) {
 /// Changes one character of a signature, so it is well formed and wrong.
 String tamper(String sig) => (sig[0] == 'A' ? 'B' : 'A') + sig.substring(1);
 
+/// A wallet for the settle operation: a fixed instant, a fixed transaction id,
+/// and no signing. The instant is supplied per entry so both implementations
+/// write the same `at` without either deriving one.
+class DiffHost implements seam.BillHost {
+  DiffHost({
+    required this.me,
+    required this.payToAddress,
+    required String at,
+    required String txid,
+  }) : _at = DateTime.parse(at).toUtc(),
+       _txid = txid;
+
+  @override
+  final String me;
+  @override
+  final String? payToAddress;
+  final DateTime _at;
+  final String _txid;
+
+  @override
+  seam.Clock get now =>
+      () => _at;
+
+  @override
+  seam.Randomness get randomBytes =>
+      (int n) => Uint8List.fromList(List<int>.generate(n, (i) => i));
+
+  @override
+  seam.SignEntry? get sign => null;
+  @override
+  seam.VerifyEntry? get verify => null;
+
+  @override
+  seam.Broadcast get broadcast =>
+      (uri) async => _txid.isEmpty
+      ? const seam.Sent.failed(detail: 'no transaction id')
+      : seam.Sent.sent(_txid);
+}
+
+/// The records `settle` writes, or why it wrote none.
+Future<Map<String, Object?>> settleRecords(Map<String, dynamic> op) async {
+  final people = [
+    for (final p in op['people'] as List) (p as Map).cast<String, dynamic>(),
+  ];
+  final expenses = [
+    for (final e in op['expenses'] as List) (e as Map).cast<String, dynamic>(),
+  ];
+  final instants = [for (final i in op['instants'] as List) i as String];
+  final me = op['me'] as String;
+  final txid = op['txid'] as String;
+  final rate = op['rate'] as int?;
+
+  DiffHost at(int step, String who, String? payTo) =>
+      DiffHost(me: who, payToAddress: payTo, at: instants[step], txid: txid);
+
+  final first = people.first;
+  var step = 0;
+  final entries = <Map<String, dynamic>>[
+    seam.createBill(
+      host: at(step++, first['id'] as String, first['payTo'] as String?),
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: op['creatorKey'] as String,
+    ),
+  ];
+  for (final p in people) {
+    final payouts = p['payouts'] as List?;
+    entries.add(
+      seam.joinBill(
+        host: at(step++, p['id'] as String, p['payTo'] as String?),
+        name: p['id'] as String,
+        payTo: p['payTo'] as String?,
+        payouts: payouts == null
+            ? null
+            : [for (final o in payouts) (o as Map).cast<String, dynamic>()],
+      ),
+    );
+  }
+  for (final e in expenses) {
+    entries.add(
+      seam.addExpense(
+        host: at(step++, e['paidBy'] as String, null),
+        expenseId: e['id'] as String,
+        paidBy: e['paidBy'] as String,
+        amount: e['amount'] as int,
+        split: <String, dynamic>{'type': 'equal', 'among': e['among']},
+      ),
+    );
+  }
+  if (rate != null) {
+    entries.add(
+      seam.setRate(
+        host: at(step++, first['id'] as String, first['payTo'] as String?),
+        currency: 'EUR',
+        minorUnitsPerZec: rate,
+      ),
+    );
+  }
+
+  final mine = people.firstWhere((p) => p['id'] == me);
+  final host = at(step, me, mine['payTo'] as String?);
+  final log = seam.BillLog(host);
+  final refused = log.add(entries);
+  final seam.FoldedBill folded;
+  try {
+    folded = log.fold();
+  } on protocol.SplitError catch (e) {
+    return {'folded': false, 'error': e.code};
+  }
+  final owed = seam.obligationFor(host, folded);
+  if (owed == null) {
+    return {
+      'folded': true,
+      'refused': [for (final r in refused) r.code],
+      'setAside': [for (final a in folded.setAside) a.code],
+      'priced': false,
+    };
+  }
+  final settled = await seam.settle(host, log, owed);
+  return {
+    'folded': true,
+    'refused': [for (final r in refused) r.code],
+    'setAside': [for (final a in folded.setAside) a.code],
+    'priced': true,
+    'settlements': [
+      for (final s in owed.settlements) {'to': s.to, 'amount': s.amount},
+    ],
+    'unpayable': [
+      for (final u in owed.unpayable) {'id': u.id, 'reason': u.reason},
+    ],
+    'awaiting': [
+      for (final a in owed.awaiting)
+        {'to': a.to, 'owed': a.owed, 'paid': a.paid},
+    ],
+    'uri': owed.uri,
+    'result': settled.result.name,
+    'detail': settled.detail,
+    'txid': settled.txid,
+    // The whole payload, `at` included: the clock is fixed, so an instant
+    // that differs is a real divergence rather than a race.
+    'records': [for (final r in settled.records) r['payment']],
+  };
+}
+
 Future<Object?> answer(Map<String, dynamic> op) async {
   switch (op['op'] as String) {
+    case 'settle_records':
+      return settleRecords(op);
     case 'public_key':
       return signer.publicKeyFromSeed(
         SplitsSigner.decode(op['seed'] as String),
