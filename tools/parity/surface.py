@@ -148,6 +148,7 @@ RENAMES = {
     "acceptScan": "accept_scan",
     "hasJoined": "has_joined",
     "obligationFor": "obligation_for",
+    "paymentIdForSend": "payment_id_for_send",
 }
 
 

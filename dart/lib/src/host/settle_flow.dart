@@ -144,6 +144,16 @@ PayerObligation? obligationFor(
       request: rendered);
 }
 
+/// The id of the payment record for [to]'s share of the transaction [txid].
+///
+/// One transaction paying several people is several records, and §10.5
+/// requires each to carry its own id: a confirmation names one record, so two
+/// under one id would let one recipient's word settle a debt another never
+/// vouched for, and the fold sets the second aside as `duplicate_payment` —
+/// losing the record of a payment that was made. The transaction itself goes
+/// in the record's `reference`, which is what `onChain` reads.
+String paymentIdForSend(String txid, String to) => '$txid:$to';
+
 /// Sends [obligation] and records that it was sent.
 ///
 /// **Everything the record needs is read before the broadcast.** A send that
@@ -175,10 +185,13 @@ Future<Settled> settle(
   // would claim a transaction settled a debt it never paid — a debt the
   // payee then has to contest rather than simply still be owed.
   final unpayable = {for (final u in obligation.unpayable) u.id};
-  final owed = <String, int>{
-    for (final s in obligation.settlements)
-      if (!unpayable.contains(s.to)) s.to: s.amount,
-  };
+  // Records to one recipient sum, as they do in §14. A map literal would keep
+  // the last settlement and drop the rest, recording less than was sent.
+  final owed = <String, int>{};
+  for (final s in obligation.settlements) {
+    if (unpayable.contains(s.to)) continue;
+    owed[s.to] = (owed[s.to] ?? 0) + s.amount;
+  }
   if (owed.isEmpty) {
     return const Settled(
       result: SendResult.failed,
@@ -205,9 +218,10 @@ Future<Settled> settle(
   for (final entry in owed.entries) {
     final record = recordPayment(
       host: host,
-      paymentId: txid,
+      paymentId: paymentIdForSend(txid, entry.key),
       to: entry.key,
       amount: entry.value,
+      reference: txid,
     );
     log.add([record]);
     records.add(record);

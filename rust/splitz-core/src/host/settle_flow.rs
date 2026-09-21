@@ -138,6 +138,18 @@ pub fn obligation_for(
     }))
 }
 
+/// The id of the payment record for `to`'s share of the transaction `txid`.
+///
+/// One transaction paying several people is several records, and §10.5
+/// requires each to carry its own id: a confirmation names one record, so two
+/// under one id would let one recipient's word settle a debt another never
+/// vouched for, and the fold sets the second aside as `duplicate_payment` —
+/// losing the record of a payment that was made. The transaction itself goes
+/// in the record's `reference`, which is what `onChain` reads.
+pub fn payment_id_for_send(txid: &str, to: &str) -> String {
+    format!("{txid}:{to}")
+}
+
 /// Sends `obligation` and records that it was sent.
 ///
 /// **Everything the record needs is read before the broadcast.** A send that
@@ -217,13 +229,14 @@ pub fn settle(
 
     let mut records = Vec::new();
     for (to, amount) in owed {
+        let payment_id = payment_id_for_send(&txid, to);
         let record = record_payment(
             host,
-            &txid,
+            &payment_id,
             to,
             amount,
             "shieldedZec",
-            None,
+            Some(&txid),
             None,
             None,
             None,

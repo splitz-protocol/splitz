@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 
 use splitz_core::host::{
     add_expense, base64url_no_pad, create_bill, in_lane, join_bill, lane_debts, lane_for,
-    obligation_for, record_payment, set_rate, settle, settle_cash, settle_swap, BillHost, BillLog,
-    SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
+    obligation_for, payment_id_for_send, record_payment, set_rate, settle, settle_cash,
+    settle_swap, BillHost, BillLog, SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
 };
 use splitz_core::model::Participant;
 use splitz_core::{net_balances, settle_bill, DEFAULT_EXACT_LIMIT};
@@ -256,8 +256,11 @@ fn a_settle_records_only_what_the_request_carried() {
     let payment = &settled.records[0]["payment"];
     assert_eq!(payment["to"], "ben");
     assert_eq!(payment["method"], "shieldedZec");
-    // Nothing off-chain happened, so nothing claims it did.
-    assert!(payment.get("reference").is_none());
+    let txid = settled.txid.clone().unwrap();
+    assert_eq!(payment["id"], json!(payment_id_for_send(&txid, "ben")));
+    // §10.5: the record carries its own id and the transaction is the
+    // reference, which is what an `onChain` confirmation is checked against.
+    assert_eq!(payment["reference"], json!(txid));
 }
 
 #[test]

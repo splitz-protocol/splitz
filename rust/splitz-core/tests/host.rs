@@ -377,7 +377,9 @@ fn a_sent_request_records_what_was_owed_when_it_was_made() {
     let payment = &settled.records[0]["payment"];
     assert_eq!(payment["to"], json!("ana"));
     assert_eq!(payment["amount"], json!(4500));
-    assert_eq!(payment["id"], json!(settled.txid.clone().unwrap()));
+    let txid = settled.txid.clone().unwrap();
+    assert_eq!(payment["id"], json!(format!("{txid}:ana")));
+    assert_eq!(payment["reference"], json!(txid));
 
     // §10.5: a record is a claim. The balance has not moved.
     let after = log.fold().unwrap();
@@ -441,6 +443,7 @@ fn a_confirmation_is_what_clears_the_debt() {
         .unwrap();
     let settled = settle(&ben, &mut log, &owed).unwrap();
     let txid = settled.txid.unwrap();
+    let payment_id = format!("{txid}:ana");
 
     // Recorded, not confirmed: ben still owes.
     let before = log.fold().unwrap();
@@ -451,7 +454,7 @@ fn a_confirmation_is_what_clears_the_debt() {
     // how the money was seen to arrive, not how it was sent — and an entry
     // saying otherwise is set aside rather than settling anything.
     ana.tick();
-    let wrong = confirm_payment(&ana, &txid, "shieldedZec", None).unwrap();
+    let wrong = confirm_payment(&ana, &payment_id, "shieldedZec", None).unwrap();
     let mut aside = BillLog::with_entries(&ben, log.entries());
     aside.add(vec![wrong]).unwrap();
     assert_eq!(
@@ -466,11 +469,11 @@ fn a_confirmation_is_what_clears_the_debt() {
     );
 
     ana.tick();
-    let confirmation = confirm_payment(&ana, &txid, "recipientConfirmed", None).unwrap();
+    let confirmation = confirm_payment(&ana, &payment_id, "recipientConfirmed", None).unwrap();
     log.add(vec![confirmation]).unwrap();
 
     let after = log.fold().unwrap();
-    assert!(after.bill.confirmed_payments.contains(&txid));
+    assert!(after.bill.confirmed_payments.contains(&payment_id));
     assert_eq!(net_balances(&after.bill).unwrap().get("ben"), Some(&0));
 }
 
@@ -773,4 +776,116 @@ fn an_invite_member_that_is_not_a_string_is_refused_not_panicked() {
             other => panic!("a payload read as {other:?}"),
         }
     }
+}
+
+/// Three on a bill, and one of them owes the other two: ben pays 90.00 and cat
+/// pays 90.00, each split evenly across all three, so ana owes 30.00 to ben and
+/// 30.00 to cat — two settlements carried by one transaction.
+fn two_debts(ana: &FakeHost, ben: &FakeHost, cat: &FakeHost) -> Vec<Value> {
+    let create = create_bill(ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    ana.tick();
+    let join_ana = join_bill(ana, Some("Ana"), ana.pay_to_address(), None, None).unwrap();
+    ben.tick();
+    ben.tick();
+    let join_ben = join_bill(ben, Some("Ben"), ben.pay_to_address(), None, None).unwrap();
+    cat.tick();
+    cat.tick();
+    cat.tick();
+    let join_cat = join_bill(cat, Some("Cat"), cat.pay_to_address(), None, None).unwrap();
+    ben.tick();
+    let e1 = add_expense(
+        ben,
+        "x1",
+        "ben",
+        9000,
+        equal_split(&["ana", "ben", "cat"]),
+        None,
+    )
+    .unwrap();
+    cat.tick();
+    let e2 = add_expense(
+        cat,
+        "x2",
+        "cat",
+        9000,
+        equal_split(&["ana", "ben", "cat"]),
+        None,
+    )
+    .unwrap();
+    ana.tick();
+    let rate = set_rate(ana, "EUR", 51234, None).unwrap();
+    vec![create, join_ana, join_ben, join_cat, e1, e2, rate]
+}
+
+#[test]
+fn one_transaction_paying_two_people_is_two_records_each_confirmable() {
+    // §10.5 gives every record its own id. Under one shared id the fold sets
+    // the second aside as `duplicate_payment`, so a payment that was made
+    // leaves no record on the bill: its payee is still shown as owed, cannot
+    // confirm — the surviving record names somebody else — and the payer has
+    // already sent the money.
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let cat = FakeHost::paid_at("cat", "u1cat");
+    let mut log = BillLog::new(&ana);
+    let refused = log.add(two_debts(&ana, &ben, &cat)).unwrap();
+    assert!(refused.is_empty(), "{refused:?}");
+
+    let folded = log.fold().unwrap();
+    let owed = obligation_for(&ana, &folded, &BTreeSet::new())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        owed.settlements
+            .iter()
+            .map(|s| s.to.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ben", "cat"]
+    );
+
+    let settled = settle(&ana, &mut log, &owed).unwrap();
+    let txid = settled.txid.clone().unwrap();
+    assert_eq!(settled.records.len(), 2);
+    assert_eq!(
+        settled
+            .records
+            .iter()
+            .map(|r| r["payment"]["id"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec![format!("{txid}:ben"), format!("{txid}:cat")]
+    );
+    for record in &settled.records {
+        // The transaction ties both records to the chain, and is what
+        // `onChain` reads.
+        assert_eq!(record["payment"]["reference"], json!(txid));
+    }
+
+    let after = log.fold().unwrap();
+    assert!(
+        after.set_aside.is_empty(),
+        "neither record is a duplicate of the other: {:?}",
+        after.set_aside
+    );
+    // §10.2 orders the log, and these two records share an instant, so the
+    // tiebreak is by entry id — which depends on this test's own clock and
+    // nonce. What is asserted is that both survive, not the order they land in.
+    let mut paid: Vec<&str> = after.bill.payments.iter().map(|p| p.to.as_str()).collect();
+    paid.sort_unstable();
+    assert_eq!(paid, vec!["ben", "cat"]);
+
+    // ben confirms his own record and clears his own half. cat's stands.
+    for _ in 0..8 {
+        ben.tick();
+    }
+    let payment_id = format!("{txid}:ben");
+    let confirmation = confirm_payment(&ben, &payment_id, "recipientConfirmed", None).unwrap();
+    log.add(vec![confirmation]).unwrap();
+
+    let end = log.fold().unwrap();
+    assert!(end.set_aside.is_empty(), "{:?}", end.set_aside);
+    assert!(end.bill.confirmed_payments.contains(&payment_id));
+    let balances = net_balances(&end.bill).unwrap();
+    assert_eq!(balances.get("ben"), Some(&0));
+    assert_eq!(balances.get("cat"), Some(&3000));
+    assert_eq!(balances.get("ana"), Some(&-3000));
 }

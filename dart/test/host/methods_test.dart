@@ -183,10 +183,11 @@ void main() {
       expect(settled.result, SendResult.sent);
       final payment = settled.records.single['payment'] as Map<String, dynamic>;
       expect(payment['method'], 'shieldedZec');
-      expect(payment['id'], settled.txid);
+      expect(payment['id'], paymentIdForSend(settled.txid!, 'ben'));
       expect(payment['to'], 'ben');
-      // Nothing off-chain happened, so nothing claims it did.
-      expect(payment.containsKey('reference'), isFalse);
+      // §10.5: the record carries its own id and the transaction is the
+      // reference, which is what an `onChain` confirmation is checked against.
+      expect(payment['reference'], settled.txid);
     });
 
     test('a cash settlement records cash, sends nothing, and is folded', () {

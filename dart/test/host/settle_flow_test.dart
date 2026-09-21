@@ -36,6 +36,56 @@ import 'support/fake_host.dart';
   return (log: log, ana: ana, ben: ben);
 }
 
+/// Three on a bill, and one of them owes the other two: Ben pays 90.00 and Cat
+/// pays 90.00, each split evenly across all three, so Ana owes 30.00 to Ben
+/// and 30.00 to Cat — two settlements carried by one transaction.
+({BillLog log, FakeHost ana}) twoDebts() {
+  final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
+  final ben = FakeHost(me: 'ben', payToAddress: 'u1ben');
+  final cat = FakeHost(me: 'cat', payToAddress: 'u1cat');
+
+  final create = createBill(
+      host: ana, name: 'Dinner', currency: 'EUR', creatorKey: fakeKey('ana'));
+  ana.tick();
+  final joinAna = joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
+  ben.tick();
+  ben.tick();
+  final joinBen = joinBill(host: ben, name: 'Ben', payTo: 'u1ben');
+  cat.tick();
+  cat.tick();
+  cat.tick();
+  final joinCat = joinBill(host: cat, name: 'Cat', payTo: 'u1cat');
+  ben.tick();
+  final e1 = addExpense(
+    host: ben,
+    expenseId: 'x1',
+    paidBy: 'ben',
+    amount: 9000,
+    split: const {
+      'type': 'equal',
+      'among': ['ana', 'ben', 'cat'],
+    },
+  );
+  cat.tick();
+  final e2 = addExpense(
+    host: cat,
+    expenseId: 'x2',
+    paidBy: 'cat',
+    amount: 9000,
+    split: const {
+      'type': 'equal',
+      'among': ['ana', 'ben', 'cat'],
+    },
+  );
+  ana.tick();
+  final rate = setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234);
+
+  final log = BillLog(ana);
+  final refused = log.add([create, joinAna, joinBen, joinCat, e1, e2, rate]);
+  expect(refused, isEmpty, reason: 'every entry this package writes is valid');
+  return (log: log, ana: ana);
+}
+
 void main() {
   test('a whole bill, from nothing to a payment request', () {
     final d = dinner();
@@ -147,8 +197,10 @@ void main() {
     final record = settled.records.single['payment'] as Map<String, dynamic>;
     expect(record['amount'], 4500,
         reason: 'the record is what was sent, not what is owed now');
-    expect(record['id'], settled.txid,
-        reason: 'the record and the transaction carry one identifier');
+    expect(record['id'], '${settled.txid}:ana',
+        reason: 'a record carries its own id; the transaction is the '
+            'reference');
+    expect(record['reference'], settled.txid);
   });
 
   test('a send that was built but not broadcast records nothing', () async {
@@ -234,14 +286,14 @@ void main() {
     // §10.5: `onChain` needs a reference, and anyone may state it.
     final confirm = confirmPayment(
       host: d.ana,
-      paymentId: settled.txid!,
+      paymentId: '${settled.txid}:ana',
       method: 'onChain',
       reference: settled.txid,
     );
     d.log.add([confirm]);
 
     final after = d.log.fold();
-    expect(after.bill.confirmedPayments, contains(settled.txid));
+    expect(after.bill.confirmedPayments, contains('${settled.txid}:ana'));
     expect(splitz.netBalances(after.bill)['ben'], 0);
     expect(splitz.netBalances(after.bill)['ana'], 0);
   });
@@ -297,6 +349,65 @@ void main() {
     expect(retry.settlements.single.to, 'ana');
     expect(retry.settlements.single.amount, 4500);
     expect(retry.uri, startsWith('zcash:u1ana'));
+  });
+
+  test('one transaction paying two people is two records, each confirmable',
+      () async {
+    // §10.5 gives every record its own id. Under one shared id the fold sets
+    // the second aside as `duplicate_payment`, so a payment that was made
+    // leaves no record on the bill: its payee is still shown as owed, cannot
+    // confirm — the surviving record names somebody else — and the payer has
+    // already sent the money.
+    final d = twoDebts();
+    final owed = obligationFor(d.ana, d.log.fold())!;
+    expect(owed.settlements.map((s) => s.to), ['ben', 'cat']);
+
+    final settled = await settle(d.ana, d.log, owed);
+    final txid = settled.txid!;
+    expect(settled.records.length, 2);
+    expect(
+      settled.records.map((r) => (r['payment'] as Map<String, dynamic>)['id']),
+      ['$txid:ben', '$txid:cat'],
+    );
+    expect(
+      settled.records
+          .map((r) => (r['payment'] as Map<String, dynamic>)['reference']),
+      [txid, txid],
+      reason: 'the transaction ties both records to the chain, and is what '
+          '`onChain` reads',
+    );
+
+    final after = d.log.fold();
+    expect(after.setAside, isEmpty,
+        reason: 'neither record is a duplicate of the other');
+    // §10.2 orders the log, and these two records share an instant, so the
+    // tiebreak is by entry id — which depends on this test's own clock and
+    // nonce. What is asserted is that both survive, not the order they land in.
+    expect(
+        after.bill.payments.map((p) => p.to).toList()..sort(), ['ben', 'cat']);
+
+    // Ben confirms his own record and clears his own half. Cat's stands.
+    final ben = FakeHost(me: 'ben', payToAddress: 'u1ben');
+    for (var i = 0; i < 8; i++) {
+      ben.tick();
+    }
+    expect(
+      d.log.add([
+        confirmPayment(
+          host: ben,
+          paymentId: '$txid:ben',
+          method: 'recipientConfirmed',
+        )
+      ]),
+      isEmpty,
+    );
+
+    final end = d.log.fold();
+    expect(end.setAside, isEmpty);
+    expect(end.bill.confirmedPayments, {'$txid:ben'});
+    expect(splitz.netBalances(end.bill)['ben'], 0);
+    expect(splitz.netBalances(end.bill)['cat'], 3000);
+    expect(splitz.netBalances(end.bill)['ana'], -3000);
   });
 }
 
