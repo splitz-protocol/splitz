@@ -209,7 +209,11 @@ five-unit bill into an obligation bounded only by §8.1.
 `{"type": "equal", "among": [id, …]}`
 
 Duplicate ids collapse. The surviving set is sorted and the total allocated
-evenly across it. An empty `among` is refused with `empty_split`.
+evenly across it. An empty `among` is refused with `empty_split`. An id
+appearing more than once counts **once**: `among` names a set, so a list
+holding a participant twice splits the expense the same way as one holding
+them once. An implementation that weighted a repeat would charge that person
+twice for the same meal and disagree with every other reader of the log.
 
 ### 4.2 `exact`
 
