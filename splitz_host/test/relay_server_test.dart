@@ -14,12 +14,15 @@ import 'package:test/test.dart';
 /// against a server written in the same file would prove they agree with each
 /// other, so this runs the server this repository ships, as a process, over a
 /// socket.
-Future<({Process process, int port})> _relay() async {
+Future<({Process process, int port})> _relay([
+  List<String> extra = const [],
+]) async {
   final port = 39300 + DateTime.now().microsecond % 2000;
   final process = await Process.start('python3', [
     '../tools/relay/server.py',
     '--port',
     '$port',
+    ...extra,
   ]);
   final client = HttpClient();
   for (var i = 0; i < 100; i++) {
@@ -119,5 +122,63 @@ void main() {
       ),
     );
     expect(jsonDecode(body)['blobs'], isNull);
+  });
+
+  group('bounded, for a relay strangers can reach', () {
+    late Process small;
+    late Uri origin;
+
+    setUpAll(() async {
+      final up = await _relay(['--max-body', '1000', '--max-held', '30']);
+      small = up.process;
+      origin = Uri.parse('http://127.0.0.1:${up.port}/c/${'c' * 64}');
+    });
+
+    tearDownAll(() => small.kill());
+
+    Future<(int, String)> post(String body, {bool chunked = false}) async {
+      final client = HttpClient();
+      final request = await client.postUrl(origin);
+      if (chunked) {
+        request.headers.chunkedTransferEncoding = true;
+      } else {
+        request.contentLength = utf8.encode(body).length;
+      }
+      request.write(body);
+      final response = await request.close();
+      final text = await response.transform(utf8.decoder).join();
+      client.close(force: true);
+      return (response.statusCode, text);
+    }
+
+    String push(List<String> blobs) => jsonEncode({'blobs': blobs});
+
+    test('a push under both bounds is stored', () async {
+      expect((await post(push(['0123456789']))).$1, 200);
+      expect((await post(push(['abcdefghij']))).$1, 200);
+    });
+
+    test(
+      'a push that would cross what the relay holds is refused whole',
+      () async {
+        final (status, _) = await post(push(['ABCDEFGHIJK', 'z']));
+        expect(status, 507);
+        final (_, held) = await post(push(['0123456789']));
+        expect(
+          jsonDecode(held)['ok'],
+          isTrue,
+          reason: 'a repeat adds nothing, so it still fits',
+        );
+      },
+    );
+
+    test(
+      'a body over the request bound is refused, however it is framed',
+      () async {
+        final big = push(['x' * 2000]);
+        expect((await post(big)).$1, 413);
+        expect((await post(big, chunked: true)).$1, 413);
+      },
+    );
   });
 }
