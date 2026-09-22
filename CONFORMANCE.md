@@ -98,7 +98,7 @@ change that breaks one is found by hand or not at all:
 
 | lane | what it needs |
 |---|---|
-| `tools/ffi/swift.sh` | `swiftc` |
+| `tools/ffi/swift.sh` | Xcode, and `tools/package/ios.sh` run first |
 | `tools/ffi/flutter.sh` | the Flutter SDK |
 | `tools/regtest/run.sh` | Docker, and a chain it brings up |
 | `tools/package/ios.sh` | Xcode and the three Apple targets |

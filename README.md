@@ -95,9 +95,9 @@ so there are checks around it:
   — timestamps checked against Python's date library, and payment requests
   against `librustzcash`. Everything else here was written by one author from
   one spec, so it could all be wrong in the same way.
-- **A real wallet in four languages** (`tools/ffi`) — Kotlin, Dart and
-  JavaScript each drive a whole bill through the crate, and the Swift module
-  builds.
+- **A real wallet in four languages** (`tools/ffi`) — Kotlin, Swift, Dart
+  and JavaScript each drive a whole bill through the crate. The Swift one
+  builds against the packaged xcframework, the way a wallet reaches it.
 - **Four devices and an intruder** (`splitz_host/test/rehearsal_test.dart`) —
   four devices with their own storage and keys sync through a relay, receive
   the updates in different orders, and end up with an identical bill. Then

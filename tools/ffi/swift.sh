@@ -1,38 +1,55 @@
 #!/usr/bin/env bash
-# The generated Swift, compiled.
+# A Swift wallet over the generated binding, driving one whole bill.
 #
-# A module that does not build is a binding no Swift wallet can reach, and the
-# generator will produce one: a record field named for something the target
-# language already puts on that type compiles in Rust and not in Swift or
-# Kotlin. This catches that class before a wallet does.
+# It builds the consumer against the PACKAGE, the way an integrator reaches it
+# — `.package(path:)` and `import SplitzFFI` — rather than against the source
+# tree. A module that compiles is not an integration: this one opens a bill,
+# joins it, adds an expense, prices it, settles a debt, records the payment and
+# has the payee confirm it.
 #
-# It does not drive the seam — `tools/ffi/kotlin.sh` does that. Needs swiftc.
+#     tools/package/ios.sh     # builds dist/ios/SplitzFFI first
+#     tools/ffi/swift.sh
+#
+# Runs on macOS, against the xcframework's macOS slice. Needs Xcode.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+pkg="$root/dist/ios/SplitzFFI"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-if ! command -v swiftc >/dev/null; then
-  echo "no swiftc" >&2
+if ! command -v swift >/dev/null; then
+  echo "no swift" >&2
   exit 2
 fi
 
-(cd "$root/rust" && "${CARGO:-cargo}" build --quiet -p splitz-ffi)
-lib="$root/rust/target/debug"
-for name in libsplitz_ffi.dylib libsplitz_ffi.so; do
-  [ -f "$lib/$name" ] && library="$lib/$name" && break
-done
-if [ -z "${library:-}" ]; then
-  echo "no splitz-ffi library under $lib" >&2
-  exit 1
+if [ ! -d "$pkg/splitz_ffiFFI.xcframework" ]; then
+  echo "no package at $pkg — run tools/package/ios.sh first" >&2
+  exit 2
 fi
 
-(cd "$root/rust" && "${CARGO:-cargo}" run --quiet --bin uniffi-bindgen -p splitz-ffi -- \
-  generate --library "$library" --language swift --out-dir "$work")
+# A consumer is its own package depending on ours by path, which is what a
+# wallet writes. Building inside our package instead would prove nothing about
+# whether the manifest exports what it claims.
+mkdir -p "$work/Consumer/Sources/Consumer"
+cp "$root/tools/ffi/swift/Consumer.swift" "$work/Consumer/Sources/Consumer/main.swift"
 
-(cd "$work" && swiftc -emit-module -module-name splitz_ffi \
-  -Xcc -fmodule-map-file=splitz_ffiFFI.modulemap -I . \
-  -L "$lib" -lsplitz_ffi splitz_ffi.swift -o "$work/splitz_ffi.swiftmodule")
+cat > "$work/Consumer/Package.swift" <<SWIFT
+// swift-tools-version:5.9
+import PackageDescription
 
-echo "the generated Swift module builds"
+let package = Package(
+    name: "Consumer",
+    platforms: [.macOS(.v11)],
+    dependencies: [.package(path: "$pkg")],
+    targets: [
+        .executableTarget(
+            name: "Consumer",
+            dependencies: [.product(name: "SplitzFFI", package: "SplitzFFI")],
+            path: "Sources/Consumer"
+        )
+    ]
+)
+SWIFT
+
+(cd "$work/Consumer" && swift run --quiet Consumer)

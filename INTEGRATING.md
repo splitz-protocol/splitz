@@ -480,8 +480,10 @@ their own documentation does not state:
   `ffi_uniffi_<name>_rustbuffer_*` where the library exports
   `ffi_<name>_rustbuffer_*`.
 
-The Swift module compiles (`tools/ffi/swift.sh`) and nothing drives it: there
-is no Swift sample here because there is no Swift sample that has run.
+`tools/ffi/swift.sh` drives a whole bill from Swift. It builds its consumer
+against the package `tools/package/ios.sh` writes — `.package(path:)` and
+`import SplitzFFI` — rather than against this source tree, because what a
+wallet reaches is the package and not the tree.
 
 ## Ten things the wallet owns
 
