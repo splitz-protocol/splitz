@@ -12,9 +12,12 @@ and derives §9.5's id, a log that merges and folds, the two scans that move a
 bill between phones, and one payer's obligation from a folded bill. See **The
 wallet seam** below.
 
-A wallet in Kotlin, Swift, JavaScript or Python reaches the same protocol
-through `splitz-ffi`, which is those two layers across a foreign function
-boundary. See **Kotlin, Dart and JavaScript**.
+A wallet in Kotlin, Swift or JavaScript reaches the same protocol through
+`splitz-ffi`, which is those two layers across a foreign function boundary.
+See **Kotlin, Dart and JavaScript**.
+
+How to add the dependency, by git and pinned to a commit, is in the README
+under **Use it in your wallet**.
 
 ## Dart
 

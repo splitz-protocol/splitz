@@ -21,7 +21,7 @@ nobody mistakes them for missing features.
 | **the plumbing** | `splitz_host/`, `rust/splitz-host` | signing entries, sealing them, storing them, syncing through a relay, swaps, activity |
 | **the binding** | `rust/splitz-ffi` | using the Rust crate from Kotlin, Swift, Dart or JavaScript |
 | **the seam** | `SPEC.md` §15 | the seven things a wallet has to provide |
-| **the test cases** | `vectors/` | 449 cases any implementation can run, in no particular language |
+| **the test cases** | `vectors/` | 460 cases in 18 files any implementation can run, in no particular language |
 | **the extra checks** | `tools/` | everything a fixed set of test cases can't catch |
 
 A Flutter wallet can also take the screens ready-made: `splitz_flutter` is a
@@ -52,8 +52,46 @@ you having to implement seven sets of callbacks across a language boundary.
 Kotlin, Dart and JavaScript. The library stops at the payment request: your
 wallet reads the addresses out of it, builds the transaction, and signs it.
 
-Nothing is published to a package registry yet — both crates and both Dart
-packages are deliberately marked as unpublishable for now.
+## Use it in your wallet
+
+Nothing is on a package registry yet: every crate and Dart package is marked
+unpublishable. Depend on this repository by git, pinned to a commit.
+
+| your wallet | depend on | what you get |
+|---|---|---|
+| Dart or Flutter | `splitz_core` and `splitz_host` | the protocol and the whole wallet layer: signing, sealing, the log, relay sync, swaps, activity |
+| Rust | `splitz-core` and `splitz-host` | the same, in Rust |
+| Kotlin, Swift, JavaScript | `splitz-ffi`, built by `tools/package/{android,ios,npm}.sh` | the protocol through a generated binding; the wallet layer is yours to write |
+
+Dart — both packages, **pinned to the same commit**. Pub refuses a branch name
+here: `splitz_host` reaches `splitz_core` by a path inside the repository, which
+resolves to a commit, and a direct dependency on `main` is not that commit.
+
+```yaml
+dependencies:
+  splitz_core:
+    git:
+      url: https://github.com/KamaIOps/Splitz-Protocol.git
+      path: dart
+      ref: <commit sha>
+  splitz_host:
+    git:
+      url: https://github.com/KamaIOps/Splitz-Protocol.git
+      path: splitz_host
+      ref: <commit sha>
+```
+
+Rust — cargo finds each crate in the workspace by name:
+
+```toml
+[dependencies]
+splitz-core = { git = "https://github.com/KamaIOps/Splitz-Protocol", rev = "<commit sha>" }
+splitz-host = { git = "https://github.com/KamaIOps/Splitz-Protocol", rev = "<commit sha>" }
+```
+
+The binding cannot call back into a wallet, so a Kotlin, Swift or JavaScript
+wallet passes in the facts each call needs and does its own sending, storage
+and sync. `INTEGRATING.md` covers all three routes.
 
 ## How the money is handled
 
@@ -73,14 +111,37 @@ The bill's history is append-only, and merging two copies is just a union: do
 it twice, or in a different order, and you get the same thing. So two people
 who have seen different parts of the history still see the same bill.
 
-## Running it
+## Verify it yourself
+
+Needs Dart 3.11.4 or later and a Rust toolchain; the crates declare 1.82 as
+their minimum. Run each command from the repository root; the comment beside
+it says what a pass looks like.
 
 ```
-cd dart && dart test                 # 542 tests, 449 of them the shared cases
-cd splitz_host && dart test          # 117 more, over the wallet layer
-cd rust && cargo test                # 173, and again with --release
+cd dart && dart test                 # +554: All tests passed!
+                                     #   every one of the 460 shared cases
+                                     #   among them
+cd splitz_host && dart test          # +132: All tests passed!
+cd rust && cargo test                # every "test result: ok", 183 in all
 cd dart && dart run example/dinner.dart
+                                     # one bill, three people, the fewest
+                                     #   payments, and one payer's single
+                                     #   payment request
 ```
+
+Whether the money arrives, on a local chain. Needs Docker with ports 9067
+and 18232 free, and downloads the Sapling parameters on its first run:
+
+```
+tools/regtest/run.sh up              # a regtest node, mined past maturity
+tools/regtest/run.sh prove           # ends: the money that arrived is the
+                                     #   money splitz said.
+tools/regtest/run.sh down
+```
+
+`prove` funds a wallet, builds one person's debts into a payment request,
+sends it, mines it, and compares the recipient's balance with the amount
+splitz computed.
 
 ## How it's tested
 
