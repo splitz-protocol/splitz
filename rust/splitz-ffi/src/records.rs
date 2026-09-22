@@ -256,30 +256,3 @@ pub struct SwapStatus {
     pub destination_tx_hash: Option<String>,
     pub detail: Option<String>,
 }
-
-/// What one sync produced.
-#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
-pub struct SyncResult {
-    pub entry_count: u32,
-    pub refused: Vec<SetAside>,
-    /// Blobs in the channel that would not open under this bill's key. A
-    /// channel where every blob is unopenable is a wrong key, and that looks
-    /// identical to a quiet relay unless somebody counts.
-    pub unopenable: u32,
-}
-
-/// What a settle attempt reported (§14.3).
-///
-/// Three outcomes, not two. `sent` and `pending` are never both true, and
-/// neither being true means nothing was spent. **A pending send may still
-/// land**: nothing may be recorded for it and no retry is safe.
-#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
-pub struct SettleResult {
-    pub sent: bool,
-    pub pending: bool,
-    /// Present when and only when `sent`.
-    pub txid: Option<String>,
-    pub detail: Option<String>,
-    /// Payment entries appended to the log, one per recipient.
-    pub recorded: u32,
-}
