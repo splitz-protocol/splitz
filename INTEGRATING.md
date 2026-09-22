@@ -301,6 +301,16 @@ four ABIs under `jni/` and the generated Kotlin compiled into `classes.jar`,
 and a consumer writes one `implementation` line. Neither publishes anything;
 where the artefact goes is still the wallet's build system.
 
+Two costs the Android side carries, and they are not obvious from the file:
+
+- The AAR declares `minCompileSdk=36`, so a wallet compiling against an older
+  SDK cannot depend on it at all.
+- A wallet that resolves it from a repository gets JNA transitively, because
+  `gradle publishToMavenLocal` writes a POM that names it. A wallet that drops
+  the bare `.aar` into a directory gets no POM, and must declare
+  `net.java.dev.jna:jna:5.17.0@aar` itself or the binding's own types will not
+  resolve.
+
 ```dart file=tools/ffi/dart/doc.dart
 import 'dart:convert';
 import 'dart:typed_data';

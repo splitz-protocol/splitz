@@ -99,6 +99,11 @@ cat > "$pkg/build.gradle.kts" <<'GRADLE'
 // `org.jetbrains.kotlin.android` plugin is refused alongside it.
 plugins {
     id("com.android.library")
+    // Without this the build emits a bare .aar and no POM, so the JNA
+    // dependency below never reaches a consumer: a wallet that drops the
+    // file in gets `Unresolved reference 'jna'` at compile time. With it,
+    // `gradle publishToMavenLocal` writes the POM that carries it.
+    id("maven-publish")
 }
 
 android {
@@ -109,6 +114,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    // The `release` software component does not exist until a variant is
+    // declared publishable; without this, `publishToMavenLocal` fails with
+    // "SoftwareComponent with name 'release' not found".
+    publishing { singleVariant("release") }
 }
 
 // No `sourceSets` block: the generated Kotlin and the per-ABI `.so` files are
@@ -117,7 +126,22 @@ android {
 
 
 dependencies {
+    // `api`, not `implementation`: the generated binding's own types reach the
+    // consumer through JNA.
     api("net.java.dev.jna:jna:5.17.0@aar")
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                groupId = "cash.splitz"
+                artifactId = "splitz"
+                version = "0.1.0"
+            }
+        }
+    }
 }
 GRADLE
 
@@ -149,3 +173,10 @@ echo "gradle module: $pkg"
 echo "  a consumer depends on it with:"
 echo "    implementation(project(\":splitz\"))"
 echo "  build the AAR with: (cd $pkg && gradle assembleRelease)"
+echo "  or publish it with:  (cd $pkg && gradle publishToMavenLocal)"
+echo
+echo "  two costs a consumer pays, and should be told about:"
+echo "    - the AAR declares minCompileSdk=36, so a wallet compiling against"
+echo "      an older SDK cannot depend on it"
+echo "    - a wallet that drops the bare .aar in, rather than resolving it"
+echo "      from a repository, gets no POM and must declare JNA itself"
