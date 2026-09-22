@@ -96,12 +96,25 @@ done
 
 echo
 echo "== packaging =="
-[ -d dist/ios/splitz_ffi.xcframework ] &&
-  ok "" "dist/ios/splitz_ffi.xcframework built" ||
-  note "absent" "dist/ios — run tools/package/ios.sh"
+[ -d dist/ios/SplitzFFI/splitz_ffiFFI.xcframework ] &&
+  ok "" "dist/ios/SplitzFFI built, with its xcframework" ||
+  note "absent" "dist/ios/SplitzFFI — run tools/package/ios.sh"
 [ -d dist/android/jniLibs ] &&
   ok "" "dist/android/jniLibs built ($(ls dist/android/jniLibs | tr '\n' ' '))" ||
   note "absent" "dist/android — run tools/package/android.sh"
+
+# The npm package is checked for its guard as well as its existence.
+# `npm publish --dry-run` exits 0 on a package marked private, so the dry run
+# is not the thing that holds it back and cannot be relied on to.
+if [ -f dist/npm/package.json ]; then
+  if grep -q '"private"[[:space:]]*:[[:space:]]*true' dist/npm/package.json; then
+    ok "" "dist/npm built and still marked private"
+  else
+    bad "" "dist/npm is NOT marked private — npm publish would go through"
+  fi
+else
+  note "absent" "dist/npm — run tools/package/npm.sh"
+fi
 
 echo
 if [ "$fail" = "0" ]; then

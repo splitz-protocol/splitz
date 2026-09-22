@@ -301,6 +301,15 @@ four ABIs under `jni/` and the generated Kotlin compiled into `classes.jar`,
 and a consumer writes one `implementation` line. Neither publishes anything;
 where the artefact goes is still the wallet's build system.
 
+`tools/package/npm.sh` writes `dist/npm` and packs it. A JavaScript wallet
+installs the tarball and imports by name — `import * as splitz from
+"splitz-ffi"` — with no library path, because the package carries its own
+under `prebuilds/`. **One run produces one platform: the machine it ran on.**
+The manifest's `os` and `cpu` say which, so a foreign platform is refused at
+install time rather than at the first call. A real release needs the build
+repeated per platform with the `prebuilds/` directories merged, and nothing
+in this tree does that.
+
 Two costs the Android side carries, and they are not obvious from the file:
 
 - The AAR declares `minCompileSdk=36`, so a wallet compiling against an older
