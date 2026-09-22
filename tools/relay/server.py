@@ -16,22 +16,30 @@ has and when they arrived. Nothing here logs a blob.
     python3 tools/relay/server.py --port 39300
 
 Binds 127.0.0.1 unless `--host` says otherwise. A simulator reaches loopback
-on the host; a phone does not, so a run on phones puts this behind an HTTPS
-tunnel (`tools/relay/public.sh`) rather than opening it on the LAN, which
-would need a cleartext exception in the wallet on each platform.
+on the host; a phone does not, so a run on phones puts this behind HTTPS —
+`tools/relay/funnel.sh` at a stable Tailscale origin, or `tools/relay/public.sh`
+at a quick tunnel whose origin changes every start — rather than opening it on
+the LAN, which would need a cleartext exception in the wallet on each platform.
 
 **Bounded, because it may be reachable by strangers.** One request body is at
 most `MAX_BODY_BYTES`; everything held is at most `MAX_HELD_CHARS`. A body
 over the first is refused before it is read and the connection closed; a push
-that would cross the second is refused whole. Nothing is written to disk: a
-restart forgets every channel, and devices re-push their whole log on the next
-sync, so a restart costs one round trip, not a bill.
+that would cross the second is refused whole.
+
+Without `--state-file` nothing is written to disk: a restart forgets every
+channel, and devices re-push their whole log on the next sync. With it, the
+store is rewritten after every push that adds a blob — to a temporary file,
+then renamed over the old one, so a crash mid-write leaves the previous copy —
+and read back at start. The file holds what the relay holds: channel digests
+and ciphertext. A file that breaks a bound the running relay keeps is refused
+at start rather than loaded in part.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import threading
 from collections import OrderedDict
@@ -58,6 +66,37 @@ CHANNEL = re.compile(r"^[0-9a-f]{64}$")
 CHANNELS: "OrderedDict[str, list[str]]" = OrderedDict()
 HELD_CHARS = 0
 LOCK = threading.Lock()
+STATE_FILE: str | None = None
+
+
+def load_state(path: str) -> None:
+    """Fills the store from `path`, or exits naming the bound it breaks."""
+    global HELD_CHARS
+    with open(path, encoding="utf-8") as f:
+        loaded = json.load(f)
+    if not isinstance(loaded, dict):
+        raise SystemExit(f"{path}: not an object of channels")
+    held = 0
+    for channel, blobs in loaded.items():
+        if not CHANNEL.match(channel):
+            raise SystemExit(f"{path}: {channel[:16]!r} is not a channel")
+        if not isinstance(blobs, list) or any(
+            not isinstance(b, str) or len(b) > MAX_BLOB_CHARS for b in blobs
+        ):
+            raise SystemExit(f"{path}: channel {channel[:12]}… holds a bad blob")
+        held += sum(len(b) for b in blobs)
+    if held > MAX_HELD_CHARS:
+        raise SystemExit(f"{path}: {held} characters, over --max-held")
+    CHANNELS.update(loaded)
+    HELD_CHARS = held
+
+
+def save_state() -> None:
+    """Writes the store to `STATE_FILE`. Called with `LOCK` held."""
+    tmp = f"{STATE_FILE}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(CHANNELS, f)
+    os.replace(tmp, STATE_FILE)
 
 
 class TooLarge(Exception):
@@ -166,6 +205,8 @@ class Relay(BaseHTTPRequestHandler):
             HELD_CHARS += grow
             held = CHANNELS[channel]
             added = len(fresh)
+            if added and STATE_FILE is not None:
+                save_state()
         # The channel and the counts, never a blob.
         print(f"{channel[:12]}… +{added} of {len(blobs)}, holds {len(held)}",
               flush=True)
@@ -176,14 +217,19 @@ class Relay(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global MAX_BODY_BYTES, MAX_HELD_CHARS
+    global MAX_BODY_BYTES, MAX_HELD_CHARS, STATE_FILE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=39300)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--max-body", type=int, default=MAX_BODY_BYTES)
     parser.add_argument("--max-held", type=int, default=MAX_HELD_CHARS)
+    parser.add_argument("--state-file")
     args = parser.parse_args()
     MAX_BODY_BYTES, MAX_HELD_CHARS = args.max_body, args.max_held
+    STATE_FILE = args.state_file
+    if STATE_FILE is not None and os.path.exists(STATE_FILE):
+        load_state(STATE_FILE)
+        print(f"loaded {len(CHANNELS)} channels from {STATE_FILE}", flush=True)
     server = ThreadingHTTPServer((args.host, args.port), Relay)
     print(f"relay on http://{args.host}:{args.port}", flush=True)
     server.serve_forever()

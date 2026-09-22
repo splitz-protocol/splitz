@@ -124,6 +124,65 @@ void main() {
     expect(jsonDecode(body)['blobs'], isNull);
   });
 
+  group('a state file', () {
+    late Directory dir;
+
+    setUp(() async => dir = await Directory.systemTemp.createTemp('relay'));
+    tearDown(() => dir.delete(recursive: true));
+
+    Future<List<String>> pushThenRestart(List<String> extra) async {
+      final io = _io();
+      final first = await _relay(extra);
+      await HttpSplitsRelay(
+        origin: Uri.parse('http://127.0.0.1:${first.port}'),
+        post: io.post,
+        get: io.get,
+      ).push('d' * 64, ['kept']);
+      first.process.kill();
+      await first.process.exitCode;
+      final second = await _relay(extra);
+      try {
+        return await HttpSplitsRelay(
+          origin: Uri.parse('http://127.0.0.1:${second.port}'),
+          post: io.post,
+          get: io.get,
+        ).fetch('d' * 64);
+      } finally {
+        second.process.kill();
+      }
+    }
+
+    test('carries what was pushed across a restart', () async {
+      final file = '${dir.path}/state.json';
+      expect(await pushThenRestart(['--state-file', file]), ['kept']);
+    });
+
+    test('without one, a restart forgets', () async {
+      expect(await pushThenRestart([]), isEmpty);
+    });
+
+    test('one over the bound the relay keeps is refused at start', () async {
+      final file = File('${dir.path}/state.json')
+        ..writeAsStringSync(
+          jsonEncode({
+            'e' * 64: ['x' * 40],
+          }),
+        );
+      final process = await Process.start('python3', [
+        '../tools/relay/server.py',
+        '--max-held',
+        '30',
+        '--state-file',
+        file.path,
+      ]);
+      expect(await process.exitCode, isNot(0));
+      expect(
+        await process.stderr.transform(utf8.decoder).join(),
+        contains('over --max-held'),
+      );
+    });
+  });
+
   group('bounded, for a relay strangers can reach', () {
     late Process small;
     late Uri origin;
