@@ -256,6 +256,10 @@ class OneClickSwaps implements SwapProvider {
 
   List<TradableAsset>? _tokens;
 
+  /// How far the delivered amount may fall below the quote, in basis points
+  /// (1/100 of a percent). The provider requires it on every quote; 100 is 1%.
+  static const int slippageBasisPoints = 100;
+
   Uri _url(String path, [Map<String, String>? query]) =>
       origin.replace(path: '${origin.path}$path', queryParameters: query);
 
@@ -304,6 +308,7 @@ class OneClickSwaps implements SwapProvider {
     final request = <String, Object?>{
       'dry': false,
       'swapType': 'EXACT_INPUT',
+      'slippageTolerance': slippageBasisPoints,
       'originAsset': zecAssetId,
       'depositType': 'ORIGIN_CHAIN',
       'destinationAsset': asset.assetId,
@@ -357,12 +362,19 @@ class OneClickSwaps implements SwapProvider {
       throw const SwapException('Malformed status response');
     }
     final status = (body['status'] ?? '').toString().toUpperCase();
+    // Everything past the status sits under `swapDetails`: the delivery's
+    // hash in `destinationChainTxHashes[].hash`, a failure's reason in
+    // `refundReason`.
+    final details = body['swapDetails'];
+    final detailsMap = details is Map<String, dynamic> ? details : null;
+    final hashes = detailsMap?['destinationChainTxHashes'];
+    final first = hashes is List && hashes.isNotEmpty ? hashes.first : null;
     return SwapStatus(
       state: _state(status),
-      destinationTxHash:
-          _optional(body, 'destinationTxHash') ??
-          _optional(body, 'destinationChainTxHash'),
-      detail: _optional(body, 'message'),
+      destinationTxHash: first is Map<String, dynamic>
+          ? _optional(first, 'hash')
+          : null,
+      detail: detailsMap == null ? null : _optional(detailsMap, 'refundReason'),
     );
   }
 
@@ -372,10 +384,16 @@ class OneClickSwaps implements SwapProvider {
   /// [SwapState.delivered].** Reading an unknown word as success would tell a
   /// payer their debt is settled on the strength of a string nobody here has
   /// defined.
+  ///
+  /// `INCOMPLETE_DEPOSIT` is awaiting a deposit: the provider has received
+  /// less than the quote asked for, and nothing has been delivered on it.
   static SwapState _state(String status) => switch (status) {
-    'PENDING_DEPOSIT' || 'KNOWN_DEPOSIT_TX' => SwapState.awaitingDeposit,
+    'PENDING_DEPOSIT' ||
+    'KNOWN_DEPOSIT_TX' ||
+    'INCOMPLETE_DEPOSIT' => SwapState.awaitingDeposit,
+    'PROCESSING' => SwapState.processing,
     'SUCCESS' => SwapState.delivered,
-    'FAILED' || 'REFUNDED' || 'EXPIRED' => SwapState.failed,
+    'FAILED' || 'REFUNDED' => SwapState.failed,
     _ => SwapState.processing,
   };
 

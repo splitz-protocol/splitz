@@ -127,6 +127,9 @@ void main() {
       // Not a dry run: a quote a payer is shown is one the provider will
       // honour.
       expect(body['dry'], false);
+      // Required by the provider: a quote without it is refused with a 400.
+      expect(body['slippageTolerance'], OneClickSwaps.slippageBasisPoints);
+      expect(body['slippageTolerance'], 100);
 
       // The deposit address is the PROVIDER's, not the recipient's.
       expect(quote.depositAddress, 'u1provider');
@@ -251,8 +254,10 @@ void main() {
         ('PENDING_DEPOSIT', SwapState.awaitingDeposit),
         ('KNOWN_DEPOSIT_TX', SwapState.awaitingDeposit),
         ('SUCCESS', SwapState.delivered),
+        ('INCOMPLETE_DEPOSIT', SwapState.awaitingDeposit),
+        ('PROCESSING', SwapState.processing),
+        ('FAILED', SwapState.failed),
         ('REFUNDED', SwapState.failed),
-        ('EXPIRED', SwapState.failed),
       ]) {
         final p = provider(status: {'status': word});
         final s = await p.swaps.statusOf(
@@ -283,6 +288,46 @@ void main() {
       );
       expect(s.state, SwapState.processing);
       expect(s.state, isNot(SwapState.delivered));
+    });
+
+    test('the hash and the reason come from swapDetails', () async {
+      final quote = SwapQuote(
+        depositAddress: 'u1provider',
+        amountInZatoshi: 1,
+        amountOut: '1',
+        asset: usdcOnBase(),
+        deadline: '2026-01-01T00:00:00.000Z',
+      );
+      final delivered = await provider(
+        status: {
+          'status': 'SUCCESS',
+          'swapDetails': {
+            'destinationChainTxHashes': [
+              {'hash': '0xbase-tx', 'explorerUrl': 'https://x'},
+            ],
+          },
+        },
+      ).swaps.statusOf(quote);
+      expect(delivered.destinationTxHash, '0xbase-tx');
+
+      final refunded = await provider(
+        status: {
+          'status': 'REFUNDED',
+          'swapDetails': {'refundReason': 'deposit below the minimum'},
+        },
+      ).swaps.statusOf(quote);
+      expect(refunded.detail, 'deposit below the minimum');
+
+      // Keys the provider does not send at the top level are not read there.
+      final stray = await provider(
+        status: {
+          'status': 'SUCCESS',
+          'destinationTxHash': '0xtop',
+          'message': 'top-level',
+        },
+      ).swaps.statusOf(quote);
+      expect(stray.destinationTxHash, isNull);
+      expect(stray.detail, isNull);
     });
 
     test('the memo travels with the address', () async {

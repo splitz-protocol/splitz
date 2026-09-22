@@ -167,8 +167,9 @@ def a_draft(rng: random.Random) -> dict:
     }
 
 
-STATUS_WORDS = ["PENDING_DEPOSIT", "KNOWN_DEPOSIT_TX", "SUCCESS", "FAILED",
-                "REFUNDED", "EXPIRED", "PROCESSING", "something_new", "", "3"]
+STATUS_WORDS = ["PENDING_DEPOSIT", "KNOWN_DEPOSIT_TX", "INCOMPLETE_DEPOSIT",
+                "SUCCESS", "FAILED", "REFUNDED", "PROCESSING", "EXPIRED",
+                "something_new", "", "3"]
 
 TEXTS = ["plain", "a b", "a+b", "a/b", "a&b=c", "café", "a~_-.b", "💸",
          "!'()*", "", "%2F", "a\tb"]
@@ -354,10 +355,24 @@ def main() -> int:
             json.dump({"op": op, "text": rng.choice(TEXTS)}, out)
         elif op == "swap_status":
             body = {"status": rng.choice(STATUS_WORDS)}
-            for key in ["destinationTxHash", "destinationChainTxHash",
-                        "message"]:
-                if rng.random() < 0.4:
-                    body[key] = rng.choice(["0xdead", "", "a note"])
+            # The provider's shape, and the shapes a reader must survive: a
+            # missing or non-object `swapDetails`, an empty or malformed hash
+            # list, and top-level lookalikes that must NOT be read.
+            details = rng.choice([None, "not-an-object", {}])
+            if isinstance(details, dict):
+                hashes = rng.choice([None, [], ["0xbare"], [{"hash": ""}],
+                                     [{"hash": "0xdead", "explorerUrl": "u"},
+                                      {"hash": "0xsecond"}],
+                                     [{"explorerUrl": "u"}]])
+                if hashes is not None:
+                    details["destinationChainTxHashes"] = hashes
+                if rng.random() < 0.5:
+                    details["refundReason"] = rng.choice(["", "a note", 7])
+            if details is not None:
+                body["swapDetails"] = details
+            for key in ["destinationTxHash", "message"]:
+                if rng.random() < 0.3:
+                    body[key] = rng.choice(["0xtop", "", "top"])
             json.dump({"op": op, "body": body,
                        "memo": rng.choice(["memo-1", "", None, "a/b"])}, out)
         elif op == "swap_quote":

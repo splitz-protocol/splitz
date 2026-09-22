@@ -199,6 +199,7 @@ pub fn quote_request_body(
     let mut request = json!({
         "dry": false,
         "swapType": "EXACT_INPUT",
+        "slippageTolerance": OneClickSwaps::SLIPPAGE_BASIS_POINTS,
         "originAsset": zec_asset_id,
         "depositType": "ORIGIN_CHAIN",
         "destinationAsset": asset.asset_id,
@@ -273,11 +274,19 @@ pub fn status_from_response(body: &str) -> Result<SwapStatus, HostError> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_uppercase();
+    // Everything past the status sits under `swapDetails`: the delivery's
+    // hash in `destinationChainTxHashes[].hash`, a failure's reason in
+    // `refundReason`.
+    let details = body.get("swapDetails").filter(|d| d.is_object());
     Ok(SwapStatus {
         state: state_of(&status),
-        destination_tx_hash: optional(&body, "destinationTxHash")
-            .or_else(|| optional(&body, "destinationChainTxHash")),
-        detail: optional(&body, "message"),
+        destination_tx_hash: details
+            .and_then(|d| d.get("destinationChainTxHashes"))
+            .and_then(Value::as_array)
+            .and_then(|hashes| hashes.first())
+            .filter(|first| first.is_object())
+            .and_then(|first| optional(first, "hash")),
+        detail: details.and_then(|d| optional(d, "refundReason")),
     })
 }
 
@@ -313,6 +322,11 @@ pub struct OneClickSwaps<'a> {
 }
 
 impl<'a> OneClickSwaps<'a> {
+    /// How far the delivered amount may fall below the quote, in basis
+    /// points (1/100 of a percent). The provider requires it on every quote;
+    /// 100 is 1%.
+    pub const SLIPPAGE_BASIS_POINTS: i64 = 100;
+
     /// `origin` is a scheme, a host and an optional path. A query or a
     /// fragment is refused: a path and a query are appended to it, and an
     /// origin carrying either would address something else.
@@ -391,11 +405,15 @@ fn asset_from(token: &Value) -> Result<TradableAsset, HostError> {
 /// [`SwapState::Delivered`].** Reading an unknown word as success would tell a
 /// payer their debt is settled on the strength of a string nobody here has
 /// defined.
+///
+/// `INCOMPLETE_DEPOSIT` is awaiting a deposit: the provider has received less
+/// than the quote asked for, and nothing has been delivered on it.
 fn state_of(status: &str) -> SwapState {
     match status {
-        "PENDING_DEPOSIT" | "KNOWN_DEPOSIT_TX" => SwapState::AwaitingDeposit,
+        "PENDING_DEPOSIT" | "KNOWN_DEPOSIT_TX" | "INCOMPLETE_DEPOSIT" => SwapState::AwaitingDeposit,
+        "PROCESSING" => SwapState::Processing,
         "SUCCESS" => SwapState::Delivered,
-        "FAILED" | "REFUNDED" | "EXPIRED" => SwapState::Failed,
+        "FAILED" | "REFUNDED" => SwapState::Failed,
         _ => SwapState::Processing,
     }
 }

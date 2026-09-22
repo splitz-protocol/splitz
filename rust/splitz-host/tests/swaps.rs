@@ -133,6 +133,12 @@ fn the_quote_states_zec_in_the_asset_out_and_where_a_refund_goes() {
     assert_eq!(sent["destinationAsset"], "nep141:base-usdc");
     assert_eq!(sent["refundTo"], "u1ana");
     assert_eq!(sent["recipient"], "0xcara");
+    // Required by the provider: a quote without it is refused with a 400.
+    assert_eq!(
+        sent["slippageTolerance"],
+        OneClickSwaps::SLIPPAGE_BASIS_POINTS
+    );
+    assert_eq!(sent["slippageTolerance"], 100);
     assert_eq!(sent["amount"], "1000000");
     assert_eq!(sent["referral"], "a-wallet");
     assert_eq!(sent["deadline"], DEADLINE);
@@ -254,8 +260,8 @@ fn the_provider_vocabulary_maps_onto_the_states() {
         ("KNOWN_DEPOSIT_TX", SwapState::AwaitingDeposit),
         ("SUCCESS", SwapState::Delivered),
         ("FAILED", SwapState::Failed),
+        ("INCOMPLETE_DEPOSIT", SwapState::AwaitingDeposit),
         ("REFUNDED", SwapState::Failed),
-        ("EXPIRED", SwapState::Failed),
         ("PROCESSING", SwapState::Processing),
     ] {
         let fake = FakeProvider {
@@ -321,4 +327,40 @@ fn an_origin_carrying_a_query_or_a_fragment_is_refused() {
             "{origin}"
         );
     }
+}
+
+#[test]
+fn the_hash_and_the_reason_come_from_swap_details() {
+    let status = |body: Value| {
+        let fake = FakeProvider {
+            status: Some(body),
+            ..Default::default()
+        };
+        provider(&fake).status_of(&a_quote(None)).unwrap()
+    };
+    let delivered = status(json!({
+        "status": "SUCCESS",
+        "swapDetails": {"destinationChainTxHashes": [
+            {"hash": "0xbase-tx", "explorerUrl": "https://x"}
+        ]}
+    }));
+    assert_eq!(delivered.destination_tx_hash.as_deref(), Some("0xbase-tx"));
+
+    let refunded = status(json!({
+        "status": "REFUNDED",
+        "swapDetails": {"refundReason": "deposit below the minimum"}
+    }));
+    assert_eq!(
+        refunded.detail.as_deref(),
+        Some("deposit below the minimum")
+    );
+
+    // Keys the provider does not send at the top level are not read there.
+    let stray = status(json!({
+        "status": "SUCCESS",
+        "destinationTxHash": "0xtop",
+        "message": "top-level"
+    }));
+    assert_eq!(stray.destination_tx_hash, None);
+    assert_eq!(stray.detail, None);
 }
