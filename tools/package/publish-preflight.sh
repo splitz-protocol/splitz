@@ -115,6 +115,16 @@ for pkg in ios android npm; do
   else
     bad "" "dist/$pkg is stale: built from rust tree $built, rust/ is now $current — rerun tools/package/$pkg.sh"
   fi
+  scripts="$(script_source_stamp "$root" "$pkg")"
+  built="$(sed -n 's/^scripts //p' "dist/$pkg/SOURCE")"
+  case "$scripts" in
+    *+dirty) bad "" "tools/package/$pkg.sh or source.sh has uncommitted changes — commit, then rebuild dist/$pkg" ;;
+    *) if [ "$built" = "$scripts" ]; then
+         ok "" "dist/$pkg built by the current tools/package/$pkg.sh"
+       else
+         bad "" "dist/$pkg is stale: built by scripts ${built:-(unrecorded)}, now $scripts — rerun tools/package/$pkg.sh"
+       fi ;;
+  esac
 done
 [ -d dist/ios/SplitzFFI/splitz_ffiFFI.xcframework ] &&
   ok "" "dist/ios/SplitzFFI built, with its xcframework" ||
