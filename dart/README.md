@@ -3,7 +3,7 @@
 The Dart reference implementation of the splitz shared-bill protocol. One specification,
 two implementations, one corpus that both run.
 
-See the [repository](https://github.com/KamaIOps/Splitz-protocol) for `SPEC.md`,
+See the [repository](https://github.com/KamaIOps/Splitz-Protocol) for `SPEC.md`,
 `INTEGRATING.md` and the conformance vectors.
 
 ## Conformance
@@ -17,8 +17,8 @@ reports it as a pass with skips.
 the corpus sit together:
 
 ```
-git clone https://github.com/KamaIOps/Splitz-protocol
-cd Splitz-protocol/dart && dart test
+git clone https://github.com/KamaIOps/Splitz-Protocol
+cd Splitz-Protocol/dart && dart test
 ```
 
 `SPLITZ_VECTORS` points the suite at a corpus somewhere other than

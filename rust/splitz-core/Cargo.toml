@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.82"
 description = "A shared-bill protocol for Zcash wallets. Exact integer money, deterministic settlement, ZIP 321 output."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/KamaIOps/Splitz-protocol"
+repository = "https://github.com/KamaIOps/Splitz-Protocol"
 readme = "README.md"
 # Held back from crates.io. A publish there cannot be undone — there is no
 # delete, only yank, and a yanked version stays visible — so the crate carries

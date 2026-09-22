@@ -2,15 +2,20 @@ name: splitz_host
 description: "What a Zcash wallet needs around package:splitz_core — the seam, entry signing, sealing, the log, the sync, and where keys live. No screens, no wallet named, no Flutter."
 version: 0.1.0
 publish_to: none
+repository: https://github.com/KamaIOps/Splitz-Protocol
+homepage: https://github.com/KamaIOps/Splitz-Protocol
 
 environment:
   sdk: ^3.11.4
 
 dependencies:
-  # The protocol. A path dependency while both trees are private: a git dep
-  # pins a commit nobody outside can fetch.
+  # The protocol. The path is what resolves here; the version is what a
+  # published pubspec carries, and a registry refuses a dependency without
+  # one. A git dep is the wrong third option: it pins a commit nobody outside
+  # can fetch.
   splitz_core:
     path: ../dart
+    version: ^1.0.0
 
   # Ed25519 for §10.6 signatures, XChaCha20-Poly1305 for sealing entries before
   # they reach a relay. The protocol fixes the signing message and hands the
