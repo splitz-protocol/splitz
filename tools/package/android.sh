@@ -16,6 +16,9 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="$root/dist/android"
+# Taken before the build: the source this package is compiled from.
+. "$root/tools/package/source.sh"
+stamp="$(rust_source_stamp "$root")"
 API="${ANDROID_API_LEVEL:-21}"
 
 ndk="${ANDROID_NDK_HOME:-}"
@@ -180,3 +183,6 @@ echo "    - the AAR declares minCompileSdk=36, so a wallet compiling against"
 echo "      an older SDK cannot depend on it"
 echo "    - a wallet that drops the bare .aar in, rather than resolving it"
 echo "      from a repository, gets no POM and must declare JNA itself"
+
+write_source_stamp "$out" "$stamp" "$root"
+echo "  source:    rust tree $stamp (dist/android/SOURCE)"

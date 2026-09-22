@@ -17,6 +17,9 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="$root/dist/ios"
+# Taken before the build: the source this package is compiled from.
+. "$root/tools/package/source.sh"
+stamp="$(rust_source_stamp "$root")"
 DEVICE=aarch64-apple-ios
 SIMS=(aarch64-apple-ios-sim x86_64-apple-ios)
 # macOS too: this wallet ships a desktop build, and a package that declares
@@ -133,3 +136,6 @@ lipo -info "$out/sim/libsplitz_ffi.a" | sed 's/^/  sim:    /'
 lipo -info "$out/mac/libsplitz_ffi.a" | sed 's/^/  mac:    /'
 echo "  a consumer depends on it with:"
 echo "    .package(path: \"$pkg\")"
+
+write_source_stamp "$out" "$stamp" "$root"
+echo "  source:    rust tree $stamp (dist/ios/SOURCE)"

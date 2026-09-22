@@ -96,6 +96,26 @@ done
 
 echo
 echo "== packaging =="
+# A package is compiled from rust/; one built from any other tree ships code
+# the repository no longer holds. Each script stamps dist/<pkg>/SOURCE.
+. "$root/tools/package/source.sh"
+current="$(rust_source_stamp "$root")"
+case "$current" in
+  *+dirty) bad "" "rust/ has uncommitted changes — commit, then rebuild the packages" ;;
+esac
+for pkg in ios android npm; do
+  [ -d "dist/$pkg" ] || continue
+  if [ ! -f "dist/$pkg/SOURCE" ]; then
+    bad "" "dist/$pkg has no SOURCE stamp — rebuild with tools/package/$pkg.sh"
+    continue
+  fi
+  built="$(sed -n 's/^rust-tree //p' "dist/$pkg/SOURCE")"
+  if [ "$built" = "$current" ]; then
+    ok "" "dist/$pkg built from the current rust/ ($current)"
+  else
+    bad "" "dist/$pkg is stale: built from rust tree $built, rust/ is now $current — rerun tools/package/$pkg.sh"
+  fi
+done
 [ -d dist/ios/SplitzFFI/splitz_ffiFFI.xcframework ] &&
   ok "" "dist/ios/SplitzFFI built, with its xcframework" ||
   note "absent" "dist/ios/SplitzFFI — run tools/package/ios.sh"

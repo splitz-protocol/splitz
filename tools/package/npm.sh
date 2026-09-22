@@ -29,6 +29,9 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="$root/dist/npm"
+# Taken before the build: the source this package is compiled from.
+. "$root/tools/package/source.sh"
+stamp="$(rust_source_stamp "$root")"
 work="${NPM_WORK:-$(mktemp -d)}"
 # Pinned with tools/ffi/node.sh: every generator outside the uniffi tree
 # targets uniffi 0.31, which is the version this crate pins.
@@ -154,3 +157,6 @@ echo "  tarball:   $out/$tarball"
 echo "  platform:  $target only — no other prebuild is in this package"
 echo "  a consumer depends on it with:"
 echo "    npm install $out/$tarball"
+
+write_source_stamp "$out" "$stamp" "$root"
+echo "  source:    rust tree $stamp (dist/npm/SOURCE)"
