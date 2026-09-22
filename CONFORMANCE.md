@@ -102,7 +102,7 @@ change that breaks one is found by hand or not at all:
 | `tools/ffi/flutter.sh` | the Flutter SDK |
 | `tools/regtest/run.sh` | Docker, and a chain it brings up |
 | `tools/package/ios.sh` | Xcode and the three Apple targets |
-| `tools/package/android.sh` | the Android NDK |
+| `tools/package/android.sh` | the Android NDK; Gradle and the SDK to build the AAR |
 
 An implementation is conformant on the corpus and the differential lanes
 alone; these five say whether it can be *shipped*, which is a separate claim.

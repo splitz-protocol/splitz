@@ -79,6 +79,64 @@ lib="$root/rust/target/release/libsplitz_ffi.dylib"
    -p splitz-ffi -- generate --library "$lib" \
    --language kotlin --out-dir "$out/kotlin")
 
+# The library as an Android wallet declares it: a Gradle module whose AAR
+# carries the four ABIs and the generated Kotlin, so a consumer writes one
+# `implementation` line and never sees a `.so`.
+pkg="$out/splitz"
+mkdir -p "$pkg/src/main/kotlin" "$pkg/src/main/jniLibs"
+cp -R "$out/jniLibs/." "$pkg/src/main/jniLibs/"
+cp -R "$out/kotlin/." "$pkg/src/main/kotlin/"
+
+cat > "$pkg/build.gradle.kts" <<'GRADLE'
+// The splitz protocol and its wallet plumbing, as an Android wallet reaches it.
+//
+// The native library is not built here: `tools/package/android.sh` cross
+// compiles it per ABI and drops it into `src/main/jniLibs`, which is where the
+// Android plugin expects to find one. JNA is an `api` dependency rather than
+// an `implementation` one because the generated binding's own types reach the
+// consumer through it.
+// AGP 9 carries Kotlin support itself; the separate
+// `org.jetbrains.kotlin.android` plugin is refused alongside it.
+plugins {
+    id("com.android.library")
+}
+
+android {
+    namespace = "cash.splitz.ffi"
+    compileSdk = 36
+    defaultConfig { minSdk = 21 }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+// No `sourceSets` block: the generated Kotlin and the per-ABI `.so` files are
+// written to `src/main/kotlin` and `src/main/jniLibs`, which is where AGP
+// looks by convention. Declaring them again is refused by AGP 9.
+
+
+dependencies {
+    api("net.java.dev.jna:jna:5.17.0@aar")
+}
+GRADLE
+
+cat > "$pkg/settings.gradle.kts" <<'GRADLE'
+pluginManagement {
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+    plugins {
+        // Pinned, and read from Google's own maven metadata rather than
+        // guessed: an AGP version that does not exist fails at plugin
+        // resolution with a list of repositories rather than a version.
+        id("com.android.library") version "9.4.1"
+    }
+}
+dependencyResolutionManagement {
+    repositories { google(); mavenCentral() }
+}
+rootProject.name = "splitz"
+GRADLE
+
 echo
 echo "jniLibs: $out/jniLibs"
 for row in "${TARGETS[@]}"; do
@@ -86,3 +144,8 @@ for row in "${TARGETS[@]}"; do
   printf '  %-12s ' "$abi"
   file -b "$out/jniLibs/$abi/libsplitz_ffi.so" | cut -d, -f1-2
 done
+echo
+echo "gradle module: $pkg"
+echo "  a consumer depends on it with:"
+echo "    implementation(project(\":splitz\"))"
+echo "  build the AAR with: (cd $pkg && gradle assembleRelease)"

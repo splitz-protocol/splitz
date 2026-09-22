@@ -292,7 +292,14 @@ Cross-compiling for a phone is `tools/package/ios.sh` and
 which cannot be one archive because both are arm64 and `lipo` refuses two
 slices of one architecture. The second writes `dist/android/jniLibs/<abi>/`
 for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`, against NDK API 21.
-Adding either artefact to the app bundle is still the wallet's build system.
+
+Each script also writes the package a wallet actually declares, rather than
+loose artefacts. `dist/ios/SplitzFFI` is a Swift package — a consumer adds
+`.package(path:)` and writes `import SplitzFFI`. `dist/android/splitz` is a
+Gradle module — `gradle assembleRelease` there produces an AAR carrying all
+four ABIs under `jni/` and the generated Kotlin compiled into `classes.jar`,
+and a consumer writes one `implementation` line. Neither publishes anything;
+where the artefact goes is still the wallet's build system.
 
 ```dart file=tools/ffi/dart/doc.dart
 import 'dart:convert';
