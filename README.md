@@ -41,10 +41,12 @@ keep secrets, storage, a relay to sync through, exchange rates, swaps, and its
 own account details. Those are the seven interfaces in `SPEC.md` §15, 28 calls
 in all. Everything else is the library's job.
 
-Rust wallets use the crates directly. Everyone else uses the generated binding,
-and it's deliberately simple: you pass in the facts it needs and it passes back
-an answer, instead of you having to implement seven sets of callbacks across a
-language boundary.
+Rust wallets use the crates directly, and Dart and Flutter wallets use the Dart
+packages (`splitz_core`, `splitz_host`) — the Dart implementation, held to the
+same answers as the Rust one by the differential and parity lanes. Kotlin,
+Swift and JavaScript wallets use the generated binding, and it's deliberately
+simple: you pass in the facts it needs and it passes back an answer, instead of
+you having to implement seven sets of callbacks across a language boundary.
 
 `INTEGRATING.md` walks through the whole thing, with a working sample in
 Kotlin, Dart and JavaScript. The library stops at the payment request: your
