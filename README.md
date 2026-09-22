@@ -24,6 +24,11 @@ nobody mistakes them for missing features.
 | **the test cases** | `vectors/` | 449 cases any implementation can run, in no particular language |
 | **the extra checks** | `tools/` | everything a fixed set of test cases can't catch |
 
+A Flutter wallet can also take the screens ready-made: `splitz_flutter` is a
+separate package holding the bill, expense, settle, activity and share
+screens over this library. It names no wallet and takes what it needs as
+interfaces, so it drops into any Flutter Zcash wallet.
+
 There are two implementations, one in Dart and one in Rust, written separately
 from the same specification and run against the same test cases. The test cases
 themselves come from a third implementation, written only from the text of the
