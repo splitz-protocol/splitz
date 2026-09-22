@@ -91,21 +91,27 @@ Amounts are integer minor units throughout. Instants are canonical (§9.3).
 
 ## Lanes CI does not run
 
-`.github/workflows/ci.yml` runs thirteen jobs. Five lanes in the tree are not
-among them, because each needs a toolchain no hosted runner carries by
-default. They pass on a developer machine and nothing re-checks them, so a
-change that breaks one is found by hand or not at all:
+`.github/workflows/ci.yml` runs thirteen jobs. Eight lanes in the tree are not
+among them, because each needs a toolchain, a device or a daemon no hosted
+runner carries by default. They pass on a developer machine and nothing
+re-checks them, so a change that breaks one is found by hand or not at all:
 
 | lane | what it needs |
 |---|---|
 | `tools/ffi/swift.sh` | Xcode, and `tools/package/ios.sh` run first |
+| `tools/ffi/swift-simulator.sh` | the same, plus a booted iOS simulator |
+| `tools/ffi/aar-consumer.sh` | Gradle, the Android SDK, and the NDK |
 | `tools/ffi/flutter.sh` | the Flutter SDK |
 | `tools/regtest/run.sh` | Docker, and a chain it brings up |
-| `tools/package/ios.sh` | Xcode and the three Apple targets |
-| `tools/package/android.sh` | the Android NDK; Gradle and the SDK to build the AAR |
+| `tools/package/ios.sh` | Xcode and the four Apple targets |
+| `tools/package/android.sh` | the Android NDK; Gradle and the SDK for the AAR |
+| `tools/package/npm.sh` | node and npm; it builds one platform, its own |
+
+`tools/package/publish-preflight.sh` is not a lane. It reads only, and answers
+whether anything may be published yet.
 
 An implementation is conformant on the corpus and the differential lanes
-alone; these five say whether it can be *shipped*, which is a separate claim.
+alone; these say whether it can be *shipped*, which is a separate claim.
 
 ## Telling whether a green suite means anything
 

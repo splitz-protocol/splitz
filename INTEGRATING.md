@@ -310,6 +310,11 @@ install time rather than at the first call. A real release needs the build
 repeated per platform with the `prebuilds/` directories merged, and nothing
 in this tree does that.
 
+The iOS slice is executed, not merely built: `tools/ffi/swift-simulator.sh`
+runs the same bill on a booted simulator, so the arm64 code a wallet ships is
+the code that ran. The Android `.so` files have no equivalent yet — the AAR
+consumer runs on the JVM against the host library.
+
 Two costs the Android side carries, and they are not obvious from the file:
 
 - The AAR declares `minCompileSdk=36`, so a wallet compiling against an older
