@@ -89,6 +89,24 @@ before writing a third: `dart/test/conformance_test.dart` and
 Objects keyed by participant id are compared by content, not key order.
 Amounts are integer minor units throughout. Instants are canonical (§9.3).
 
+## Lanes CI does not run
+
+`.github/workflows/ci.yml` runs thirteen jobs. Five lanes in the tree are not
+among them, because each needs a toolchain no hosted runner carries by
+default. They pass on a developer machine and nothing re-checks them, so a
+change that breaks one is found by hand or not at all:
+
+| lane | what it needs |
+|---|---|
+| `tools/ffi/swift.sh` | `swiftc` |
+| `tools/ffi/flutter.sh` | the Flutter SDK |
+| `tools/regtest/run.sh` | Docker, and a chain it brings up |
+| `tools/package/ios.sh` | Xcode and the three Apple targets |
+| `tools/package/android.sh` | the Android NDK |
+
+An implementation is conformant on the corpus and the differential lanes
+alone; these five say whether it can be *shipped*, which is a separate claim.
+
 ## Telling whether a green suite means anything
 
 Break what an assertion guards and watch it go red for the reason it names,

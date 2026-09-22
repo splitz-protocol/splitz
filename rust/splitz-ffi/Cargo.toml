@@ -5,12 +5,12 @@ edition = "2021"
 rust-version = "1.82"
 description = "The splitz protocol and its wallet plumbing, across a foreign function boundary."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/KamaIOps/Splitz-protocol"
+repository = "https://github.com/KamaIOps/Splitz-Protocol"
 # Held back from crates.io for the same reason the other two are.
 publish = false
 
 [lib]
-crate-type = ["cdylib", "lib"]
+crate-type = ["cdylib", "staticlib", "lib"]
 name = "splitz_ffi"
 
 [[bin]]
@@ -18,10 +18,10 @@ name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
-splitz-core = { path = "../splitz-core" }
-splitz-host = { path = "../splitz-host" }
+splitz-core = { path = "../splitz-core", version = "1.0.0" }
+splitz-host = { path = "../splitz-host", version = "0.1.0" }
 serde_json = { version = "1", features = ["preserve_order"] }
 uniffi = { version = "=0.31.0", features = ["cli", "scaffolding-ffi-buffer-fns"] }
 
 [dev-dependencies]
-splitz-host = { path = "../splitz-host" }
+splitz-host = { path = "../splitz-host", version = "0.1.0" }

@@ -284,8 +284,15 @@ fun main() {
 the library and must be called before anything else. It works the same under
 Flutter's test harness as under the standalone VM — `tools/ffi/flutter.sh`
 asserts that, because the two are different hosts and only one of them is what
-a wallet ships. Cross-compiling the cdylib for a phone and bundling it with the
-app is the wallet's build system; nothing here does it.
+a wallet ships.
+
+Cross-compiling for a phone is `tools/package/ios.sh` and
+`tools/package/android.sh`. The first writes
+`dist/ios/splitz_ffi.xcframework` — a device slice and a fat simulator slice,
+which cannot be one archive because both are arm64 and `lipo` refuses two
+slices of one architecture. The second writes `dist/android/jniLibs/<abi>/`
+for `arm64-v8a`, `armeabi-v7a`, `x86_64` and `x86`, against NDK API 21.
+Adding either artefact to the app bundle is still the wallet's build system.
 
 ```dart file=tools/ffi/dart/doc.dart
 import 'dart:convert';

@@ -5,6 +5,10 @@ pubspec.lock
 
 # Rust
 target/
+
+# Packaged native artefacts: tools/package/ios.sh and android.sh rebuild them
+# from the crate, so they are output and never a source.
+dist/
 __pycache__/
 *.pyc
 
