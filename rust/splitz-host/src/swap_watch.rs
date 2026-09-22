@@ -74,6 +74,7 @@ impl SwapWatch {
             deposit_memo: self.deposit_memo.clone(),
             amount_in_zatoshi: 0,
             amount_out: String::new(),
+            min_amount_out: None,
             asset: TradableAsset {
                 asset_id: String::new(),
                 symbol: self.asset_symbol.clone(),

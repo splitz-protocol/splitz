@@ -1,0 +1,31 @@
+name: contract
+
+# The swap client against the live 1Click API, once a day and on demand.
+#
+# Everything in ci.yml runs offline, against the provider's schema and answers
+# pinned in tools/contracts/. This is what notices when the provider moves:
+# the schema is fetched and compared with the pinned copy, and the client's
+# own request is sent with `dry: true` — nothing else changed — so it moves
+# nothing and issues no deposit address. A red run means re-pin with
+# tools/contracts/oneclick.py and fix what the contract tests then say.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  oneclick:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      # The schema is YAML; Ruby's standard library reads it (oneclick.py).
+      - run: ruby --version
+      - run: python3 tools/contracts/oneclick.py --check
+      - run: dart pub get
+        working-directory: splitz_host
+      - run: dart run tool/oneclick_live.dart check
+        working-directory: splitz_host

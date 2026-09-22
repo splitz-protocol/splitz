@@ -49,6 +49,7 @@ Map<String, Object?> quoteJson(SwapQuote q) => {
   'depositMemo': q.depositMemo,
   'amountInZatoshi': q.amountInZatoshi,
   'amountOut': q.amountOut,
+  'minAmountOut': q.minAmountOut,
   'deadline': q.deadline,
   'reference': q.reference,
   'paymentReference': q.paymentReference,

@@ -233,6 +233,8 @@ pub struct SwapQuote {
     pub deposit_memo: Option<String>,
     pub amount_in_zatoshi: i64,
     pub amount_out: String,
+    /// The least the recipient receives once slippage is applied.
+    pub min_amount_out: Option<String>,
     pub asset: TradableAsset,
     /// A §9.3 instant.
     pub deadline: String,

@@ -204,6 +204,7 @@ pub(crate) fn quote(q: &splitz_host::SwapQuote) -> ffi::SwapQuote {
         deposit_memo: q.deposit_memo.clone(),
         amount_in_zatoshi: q.amount_in_zatoshi,
         amount_out: q.amount_out.clone(),
+        min_amount_out: q.min_amount_out.clone(),
         asset: asset(&q.asset),
         deadline: q.deadline.clone(),
         reference: q.reference.clone(),

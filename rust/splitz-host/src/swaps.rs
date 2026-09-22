@@ -71,8 +71,13 @@ pub struct SwapQuote {
     /// What leaves the payer's wallet. This is the figure a payment record's
     /// `zatoshi` carries (§9.2).
     pub amount_in_zatoshi: i64,
-    /// What the recipient receives, in the asset's base units.
+    /// What the provider quotes the recipient receives, in the asset's base
+    /// units. Up to the slippage less may arrive; `min_amount_out` is the
+    /// floor.
     pub amount_out: String,
+    /// The least the recipient receives once slippage is applied, in the
+    /// asset's base units, or `None` when the provider states none.
+    pub min_amount_out: Option<String>,
     pub asset: TradableAsset,
     /// After this the quote is not honoured and a new one is needed. A §9.3
     /// instant, so two devices read one moment.
@@ -253,6 +258,7 @@ pub fn quote_from_response(
         deposit_memo: optional(quote, "depositMemo"),
         amount_in_zatoshi,
         amount_out: required(quote, "amountOut")?,
+        min_amount_out: optional(quote, "minAmountOut"),
         asset: asset.clone(),
         // The provider's own deadline where it states one: honouring a longer
         // one of ours would quote a price it has stopped holding.
@@ -297,8 +303,9 @@ fn decode_body(text: &str, what: &str) -> Result<Value, HostError> {
 
 /// A [`SwapProvider`] speaking the 1Click request shape.
 ///
-/// Four endpoints, relative to `origin`: `GET /v0/tokens`, `POST /v0/quote`,
-/// `GET /v0/status`, `POST /v0/deposit/submit`. `origin` is the wallet's — a
+/// Three endpoints, relative to `origin`: `GET /v0/tokens`, `POST /v0/quote`,
+/// `GET /v0/status`. Held to the provider's schema by
+/// `tests/oneclick_contract.rs`. `origin` is the wallet's — a
 /// provider's own host, or a proxy the wallet runs so no credential ships in
 /// the app.
 ///

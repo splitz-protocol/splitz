@@ -1,5 +1,7 @@
 //! Settling a debt in an asset that is not ZEC (SPEC.md §9.2, §15.7).
 
+mod oneclick;
+
 use std::cell::RefCell;
 
 use serde_json::{json, Value};
@@ -27,6 +29,12 @@ impl HttpTransport for FakeProvider {
         self.posts
             .borrow_mut()
             .push((url.to_owned(), body.to_owned()));
+        // Refused as the provider refuses it: a fake that accepts anything
+        // agrees with the client by construction.
+        let problems = oneclick::quote_request_problems(&serde_json::from_str(body).unwrap());
+        if !problems.is_empty() {
+            return Err(format!("answered 400: {}", problems.join(", ")));
+        }
         Ok(self
             .quote
             .clone()
@@ -247,6 +255,7 @@ fn a_quote(memo: Option<&str>) -> SwapQuote {
         deposit_memo: memo.map(str::to_owned),
         amount_in_zatoshi: 1,
         amount_out: "1".to_owned(),
+        min_amount_out: None,
         asset: usdc_on_base(),
         deadline: "2026-01-01T00:00:00.000Z".to_owned(),
         reference: None,

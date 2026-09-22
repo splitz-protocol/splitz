@@ -1,0 +1,7 @@
+{
+  "message": "slippageTolerance should not be empty,slippageTolerance must not be greater than 10000,slippageTolerance must not be less than 0,slippageTolerance must be an integer number",
+  "error": "Bad Request",
+  "statusCode": 400,
+  "timestamp": "2026-09-22T19:13:39.696Z",
+  "path": "/v0/quote"
+}

@@ -9,6 +9,8 @@ import 'dart:convert';
 import 'package:splitz_host/splitz_host.dart';
 import 'package:test/test.dart';
 
+import 'support/oneclick_contract.dart';
+
 const String origin = 'https://swaps.example';
 
 /// The provider's token list, as two chains carrying one symbol.
@@ -58,7 +60,14 @@ provider({
       },
       post: (url, body) async {
         if (throwOnCall != null) throw throwOnCall;
-        posts.add({'url': url, 'body': jsonDecode(body)});
+        final sent = jsonDecode(body) as Map<String, dynamic>;
+        posts.add({'url': url, 'body': sent});
+        // Refused as the provider refuses it: a fake that accepts anything
+        // agrees with the client by construction.
+        final problems = quoteRequestProblems(sent);
+        if (problems.isNotEmpty) {
+          throw SwapException('answered 400: ${problems.join(', ')}');
+        }
         return jsonEncode(
           quote ??
               {

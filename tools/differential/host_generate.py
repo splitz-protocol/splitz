@@ -181,6 +181,8 @@ def a_quote_body(rng: random.Random) -> dict:
         quote["depositAddress"] = rng.choice(["u1provider", ""])
     if rng.random() < 0.85:
         quote["amountOut"] = rng.choice(["12340000", ""])
+    if rng.random() < 0.6:
+        quote["minAmountOut"] = rng.choice(["12216600", "", 7])
     if rng.random() < 0.5:
         quote["depositMemo"] = rng.choice(["memo-1", ""])
     if rng.random() < 0.5:

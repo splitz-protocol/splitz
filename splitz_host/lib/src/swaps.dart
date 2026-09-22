@@ -82,6 +82,7 @@ class SwapQuote {
     required this.deadline,
     this.depositMemo,
     this.reference,
+    this.minAmountOut,
   });
 
   /// The address the payer's ZEC goes to. **Not the recipient's address** —
@@ -96,8 +97,13 @@ class SwapQuote {
   /// `zatoshi` carries (§9.2).
   final int amountInZatoshi;
 
-  /// What the recipient receives, in [asset]'s base units.
+  /// What the provider quotes the recipient receives, in [asset]'s base
+  /// units. Up to the slippage less may arrive; [minAmountOut] is the floor.
   final String amountOut;
+
+  /// The least the recipient receives once slippage is applied, in [asset]'s
+  /// base units, or null when the provider states none.
+  final String? minAmountOut;
 
   final TradableAsset asset;
 
@@ -217,8 +223,9 @@ typedef ZecAssetId = String;
 
 /// A [SwapProvider] speaking the 1Click request shape.
 ///
-/// Four endpoints, relative to [origin]: `GET /v0/tokens`, `POST /v0/quote`,
-/// `GET /v0/status`, `POST /v0/deposit/submit`. [origin] is the wallet's —
+/// Three endpoints, relative to [origin]: `GET /v0/tokens`, `POST /v0/quote`,
+/// `GET /v0/status`. Held to the provider's schema by
+/// `test/oneclick_contract_test.dart`. [origin] is the wallet's —
 /// a provider's own host, or a proxy the wallet runs so no credential ships
 /// in the app.
 ///
@@ -338,6 +345,7 @@ class OneClickSwaps implements SwapProvider {
       depositMemo: _optional(quote, 'depositMemo'),
       amountInZatoshi: amountInZatoshi,
       amountOut: _string(quote, 'amountOut'),
+      minAmountOut: _optional(quote, 'minAmountOut'),
       asset: asset,
       // The provider's own deadline where it states one: honouring a longer
       // one of ours would quote a price it has stopped holding.
