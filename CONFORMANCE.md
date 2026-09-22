@@ -91,7 +91,7 @@ Amounts are integer minor units throughout. Instants are canonical (§9.3).
 
 ## Lanes CI does not run
 
-`.github/workflows/ci.yml` runs thirteen jobs. Eight lanes in the tree are not
+`.github/workflows/ci.yml` runs thirteen jobs. Nine lanes in the tree are not
 among them, because each needs a toolchain, a device or a daemon no hosted
 runner carries by default. They pass on a developer machine and nothing
 re-checks them, so a change that breaks one is found by hand or not at all:
@@ -101,6 +101,7 @@ re-checks them, so a change that breaks one is found by hand or not at all:
 | `tools/ffi/swift.sh` | Xcode, and `tools/package/ios.sh` run first |
 | `tools/ffi/swift-simulator.sh` | the same, plus a booted iOS simulator |
 | `tools/ffi/aar-consumer.sh` | Gradle, the Android SDK, and the NDK |
+| `tools/ffi/aar-device.sh` | the same, plus a booted emulator or a device |
 | `tools/ffi/flutter.sh` | the Flutter SDK |
 | `tools/regtest/run.sh` | Docker, and a chain it brings up |
 | `tools/package/ios.sh` | Xcode and the four Apple targets |

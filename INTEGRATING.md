@@ -310,10 +310,12 @@ install time rather than at the first call. A real release needs the build
 repeated per platform with the `prebuilds/` directories merged, and nothing
 in this tree does that.
 
-The iOS slice is executed, not merely built: `tools/ffi/swift-simulator.sh`
-runs the same bill on a booted simulator, so the arm64 code a wallet ships is
-the code that ran. The Android `.so` files have no equivalent yet — the AAR
-consumer runs on the JVM against the host library.
+Both mobile libraries are executed, not merely built.
+`tools/ffi/swift-simulator.sh` runs the bill on a booted iOS simulator, and
+`tools/ffi/aar-device.sh` runs it as an instrumented test on an Android
+emulator, where the platform extracts `jni/<abi>/libsplitz_ffi.so` from the
+APK and loads it. Each has a JVM or macOS twin that proves the packaged
+surface; these two prove the shipped binary.
 
 Two costs the Android side carries, and they are not obvious from the file:
 

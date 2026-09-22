@@ -18,7 +18,10 @@ val splitzLibDir: String = providers.gradleProperty("splitzLibDir").get()
 android {
     namespace = "cash.splitz.consumer"
     compileSdk = 36
-    defaultConfig { minSdk = 21 }
+    defaultConfig {
+        minSdk = 21
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -38,6 +41,13 @@ dependencies {
     // states this itself.
     testImplementation("net.java.dev.jna:jna:5.17.0")
     testImplementation("junit:junit:4.13.2")
+
+    // On a device the picture inverts: JNA must be the `@aar`, because that
+    // is the variant carrying `libjnidispatch.so` for each Android ABI. The
+    // plain jar has only host dispatch libraries and cannot bind there.
+    androidTestImplementation("net.java.dev.jna:jna:5.17.0@aar")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
 tasks.withType<Test>().configureEach {
