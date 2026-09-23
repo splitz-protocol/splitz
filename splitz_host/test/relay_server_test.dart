@@ -103,6 +103,29 @@ void main() {
     expect(jsonDecode(body)['blobs'], isNull);
   });
 
+  test(
+    'a connection that sends nothing is closed after the idle timeout',
+    () async {
+      final up = await _relay(['--idle-timeout', '1']);
+      try {
+        final socket = await Socket.connect('127.0.0.1', up.port);
+        // Nothing is written. A relay with no timeout holds this thread for
+        // good; this one closes the connection, and the stream ends.
+        final closed = socket.drain<void>().then((_) => true);
+        expect(
+          await closed.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => false,
+          ),
+          isTrue,
+        );
+        socket.destroy();
+      } finally {
+        up.process.kill();
+      }
+    },
+  );
+
   group('a state file', () {
     late Directory dir;
 

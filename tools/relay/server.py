@@ -24,13 +24,24 @@ the LAN, which would need a cleartext exception in the wallet on each platform.
 **Bounded, because it may be reachable by strangers.** One request body is at
 most `MAX_BODY_BYTES`; everything held is at most `MAX_HELD_CHARS`. A body
 over the first is refused before it is read and the connection closed; a push
-that would cross the second is refused whole.
+that would cross the second is refused whole. A connection that sends nothing
+for `--idle-timeout` seconds is closed, so a client that opens connections and
+never finishes a request cannot hold every thread.
+
+**It authenticates nobody.** Anyone who can reach it can push, so anyone can
+fill it to `MAX_HELD_CHARS`, after which every push is refused with 507 until
+it restarts. Nothing here can tell a stranger's blob from a participant's —
+that is what not being able to read them means. A bill still works with no
+relay (§15.5); a relay somebody has filled is one to restart, or to replace
+with one that knows its users.
 
 Without `--state-file` nothing is written to disk: a restart forgets every
 channel, and devices re-push their whole log on the next sync. With it, the
-store is rewritten after every push that adds a blob — to a temporary file,
+store is written by a background thread at most once a `SAVE_INTERVAL` after a
+push adds a blob, and when the process is asked to stop — to a temporary file,
 then renamed over the old one, so a crash mid-write leaves the previous copy —
-and read back at start. The file holds what the relay holds: channel digests
+and read back at start. A push never waits on the disk, and a crash loses at
+most the last interval's pushes, which devices send again on their next sync. The file holds what the relay holds: channel digests
 and ciphertext. A file that breaks a bound the running relay keeps is refused
 at start rather than loaded in part.
 """
@@ -41,8 +52,11 @@ import argparse
 import json
 import os
 import re
+import signal
 import socket
+import sys
 import threading
+import time
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -97,11 +111,30 @@ def load_state(path: str) -> None:
     HELD_CHARS = held
 
 
-def save_state() -> None:
-    """Writes the store to `STATE_FILE`. Called with `LOCK` held."""
+# How often, at most, the state file is rewritten. Each rewrite is the whole
+# store, so it is taken off the request path.
+SAVE_INTERVAL = 1.0
+DIRTY = threading.Event()
+
+
+def saver() -> None:
+    """Writes the store whenever a push has changed it, at most once an interval."""
+    while True:
+        DIRTY.wait()
+        time.sleep(SAVE_INTERVAL)
+        flush()
+
+
+def flush() -> None:
+    """Writes the store now, if a push changed it since the last write."""
+    if STATE_FILE is None or not DIRTY.is_set():
+        return
+    with LOCK:
+        DIRTY.clear()
+        snapshot = {c: list(b) for c, b in CHANNELS.items()}
     tmp = f"{STATE_FILE}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(CHANNELS, f)
+        json.dump(snapshot, f)
     os.replace(tmp, STATE_FILE)
 
 
@@ -236,7 +269,7 @@ class Relay(BaseHTTPRequestHandler):
             held = CHANNELS[channel]
             added = len(fresh)
             if added and STATE_FILE is not None:
-                save_state()
+                DIRTY.set()
         # The channel and the counts, never a blob.
         print(f"{channel[:12]}… +{added} of {len(blobs)}, holds {len(held)}",
               flush=True)
@@ -254,7 +287,10 @@ def main() -> None:
     parser.add_argument("--max-body", type=int, default=MAX_BODY_BYTES)
     parser.add_argument("--max-held", type=int, default=MAX_HELD_CHARS)
     parser.add_argument("--state-file")
+    parser.add_argument("--idle-timeout", type=float, default=30.0)
     args = parser.parse_args()
+    # Read by the handler's setup: a connection silent this long is closed.
+    Relay.timeout = args.idle_timeout
     MAX_BODY_BYTES, MAX_HELD_CHARS = args.max_body, args.max_held
     STATE_FILE = args.state_file
     if STATE_FILE is not None and os.path.exists(STATE_FILE):
@@ -264,7 +300,17 @@ def main() -> None:
     # The port actually bound: `--port 0` asks the OS for a free one, and a
     # caller learns which from this line rather than guessing and probing.
     print(f"relay on http://{args.host}:{server.server_address[1]}", flush=True)
-    server.serve_forever()
+    if STATE_FILE is not None:
+        threading.Thread(target=saver, daemon=True).start()
+    # Asked to stop, it stops through `finally`, which writes what the last
+    # interval's pushes added.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        flush()
 
 
 if __name__ == "__main__":
