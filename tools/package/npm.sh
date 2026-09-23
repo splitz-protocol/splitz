@@ -60,6 +60,11 @@ if (p !== "linux") { console.log(`${p}-${a}`); } else {
 
 # --release, because a wallet ships release.
 echo "building splitz-ffi for $target"
+# musl targets link the C runtime statically by default, and a static runtime
+# cannot be a shared library: cargo drops the cdylib the loader needs.
+case "$target" in
+  *-musl) export RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=-crt-static" ;;
+esac
 (cd "$root/rust" && "${CARGO:-cargo}" build --quiet --release -p splitz-ffi)
 lib="$root/rust/target/release"
 for name in libsplitz_ffi.dylib libsplitz_ffi.so splitz_ffi.dll; do
