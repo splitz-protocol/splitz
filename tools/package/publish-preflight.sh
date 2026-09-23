@@ -125,6 +125,17 @@ for pkg in ios android npm; do
          bad "" "dist/$pkg is stale: built by scripts ${built:-(unrecorded)}, now $scripts — rerun tools/package/$pkg.sh"
        fi ;;
   esac
+  # The stamps name what the package was built from; this checks that what
+  # is in dist/ is still what was built. A file edited or replaced after the
+  # build leaves every stamp above matching.
+  built="$(sed -n 's/^files //p' "dist/$pkg/SOURCE")"
+  if [ -z "$built" ]; then
+    bad "" "dist/$pkg records no digest of its files — rerun tools/package/$pkg.sh"
+  elif [ "$built" = "$(dist_digest "dist/$pkg")" ]; then
+    ok "" "dist/$pkg holds exactly what was built"
+  else
+    bad "" "dist/$pkg has changed since it was built — rerun tools/package/$pkg.sh"
+  fi
 done
 [ -d dist/ios/SplitzFFI/splitz_ffiFFI.xcframework ] &&
   ok "" "dist/ios/SplitzFFI built, with its xcframework" ||
@@ -145,6 +156,44 @@ if [ -f dist/npm/package.json ]; then
 else
   note "absent" "dist/npm — run tools/package/npm.sh"
 fi
+
+echo
+echo "== Dart packages, as a registry would take them =="
+# Checking the guards says nothing about whether a package would publish. Each
+# is copied with the edits publishing makes — publish_to removed, and
+# splitz_host depending on splitz_core by version rather than by path — and put
+# through pub's own dry run. splitz_core resolves from the copy beside it
+# through an override pub does not publish.
+scratch="$(mktemp -d)"
+for pkg in dart splitz_host; do
+  rsync -a --exclude .dart_tool --exclude build "$pkg/" "$scratch/$pkg/"
+  python3 - "$scratch/$pkg/pubspec.yaml" <<'PY'
+import sys
+path = sys.argv[1]
+lines = open(path).read().splitlines()
+out = [l for l in lines
+       if l.strip() != "publish_to: none" and l.strip() != "path: ../dart"]
+open(path, "w").write("\n".join(out) + "\n")
+PY
+  if [ "$pkg" = splitz_host ]; then
+    printf 'dependency_overrides:\n  splitz_core:\n    path: ../dart\n' \
+      >"$scratch/$pkg/pubspec_overrides.yaml"
+  fi
+  report="$(cd "$scratch/$pkg" && dart pub publish --dry-run 2>&1)"
+  status=$?
+  # Until splitz_core is on the registry, splitz_host resolves it only through
+  # the override, and pub warns about the override. That one is expected;
+  # anything else stops the publish.
+  problems="$(echo "$report" | grep -E '^\* ' |
+              grep -v 'overridden in pubspec_overrides.yaml' || true)"
+  if [ "$status" = 0 ] || { [ "$pkg" = splitz_host ] && [ -z "$problems" ]; }; then
+    ok "" "$pkg would publish$([ "$pkg" = splitz_host ] && echo ' once splitz_core is on pub.dev')"
+  else
+    bad "" "$pkg would not publish:"
+    echo "$problems" | sed 's/^/             /' | head -12
+  fi
+done
+rm -rf "$scratch"
 
 echo
 if [ "$fail" = "0" ]; then

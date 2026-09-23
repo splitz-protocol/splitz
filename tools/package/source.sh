@@ -31,10 +31,22 @@ script_source_stamp() {
   fi
 }
 
-# Records both stamps, taken before the build, into <dir>/SOURCE. Called last,
-# so a build that fails leaves no stamp claiming it finished.
+# One SHA-256 over what <dir> holds: each file's path and its own SHA-256, in
+# byte order of path. SOURCE itself is left out, and so is what a later tool
+# run adds beside the package — build/, .gradle/, node_modules/ — so building
+# the AAR from dist/android does not make the package read as changed.
+dist_digest() {
+  local dir="$1"
+  (cd "$dir" && find . -type f ! -name SOURCE ! -path '*/build/*' \
+      ! -path '*/.gradle/*' ! -path '*/node_modules/*' -print0 |
+    LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -d' ' -f1
+}
+
+# Records both stamps, taken before the build, and the digest of what the
+# build left, into <dir>/SOURCE. Called last, so a build that fails leaves no
+# stamp claiming it finished.
 write_source_stamp() {
   local dir="$1" stamp="$2" root="$3" scripts="$4"
-  printf 'rust-tree %s\nscripts %s\ncommit %s\n' "$stamp" "$scripts" \
-    "$(git -C "$root" rev-parse HEAD)" >"$dir/SOURCE"
+  printf 'rust-tree %s\nscripts %s\ncommit %s\nfiles %s\n' "$stamp" "$scripts" \
+    "$(git -C "$root" rev-parse HEAD)" "$(dist_digest "$dir")" >"$dir/SOURCE"
 }
