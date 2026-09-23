@@ -56,7 +56,13 @@ impl<'a> BillStore<'a> {
         let Ok(Value::Array(decoded)) = serde_json::from_str::<Value>(&stored) else {
             return Ok(Vec::new());
         };
-        let mut entries: Vec<Value> = decoded.into_iter().filter(Value::is_object).collect();
+        // Only what §10.1 admits. The store writes nothing else, so anything
+        // else is a file damaged or written by something that is not this
+        // store — and ordering it would compare fields it does not have.
+        let mut entries: Vec<Value> = decoded
+            .into_iter()
+            .filter(|e| splitz_core::check_entry(e).is_ok())
+            .collect();
         order_entries(&mut entries);
         Ok(entries)
     }

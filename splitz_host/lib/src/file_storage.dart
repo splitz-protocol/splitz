@@ -22,16 +22,52 @@ class FileBillStorage implements BillStorage {
 
   final Directory directory;
 
-  /// A stored name, made safe to be a file name.
+  /// A stored name, as a file name that maps back to it.
   ///
-  /// Keys are this package's own — a prefix and a bill id, and a bill id is
-  /// base64url — so the mapping is close to identity. It is applied anyway
-  /// because the one character base64url uses that a file name should not is
-  /// `/`, and a key carrying one would write outside this directory.
-  File _fileFor(String key) {
-    final safe = key.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
-    return File('${directory.path}/$safe');
+  /// Every character outside `A–Z a–z 0–9 _ . -` is written as `%` and two
+  /// upper-case hex digits per UTF-8 byte, `%` included, so the mapping is
+  /// reversible: [keys] lists what was stored, not a lossy copy of it. A bill
+  /// key is base64url and passes through unchanged; a `/`, which would write
+  /// outside this directory, does not.
+  static String _encode(String key) {
+    final out = StringBuffer();
+    for (final byte in utf8.encode(key)) {
+      final c = String.fromCharCode(byte);
+      if (RegExp(r'^[A-Za-z0-9_.\-]$').hasMatch(c)) {
+        out.write(c);
+      } else {
+        out.write('%${byte.toRadixString(16).toUpperCase().padLeft(2, '0')}');
+      }
+    }
+    return out.toString();
   }
+
+  /// The stored name a file name encodes, or null for one [_encode] never
+  /// writes.
+  static String? _decode(String name) {
+    final bytes = <int>[];
+    for (var i = 0; i < name.length; i++) {
+      final c = name[i];
+      if (c == '%') {
+        if (i + 2 >= name.length) return null;
+        final byte = int.tryParse(name.substring(i + 1, i + 3), radix: 16);
+        if (byte == null) return null;
+        bytes.add(byte);
+        i += 2;
+      } else if (RegExp(r'^[A-Za-z0-9_.\-]$').hasMatch(c)) {
+        bytes.add(c.codeUnitAt(0));
+      } else {
+        return null;
+      }
+    }
+    try {
+      return utf8.decode(bytes);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  File _fileFor(String key) => File('${directory.path}/${_encode(key)}');
 
   @override
   Future<String?> read(String key) async {
@@ -52,9 +88,11 @@ class FileBillStorage implements BillStorage {
     // Written beside the target and renamed over it. A rename within one
     // filesystem is atomic, so a process that dies mid-write leaves either the
     // old contents or the new, never half of either — and half a log is a bill
-    // that no longer folds.
+    // that no longer folds. The temporary name is unique to this write: two
+    // writers sharing one would truncate each other's file and one rename
+    // would fail.
     final target = _fileFor(key);
-    final temporary = File('${target.path}.writing');
+    final temporary = File(_unfinished(target.path));
     await temporary.writeAsString(value, flush: true);
     await temporary.rename(target.path);
   }
@@ -71,11 +109,12 @@ class FileBillStorage implements BillStorage {
     final names = <String>[];
     await for (final entity in directory.list(followLinks: false)) {
       if (entity is! File) continue;
+      // A half-written file is not a bill, so a crash during a write cannot
+      // make a torn log look like a stored one.
       final name = entity.uri.pathSegments.last;
-      // A half-written file is not a bill. Skipped rather than listed, so a
-      // crash during a write cannot make a torn log look like a stored one.
-      if (name.endsWith('.writing')) continue;
-      if (name.startsWith(prefix)) names.add(name);
+      if (_isUnfinished(name)) continue;
+      final key = _decode(name);
+      if (key != null && key.startsWith(prefix)) names.add(key);
     }
     names.sort();
     return names;
@@ -90,7 +129,7 @@ class FileBillStorage implements BillStorage {
     if (!await directory.exists()) return 0;
     var removed = 0;
     await for (final entity in directory.list(followLinks: false)) {
-      if (entity is File && entity.path.endsWith('.writing')) {
+      if (entity is File && _isUnfinished(entity.uri.pathSegments.last)) {
         await entity.delete();
         removed++;
       }
@@ -98,6 +137,16 @@ class FileBillStorage implements BillStorage {
     return removed;
   }
 }
+
+/// A temporary name beside [path], unique to one write.
+String _unfinished(String path) =>
+    '$path~${DateTime.now().microsecondsSinceEpoch}-'
+    '${_writes++}.writing';
+int _writes = 0;
+
+/// A name a write left behind: this version's, or `<name>.writing` from one
+/// that used a single temporary name. No stored key ends so.
+bool _isUnfinished(String name) => name.endsWith('.writing');
 
 /// A secret store backed by a file, for a build with no keychain.
 ///
@@ -127,23 +176,35 @@ class FileSecretStore implements SecretStore {
 
   Future<void> _write(Map<String, String> values) async {
     await file.parent.create(recursive: true);
-    final temporary = File('${file.path}.writing');
+    final temporary = File(_unfinished(file.path));
     await temporary.writeAsString(jsonEncode(values), flush: true);
     await temporary.rename(file.path);
   }
 
-  @override
-  Future<String?> read(String key) async => (await _read())[key];
+  /// Changes to the file, one at a time. Each reads the whole map and writes
+  /// it back, so two at once would each drop the other's key.
+  Future<void> _serial(void Function(Map<String, String>) change) {
+    final run = _tail.then((_) async {
+      final values = await _read();
+      change(values);
+      await _write(values);
+    });
+    _tail = run.catchError((Object _) {});
+    return run;
+  }
+
+  Future<void> _tail = Future<void>.value();
 
   @override
-  Future<void> write(String key, String value) async => _write(
-    await _read()
-      ..[key] = value,
-  );
+  Future<String?> read(String key) async {
+    await _tail;
+    return (await _read())[key];
+  }
 
   @override
-  Future<void> delete(String key) async => _write(
-    await _read()
-      ..remove(key),
-  );
+  Future<void> write(String key, String value) =>
+      _serial((values) => values[key] = value);
+
+  @override
+  Future<void> delete(String key) => _serial((values) => values.remove(key));
 }

@@ -87,10 +87,19 @@ class BillStore {
       return const [];
     }
     if (decoded is! List) return const [];
-    final entries = <Map<String, dynamic>>[
-      for (final e in decoded)
-        if (e is Map<String, dynamic>) e,
-    ];
+    // Only what §10.1 admits. The store writes nothing else, so anything else
+    // is a file damaged or written by something that is not this store — and
+    // ordering it would raise on the first entry with no `at`.
+    final entries = <Map<String, dynamic>>[];
+    for (final e in decoded) {
+      if (e is! Map<String, dynamic>) continue;
+      try {
+        protocol.checkEntry(e);
+      } on protocol.SplitError {
+        continue;
+      }
+      entries.add(e);
+    }
     return protocol.orderEntries(entries);
   }
 
@@ -101,18 +110,46 @@ class BillStore {
   /// by which copy arrived first. Whatever it refuses at ingress is returned
   /// with the log, because an entry that vanished silently is indistinguishable
   /// from one that was never sent.
+  ///
+  /// Merges into one bill run one at a time, with [forget] among them: each
+  /// reads the log, merges and writes it back, so two at once would each write
+  /// a log missing the other's entries — a sync overwriting the record of a
+  /// payment just sent. [onlyIf], when given, is checked inside that turn, and
+  /// when it answers false nothing is written and [MergedBill.applied] is
+  /// false: a sync that fetched before the bill was forgotten must not write
+  /// it back.
   Future<MergedBill> merge(
     String billId,
-    Iterable<Map<String, dynamic>> incoming,
-  ) async {
+    Iterable<Map<String, dynamic>> incoming, {
+    Future<bool> Function()? onlyIf,
+  }) => _serial(billId, () async {
+    if (onlyIf != null && !await onlyIf()) {
+      return const MergedBill(entries: [], refused: [], applied: false);
+    }
     final held = await read(billId);
     final merged = protocol.mergeLogs([held, incoming.toList()]);
     await _storage.write(_name(billId), jsonEncode(merged.merged));
     return MergedBill(entries: merged.merged, refused: merged.refused);
-  }
+  });
 
-  /// Forgets a bill entirely.
-  Future<void> forget(String billId) => _storage.delete(_name(billId));
+  /// Forgets a bill entirely, in its turn among merges into it.
+  Future<void> forget(String billId) =>
+      _serial(billId, () => _storage.delete(_name(billId)));
+
+  /// The last operation queued on each bill.
+  final Map<String, Future<void>> _tails = {};
+
+  Future<T> _serial<T>(String billId, Future<T> Function() body) {
+    final run = (_tails[billId] ?? Future<void>.value()).then((_) => body());
+    final tail = run.then<void>((_) {}, onError: (Object _) {});
+    _tails[billId] = tail;
+    // Dropped once nothing is queued behind it, so the map holds only bills
+    // with work in flight.
+    tail.then((_) {
+      if (identical(_tails[billId], tail)) _tails.remove(billId);
+    });
+    return run;
+  }
 
   /// Clears anything an interrupted write left behind. See
   /// [BillStorage.sweepUnfinishedWrites].
@@ -121,7 +158,15 @@ class BillStore {
 
 /// A merged log, and what the merge would not take.
 class MergedBill {
-  const MergedBill({required this.entries, required this.refused});
+  const MergedBill({
+    required this.entries,
+    required this.refused,
+    this.applied = true,
+  });
+
+  /// False when the condition given to [BillStore.merge] refused the merge,
+  /// and nothing was written.
+  final bool applied;
 
   final List<Map<String, dynamic>> entries;
 

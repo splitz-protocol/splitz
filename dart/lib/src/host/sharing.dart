@@ -27,9 +27,18 @@ final class ScannedInvite extends Scanned {
 
 /// A bill and, on the full form, the invite that opens it.
 final class ScannedBill extends Scanned {
-  const ScannedBill({required this.entries, required this.invite});
+  const ScannedBill({
+    required this.entries,
+    required this.invite,
+    this.notEntries = 0,
+  });
 
   final List<Map<String, dynamic>> entries;
+
+  /// Items in the scanned log that are not objects, and so not entries.
+  /// [acceptScan] reports each as §10.1 refuses it, as the merge does for
+  /// every other entry it will not take.
+  final int notEntries;
 
   /// Present on a `splitz1:` payload, absent on a `splitzd1:` delta — a delta
   /// is for a reader that already holds the key (§11.2).
@@ -57,6 +66,7 @@ Scanned readScan(String text) {
       for (final e in payload.log)
         if (e is Map) e.cast<String, dynamic>(),
     ];
+    final notEntries = payload.log.length - entries.length;
     splitz.Invite? invite;
     final raw = payload.invite;
     if (raw != null) {
@@ -78,7 +88,8 @@ Scanned readScan(String text) {
         }
       }
     }
-    return ScannedBill(entries: entries, invite: invite);
+    return ScannedBill(
+        entries: entries, invite: invite, notEntries: notEntries);
   } on splitz.SplitError catch (e) {
     // Text claiming to be a payload is answered as one. Falling through to
     // the invite parser would hand a person "not an invite" for a bill QR
@@ -152,8 +163,19 @@ splitz.Delta deltaFor({
     splitz.deltaFor(log.entries, theyHave.toSet());
 
 /// Folds a scanned bill into this device's own log, reporting what it refused.
-List<splitz.SetAside> acceptScan(BillLog log, ScannedBill scan) =>
-    log.add(scan.entries);
+List<splitz.SetAside> acceptScan(BillLog log, ScannedBill scan) {
+  final refused = [
+    ...log.add(scan.entries),
+    for (var i = 0; i < scan.notEntries; i++)
+      const splitz.SetAside('', splitz.SplitCode.billTypeError),
+  ];
+  // §10.2's order for a refusal list, as the merge gives it.
+  refused.sort((a, b) {
+    final byId = splitz.compareUtf8(a.id, b.id);
+    return byId != 0 ? byId : splitz.compareUtf8(a.code, b.code);
+  });
+  return refused;
+}
 
 /// Whether this host can act on [bill] — that is, whether it has joined.
 bool hasJoined(BillHost host, splitz.Bill bill) =>

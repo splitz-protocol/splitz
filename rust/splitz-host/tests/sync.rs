@@ -246,3 +246,79 @@ fn a_peers_entry_is_merged_without_judging_who_wrote_it() {
     assert_eq!(result.unopenable, 0);
     assert!(ids(&result.entries).contains(&theirs["id"].as_str().unwrap().to_owned()));
 }
+
+/// A relay that forgets the bill while it fetches, the way a person removing
+/// a bill during a poll does.
+struct ForgetsWhileFetching<'a> {
+    inner: InMemorySplitsRelay,
+    keys: &'a SplitsKeys<'a>,
+    store: &'a BillStore<'a>,
+    bill_id: String,
+}
+
+impl SplitsRelay for ForgetsWhileFetching<'_> {
+    fn push(&self, channel: &str, blobs: &[String]) -> splitz_host::Result<()> {
+        self.inner.push(channel, blobs)
+    }
+
+    fn fetch(&self, channel: &str) -> splitz_host::Result<Vec<String>> {
+        let blobs = self.inner.fetch(channel)?;
+        self.keys.forget_bill(&self.bill_id)?;
+        self.store.forget(&self.bill_id)?;
+        Ok(blobs)
+    }
+}
+
+#[test]
+fn a_bill_forgotten_while_a_sync_fetches_is_not_written_back() {
+    let ana = Device::new("ana", "u1ana", 1);
+    let (store, keys) = (ana.store(), ana.keys());
+    let host = ana.host();
+    let create = create_bill(&host, "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let bill_id = create["id"].as_str().unwrap().to_owned();
+    keys.ensure_bill_key(&bill_id).unwrap();
+    store.merge(&bill_id, vec![create]).unwrap();
+
+    let relay = ForgetsWhileFetching {
+        inner: InMemorySplitsRelay::default(),
+        keys: &keys,
+        store: &store,
+        bill_id: bill_id.clone(),
+    };
+    let sync = SplitsSync::new(&store, &keys, &relay);
+    sync.push(&bill_id, None, None).unwrap();
+    match sync.pull(&bill_id) {
+        Err(HostError::Sync(why)) => assert!(why.contains("forgotten"), "{why}"),
+        other => panic!("expected a sync refusal, got {other:?}"),
+    }
+    assert!(
+        store.bill_ids().unwrap().is_empty(),
+        "the bill is not written back without its key"
+    );
+}
+
+#[test]
+fn a_different_key_for_a_bill_already_held_is_refused() {
+    let ana = Device::new("ana", "u1ana", 1);
+    let keys = ana.keys();
+    let held = keys.ensure_bill_key("b1").unwrap();
+    let other = keys.generate_key();
+    match keys.store_bill_key("b1", &other) {
+        Err(HostError::KeyConflict(bill)) => assert_eq!(bill, "b1"),
+        other => panic!("expected a key conflict, got {other:?}"),
+    }
+    assert_eq!(keys.read_bill_key("b1").unwrap(), Some(held.clone()));
+    keys.store_bill_key("b1", &held).unwrap();
+}
+
+#[test]
+fn a_stored_entry_that_is_not_an_entry_is_skipped_not_raised() {
+    let ana = Device::new("ana", "u1ana", 1);
+    splitz_host::BillStorage::write(
+        &ana.storage,
+        "splitz_bill_b1",
+        r#"[{"kind":"joinBill"},{"kind":"x"},7]"#,
+    )
+    .unwrap();
+    assert!(ana.store().read("b1").unwrap().is_empty());
+}

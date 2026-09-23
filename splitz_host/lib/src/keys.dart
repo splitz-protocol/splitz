@@ -67,6 +67,12 @@ class SplitsKeys {
   /// `k` is non-empty base64url — not that it is the right length — so without
   /// this a malformed key is stored, and the failure then surfaces from inside
   /// whatever loop next tries to decrypt, far from the scan that caused it.
+  ///
+  /// Refuses, with [BillKeyConflict], a different key for a bill this device
+  /// already holds a key for. Replacing it would seal everything this device
+  /// writes under a key the others do not hold, and open nothing they write —
+  /// and an invite link is text anyone can send. The same key again is a
+  /// no-op.
   Future<void> storeBillKey(String billId, String key) async {
     if (!isWellFormedKey(key)) {
       throw ArgumentError.value(
@@ -74,6 +80,11 @@ class SplitsKeys {
         'key',
         'a bill key is $keyLengthBytes bytes of base64url',
       );
+    }
+    final held = await readBillKey(billId);
+    if (held != null && held.isNotEmpty) {
+      if (held == key) return;
+      throw BillKeyConflict(billId);
     }
     await _store.write(_billKeyName(billId), key);
   }
@@ -143,3 +154,15 @@ List<int> identitySeedFrom(List<int> secret) => hashing.sha256.convert([
   0,
   ...secret,
 ]).bytes;
+
+/// Raised when an invite carries a different key for a bill this device
+/// already holds.
+class BillKeyConflict implements Exception {
+  const BillKeyConflict(this.billId);
+
+  final String billId;
+
+  @override
+  String toString() =>
+      'BillKeyConflict: this device already holds a different key for $billId';
+}

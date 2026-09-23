@@ -144,6 +144,19 @@ impl<'a> SplitsSync<'a> {
             }
         }
 
+        // Merged only while this device still holds the bill's key. A bill
+        // forgotten while the fetch was in flight is not written back: it
+        // would return with no key, and the next Share would mint a key
+        // nobody else holds.
+        let still_held = self
+            .keys
+            .read_bill_key(bill_id)?
+            .is_some_and(|k| !k.is_empty());
+        if !still_held {
+            return Err(HostError::Sync(format!(
+                "{bill_id} was forgotten while it synced"
+            )));
+        }
         let merged = self.store.merge(bill_id, entries)?;
         Ok(SyncResult {
             entries: merged.entries,

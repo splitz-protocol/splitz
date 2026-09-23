@@ -18,6 +18,7 @@ dart::SealingException   # Rust returns `HostError::Sealing`. One enum for every
 dart::SplitsRelayException  # `HostError::Relay { transient }` — §15.5's "could retrying succeed" is a field there and a constructor argument here.
 dart::SplitsSyncException   # `HostError::Sync`.
 dart::SwapException         # `HostError::Swap { transient }`.
+dart::BillKeyConflict       # `HostError::KeyConflict`, naming the bill.
 dart::UnansweredSignatureQuestion  # `FoldFailure::Unanswered`, one of the two ways a verified fold fails. Dart throws it past a fold that returns.
 rust::HostError          # The enum the four above collapse into.
 rust::Result             # `Result<T> = core::result::Result<T, HostError>`. Dart throws, so there is no alias to name.

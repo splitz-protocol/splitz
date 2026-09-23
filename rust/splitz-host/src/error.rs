@@ -27,6 +27,9 @@ pub enum HostError {
     Relay { message: String, transient: bool },
     /// A bill cannot be synced.
     Sync(String),
+    /// An invite carries a different key for the named bill than the one this
+    /// device already holds.
+    KeyConflict(String),
     /// A swap could not be arranged (§15.7).
     ///
     /// `transient` is true when retrying the same request could succeed — a
@@ -42,6 +45,9 @@ impl fmt::Display for HostError {
             HostError::Sealing(why) => write!(f, "{why}"),
             HostError::Relay { message, .. } => write!(f, "{message}"),
             HostError::Sync(why) => write!(f, "{why}"),
+            HostError::KeyConflict(bill) => {
+                write!(f, "this device already holds a different key for {bill}")
+            }
             HostError::Swap { message, .. } => write!(f, "{message}"),
         }
     }

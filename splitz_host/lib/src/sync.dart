@@ -107,7 +107,21 @@ class SplitsSync {
       }
     }
 
-    final merged = await _store.merge(billId, entries);
+    // Merged only while this device still holds the bill's key. A bill
+    // forgotten while the fetch was in flight is not written back: it would
+    // return with no key, and the next Share would mint a key nobody else
+    // holds.
+    final merged = await _store.merge(
+      billId,
+      entries,
+      onlyIf: () async {
+        final held = await _keys.readBillKey(billId);
+        return held != null && held.isNotEmpty;
+      },
+    );
+    if (!merged.applied) {
+      throw SplitsSyncException('$billId was forgotten while it synced');
+    }
     return SyncResult(
       entries: merged.entries,
       refused: merged.refused,

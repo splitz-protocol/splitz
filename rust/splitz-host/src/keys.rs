@@ -97,13 +97,23 @@ impl<'a> SplitsKeys<'a> {
     /// without this a malformed key is stored, and the failure then surfaces
     /// from inside whatever loop next tries to decrypt, far from the scan that
     /// caused it.
+    ///
+    /// Refuses, with [`HostError::KeyConflict`], a different key for a bill
+    /// this device already holds a key for. Replacing it would seal everything
+    /// this device writes under a key the others do not hold, and open nothing
+    /// they write — and an invite link is text anyone can send. The same key
+    /// again is a no-op.
     pub fn store_bill_key(&self, bill_id: &str, key: &str) -> Result<()> {
         if !is_well_formed_key(key) {
             return Err(HostError::Malformed(format!(
                 "a bill key is {KEY_LENGTH_BYTES} bytes of base64url"
             )));
         }
-        self.store.write(&Self::bill_key_name(bill_id), key)
+        match self.read_bill_key(bill_id)? {
+            Some(held) if !held.is_empty() && held == key => Ok(()),
+            Some(held) if !held.is_empty() => Err(HostError::KeyConflict(bill_id.to_owned())),
+            _ => self.store.write(&Self::bill_key_name(bill_id), key),
+        }
     }
 
     /// Forgets a bill's key, so the keychain does not accumulate secrets for

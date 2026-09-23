@@ -118,11 +118,11 @@ their minimum. Run each command from the repository root; the comment beside
 it says what a pass looks like.
 
 ```
-cd dart && dart test                 # +585: All tests passed!
+cd dart && dart test                 # +586: All tests passed!
                                      #   every one of the 490 shared cases
                                      #   among them
-cd splitz_host && dart test          # +135: All tests passed!
-cd rust && cargo test                # every "test result: ok", 187 in all
+cd splitz_host && dart test          # +142: All tests passed!
+cd rust && cargo test                # every "test result: ok", 191 in all
 cd dart && dart run example/dinner.dart
                                      # one bill, three people, the fewest
                                      #   payments, and one payer's single

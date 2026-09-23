@@ -139,4 +139,17 @@ void main() {
     expect(scan, isA<ScanRefused>());
     expect((scan as ScanRefused).code, 'invite_not_an_invite');
   });
+
+  test('items in a scanned log that are not entries are refused, not dropped',
+      () {
+    // The same text the Rust seam reads in `host.rs`: three non-objects and
+    // no entry. Each is refused as §10.1 refuses it, so the two seams give
+    // one refusal list for one scan.
+    const text = 'splitz1:eyJsb2ciOlsxLCJ4IixudWxsXSwidiI6MX0';
+    final scan = readScan(text) as ScannedBill;
+    expect(scan.entries, isEmpty);
+    final refused = acceptScan(BillLog(FakeHost(me: 'ana')), scan);
+    expect([for (final r in refused) '${r.id}:${r.code}'],
+        [':bill_type_error', ':bill_type_error', ':bill_type_error']);
+  });
 }

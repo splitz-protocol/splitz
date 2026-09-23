@@ -959,3 +959,24 @@ fn one_transaction_paying_two_people_is_two_records_each_confirmable() {
     assert_eq!(balances.get("cat"), Some(&3000));
     assert_eq!(balances.get("ana"), Some(&-3000));
 }
+
+#[test]
+fn items_in_a_scanned_log_that_are_not_entries_are_refused_not_dropped() {
+    // The same text the Dart seam reads in `sharing_test.dart`: three
+    // non-objects and no entry. Each is refused as §10.1 refuses it.
+    let text = "splitz1:eyJsb2ciOlsxLCJ4IixudWxsXSwidiI6MX0";
+    let Scanned::Bill(scan) = read_scan(text) else {
+        panic!("a payload");
+    };
+    let ana = FakeHost::new("ana");
+    let mut log = BillLog::new(&ana);
+    let refused = accept_scan(&mut log, scan).unwrap();
+    let rows: Vec<String> = refused
+        .iter()
+        .map(|r| format!("{}:{}", r.id, r.code))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![":bill_type_error", ":bill_type_error", ":bill_type_error"]
+    );
+}
