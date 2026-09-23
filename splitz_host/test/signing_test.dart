@@ -97,7 +97,12 @@ void main() {
       ),
     );
 
-    final folded = await foldVerified(wallet, entries, signer: signer);
+    final folded = await foldVerified(
+      wallet,
+      entries,
+      billId: billIdOf(entries),
+      signer: signer,
+    );
     expect(folded.setAside, isEmpty);
     expect(folded.identities.bound['ana'], anaKey);
     expect(folded.identities.bound['ben'], benKey);
@@ -140,7 +145,12 @@ void main() {
     // create opens nothing — so writing down somebody else's key does not get
     // a bill off the ground, it stops one existing.
     await expectLater(
-      () => foldVerified(wallet, entries, signer: signer),
+      () => foldVerified(
+        wallet,
+        entries,
+        billId: billIdOf(entries),
+        signer: signer,
+      ),
       throwsA(
         isA<protocol.SplitError>().having(
           (e) => e.code,
@@ -153,7 +163,11 @@ void main() {
     // And the same log folds fine with no verifier: §10.7 then binds nothing
     // rather than refusing, which is the honest answer for a device that
     // cannot check a signature.
-    final unchecked = foldUnverified(wallet, entries);
+    final unchecked = foldUnverified(
+      wallet,
+      entries,
+      billId: billIdOf(entries),
+    );
     expect(unchecked.bill.participants.single.id, 'ana');
     expect(unchecked.identities.bound, isEmpty);
   });
@@ -227,7 +241,12 @@ void main() {
       ),
     );
 
-    final folded = await foldVerified(wallet, entries, signer: signer);
+    final folded = await foldVerified(
+      wallet,
+      entries,
+      billId: billIdOf(entries),
+      signer: signer,
+    );
     expect(folded.identities.contested, contains('ben'));
     expect(
       folded.identities.bound.containsKey('ben'),
@@ -328,7 +347,12 @@ void main() {
     // Through the path a caller uses it surfaces as the verifier's fault and
     // not the log's. `log_no_create` would name the wrong thing.
     await expectLater(
-      () => foldVerified(wallet, [create], signer: _PreparesNothing()),
+      () => foldVerified(
+        wallet,
+        [create],
+        billId: create['id'] as String,
+        signer: _PreparesNothing(),
+      ),
       throwsA(isA<UnansweredSignatureQuestion>()),
     );
   });

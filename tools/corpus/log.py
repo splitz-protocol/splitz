@@ -7,7 +7,7 @@ import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
                    seal_log, merge, order, fold, balances,
-                   canonical_json, b64url, Refused)
+                   canonical_json, b64url, Refused, stand_in)
 
 def AT(m):
     return f"2026-10-28T19:{m:02d}:00.000Z"
@@ -513,13 +513,13 @@ FOLD_CASES = [
     # that does not gets no binding and no contest, which is the honest answer
     # rather than a claim that none exists.
     ("a_verified_create_binds_the_creator",
-     [C, J_ANA, J_BEN], C["id"], [0]),
+     [C, J_ANA, J_BEN], C["id"], [0, 1]),
     ("a_create_whose_signature_fails_opens_no_bill",
      [C, J_ANA, J_BEN], C["id"], []),
     ("a_self_claim_that_verifies_binds_a_key",
      [C, J_ANA, dict(J_BEN, participant={"id": "ben", "name": "Ben",
                                          "identityKey": KEY_B})],
-     C["id"], [0, 2]),
+     C["id"], [0, 1, 2]),
     ("a_rival_claim_leaves_the_id_contested",
      [C, J_ANA,
       dict(J_BEN, participant={"id": "ben", "name": "Ben",
@@ -527,7 +527,7 @@ FOLD_CASES = [
       {"v": 1, "id": "jr", "author": "ben", "kind": "joinBill", "at": AT(7),
        "participant": {"id": "ben", "name": "Ben",
                        "identityKey": KEY_RIVAL}}],
-     C["id"], [0, 2, 3]),
+     C["id"], [0, 1, 2, 3]),
     ("no_verifier_decides_nothing",
      [C, J_ANA, dict(J_BEN, participant={"id": "ben", "name": "Ben",
                                          "identityKey": KEY_B})], C["id"]),
@@ -566,6 +566,10 @@ def at_depth(total):
 
 ENTRY_CASES = [
     ("a_create_entry_derives_its_id", C),
+    # §10.1. A signature is a string or absent: `null` would sort above every
+    # string and win every merge it entered.
+    ("a_signature_that_is_not_a_string_is_refused", dict(J_ANA, sig=None)),
+    ("a_numeric_signature_is_refused", dict(J_ANA, sig=7)),
     # §10.1's depth bound, at the boundary and one past it. A case nested far
     # past a JSON reader's own recursion limit cannot live here: the file
     # would fail to parse and take the whole corpus down rather than test one
@@ -625,6 +629,78 @@ MERGE_CASES_EXTRA = [
 ]
 
 
+# §10.2 and §10.3. Two signed copies of one entry are both kept, and a fold
+# that verifies applies one whose signature checks against the author's key.
+SIG_A = "A" * 86
+SIG_Z = "z" * 86
+J_BEN_KEYED = dict(J_BEN, participant={"id": "ben", "name": "Ben",
+                                       "payTo": ADDRESSES[1],
+                                       "identityKey": KEY_B})
+CONFIRM_AS_ANA = {"v": 1, "id": "c1", "author": "ana",
+                  "kind": "confirmPayment", "at": AT(5),
+                  "confirmation": {"paymentId": "y1",
+                                   "method": "recipientConfirmed"}}
+
+FOLD_CASES += [
+    ("a_create_whose_signature_was_swapped_still_opens",
+     [dict(C, sig=SIG_A), dict(C, sig=SIG_Z), J_ANA, J_BEN],
+     C["id"], [("copy", 0), 2]),
+    ("a_create_with_no_copy_that_verifies_opens_no_bill",
+     [dict(C, sig=SIG_A), dict(C, sig=SIG_Z), J_ANA, J_BEN],
+     C["id"], [2]),
+    ("unverified_the_copy_that_sorts_higher_applies",
+     [dict(C, sig=SIG_A), dict(C, sig=SIG_Z), J_ANA, J_BEN], C["id"]),
+    ("an_entry_authored_as_the_bound_creator_that_does_not_verify_is_set_aside",
+     [C, J_ANA, J_BEN, E1, P1, CONFIRM_AS_ANA], C["id"], [0, 1, 3]),
+    ("and_one_that_verifies_applies",
+     [C, J_ANA, J_BEN, E1, P1, CONFIRM_AS_ANA], C["id"], [0, 1, 3, 5]),
+    ("an_unsigned_join_written_as_a_bound_participant_is_set_aside",
+     [C, J_ANA, J_BEN_KEYED, E1,
+      {"v": 1, "id": "jf", "author": "ben", "kind": "joinBill", "at": AT(8),
+       "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[2]}}],
+     C["id"], [0, 1, 2, 3]),
+    ("a_join_for_a_bound_creator_by_anyone_else_is_set_aside",
+     [C, J_BEN,
+      {"v": 1, "id": "ja", "author": "ben", "kind": "joinBill", "at": AT(3),
+       "participant": {"id": "ana", "name": "Ana", "payTo": ADDRESSES[2]}}],
+     C["id"], [0]),
+    ("an_amendment_written_as_a_bound_participant_is_set_aside",
+     [C, J_ANA, J_BEN_KEYED,
+      {"v": 1, "id": "am", "author": "ben", "kind": "amendEntry",
+       "at": AT(8), "targetId": "j2",
+       "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[2],
+                       "identityKey": KEY_B}}],
+     C["id"], [0, 1, 2]),
+    ("an_amendment_that_changes_an_address_is_reported",
+     [C, J_ANA, J_BEN,
+      {"v": 1, "id": "am", "author": "ben", "kind": "amendEntry",
+       "at": AT(8), "targetId": "j2",
+       "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[2]}}],
+     C["id"]),
+    ("a_swapped_signature_on_a_claim_does_not_lift_a_contest",
+     [C, J_ANA, dict(J_BEN_KEYED, sig=SIG_A),
+      {"v": 1, "id": "jr", "author": "ben", "kind": "joinBill", "at": AT(7),
+       "participant": {"id": "ben", "name": "Ben",
+                       "identityKey": KEY_RIVAL}},
+      dict(J_BEN_KEYED, sig=SIG_Z)],
+     C["id"], [0, 1, ("copy", 2), 3]),
+
+    # §10.8. What a withdrawal names orders it after what it names, whatever
+    # instant its author wrote.
+    ("an_undo_dated_before_the_withdrawal_it_names_is_in_force",
+     BASE + [void("v1", "ana", "e1", 9), void("v2", "ana", "v1", 8)],
+     C["id"]),
+    ("two_refused_removals_of_one_participant_are_both_reported",
+     BASE + [void("v1", "ben", "j2", 9), void("v2", "ana", "j2", 10)],
+     C["id"]),
+    ("a_join_rewriting_another_record_is_refused_before_it_is_decoded",
+     BASE + [{"v": 1, "id": "jm", "author": "ana", "kind": "joinBill",
+              "at": AT(9),
+              "participant": {"id": "ben", "name": "Ben", "payTo": 7}}],
+     C["id"]),
+]
+
+
 def forgery_of(entry, **changed):
     """A re-pushed copy of `entry` with members changed, keeping its id.
 
@@ -639,11 +715,15 @@ MERGE_CASES = [
     ("a_signed_copy_beats_an_unsigned_one", [J_ANA], [dict(J_ANA, sig=SIG)]),
     ("and_in_the_other_direction", [dict(J_ANA, sig=SIG)], [J_ANA]),
     # §9.5 derives an id from the entry with `id`, `sig` and `v` removed, so
-    # two copies that rule 2 cannot separate differ in exactly those members.
+    # two copies under one id differ in exactly those members. Two different
+    # signatures are both kept: nothing in the pair says which is genuine.
     # Copies differing anywhere else are different entries with different ids
     # and never meet under one id at all.
-    ("two_signed_copies_resolve_by_canonical_order",
+    ("two_signed_copies_are_both_kept",
      [dict(J_ANA, sig="A" * 86)], [dict(J_ANA, sig="B" * 86)]),
+    ("a_copy_repeated_on_both_sides_is_kept_once",
+     [dict(J_ANA, sig="A" * 86)], [dict(J_ANA, sig="A" * 86),
+                                   dict(J_ANA, sig="B" * 86)]),
     ("disjoint_logs_union", [J_ANA], [J_BEN]),
 
     # Removing a payload member makes an entry sort higher under §9.3, so
@@ -709,10 +789,16 @@ def main():
             case["billId"] = bill_id
         verify = None
         if verifies is not None:
-            ok = {entries[i]["id"] for i in verifies}
+            # An index verifies every copy of that entry; ("copy", i) only the
+            # copy at i, by its signature.
+            ok = set()
+            for v in verifies:
+                if isinstance(v, tuple):
+                    ok.add(f"{entries[v[1]]['id']}|{entries[v[1]]['sig']}")
+                else:
+                    ok.add(entries[v]["id"])
             case["verifies"] = sorted(ok)
-            def verify(e, key, ok=ok):
-                return e["id"] in ok
+            verify = stand_in(ok)
         try:
             r = fold(entries, bill_id, verify)
             r["balances"] = balances(r["bill"])

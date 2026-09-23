@@ -251,8 +251,13 @@ fun main() {
     // id, in either direction, any number of times.
     val log = mergeEntries(anaLog, benLog).entries
 
+    // The bill these entries belong to, read back from the entry that opened
+    // it. Every fold names it, so a create for another bill pushed into the
+    // channel cannot make this one unopenable.
+    val billId = Regex("\"id\":\"([^\"]+)\"").find(anaLog.first())!!.groupValues[1]
+
     val benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6)
-    val folded = foldEntries(benFacts, log)
+    val folded = foldEntries(benFacts, billId, log)
     println("on the bill: " + folded.bill.participants.joinToString { it.id })
     // Render these. An entry the fold set aside is one a person cannot see
     // otherwise, and its §12 code is what a wallet turns into a sentence.
@@ -261,7 +266,7 @@ fun main() {
     // Null when the bill carries no rate: an unpriced bill is an ordinary
     // bill, not a refusal. The second argument names the contested
     // participants the payer has been shown and chosen to pay anyway (§10.7).
-    val owed = obligationOf(benFacts, log, listOf())
+    val owed = obligationOf(benFacts, billId, log, listOf())
         ?: error("a bill with a rate owes something")
 
     val settlement = owed.settlements.single()
@@ -413,8 +418,13 @@ void main(List<String> args) {
   // id, in either direction, any number of times.
   final log = mergeEntries(anaLog, benLog).entries;
 
+  // The bill these entries belong to, read back from the entry that opened
+  // it. Every fold names it, so a create for another bill pushed into the
+  // channel cannot make this one unopenable.
+  final billId = (jsonDecode(anaLog.first) as Map)['id'] as String;
+
   final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
-  final folded = foldEntries(benFacts, log);
+  final folded = foldEntries(benFacts, billId, log);
   print('on the bill: ${folded.bill.participants.map((p) => p.id).join(', ')}');
   // Render these. An entry the fold set aside is one a person cannot see
   // otherwise, and its §12 code is what a wallet turns into a sentence.
@@ -423,7 +433,7 @@ void main(List<String> args) {
   // Null when the bill carries no rate: an unpriced bill is an ordinary bill,
   // not a refusal. The third argument names the contested participants the
   // payer has been shown and chosen to pay anyway (§10.7).
-  final owed = obligationOf(benFacts, log, const []);
+  final owed = obligationOf(benFacts, billId, log, const []);
   if (owed == null) throw StateError('a bill with a rate owes something');
 
   final settlement = owed.settlements.single;
@@ -505,8 +515,13 @@ const benLog = [
 // in either direction, any number of times.
 const log = splitz.merge_entries(anaLog, benLog).entries;
 
+// The bill these entries belong to, read back from the entry that opened it.
+// Every fold names it, so a create for another bill pushed into the channel
+// cannot make this one unopenable.
+const billId = JSON.parse(anaLog[0]).id;
+
 const benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6);
-const folded = splitz.fold_entries(benFacts, log);
+const folded = splitz.fold_entries(benFacts, billId, log);
 console.log("on the bill: " + folded.bill.participants.map((p) => p.id).join(", "));
 // Render these. An entry the fold set aside is one a person cannot see
 // otherwise, and its §12 code is what a wallet turns into a sentence.
@@ -515,7 +530,7 @@ console.log("set aside: " + JSON.stringify(folded.set_aside));
 // Undefined when the bill carries no rate: an unpriced bill is an ordinary
 // bill, not a refusal. The third argument names the contested participants the
 // payer has been shown and chosen to pay anyway (§10.7).
-const owed = splitz.obligation_of(benFacts, log, []);
+const owed = splitz.obligation_of(benFacts, billId, log, []);
 if (owed === undefined) throw new Error("a bill with a rate owes something");
 
 const settlement = owed.settlements[0];

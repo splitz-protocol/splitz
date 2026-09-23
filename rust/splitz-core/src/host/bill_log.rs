@@ -49,6 +49,7 @@ pub struct FoldedBill {
 pub struct BillLog<'h> {
     host: &'h dyn BillHost,
     entries: Vec<Value>,
+    bill_id: Option<String>,
 }
 
 impl<'h> BillLog<'h> {
@@ -56,11 +57,29 @@ impl<'h> BillLog<'h> {
         Self {
             host,
             entries: Vec::new(),
+            bill_id: None,
         }
     }
 
     pub fn with_entries(host: &'h dyn BillHost, entries: Vec<Value>) -> Self {
-        Self { host, entries }
+        Self {
+            host,
+            entries,
+            bill_id: None,
+        }
+    }
+
+    /// Names the bill these entries belong to.
+    ///
+    /// A device that holds a bill always knows it, and a fold that is not
+    /// told reads whatever single create the log holds — so anyone holding
+    /// the invite who pushes a valid create for another bill into the channel
+    /// makes this one unopenable (§10.3's `ambiguous_create`). It is omitted
+    /// only by a caller about to learn the id from the log, such as one
+    /// opening a bill it just created.
+    pub fn for_bill(mut self, bill_id: impl Into<String>) -> Self {
+        self.bill_id = Some(bill_id.into());
+        self
     }
 
     /// The entries this device holds, in the order §10.2 puts them.
@@ -87,8 +106,10 @@ impl<'h> BillLog<'h> {
     /// never raised, so one bad entry does not take the bill with it.
     pub fn fold(&self) -> Result<FoldedBill> {
         let result = match self.host.verifier() {
-            None => fold_log(&self.entries, None)?,
-            Some(verify) => fold_log_verified(&self.entries, None, Some(verify))?,
+            None => fold_log(&self.entries, self.bill_id.as_deref())?,
+            Some(verify) => {
+                fold_log_verified(&self.entries, self.bill_id.as_deref(), Some(verify))?
+            }
         };
         Ok(FoldedBill {
             bill: decode_bill(&result.bill)?,

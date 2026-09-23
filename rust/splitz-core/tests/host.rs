@@ -273,6 +273,76 @@ fn dinner(ana: &FakeHost, ben: &FakeHost) -> Vec<Value> {
 }
 
 #[test]
+fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
+    // Everyone signs, so everyone is bound, and §10.3 then applies an entry
+    // authored by any of them only from a copy that verifies.
+    let bill = |ben_signs: bool| {
+        let ana = signing_host("ana", &fake_key("ana"), Some("u1ana"));
+        let signer = signing_host("ben", &fake_key("ben"), Some("u1ben"));
+        let mut ben = signing_host("ben", &fake_key("ben"), Some("u1ben"));
+        if !ben_signs {
+            ben.sign = None;
+        }
+        let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+        let bill_id = create["id"].as_str().unwrap().to_owned();
+        let mut entries = vec![sign_entry(&ana, &create).unwrap()];
+        ana.tick();
+        let join_ana = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
+        entries.push(sign_entry(&ana, &join_ana).unwrap());
+        signer.tick();
+        signer.tick();
+        let join_ben = join_bill(
+            &signer,
+            Some("Ben"),
+            Some("u1ben"),
+            Some(&fake_key("ben")),
+            None,
+        )
+        .unwrap();
+        entries.push(sign_entry(&signer, &join_ben).unwrap());
+        ana.tick();
+        let expense =
+            add_expense(&ana, "x1", "ana", 9000, equal_split(&["ana", "ben"]), None).unwrap();
+        entries.push(sign_entry(&ana, &expense).unwrap());
+        ana.tick();
+        let rate = set_rate(&ana, "EUR", 51234, None).unwrap();
+        entries.push(sign_entry(&ana, &rate).unwrap());
+        for _ in 0..5 {
+            ben.tick();
+        }
+        (ben, bill_id, entries)
+    };
+
+    let (ben, bill_id, entries) = bill(true);
+    let mut log = BillLog::with_entries(&ben, entries).for_bill(bill_id);
+    let folded = log.fold().unwrap();
+    assert!(folded.identities.bound.contains_key("ana"));
+    assert!(folded.identities.bound.contains_key("ben"));
+    let owed = obligation_for(&ben, &folded, &BTreeSet::new())
+        .unwrap()
+        .unwrap();
+    let settled = settle(&ben, &mut log, &owed).unwrap();
+    assert!(settled.records[0]["sig"].as_str().is_some());
+    let after = log.fold().unwrap();
+    assert!(after.set_aside.is_empty(), "{:?}", after.set_aside);
+    assert_eq!(after.bill.payments.len(), 1);
+
+    // The rule the signature satisfies: the same record unsigned is not the
+    // bound payer speaking, and a verifying fold sets it aside.
+    let (ben, bill_id, entries) = bill(false);
+    let mut log = BillLog::with_entries(&ben, entries).for_bill(bill_id);
+    let owed = obligation_for(&ben, &log.fold().unwrap(), &BTreeSet::new())
+        .unwrap()
+        .unwrap();
+    let unsigned = settle(&ben, &mut log, &owed).unwrap();
+    assert!(unsigned.records[0].get("sig").is_none());
+    let refused = log.fold().unwrap();
+    assert!(refused.bill.payments.is_empty());
+    assert_eq!(refused.set_aside.len(), 1);
+    assert_eq!(refused.set_aside[0].code, "unauthorized_entry");
+}
+
+#[test]
 fn a_whole_bill_from_nothing_to_a_payment_request() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let ben = FakeHost::paid_at("ben", "u1ben");

@@ -4,7 +4,7 @@ use serde_json::Value;
 use splitz_core::host::{BillLog, FoldedBill, SignEntry};
 use splitz_core::SplitError;
 
-use crate::signing::Signer;
+use crate::signing::{Signer, SEED_BYTES};
 use crate::wallet::SplitsWallet;
 use crate::wallet_bill_host::WalletBillHost;
 
@@ -20,6 +20,9 @@ pub enum FoldFailure {
     /// reported are wrong in a direction that looks exactly like "no
     /// signature" — the quiet failure this two-pass exists to avoid.
     Unanswered(Vec<String>),
+    /// An input this layer will not accept, such as a signing seed of the
+    /// wrong length. Returned before anything is folded.
+    Malformed(String),
 }
 
 impl std::fmt::Display for FoldFailure {
@@ -31,6 +34,7 @@ impl std::fmt::Display for FoldFailure {
                 "the fold asked about {} (entry, key) pair(s) that were never verified",
                 pairs.len()
             ),
+            FoldFailure::Malformed(why) => write!(f, "{why}"),
         }
     }
 }
@@ -46,11 +50,28 @@ impl std::error::Error for FoldFailure {}
 ///
 /// Pass `seed` when this device should sign what it writes; it changes nothing
 /// about the fold, which only ever verifies.
+///
+/// `bill_id` names the bill the entries belong to. A fold that is not told
+/// reads whatever single create the log holds, so one valid create for
+/// another bill pushed into the channel would make this bill unopenable
+/// (§10.3's `ambiguous_create`).
 pub fn fold_verified(
     wallet: &dyn SplitsWallet,
+    bill_id: &str,
     entries: &[Value],
     seed: Option<&[u8]>,
 ) -> Result<FoldedBill, FoldFailure> {
+    // Checked here, where the seed enters: the signing closure below cannot
+    // return an error, so a seed of the wrong length reaching it would fail
+    // inside the fold.
+    if let Some(seed) = seed {
+        if seed.len() != SEED_BYTES {
+            return Err(FoldFailure::Malformed(format!(
+                "an identity seed is {SEED_BYTES} bytes, not {}",
+                seed.len()
+            )));
+        }
+    }
     let signer = Signer;
     let verified = signer.prepare(entries.iter());
 
@@ -62,7 +83,7 @@ pub fn fold_verified(
             sign_closure = move |message: &[u8]| {
                 signer
                     .sign(&owned, message)
-                    .expect("an identity seed is 32 bytes")
+                    .expect("the seed's length was checked on entry")
             };
             Some(&sign_closure)
         }
@@ -79,7 +100,9 @@ pub fn fold_verified(
     // result: §10.3 drops a create whose signature does not verify, so a
     // question nobody answered turns into `log_no_create` — a refusal that
     // names the log and says nothing about the verifier that caused it.
-    let folded = BillLog::with_entries(&host, entries.to_vec()).fold();
+    let folded = BillLog::with_entries(&host, entries.to_vec())
+        .for_bill(bill_id)
+        .fold();
     let unanswered = verified.unanswered();
     if !unanswered.is_empty() {
         return Err(FoldFailure::Unanswered(unanswered));
@@ -94,8 +117,11 @@ pub fn fold_verified(
 /// is contested — and is the honest one here.
 pub fn fold_unverified(
     wallet: &dyn SplitsWallet,
+    bill_id: &str,
     entries: &[Value],
 ) -> Result<FoldedBill, SplitError> {
     let host = WalletBillHost::new(wallet);
-    BillLog::with_entries(&host, entries.to_vec()).fold()
+    BillLog::with_entries(&host, entries.to_vec())
+        .for_bill(bill_id)
+        .fold()
 }

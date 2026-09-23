@@ -33,9 +33,15 @@ class UnansweredSignatureQuestion implements Exception {
 ///
 /// Pass `seed` when this device should sign what it writes; it changes nothing
 /// about the fold, which only ever verifies.
+///
+/// [billId] names the bill the entries belong to. It is required: a fold that
+/// is not told reads whatever single create the log holds, so one valid
+/// create for another bill pushed into the channel would make this bill
+/// unopenable (§10.3's `ambiguous_create`).
 Future<splitz.FoldedBill> foldVerified(
   SplitsWallet wallet,
   List<Map<String, dynamic>> entries, {
+  required String billId,
   SplitsSigner? signer,
   List<int>? seed,
 }) async {
@@ -56,7 +62,7 @@ Future<splitz.FoldedBill> foldVerified(
   splitz.FoldedBill? folded;
   Object? failure;
   try {
-    folded = splitz.BillLog(host, entries: entries).fold();
+    folded = splitz.BillLog(host, entries: entries, billId: billId).fold();
   } on Object catch (e) {
     failure = e;
   }
@@ -71,8 +77,14 @@ Future<splitz.FoldedBill> foldVerified(
 ///
 /// For a device that holds no identity yet. §10.7 then binds no key and reports
 /// no contest, which is a different claim from reporting that nothing is
-/// contested — and is the honest one here.
+/// contested — and is the honest one here. [billId] is required for the reason
+/// [foldVerified] gives.
 splitz.FoldedBill foldUnverified(
   SplitsWallet wallet,
-  List<Map<String, dynamic>> entries,
-) => splitz.BillLog(WalletBillHost(wallet), entries: entries).fold();
+  List<Map<String, dynamic>> entries, {
+  required String billId,
+}) => splitz.BillLog(
+  WalletBillHost(wallet),
+  entries: entries,
+  billId: billId,
+).fold();

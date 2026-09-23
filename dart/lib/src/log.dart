@@ -173,6 +173,13 @@ Map<String, dynamic> checkEntry(Object? raw) {
     raise(SplitCode.billUnknownEntryKind, 'No such entry kind: $kind');
   }
 
+  // §10.1. A signature is a string or absent. Anything else is a third state
+  // §10.2 would have to rank, and `null` sorts above every string, so it would
+  // win every merge it entered.
+  if (entry.containsKey('sig') && entry['sig'] is! String) {
+    raise(SplitCode.billTypeError, 'A signature is a string');
+  }
+
   final carried = [
     for (final p in _payloadNames)
       if (entry.containsKey(p)) p
@@ -287,22 +294,26 @@ List<Map<String, dynamic>> orderEntries(List<Map<String, dynamic>> entries) {
   return sorted;
 }
 
-/// Merges logs by set union, keyed by entry id (§10.2).
+/// Merges logs by set union, keyed by entry id and signature (§10.2).
 ///
 /// §10.1 is applied at ingress: an entry that does not carry the payload its
 /// kind uses never enters the union.
 ///
-/// A copy carrying a signature beats one that does not; otherwise the entry
-/// whose canonical encoding sorts higher wins. Both parts are functions of the
-/// two entries alone, which is what makes union commutative: resolving by
-/// arrival makes the merged bill depend on the order two devices synced in.
+/// A signed copy beats an unsigned one. Two signed copies with different
+/// signatures are both kept: §9.5's digest does not cover `sig`, so nothing in
+/// the pair says which is the author's, and resolving it by order would hand
+/// the id to whichever signature sorts higher. The fold decides with the key
+/// (§10.3). Copies sharing a signature, or all unsigned, resolve to the one
+/// whose canonical encoding sorts higher. Every rule is a function of the
+/// copies alone, which is what makes union commutative.
 MergeResult mergeLogs(List<List<Map<String, dynamic>>> logs) {
-  final byId = <String, Map<String, dynamic>>{};
+  // Id, then signature (null when unsigned), to the copy held.
+  final copies = <String, Map<String?, Map<String, dynamic>>>{};
   final refused = <SetAside>[];
   for (final log in logs) {
     for (final entry in log) {
       // §10.1 at ingress. Removing a payload member makes an entry sort
-      // higher under §9.3, so without this the stripped copy wins rule 2 and
+      // higher under §9.3, so without this the stripped copy wins rule 3 and
       // displaces the genuine entry on every device.
       try {
         checkEntry(entry);
@@ -313,28 +324,28 @@ MergeResult mergeLogs(List<List<Map<String, dynamic>>> logs) {
         refused.add(SetAside(reported is String ? reported : '', e.code));
         continue;
       }
-      final id = entry['id'] as String;
-      final held = byId[id];
-      if (held == null) {
-        byId[id] = entry;
-        continue;
-      }
-      final heldSigned = held.containsKey('sig');
-      final entrySigned = entry.containsKey('sig');
-      if (heldSigned != entrySigned) {
-        byId[id] = heldSigned ? held : entry;
-      } else {
-        byId[id] = compareUtf8(canonicalJson(held), canonicalJson(entry)) >= 0
-            ? held
-            : entry;
+      final held = copies.putIfAbsent(entry['id'] as String, () => {});
+      final sig = entry['sig'] as String?;
+      final other = held[sig];
+      if (other == null ||
+          compareUtf8(canonicalJson(entry), canonicalJson(other)) > 0) {
+        held[sig] = entry;
       }
     }
+  }
+  final out = <Map<String, dynamic>>[];
+  for (final held in copies.values) {
+    final signed = [
+      for (final e in held.entries)
+        if (e.key != null) e.value
+    ];
+    out.addAll(signed.isNotEmpty ? signed : held.values);
   }
   refused.sort((a, b) {
     final byId = compareUtf8(a.id, b.id);
     return byId != 0 ? byId : compareUtf8(a.code, b.code);
   });
-  return MergeResult(orderEntries(byId.values.toList()), refused);
+  return MergeResult(orderEntries(out), refused);
 }
 
 /// A merged log and the entries §10.1 refused at ingress.
@@ -401,6 +412,11 @@ class FoldResult {
   final Identities identities;
 }
 
+/// The copy whose canonical encoding sorts highest (§10.2 rule 3).
+Map<String, dynamic> _highest(List<Map<String, dynamic>> copies) =>
+    copies.reduce(
+        (a, b) => compareUtf8(canonicalJson(a), canonicalJson(b)) >= 0 ? a : b);
+
 /// Materialises a bill from [rawEntries] (§10.3).
 ///
 /// An entry that cannot be applied is set aside and reported, never raised as
@@ -427,13 +443,12 @@ FoldResult foldLog(List<Object?> rawEntries,
       refusedAtIngress.add(SetAside(id is String ? id : '', e.code));
     }
   }
-  // §10.3. One id names one entry in the fold as in the merge: a re-sent
-  // entry would otherwise be applied twice, and one expense sent twice
-  // doubles what everybody owes.
-  final entries = orderEntries(mergeLogs([admitted]).merged);
+  // §10.3. Every copy the merge kept, several under one id when their
+  // signatures differ.
+  final copies = mergeLogs([admitted]).merged;
 
   var creates = [
-    for (final e in entries)
+    for (final e in copies)
       if (e['kind'] == 'createBill') e
   ];
   if (billId != null) {
@@ -445,31 +460,70 @@ FoldResult foldLog(List<Object?> rawEntries,
   if (verify != null) {
     // §10.1. A host that verifies MUST check a create entry's signature
     // against the creatorKey that same entry states — the one key on a bill
-    // that needs no prior acquaintance, because §9.4 binds it to the id.
-    final unverified = [
+    // that needs no prior acquaintance, because §9.4 binds it to the id. A
+    // create is refused only when no copy of it verifies.
+    final kept = [
       for (final e in creates)
-        if (!verify(e, e['creatorKey'] as String? ?? '')) e
+        if (verify(e, e['creatorKey'] as String? ?? '')) e
     ];
-    for (final e in unverified) {
-      refusedAtIngress
-          .add(SetAside(e['id'] as String, SplitCode.unauthorizedEntry));
+    final keptIds = {for (final e in kept) e['id'] as String};
+    for (final id in sortedUtf8({
+      for (final e in creates)
+        if (!keptIds.contains(e['id'])) e['id'] as String
+    })) {
+      refusedAtIngress.add(SetAside(id, SplitCode.unauthorizedEntry));
     }
-    creates = [
-      for (final e in creates)
-        if (!unverified.contains(e)) e
-    ];
+    creates = kept;
   }
-  if (creates.isEmpty) {
+  final createIds = {for (final e in creates) e['id'] as String};
+  if (createIds.isEmpty) {
     raise(SplitCode.logNoCreate, 'A log holding no create entry opens no bill');
   }
-  if (creates.length > 1) {
+  if (createIds.length > 1) {
     // Anyone holding the invite can push in a create entry of their own, which
     // §9.4 admits because it is valid for a different bill.
     raise(SplitCode.ambiguousCreate,
-        'A log holds ${creates.length} create entries and names no bill');
+        'A log holds ${createIds.length} create entries and names no bill');
   }
-  final create = creates.first;
+  final create = _highest(creates);
   final creator = create['author'] as String;
+
+  // §10.7, over every copy: a withdrawal does not undo a claim, and a copy
+  // nobody applies is still evidence that was made. Without a verifier
+  // nothing can be decided, and nothing is claimed.
+  final identities = verify == null
+      ? const Identities({}, {})
+      : resolveIdentities(copies, create, verify);
+
+  // §10.3. One id names one entry: a re-sent entry would otherwise be applied
+  // twice, and one expense sent twice doubles what everybody owes. An author
+  // with a key is spoken for only by a copy that verifies against it.
+  final groups = <String, List<Map<String, dynamic>>>{};
+  for (final e in copies) {
+    groups.putIfAbsent(e['id'] as String, () => []).add(e);
+  }
+  final chosen = <Map<String, dynamic>>[];
+  for (final MapEntry(key: id, value: group) in groups.entries) {
+    final first = group.first;
+    final String? key = verify == null
+        ? null
+        : first['kind'] == 'createBill'
+            ? first['creatorKey'] as String?
+            : identities.bound[first['author']];
+    var candidates = group;
+    if (key != null) {
+      candidates = [
+        for (final e in group)
+          if (verify!(e, key)) e
+      ];
+      if (candidates.isEmpty) {
+        refusedAtIngress.add(SetAside(id, SplitCode.unauthorizedEntry));
+        continue;
+      }
+    }
+    chosen.add(_highest(candidates));
+  }
+  final entries = orderEntries(chosen);
 
   final currency = create['currency'];
   checkCurrency(currency);
@@ -562,17 +616,40 @@ FoldResult foldLog(List<Object?> rawEntries,
     authorised[e['id'] as String] = true;
   }
 
-  // A withdrawal is in force unless a later authorised withdrawal, itself in
-  // force, names it. Resolved from the latest backwards, so by the time one is
-  // considered every withdrawal that could name it has been decided.
+  // A withdrawal is in force unless an authorised withdrawal naming it is
+  // itself in force. `at` plays no part: an id is the digest of its entry, so
+  // a withdrawal can only name one that existed when it was written, and the
+  // chains are acyclic. Resolved by what names what, from the entries nothing
+  // names inwards.
+  final naming = <String, List<Map<String, dynamic>>>{};
+  for (final e in voids) {
+    naming.putIfAbsent(e['targetId'] as String, () => []).add(e);
+  }
   final inForce = <String, bool>{};
-  for (final e in voids.reversed) {
-    if (!(authorised[e['id']] ?? false)) {
-      inForce[e['id'] as String] = false;
-      continue;
+  for (final start in voids) {
+    final stack = <(Map<String, dynamic>, bool)>[(start, false)];
+    while (stack.isNotEmpty) {
+      final (current, expanded) = stack.removeLast();
+      final id = current['id'] as String;
+      if (inForce.containsKey(id)) continue;
+      if (!(authorised[id] ?? false)) {
+        inForce[id] = false;
+        continue;
+      }
+      final namers = naming[id] ?? const [];
+      final pending = [
+        for (final w in namers)
+          if (!inForce.containsKey(w['id'])) w
+      ];
+      if (pending.isNotEmpty && !expanded) {
+        stack.add((current, true));
+        for (final w in pending) {
+          stack.add((w, false));
+        }
+        continue;
+      }
+      inForce[id] = !namers.any((w) => inForce[w['id']]!);
     }
-    inForce[e['id'] as String] = !voids.any((other) =>
-        other['targetId'] == e['id'] && (inForce[other['id']] ?? false));
   }
 
   for (final e in voids) {
@@ -589,10 +666,18 @@ FoldResult foldLog(List<Object?> rawEntries,
   // Taking somebody off the bill. This runs after every other withdrawal is
   // resolved and before the joins are applied: a check made once the person is
   // gone is a check made too late.
-  for (final e in entries) {
-    if (e['kind'] != 'voidEntry' || !voided.contains(e['targetId'])) continue;
+  // Every removal is decided, and each refused one reported: two removals of
+  // one participant are two acts, and deciding them one at a time would let
+  // the first refusal hide the second.
+  final removals = [
+    for (final e in entries)
+      if (e['kind'] == 'voidEntry' &&
+          voided.contains(e['targetId']) &&
+          byId[e['targetId']]!['kind'] == 'joinBill')
+        e
+  ];
+  for (final e in removals) {
     final target = byId[e['targetId']]!;
-    if (target['kind'] != 'joinBill') continue;
     final gone = _mapOf(target['participant'])['id'];
     var named = false;
     for (final other in entries) {
@@ -666,6 +751,19 @@ FoldResult foldLog(List<Object?> rawEntries,
       aside(e, SplitCode.billMissingEntryPayload);
       continue;
     }
+    if (identities.bound.containsKey(id) && e['author'] != id) {
+      // §10.7. A bound participant's record is theirs to create as well as to
+      // change, so a payout cannot be redirected to somebody who never
+      // joined by an entry of their own.
+      aside(e, SplitCode.unauthorizedEntry);
+      continue;
+    }
+    if (participants.containsKey(id) && e['author'] != id) {
+      // Without this, one join naming another participant's id and carrying
+      // your own address redirects every later settlement to that person.
+      aside(e, SplitCode.unauthorizedEntry);
+      continue;
+    }
     // The decoder decides what a participant is, here rather than once the
     // document is assembled: a member it would refuse sets this entry aside
     // (§10.3) instead of making the whole bill undecodable.
@@ -675,16 +773,19 @@ FoldResult foldLog(List<Object?> rawEntries,
       aside(e, err.code);
       continue;
     }
-    if (participants.containsKey(id) && e['author'] != id) {
-      // Without this, one join naming another participant's id and carrying
-      // your own address redirects every later settlement to that person.
-      aside(e, SplitCode.unauthorizedEntry);
-      continue;
-    }
-    if (participants.containsKey(id) &&
-        participants[id]!['payTo'] != p['payTo']) {
-      replaced.add(ReplacedAddress(
-          id, participants[id]!['payTo'] as String?, p['payTo'] as String?));
+    // §10.3 step 4. The address this record replaces: the one held for the
+    // participant, or, for the first record, the one the join was written
+    // with before an amendment changed it.
+    // An address the decoder never read is taken as none, not cast.
+    final Object? held = participants.containsKey(id)
+        ? participants[id]!['payTo']
+        : amendments.containsKey(e['id'])
+            ? _mapOf(e['participant'])['payTo']
+            : p['payTo'];
+    final before = held is String ? held : null;
+    final after = p['payTo'] as String?;
+    if (before != after) {
+      replaced.add(ReplacedAddress(id, before, after));
     }
     participants[id] = p;
   }
@@ -817,12 +918,6 @@ FoldResult foldLog(List<Object?> rawEntries,
     final byId = compareUtf8(a.id, b.id);
     return byId != 0 ? byId : compareUtf8(a.code, b.code);
   });
-
-  // §10.7, over the same entry set the bill was materialised from. Without a
-  // verifier nothing can be decided, and nothing is claimed.
-  final identities = verify == null
-      ? const Identities({}, {})
-      : resolveIdentities(entries, create, verify);
 
   return FoldResult(
     bill: {

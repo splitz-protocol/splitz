@@ -68,7 +68,7 @@ void main() {
       reason: '§10.2 merges by set union, so order cannot separate them',
     );
 
-    final folded = foldUnverified(ana.wallet, back.entries);
+    final folded = foldUnverified(ana.wallet, back.entries, billId: billId);
     expect(folded.bill.participants.map((p) => p.id), ['ana', 'ben']);
     expect(folded.setAside, isEmpty);
   });

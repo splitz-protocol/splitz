@@ -166,9 +166,7 @@ fn authority() {
             .find(|e| e["kind"] == "createBill")
             .expect("a create entry");
         // The curve operation is the host's; the case says what it decided.
-        let r = splitz_core::resolve_identities(&entries, create, |e, _key| {
-            verified.contains(e["id"].as_str().unwrap_or(""))
-        });
+        let r = splitz_core::resolve_identities(&entries, create, |e, _key| stand_in(&verified, e));
         Ok(json!({
             "bound": r.bound,
             "contested": r.contested.iter().cloned().collect::<Vec<_>>(),
@@ -338,9 +336,7 @@ fn log() {
         let r = splitz_core::log::fold_log_verified(
             &entries,
             c["billId"].as_str(),
-            verifies.map(|ok| {
-                move |e: &Value, _k: &str| ok.contains(e["id"].as_str().unwrap_or_default())
-            }),
+            verifies.map(|ok| move |e: &Value, _k: &str| stand_in(&ok, e)),
         )?;
 
         // §9.1: the decoder carries confirmedPayments through, so the
@@ -579,4 +575,18 @@ fn allocation() {
         )?;
         Ok(json!(parts))
     });
+}
+
+/// The vectors' stand-in for the host's curve operation.
+///
+/// An item names an entry id, and every copy of that entry verifies; or an id
+/// and a signature joined by `|`, and only that copy does. The key is not
+/// consulted: a case states which copies verify against the key the fold asks
+/// about.
+fn stand_in(verifies: &std::collections::BTreeSet<String>, e: &Value) -> bool {
+    let id = e["id"].as_str().unwrap_or("");
+    verifies.contains(id)
+        || e["sig"]
+            .as_str()
+            .is_some_and(|sig| verifies.contains(&format!("{id}|{sig}")))
 }

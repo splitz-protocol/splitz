@@ -158,6 +158,16 @@ pub fn check_entry(entry: &Value) -> Result<()> {
         }
     };
 
+    // §10.1. A signature is a string or absent. Anything else is a third state
+    // §10.2 would have to rank, and `null` sorts above every string, so it
+    // would win every merge it entered.
+    if entry.get("sig").is_some_and(|s| !s.is_string()) {
+        return Err(SplitError::new(
+            code::BILL_TYPE_ERROR,
+            "A signature is a string",
+        ));
+    }
+
     // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
     // and every pass below walks it — deriving its id encodes it. A depth
     // nobody bounded is a stack the peer chose.
@@ -352,21 +362,26 @@ pub fn order_entries(entries: &mut [Value]) {
     });
 }
 
-/// Merges logs by set union, keyed by entry id (§10.2).
+/// Merges logs by set union, keyed by entry id and signature (§10.2).
 ///
 /// §10.1 is applied at ingress: an entry that does not carry the payload its
 /// kind uses never enters the union.
 ///
-/// A copy carrying a signature beats one that does not; otherwise the entry
-/// whose canonical encoding sorts higher wins. Both parts are functions of the
-/// two entries alone, which is what makes union commutative.
+/// A signed copy beats an unsigned one. Two signed copies with different
+/// signatures are both kept: §9.5's digest does not cover `sig`, so nothing in
+/// the pair says which is the author's, and resolving it by order would hand
+/// the id to whichever signature sorts higher. The fold decides with the key
+/// (§10.3). Copies sharing a signature, or all unsigned, resolve to the one
+/// whose canonical encoding sorts higher. Every rule is a function of the
+/// copies alone, which is what makes union commutative.
 pub fn merge_logs(logs: &[Vec<Value>]) -> Result<MergeResult> {
-    let mut by_id: BTreeMap<String, Value> = BTreeMap::new();
+    // Id, then signature (None when unsigned), to the copy held.
+    let mut copies: BTreeMap<String, BTreeMap<Option<String>, Value>> = BTreeMap::new();
     let mut refused: Vec<SetAside> = Vec::new();
     for log in logs {
         for entry in log {
             // §10.1 at ingress. Removing a payload member makes an entry sort
-            // higher under §9.3, so without this the stripped copy wins rule 2
+            // higher under §9.3, so without this the stripped copy wins rule 3
             // and displaces the genuine entry on every device.
             if let Err(e) = check_entry(entry) {
                 refused.push(SetAside {
@@ -375,32 +390,32 @@ pub fn merge_logs(logs: &[Vec<Value>]) -> Result<MergeResult> {
                 });
                 continue;
             }
-            let id = field(entry, "id").to_owned();
-            match by_id.get(&id) {
-                None => {
-                    by_id.insert(id, entry.clone());
+            let held = copies.entry(field(entry, "id").to_owned()).or_default();
+            let sig = entry.get("sig").and_then(Value::as_str).map(str::to_owned);
+            let replace = match held.get(&sig) {
+                None => true,
+                Some(other) => {
+                    canonical_json(entry)?.as_bytes() > canonical_json(other)?.as_bytes()
                 }
-                Some(held) => {
-                    let held_signed = held.get("sig").is_some();
-                    let entry_signed = entry.get("sig").is_some();
-                    let keep = if held_signed != entry_signed {
-                        if held_signed {
-                            held.clone()
-                        } else {
-                            entry.clone()
-                        }
-                    } else if canonical_json(held)?.as_bytes() >= canonical_json(entry)?.as_bytes()
-                    {
-                        held.clone()
-                    } else {
-                        entry.clone()
-                    };
-                    by_id.insert(id, keep);
-                }
+            };
+            if replace {
+                held.insert(sig, entry.clone());
             }
         }
     }
-    let mut out: Vec<Value> = by_id.into_values().collect();
+    let mut out: Vec<Value> = Vec::new();
+    for held in copies.into_values() {
+        let signed: Vec<Value> = held
+            .iter()
+            .filter(|(sig, _)| sig.is_some())
+            .map(|(_, e)| e.clone())
+            .collect();
+        if signed.is_empty() {
+            out.extend(held.into_values());
+        } else {
+            out.extend(signed);
+        }
+    }
     order_entries(&mut out);
     // §10.2. Total: two rows sharing an id are ordered by their code.
     refused.sort_by(|a, b| {
@@ -412,6 +427,17 @@ pub fn merge_logs(logs: &[Vec<Value>]) -> Result<MergeResult> {
         merged: out,
         refused,
     })
+}
+
+/// The copy whose canonical encoding sorts highest (§10.2 rule 3).
+fn highest<'a>(copies: &[&'a Value]) -> Result<&'a Value> {
+    let mut best = copies[0];
+    for &c in &copies[1..] {
+        if canonical_json(c)?.as_bytes() > canonical_json(best)?.as_bytes() {
+            best = c;
+        }
+    }
+    Ok(best)
 }
 
 /// A merged log and the entries §10.1 refused at ingress.
@@ -515,12 +541,11 @@ pub fn fold_log_verified(
             }),
         }
     }
-    // §10.3. One id names one entry in the fold as in the merge: a re-sent
-    // entry would otherwise be applied twice.
-    let mut entries = merge_logs(&[entries])?.merged;
-    order_entries(&mut entries);
+    // §10.3. Every copy the merge kept, several under one id when their
+    // signatures differ.
+    let copies = merge_logs(&[entries])?.merged;
 
-    let mut creates: Vec<&Value> = entries
+    let mut creates: Vec<&Value> = copies
         .iter()
         .filter(|e| field(e, "kind") == "createBill")
         .filter(|e| bill_id.is_none_or(|want| field(e, "id") == want))
@@ -529,37 +554,80 @@ pub fn fold_log_verified(
         // §10.1. A host that verifies MUST check a create entry's signature
         // against the creatorKey that same entry states — the one key on a
         // bill that needs no prior acquaintance, because §9.4 binds it to the
-        // id.
-        creates.retain(|e| {
-            if verify(e, field(e, "creatorKey")) {
-                true
-            } else {
-                refused_at_ingress.push(SetAside {
-                    id: field(e, "id").to_owned(),
-                    code: code::UNAUTHORIZED_ENTRY,
-                });
-                false
-            }
-        });
+        // id. A create is refused only when no copy of it verifies.
+        let all: BTreeSet<String> = creates.iter().map(|e| field(e, "id").to_owned()).collect();
+        creates.retain(|e| verify(e, field(e, "creatorKey")));
+        let kept: BTreeSet<String> = creates.iter().map(|e| field(e, "id").to_owned()).collect();
+        for id in all.difference(&kept) {
+            refused_at_ingress.push(SetAside {
+                id: id.clone(),
+                code: code::UNAUTHORIZED_ENTRY,
+            });
+        }
     }
-    if creates.is_empty() {
+    let create_ids: BTreeSet<&str> = creates.iter().map(|e| field(e, "id")).collect();
+    if create_ids.is_empty() {
         return Err(SplitError::new(
             code::LOG_NO_CREATE,
             "A log holding no create entry opens no bill",
         ));
     }
-    if creates.len() > 1 {
+    if create_ids.len() > 1 {
         // Anyone holding the invite can push in a create entry of their own,
         // which §9.4 admits because it is valid for a different bill.
         return Err(SplitError::new(
             code::AMBIGUOUS_CREATE,
             format!(
                 "A log holds {} create entries and names no bill",
-                creates.len()
+                create_ids.len()
             ),
         ));
     }
-    let create = creates[0].clone();
+    let create = highest(&creates)?.clone();
+
+    // §10.7, over every copy: a withdrawal does not undo a claim, and a copy
+    // nobody applies is still evidence that was made. Without a verifier
+    // nothing can be decided, and nothing is claimed.
+    let identities = match &verify {
+        Some(verify) => crate::authority::resolve_identities(&copies, &create, verify),
+        None => Identities::default(),
+    };
+
+    // §10.3. One id names one entry: a re-sent entry would otherwise be
+    // applied twice, and one expense sent twice doubles what everybody owes.
+    // An author with a key is spoken for only by a copy that verifies
+    // against it.
+    let mut groups: BTreeMap<&str, Vec<&Value>> = BTreeMap::new();
+    for e in &copies {
+        groups.entry(field(e, "id")).or_default().push(e);
+    }
+    let mut entries: Vec<Value> = Vec::new();
+    for (id, group) in groups {
+        let first = group[0];
+        let mut candidates = group.clone();
+        if let Some(verify) = &verify {
+            let key = if field(first, "kind") == "createBill" {
+                first
+                    .get("creatorKey")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            } else {
+                identities.bound.get(field(first, "author")).cloned()
+            };
+            if let Some(key) = key {
+                candidates.retain(|e| verify(e, &key));
+                if candidates.is_empty() {
+                    refused_at_ingress.push(SetAside {
+                        id: id.to_owned(),
+                        code: code::UNAUTHORIZED_ENTRY,
+                    });
+                    continue;
+                }
+            }
+        }
+        entries.push(highest(&candidates)?.clone());
+    }
+    order_entries(&mut entries);
     let creator = field(&create, "author").to_owned();
 
     let currency = field(&create, "currency").to_owned();
@@ -672,21 +740,45 @@ pub fn fold_log_verified(
         authorised.insert(id, true);
     }
 
-    // A withdrawal is in force unless a later authorised withdrawal, itself in
-    // force, names it. Resolved from the latest backwards, so by the time one
-    // is considered every withdrawal that could name it has been decided.
+    // A withdrawal is in force unless an authorised withdrawal naming it is
+    // itself in force. `at` plays no part: an id is the digest of its entry,
+    // so a withdrawal can only name one that existed when it was written, and
+    // the chains are acyclic. Resolved by what names what, from the entries
+    // nothing names inwards.
+    let mut naming: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for entry in &voids {
+        naming
+            .entry(field(entry, "targetId").to_owned())
+            .or_default()
+            .push(field(entry, "id").to_owned());
+    }
     let mut in_force: BTreeMap<String, bool> = BTreeMap::new();
-    for entry in voids.iter().rev() {
-        let id = field(entry, "id").to_owned();
-        if !authorised.get(&id).copied().unwrap_or(false) {
-            in_force.insert(id, false);
-            continue;
+    for start in &voids {
+        let mut stack: Vec<(String, bool)> = vec![(field(start, "id").to_owned(), false)];
+        while let Some((id, expanded)) = stack.pop() {
+            if in_force.contains_key(&id) {
+                continue;
+            }
+            if !authorised.get(&id).copied().unwrap_or(false) {
+                in_force.insert(id, false);
+                continue;
+            }
+            let namers = naming.get(&id).cloned().unwrap_or_default();
+            let pending: Vec<String> = namers
+                .iter()
+                .filter(|w| !in_force.contains_key(*w))
+                .cloned()
+                .collect();
+            if !pending.is_empty() && !expanded {
+                stack.push((id, true));
+                stack.extend(pending.into_iter().map(|w| (w, false)));
+                continue;
+            }
+            let withdrawn = namers
+                .iter()
+                .any(|w| in_force.get(w).copied().unwrap_or(false));
+            in_force.insert(id, !withdrawn);
         }
-        let withdrawn = voids.iter().any(|other| {
-            field(other, "targetId") == id
-                && in_force.get(field(other, "id")).copied().unwrap_or(false)
-        });
-        in_force.insert(id, !withdrawn);
     }
 
     for entry in &voids {
@@ -810,6 +902,13 @@ pub fn fold_log_verified(
             aside!(entry, code::BILL_MISSING_ENTRY_PAYLOAD);
             continue;
         }
+        if identities.bound.contains_key(&id) && field(entry, "author") != id {
+            // §10.7. A bound participant's record is theirs to create as well
+            // as to change, so a payout cannot be redirected to somebody who
+            // never joined by an entry of their own.
+            aside!(entry, code::UNAUTHORIZED_ENTRY);
+            continue;
+        }
         if participants.contains_key(&id) && field(entry, "author") != id {
             // Without this, one join naming another participant's id and
             // carrying your own address redirects every later settlement.
@@ -823,16 +922,28 @@ pub fn fold_log_verified(
             aside!(entry, e.code);
             continue;
         }
-        if let Some(held) = participants.get(&id) {
-            let before = held.get("payTo").and_then(Value::as_str);
-            let after = p.get("payTo").and_then(Value::as_str);
-            if before != after {
-                replaced.push(ReplacedAddress {
-                    id: id.clone(),
-                    from: before.map(str::to_owned),
-                    to: after.map(str::to_owned),
-                });
-            }
+        // §10.3 step 4. The address this record replaces: the one held for
+        // the participant, or, for the first record, the one the join was
+        // written with before an amendment changed it. An address the decoder
+        // never read is taken as none.
+        let before = if let Some(held) = participants.get(&id) {
+            held.get("payTo").and_then(Value::as_str).map(str::to_owned)
+        } else if amendments.contains_key(field(entry, "id")) {
+            entry
+                .get("participant")
+                .and_then(|o| o.get("payTo"))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+        } else {
+            p.get("payTo").and_then(Value::as_str).map(str::to_owned)
+        };
+        let after = p.get("payTo").and_then(Value::as_str).map(str::to_owned);
+        if before != after {
+            replaced.push(ReplacedAddress {
+                id: id.clone(),
+                from: before,
+                to: after,
+            });
         }
         participants.insert(id, p.clone());
     }
@@ -1036,13 +1147,6 @@ pub fn fold_log_verified(
             .expect("an object")
             .insert("rate".into(), rate);
     }
-
-    // §10.7, over the same entry set the bill was materialised from. Without
-    // a verifier nothing can be decided, and nothing is claimed.
-    let identities = match &verify {
-        Some(verify) => crate::authority::resolve_identities(&entries, &create, verify),
-        None => Identities::default(),
-    };
 
     Ok(FoldResult {
         bill,

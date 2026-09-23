@@ -57,8 +57,13 @@ const benLog = [
 // in either direction, any number of times.
 const log = splitz.merge_entries(anaLog, benLog).entries;
 
+// The bill these entries belong to, read back from the entry that opened it.
+// Every fold names it, so a create for another bill pushed into the channel
+// cannot make this one unopenable.
+const billId = JSON.parse(anaLog[0]).id;
+
 const benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6);
-const folded = splitz.fold_entries(benFacts, log);
+const folded = splitz.fold_entries(benFacts, billId, log);
 console.log("on the bill: " + folded.bill.participants.map((p) => p.id).join(", "));
 // Render these. An entry the fold set aside is one a person cannot see
 // otherwise, and its §12 code is what a wallet turns into a sentence.
@@ -67,7 +72,7 @@ console.log("set aside: " + JSON.stringify(folded.set_aside));
 // Undefined when the bill carries no rate: an unpriced bill is an ordinary
 // bill, not a refusal. The third argument names the contested participants the
 // payer has been shown and chosen to pay anyway (§10.7).
-const owed = splitz.obligation_of(benFacts, log, []);
+const owed = splitz.obligation_of(benFacts, billId, log, []);
 if (owed === undefined) throw new Error("a bill with a rate owes something");
 
 const settlement = owed.settlements[0];

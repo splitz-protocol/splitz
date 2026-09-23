@@ -10,7 +10,7 @@
 //! writing an expense in their name.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _, VerifyingKey};
 use serde_json::Value;
@@ -101,19 +101,49 @@ impl Signer {
     /// requires, since a verifier that answered differently on two devices
     /// would fold two different bills from one log.
     ///
-    /// The pairs are enumerable without restating §10.7: the protocol only
-    /// ever asks whether an entry verifies against a key *that same entry
-    /// states* — `creatorKey` on a create, `participant.identityKey` on a
-    /// join. Any other pair is a question this build did not expect, and
+    /// The pairs are enumerable without restating §10.7. The protocol asks
+    /// whether an entry verifies against a key that same entry states —
+    /// `creatorKey` on a create, `participant.identityKey` on a join — and,
+    /// once its author is bound, against the author's key (§10.3), which is
+    /// one of the keys the author states in a create or a join of their own.
+    /// Any other pair is a question this build did not expect, and
     /// [`VerifiedLog::unanswered`] records it rather than letting a `false`
     /// pass for an answer.
     pub fn prepare<'a, I>(&self, entries: I) -> VerifiedLog
     where
         I: IntoIterator<Item = &'a Value>,
     {
+        let all: Vec<&Value> = entries.into_iter().collect();
+        let mut keys_of: HashMap<String, BTreeSet<String>> = HashMap::new();
+        for entry in &all {
+            let Some(author) = entry.get("author").and_then(Value::as_str) else {
+                continue;
+            };
+            let key = match entry.get("kind").and_then(Value::as_str) {
+                Some("createBill") => entry.get("creatorKey").and_then(Value::as_str),
+                Some("joinBill") => entry
+                    .get("participant")
+                    .filter(|p| p.get("id").and_then(Value::as_str) == Some(author))
+                    .and_then(|p| p.get("identityKey"))
+                    .and_then(Value::as_str),
+                _ => None,
+            };
+            if let Some(key) = key {
+                keys_of
+                    .entry(author.to_owned())
+                    .or_default()
+                    .insert(key.to_owned());
+            }
+        }
         let mut answers = HashMap::new();
-        for entry in entries {
-            for key in keys_stated_by(entry) {
+        for entry in all {
+            let mut keys: BTreeSet<String> = keys_stated_by(entry).into_iter().collect();
+            if let Some(author) = entry.get("author").and_then(Value::as_str) {
+                if let Some(own) = keys_of.get(author) {
+                    keys.extend(own.iter().cloned());
+                }
+            }
+            for key in keys {
                 answers.insert(pair(entry, &key), self.verify_entry(entry, &key));
             }
         }

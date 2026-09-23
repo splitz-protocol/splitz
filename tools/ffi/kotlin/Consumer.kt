@@ -86,7 +86,7 @@ fun main() {
     // The bill key is the wallet's to mint and to keep; §9.4's id is public.
     val billKey = "-_" + "A".repeat(41)
     check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
-    val payload = shareableBillPayload(ana.facts(), ana.entries, billKey)
+    val payload = shareableBillPayload(ana.facts(), billId, ana.entries, billKey)
     check("the whole bill fits in one code", payload != null, "${payload?.length} characters")
     val scanned = readScanned(payload!!)
     check("the scan names the same bill", scanned.billId == billId, "${scanned.billId}")
@@ -108,7 +108,7 @@ fun main() {
         """{"type":"equal","among":["ana","ben"]}""", "dinner", ana.seed))
     ana.add(setRateEntry(ana.facts(), "EUR", 300000, "a fixed feed", ana.seed))
 
-    val folded = foldEntries(ana.facts(), ana.entries)
+    val folded = foldEntries(ana.facts(), billId, ana.entries)
     check("both people are on the bill", folded.bill.participants.size == 2,
           folded.bill.participants.joinToString { it.id })
     check("nothing was set aside", folded.setAside.isEmpty(), "${folded.setAside}")
@@ -119,7 +119,7 @@ fun main() {
 
     println("ben owes half of it")
     ben.take(ana)
-    val owed = obligationOf(ben.facts(), ben.entries, listOf())
+    val owed = obligationOf(ben.facts(), billId, ben.entries, listOf())
     check("ben has an obligation", owed != null, owed?.request?.uri ?: "none")
     val settlement = owed!!.settlements.single()
     check("it is four and a half thousand to ana",
@@ -139,12 +139,12 @@ fun main() {
     for (record in records) ben.add(record)
 
     ana.take(ben)
-    val afterPayment = foldEntries(ana.facts(), ana.entries)
+    val afterPayment = foldEntries(ana.facts(), billId, ana.entries)
     check("ana sees the payment", afterPayment.bill.payments.size == 1,
           "${afterPayment.bill.payments.map { it.id }}")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty(),
           "${afterPayment.bill.confirmedPayments}")
-    val stillOwed = obligationOf(ben.facts(), ben.entries, listOf())!!
+    val stillOwed = obligationOf(ben.facts(), billId, ben.entries, listOf())!!
     check("so ben is asked for nothing twice", stillOwed.settlements.isEmpty(),
           "${stillOwed.settlements}")
     check("and is told what is in flight", stillOwed.awaiting.single().paid == 4500L,
@@ -156,13 +156,13 @@ fun main() {
     val toConfirm = afterPayment.bill.payments.single().id
     ana.add(confirmPaymentEntry(ana.facts(), toConfirm, "recipientConfirmed", null, ana.seed))
     ben.take(ana)
-    val settled = obligationOf(ben.facts(), ben.entries, listOf())!!
+    val settled = obligationOf(ben.facts(), billId, ben.entries, listOf())!!
     check("once confirmed, the debt is gone",
           settled.settlements.isEmpty() && settled.awaiting.isEmpty(),
           "settlements=${settled.settlements.size} awaiting=${settled.awaiting.size}")
 
     println("the log reads as a history")
-    val history = historyOf(ana.facts(), ana.entries)
+    val history = historyOf(ana.facts(), billId, ana.entries)
     check("every kind a person needs is there",
           history.map { it.kind }.containsAll(listOf(
               BillEventKind.OPENED, BillEventKind.JOINED, BillEventKind.EXPENSE_ADDED,

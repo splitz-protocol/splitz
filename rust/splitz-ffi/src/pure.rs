@@ -39,11 +39,26 @@ fn parse(text: &str, what: &str) -> Result<Value> {
 ///
 /// Text rather than bytes, because that is what a keychain holds and what
 /// every other key in this API already is.
+///
+/// Checked for length here, where it enters: every signing closure below
+/// relies on it, and a seed of the wrong length reaching one would otherwise
+/// fail inside a callback that has no way to return an error.
 fn seed_bytes(seed: &str) -> Result<Vec<u8>> {
-    splitz_host::base64url_decode(seed).ok_or_else(|| SplitzError::Host {
+    let bytes = splitz_host::base64url_decode(seed).ok_or_else(|| SplitzError::Host {
         detail: "an identity seed is base64url".to_owned(),
         transient: false,
-    })
+    })?;
+    if bytes.len() != splitz_host::SEED_BYTES {
+        return Err(SplitzError::Host {
+            detail: format!(
+                "an identity seed is {} bytes, not {}",
+                splitz_host::SEED_BYTES,
+                bytes.len()
+            ),
+            transient: false,
+        });
+    }
+    Ok(bytes)
 }
 
 /// Signs `entry` with `seed` and returns it as the JSON §9.3 canonicalises.
@@ -51,7 +66,7 @@ fn signed(facts: &HostFacts, seed: &[u8], entry: Value) -> Result<String> {
     let sign = |message: &[u8]| {
         Signer
             .sign(seed, message)
-            .expect("an identity seed is 32 bytes")
+            .expect("seed_bytes checked the length")
     };
     let host = FactHost {
         facts,
@@ -71,7 +86,7 @@ fn build(
     let sign = |message: &[u8]| {
         Signer
             .sign(&seed, message)
-            .expect("an identity seed is 32 bytes")
+            .expect("seed_bytes checked the length")
     };
     let host = FactHost {
         facts,
@@ -266,8 +281,15 @@ pub fn merge_entries(held: Vec<String>, incoming: Vec<String>) -> Result<MergeOu
 
 /// The bill as `entries` stands, with what the fold refused and who §10.7
 /// leaves contested.
+///
+/// `bill_id` names the bill the entries belong to, so a create for another
+/// bill pushed into its channel cannot make it unopenable (§10.3).
 #[uniffi::export]
-pub fn fold_entries(facts: HostFacts, entries: Vec<String>) -> Result<ffi::FoldedBill> {
+pub fn fold_entries(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<ffi::FoldedBill> {
     let entries = parse_entries(&entries)?;
     let verified = Signer.prepare(entries.iter());
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
@@ -276,7 +298,9 @@ pub fn fold_entries(facts: HostFacts, entries: Vec<String>) -> Result<ffi::Folde
         sign: None,
         verify: Some(&verify),
     };
-    let folded = BillLog::with_entries(&host, entries).fold()?;
+    let folded = BillLog::with_entries(&host, entries)
+        .for_bill(bill_id)
+        .fold()?;
     let unanswered = verified.unanswered();
     if !unanswered.is_empty() {
         // A pair nobody answered reads as an invalid signature, which is a
@@ -293,8 +317,15 @@ pub fn fold_entries(facts: HostFacts, entries: Vec<String>) -> Result<ffi::Folde
 }
 
 /// The log read as a history, newest first.
+///
+/// `bill_id` names the bill the entries belong to, so a create for another
+/// bill pushed into its channel cannot make it unopenable (§10.3).
 #[uniffi::export]
-pub fn history_of(facts: HostFacts, entries: Vec<String>) -> Result<Vec<ffi::BillEvent>> {
+pub fn history_of(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<Vec<ffi::BillEvent>> {
     let parsed = parse_entries(&entries)?;
     let verified = Signer.prepare(parsed.iter());
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
@@ -303,7 +334,9 @@ pub fn history_of(facts: HostFacts, entries: Vec<String>) -> Result<Vec<ffi::Bil
         sign: None,
         verify: Some(&verify),
     };
-    let folded = BillLog::with_entries(&host, parsed.clone()).fold()?;
+    let folded = BillLog::with_entries(&host, parsed.clone())
+        .for_bill(bill_id)
+        .fold()?;
     Ok(
         activity_of(&parsed, &folded.bill, &folded.set_aside, &folded.withdrawn)
             .iter()
@@ -317,9 +350,13 @@ pub fn history_of(facts: HostFacts, entries: Vec<String>) -> Result<Vec<ffi::Bil
 /// `None` when the bill carries no rate: an unpriced bill is an ordinary bill
 /// and nothing invents a price to avoid showing that. `pay_anyway` names the
 /// contested participants the payer has been shown and chosen to pay (§10.7).
+///
+/// `bill_id` names the bill the entries belong to, so a create for another
+/// bill pushed into its channel cannot make it unopenable (§10.3).
 #[uniffi::export]
 pub fn obligation_of(
     facts: HostFacts,
+    bill_id: String,
     entries: Vec<String>,
     pay_anyway: Vec<String>,
 ) -> Result<Option<ffi::PayerObligation>> {
@@ -331,7 +368,9 @@ pub fn obligation_of(
         sign: None,
         verify: Some(&verify),
     };
-    let folded = BillLog::with_entries(&host, parsed).fold()?;
+    let folded = BillLog::with_entries(&host, parsed)
+        .for_bill(bill_id)
+        .fold()?;
     let chosen = pay_anyway.into_iter().collect();
     Ok(obligation_for(&host, &folded, &chosen)?.map(|o| convert::obligation(&o)))
 }
@@ -430,7 +469,7 @@ pub fn blobs_to_push(
     let sign = |message: &[u8]| {
         Signer
             .sign(&seed, message)
-            .expect("an identity seed is 32 bytes")
+            .expect("seed_bytes checked the length")
     };
     let host = FactHost {
         facts: &facts,
@@ -487,22 +526,30 @@ pub fn open_blobs(blobs: Vec<String>, bill_key: String) -> OpenedBlobs {
 // --- sharing a bill without a relay ----------------------------------------
 
 /// The invite URI for a bill (§11.1).
+///
+/// `bill_id` names the bill the entries belong to, so a create for another
+/// bill pushed into its channel cannot make it unopenable (§10.3).
 #[uniffi::export]
 pub fn invite_for_bill(
     facts: HostFacts,
+    bill_id: String,
     entries: Vec<String>,
     bill_key: String,
     name: Option<String>,
 ) -> Result<String> {
-    let folded = folded_bill(&facts, &entries)?;
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
     Ok(invite_for(&folded.bill, &bill_key, name.as_deref(), None)?)
 }
 
 /// The whole bill as one scanned payload (§11.2), or `None` when it will not
 /// fit in one. A caller shown `None` shares by relay instead.
+///
+/// `bill_id` names the bill the entries belong to, so a create for another
+/// bill pushed into its channel cannot make it unopenable (§10.3).
 #[uniffi::export]
 pub fn shareable_bill_payload(
     facts: HostFacts,
+    bill_id: String,
     entries: Vec<String>,
     bill_key: String,
 ) -> Result<Option<String>> {
@@ -512,7 +559,7 @@ pub fn shareable_bill_payload(
         sign: None,
         verify: None,
     };
-    let log = BillLog::with_entries(&host, parsed);
+    let log = BillLog::with_entries(&host, parsed).for_bill(bill_id);
     let folded = log.fold()?;
     Ok(shareable_bill(&log, &bill_key, &folded.bill))
 }
@@ -557,7 +604,11 @@ pub fn read_scanned(text: String) -> ScanOutcome {
 }
 
 /// Folds `entries` with every signature checked.
-fn folded_bill(facts: &HostFacts, entries: &[String]) -> Result<splitz_core::host::FoldedBill> {
+fn folded_bill(
+    facts: &HostFacts,
+    bill_id: &str,
+    entries: &[String],
+) -> Result<splitz_core::host::FoldedBill> {
     let parsed = parse_entries(entries)?;
     let verified = Signer.prepare(parsed.iter());
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
@@ -566,7 +617,9 @@ fn folded_bill(facts: &HostFacts, entries: &[String]) -> Result<splitz_core::hos
         sign: None,
         verify: Some(&verify),
     };
-    Ok(BillLog::with_entries(&host, parsed).fold()?)
+    Ok(BillLog::with_entries(&host, parsed)
+        .for_bill(bill_id)
+        .fold()?)
 }
 
 // --- what to record once the wallet has sent --------------------------------

@@ -107,8 +107,8 @@ void main() {
     final verified = (c['verifies'] as List).cast<String>().toSet();
     final create = entries.firstWhere((e) => e['kind'] == 'createBill');
     // The curve operation is the host's; the case says what it decided.
-    final r = resolveIdentities(
-        entries, create, (e, key) => verified.contains(e['id']));
+    final r =
+        resolveIdentities(entries, create, (e, key) => _standIn(verified, e));
     produce({
       'bound': {for (final k in sortedUtf8(r.bound.keys)) k: r.bound[k]},
       'contested': sortedUtf8(r.contested),
@@ -261,9 +261,8 @@ void main() {
     final r = foldLog(
       c['log'] as List,
       billId: c['billId'] as String?,
-      verify: verifies == null
-          ? null
-          : (entry, key) => verifies.contains(entry['id']),
+      verify:
+          verifies == null ? null : (entry, key) => _standIn(verifies, entry),
     );
     // §9.1: the decoder carries confirmedPayments through, so the fold's
     // answer survives the round trip with no fixup here.
@@ -558,3 +557,14 @@ void loneSurrogateTests() {
     );
   });
 }
+
+/// The vectors' stand-in for the host's curve operation.
+///
+/// An item names an entry id, and every copy of that entry verifies; or an id
+/// and a signature joined by `|`, and only that copy does. The key is not
+/// consulted: a case states which copies verify against the key the fold asks
+/// about.
+bool _standIn(Set<String> verifies, Map<String, dynamic> entry) =>
+    verifies.contains(entry['id']) ||
+    (entry['sig'] is String &&
+        verifies.contains('${entry['id']}|${entry['sig']}'));

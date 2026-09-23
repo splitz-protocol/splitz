@@ -1339,6 +1339,11 @@ def check_entry(entry):
     kind = entry.get("kind")
     if kind not in ENTRY_KINDS:
         raise Refused("bill_unknown_entry_kind")
+    # Section 10.1. A signature is a string or absent. Anything else is a
+    # third state section 10.2 would have to rank, and `null` sorts above
+    # every string, so it would win every merge it entered.
+    if "sig" in entry and not isinstance(entry["sig"], str):
+        raise Refused("bill_type_error")
     # Section 2.3, at entry ingress: the section 10.2 order depends on it.
     _check_scalar_values(entry)
 
@@ -1403,15 +1408,21 @@ def check_entry(entry):
 
 
 def merge(*logs):
-    """Section 10.2. Set union keyed by entry id, resolved by sig then order.
+    """Section 10.2. Set union keyed by entry id and signature.
 
     Returns (merged, refused). Section 10.1 is applied at ingress: an entry
     that does not carry the payload its kind uses never enters the union.
     Removing a payload member makes an entry sort higher under section 9.3, so
-    without this the stripped copy wins rule 2 and displaces the genuine entry
+    without this the stripped copy wins rule 3 and displaces the genuine entry
     on every device.
+
+    A signed copy beats an unsigned one. Two signed copies with different
+    signatures are both kept: section 9.5's digest does not cover `sig`, so
+    nothing in the pair says which is the author's, and the fold decides with
+    the key (section 10.3). Copies sharing a signature, or all unsigned,
+    resolve to the one whose canonical encoding sorts higher.
     """
-    out = {}
+    copies = {}
     refused = []
     for log in logs:
         for entry in log:
@@ -1425,20 +1436,20 @@ def merge(*logs):
                     {"id": reported if isinstance(reported, str) else "",
                      "code": e.code})
                 continue
-            eid = entry["id"]
-            if eid not in out:
-                out[eid] = entry
-                continue
-            a, b = out[eid], entry
-            a_signed, b_signed = "sig" in a, "sig" in b
-            if a_signed != b_signed:
-                out[eid] = a if a_signed else b
-            else:
-                out[eid] = max(a, b, key=lambda e: canonical_json(e).encode("utf-8"))
+            held = copies.setdefault(entry["id"], {})
+            sig = entry.get("sig")
+            other = held.get(sig)
+            if other is None or (canonical_json(entry).encode("utf-8")
+                                 > canonical_json(other).encode("utf-8")):
+                held[sig] = entry
+    out = []
+    for held in copies.values():
+        signed = [e for sig, e in held.items() if sig is not None]
+        out.extend(signed if signed else list(held.values()))
     # Section 10.2. Total: two rows sharing an id are ordered by their code.
     refused.sort(key=lambda r: ((r["id"] or "").encode("utf-8"),
                                 r["code"].encode("utf-8")))
-    return order(list(out.values())), refused
+    return order(out), refused
 
 
 def order(entries):
@@ -1474,28 +1485,55 @@ def fold(entries, bill_id=None, verify=None):
             refused_at_ingress.append(
                 {"id": eid if isinstance(eid, str) else "", "code": r.code})
 
-    # Section 10.3. One id names one entry in the fold as in the merge: a
-    # re-sent entry would otherwise be applied twice.
-    entries = order(merge(admitted)[0])
-    creates = [e for e in entries if e["kind"] == "createBill"]
+    # Section 10.3. Every copy the merge kept, several under one id when their
+    # signatures differ.
+    copies = order(merge(admitted)[0])
+    creates = [e for e in copies if e["kind"] == "createBill"]
     if bill_id is not None:
         creates = [e for e in creates if e["id"] == bill_id]
     if verify is not None:
         # Section 10.1. A host that verifies MUST check a create entry's
-        # signature against the creatorKey that same entry states.
-        kept = []
-        for e in creates:
-            if verify(e, e.get("creatorKey", "")):
-                kept.append(e)
-            else:
-                refused_at_ingress.append(
-                    {"id": e["id"], "code": "unauthorized_entry"})
+        # signature against the creatorKey that same entry states. A create
+        # is refused only when no copy of it verifies.
+        kept = [e for e in creates if verify(e, e.get("creatorKey", ""))]
+        for eid in sorted({e["id"] for e in creates} - {e["id"] for e in kept}):
+            refused_at_ingress.append({"id": eid, "code": "unauthorized_entry"})
         creates = kept
-    if not creates:
+    create_ids = {e["id"] for e in creates}
+    if not create_ids:
         raise Refused("log_no_create")
-    if len(creates) > 1:
+    if len(create_ids) > 1:
         raise Refused("ambiguous_create")
-    create = creates[0]
+    create = max(creates, key=lambda e: canonical_json(e).encode("utf-8"))
+
+    # Section 10.7, over every copy: a withdrawal does not undo a claim, and a
+    # copy nobody applies is still evidence that was made.
+    identities = (({}, set()) if verify is None
+                  else resolve_identities(copies, create, verify))
+
+    # Section 10.3. One id names one entry: a re-sent entry would otherwise be
+    # applied twice. An author with a key is spoken for only by a copy that
+    # verifies against it.
+    groups = {}
+    for e in copies:
+        groups.setdefault(e["id"], []).append(e)
+    entries = []
+    for eid, group in groups.items():
+        author = group[0]["author"]
+        key = None
+        if verify is not None:
+            if group[0]["kind"] == "createBill":
+                key = group[0].get("creatorKey")
+            else:
+                key = identities[0].get(author)
+        if key is not None:
+            group = [e for e in group if verify(e, key)]
+            if not group:
+                refused_at_ingress.append(
+                    {"id": eid, "code": "unauthorized_entry"})
+                continue
+        entries.append(max(group, key=lambda e: canonical_json(e).encode("utf-8")))
+    entries = order(entries)
 
     currency = create.get("currency")
     check_currency(currency)
@@ -1563,18 +1601,38 @@ def fold(entries, bill_id=None, verify=None):
             continue
         authorised[e["id"]] = True
 
-    # A withdrawal is in force unless a later authorised withdrawal, itself in
-    # force, names it. Resolved from the latest backwards, so by the time one
-    # is considered every withdrawal that could name it has been decided.
+    # A withdrawal is in force unless an authorised withdrawal naming it is
+    # itself in force. `at` plays no part: an id is the digest of its entry,
+    # so a withdrawal can only name one that existed when it was written, and
+    # the chains are acyclic. Resolved by what names what, from the entries
+    # nothing names inwards.
+    naming = {}
+    for e in voids:
+        naming.setdefault(e["targetId"], []).append(e)
     in_force = {}
-    for e in reversed(voids):
-        if not authorised[e["id"]]:
-            in_force[e["id"]] = False
-            continue
-        in_force[e["id"]] = not any(
-            other["targetId"] == e["id"] and in_force.get(other["id"], False)
-            for other in voids
-        )
+
+    def decide(v):
+        if v["id"] in in_force:
+            return in_force[v["id"]]
+        stack = [(v, False)]
+        while stack:
+            cur, expanded = stack.pop()
+            if cur["id"] in in_force:
+                continue
+            if not authorised[cur["id"]]:
+                in_force[cur["id"]] = False
+                continue
+            namers = naming.get(cur["id"], [])
+            pending = [w for w in namers if w["id"] not in in_force]
+            if pending and not expanded:
+                stack.append((cur, True))
+                stack.extend((w, False) for w in pending)
+                continue
+            in_force[cur["id"]] = not any(in_force[w["id"]] for w in namers)
+        return in_force[v["id"]]
+
+    for e in voids:
+        decide(e)
 
     for e in voids:
         if in_force[e["id"]]:
@@ -1596,12 +1654,11 @@ def fold(entries, bill_id=None, verify=None):
     # Taking somebody off the bill, section 10.8. This runs after every other
     # withdrawal is resolved and before the joins are applied: a check made
     # once the person is gone is a check made too late.
-    for e in entries:
-        if e["kind"] != "voidEntry" or e["targetId"] not in voided:
-            continue
+    removals = [e for e in entries
+                if e["kind"] == "voidEntry" and e["targetId"] in voided
+                and by_id[e["targetId"]]["kind"] == "joinBill"]
+    for e in removals:
         target = by_id[e["targetId"]]
-        if target["kind"] != "joinBill":
-            continue
         gone = target.get("participant", {}).get("id")
         surviving = [o for o in entries
                      if o["id"] not in voided and o["kind"] != "voidEntry"]
@@ -1665,6 +1722,11 @@ def fold(entries, bill_id=None, verify=None):
         if pid is None or pid == "":
             aside(e, "bill_missing_entry_payload", "names no participant")
             continue
+        if pid in identities[0] and e["author"] != pid:
+            # Section 10.7. A bound participant's record is theirs to create
+            # as well as to change.
+            aside(e, "unauthorized_entry", "writes a bound participant's record")
+            continue
         if pid in participants and e["author"] != pid:
             aside(e, "unauthorized_entry", "changes a record it does not own")
             continue
@@ -1676,9 +1738,20 @@ def fold(entries, bill_id=None, verify=None):
         except Refused as r:
             aside(e, r.code, "carries a participant this reader cannot decode")
             continue
-        if pid in participants and participants[pid].get("payTo") != p.get("payTo"):
-            replaced.append({"id": pid, "from": participants[pid].get("payTo"),
-                             "to": p.get("payTo")})
+        # Section 10.3 step 4. The address this record replaces: the one held
+        # for the participant, or, for the first record, the one the join was
+        # written with before an amendment changed it.
+        # An address the decoder never read is taken as none.
+        if pid in participants:
+            before = participants[pid].get("payTo")
+        elif e["id"] in amendments:
+            before = _as_dict(e.get("participant")).get("payTo")
+        else:
+            before = p.get("payTo")
+        if not isinstance(before, str):
+            before = None
+        if before != p.get("payTo"):
+            replaced.append({"id": pid, "from": before, "to": p.get("payTo")})
         participants[pid] = p
 
     expenses, payments = [], []
@@ -1794,9 +1867,8 @@ def fold(entries, bill_id=None, verify=None):
         # claimed.
         "identities": (
             {"bound": {}, "contested": []} if verify is None else
-            (lambda r: {"bound": {k: r[0][k] for k in sorted(r[0])},
-                        "contested": sorted(r[1])})(
-                resolve_identities(entries, create, verify))),
+            {"bound": {k: identities[0][k] for k in sorted(identities[0])},
+             "contested": sorted(identities[1])}),
         "replacedAddresses": replaced,
         "withdrawn": sorted(voided),
         # Section 10.2. Total: rows sharing an id are ordered by code.
@@ -2009,3 +2081,22 @@ def render_obligation(settlements, participants, rate, currency,
         "withheldMinorUnits": withheld,
         "isComplete": not unpayable,
     }
+
+
+def stand_in(verifies):
+    """The vectors' stand-in for the host's curve operation.
+
+    An item names an entry id, and every copy of that entry verifies; or an id
+    and a signature joined by `|`, and only that copy does. The key is not
+    consulted: a case states which copies verify against the key the fold asks
+    about.
+    """
+    ok = set(verifies)
+
+    def verify(entry, key):
+        del key
+        if entry.get("id") in ok:
+            return True
+        sig = entry.get("sig")
+        return isinstance(sig, str) and f"{entry.get('id')}|{sig}" in ok
+    return verify

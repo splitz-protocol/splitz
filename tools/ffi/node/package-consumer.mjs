@@ -92,7 +92,7 @@ ana.add(splitz.add_expense_entry(ana.facts(), "x1", "ana", 9000,
 // two ways. 300000 minor units per ZEC is €3000.00.
 ana.add(splitz.set_rate_entry(ana.facts(), "EUR", 300000, "a fixed feed", ana.seed));
 
-const folded = splitz.fold_entries(ana.facts(), ana.entries);
+const folded = splitz.fold_entries(ana.facts(), billId, ana.entries);
 check("the bill is the one ana opened", folded.bill.id === billId, folded.bill.id);
 check("both people are on it", folded.bill.participants.length === 2,
       folded.bill.participants.map((p) => p.id).join(", "));
@@ -101,7 +101,7 @@ check("nothing was set aside", folded.set_aside.length === 0,
 
 console.log("ben owes half of it");
 ben.take(ana);
-const owed = splitz.obligation_of(ben.facts(), ben.entries, []);
+const owed = splitz.obligation_of(ben.facts(), billId, ben.entries, []);
 check("ben has an obligation", owed !== undefined, owed?.request?.uri ?? "none");
 check("it is four and a half thousand to ana",
       owed.settlements[0].to === "ana" && Number(owed.settlements[0].amount) === 4500,
@@ -119,14 +119,14 @@ check("one record, for what the request carried", records.length === 1,
 for (const record of records) ben.add(record);
 
 ana.take(ben);
-const afterPayment = splitz.fold_entries(ana.facts(), ana.entries);
+const afterPayment = splitz.fold_entries(ana.facts(), billId, ana.entries);
 check("ana sees the payment", afterPayment.bill.payments.length === 1,
       JSON.stringify(afterPayment.bill.payments.map((p) => p.id)));
 check("and it is not confirmed", afterPayment.bill.confirmed_payments.length === 0,
       JSON.stringify(afterPayment.bill.confirmed_payments));
 check("so ben is asked for nothing twice",
-      splitz.obligation_of(ben.facts(), ben.entries, []).settlements.length === 0,
-      JSON.stringify(splitz.obligation_of(ben.facts(), ben.entries, []).settlements));
+      splitz.obligation_of(ben.facts(), billId, ben.entries, []).settlements.length === 0,
+      JSON.stringify(splitz.obligation_of(ben.facts(), billId, ben.entries, []).settlements));
 
 // A payee confirms a payment they can see, by the id the bill carries. One
 // transaction paying several people writes one record each, so the id is not
@@ -135,7 +135,7 @@ const toConfirm = afterPayment.bill.payments[0].id;
 ana.add(splitz.confirm_payment_entry(ana.facts(), toConfirm, "recipientConfirmed",
     undefined, ana.seed));
 ben.take(ana);
-const settled = splitz.obligation_of(ben.facts(), ben.entries, []);
+const settled = splitz.obligation_of(ben.facts(), billId, ben.entries, []);
 check("once confirmed, the debt is gone",
       settled.settlements.length === 0 && settled.awaiting.length === 0,
       `settlements=${settled.settlements.length} awaiting=${settled.awaiting.length}`);

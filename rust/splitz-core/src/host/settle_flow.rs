@@ -14,7 +14,7 @@ use crate::obligation::{
 use crate::settle::{settle_bill, Settlement, DEFAULT_EXACT_LIMIT};
 
 use super::bill_log::{BillLog, FoldedBill};
-use super::entries::record_payment;
+use super::entries::{record_payment, sign_entry};
 use super::host::{BillHost, SendResult, Sent};
 
 /// What this device owes, and the request that carries it.
@@ -227,10 +227,14 @@ pub fn settle(
         });
     };
 
+    // Signed before they are kept. A verifying fold applies an entry written
+    // as a bound participant only from a copy that verifies against their key
+    // (§10.3), so an unsigned record of this payer's own payment would be set
+    // aside on this device and the debt offered to them again.
     let mut records = Vec::new();
     for (to, amount) in owed {
         let payment_id = payment_id_for_send(&txid, to);
-        let record = record_payment(
+        let unsigned = record_payment(
             host,
             &payment_id,
             to,
@@ -241,6 +245,7 @@ pub fn settle(
             None,
             None,
         )?;
+        let record = sign_entry(host, &unsigned)?;
         log.add(vec![record.clone()])?;
         records.push(record);
     }

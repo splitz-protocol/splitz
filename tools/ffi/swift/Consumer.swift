@@ -85,6 +85,8 @@ func run() throws {
                                      currency: "EUR", splitMode: "equal",
                                      creatorKey: anaKey, seed: ana.seed)
     try ana.add(create)
+    let billId = (try JSONSerialization.jsonObject(with: Data(create.utf8))
+        as! [String: Any])["id"] as! String
     try ana.add(try joinBillEntry(facts: ana.facts(), name: "Ana",
                                   payTo: "u1ana", identityKey: anaKey,
                                   seed: ana.seed))
@@ -103,14 +105,14 @@ func run() throws {
                                  minorUnitsPerZec: 300000,
                                  source: "a fixed feed", seed: ana.seed))
 
-    let folded = try foldEntries(facts: ana.facts(), entries: ana.entries)
+    let folded = try foldEntries(facts: ana.facts(), billId: billId, entries: ana.entries)
     check("both people are on the bill", folded.bill.participants.count == 2,
           folded.bill.participants.map(\.id).joined(separator: ", "))
     check("nothing was set aside", folded.setAside.isEmpty, "\(folded.setAside)")
 
     print("ben owes half of it")
     try ben.take(ana)
-    let owed = try obligationOf(facts: ben.facts(), entries: ben.entries,
+    let owed = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries,
                                 payAnyway: [])
     check("ben has an obligation", owed != nil, owed?.request.uri ?? "none")
     let settlement = owed!.settlements[0]
@@ -129,7 +131,7 @@ func run() throws {
     for record in records { try ben.add(record) }
 
     try ana.take(ben)
-    let afterPayment = try foldEntries(facts: ana.facts(), entries: ana.entries)
+    let afterPayment = try foldEntries(facts: ana.facts(), billId: billId, entries: ana.entries)
     check("ana sees the payment", afterPayment.bill.payments.count == 1,
           "\(afterPayment.bill.payments.map(\.id))")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty,
@@ -141,7 +143,7 @@ func run() throws {
                                         method: "recipientConfirmed",
                                         reference: nil, seed: ana.seed))
     try ben.take(ana)
-    let settled = try obligationOf(facts: ben.facts(), entries: ben.entries,
+    let settled = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries,
                                    payAnyway: [])!
     check("once confirmed, the debt is gone",
           settled.settlements.isEmpty && settled.awaiting.isEmpty,

@@ -8,7 +8,7 @@ use crate::error::{HostError, Result};
 use crate::keys::SplitsKeys;
 use crate::relay::channel_for_bill;
 use crate::sealing::Sealing;
-use crate::signing::Signer;
+use crate::signing::{Signer, SEED_BYTES};
 use crate::store::BillStore;
 use crate::wallet::SplitsRelay;
 
@@ -78,6 +78,16 @@ impl<'a> SplitsSync<'a> {
         signer_seed: Option<&[u8]>,
         author_id: Option<&str>,
     ) -> Result<Vec<Value>> {
+        // Checked here, where the seed enters: the signing closure below
+        // cannot return an error.
+        if let Some(seed) = signer_seed {
+            if seed.len() != SEED_BYTES {
+                return Err(HostError::Malformed(format!(
+                    "an identity seed is {SEED_BYTES} bytes, not {}",
+                    seed.len()
+                )));
+            }
+        }
         let entries = self.store.read(bill_id)?;
         if entries.is_empty() {
             return Ok(entries);
@@ -88,7 +98,7 @@ impl<'a> SplitsSync<'a> {
         let sign_closure = move |message: &[u8]| {
             Signer
                 .sign(seed.as_deref().unwrap_or_default(), message)
-                .expect("an identity seed is 32 bytes")
+                .expect("the seed's length was checked on entry")
         };
 
         let mut blobs = Vec::with_capacity(entries.len());

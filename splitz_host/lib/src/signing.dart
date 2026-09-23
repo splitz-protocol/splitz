@@ -94,19 +94,64 @@ class SplitsSigner {
   /// what §10.7 requires of it, since a verifier that answered differently on
   /// two devices would fold two different bills from one log.
   ///
-  /// The pairs are enumerable without restating §10.7: the protocol only ever
-  /// asks whether an entry verifies against a key *that same entry states* —
-  /// `creatorKey` on a create, `participant.identityKey` on a join. Any other
+  /// The pairs are enumerable without restating §10.7. The protocol asks
+  /// whether an entry verifies against a key that same entry states —
+  /// `creatorKey` on a create, `participant.identityKey` on a join — and, once
+  /// its author is bound, against the author's key (§10.3), which is one of
+  /// the keys the author states in a create or a join of their own. Any other
   /// pair is a question this build did not expect, and [VerifiedLog.unanswered]
   /// records it rather than letting a `false` pass for an answer.
+  ///
+  /// An answer depends only on the entry and the key, so answers are kept
+  /// across calls: a bill folded again after one new entry verifies one entry,
+  /// not every entry it holds.
   Future<VerifiedLog> prepare(Iterable<Map<String, dynamic>> entries) async {
+    final all = entries.toList();
+    final keysOf = <String, Set<String>>{};
+    for (final entry in all) {
+      final author = entry['author'];
+      if (author is! String) continue;
+      if (entry['kind'] == 'createBill') {
+        final key = entry['creatorKey'];
+        if (key is String) keysOf.putIfAbsent(author, () => {}).add(key);
+      } else if (entry['kind'] == 'joinBill') {
+        final participant = entry['participant'];
+        if (participant is Map &&
+            participant['id'] == author &&
+            participant['identityKey'] is String) {
+          keysOf
+              .putIfAbsent(author, () => {})
+              .add(participant['identityKey'] as String);
+        }
+      }
+    }
     final answers = <String, bool>{};
-    for (final entry in entries) {
-      for (final key in _keysStatedBy(entry)) {
-        answers[_pair(entry, key)] = await verifyEntry(entry, key);
+    for (final entry in all) {
+      final keys = {..._keysStatedBy(entry), ...?keysOf[entry['author']]};
+      for (final key in keys) {
+        final known = _knownKey(entry, key);
+        answers[_pair(entry, key)] = known == null
+            ? await verifyEntry(entry, key)
+            : _known[known] ??= await verifyEntry(entry, key);
       }
     }
     return VerifiedLog._(answers);
+  }
+
+  /// Answers already computed, keyed by [_knownKey].
+  final Map<String, bool> _known = {};
+
+  /// What an answer depends on: the exact message signed, the signature and
+  /// the key. Not the id — an entry carrying a copied id and signature over
+  /// other content would otherwise file its `false` under the genuine
+  /// entry's name. Null when the entry has no §10.6 message, and then nothing
+  /// is kept.
+  static String? _knownKey(Map<String, dynamic> entry, String key) {
+    try {
+      return '${protocol.signingMessage(entry)}\u0000${entry['sig']}\u0000$key';
+    } on protocol.SplitError {
+      return null;
+    }
   }
 
   /// The keys an entry states about itself.

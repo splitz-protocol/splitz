@@ -8,6 +8,7 @@
 ///
 /// The path comes from `--dart-define`, because `flutter test` passes no
 /// arguments to the test.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -51,9 +52,11 @@ void main() {
     );
     expect(create, contains('"kind":"createBill"'));
 
-    final folded = foldEntries(facts('ana', '2026-10-28T19:32:00.000Z', 2), [
-      create,
-    ]);
+    final folded = foldEntries(
+      facts('ana', '2026-10-28T19:32:00.000Z', 2),
+      (jsonDecode(create) as Map)['id'] as String,
+      [create],
+    );
     expect(folded.bill.name, 'Dinner');
     expect(folded.setAside, isEmpty);
     expect(folded.identities.bound.keys, contains('ana'));
@@ -104,6 +107,7 @@ void main() {
     final merged = mergeEntries(const [], log).entries;
     final owed = obligationOf(
       facts('ben', '2026-10-28T19:36:00.000Z', 6),
+      (jsonDecode(log.first) as Map)['id'] as String,
       merged,
       const [],
     );

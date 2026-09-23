@@ -203,6 +203,93 @@ void main() {
     expect(record['reference'], settled.txid);
   });
 
+  test('the record of a send is signed, so a verifying fold keeps it',
+      () async {
+    // A stand-in curve: an entry verifies when it carries the one signature
+    // this host produces. Enough to bind everyone who signed, which is what
+    // makes §10.3 insist on a verifying copy of every entry they author.
+    Future<String> sign(List<int> message) async => 'good';
+    bool verify(Map<String, dynamic> e, String key) => e['sig'] == 'good';
+
+    Future<({BillLog log, FakeHost ben})> signedDinner(
+        {required bool benSigns}) async {
+      final ana = FakeHost(
+          me: 'ana', payToAddress: 'u1ana', sign: sign, verify: verify);
+      final ben = FakeHost(
+        me: 'ben',
+        payToAddress: 'u1ben',
+        sign: benSigns ? sign : null,
+        verify: verify,
+      );
+      final signer = FakeHost(me: 'ben', payToAddress: 'u1ben', sign: sign);
+      final entries = <Map<String, dynamic>>[
+        await signEntry(
+            host: ana,
+            entry: createBill(
+                host: ana,
+                name: 'Dinner',
+                currency: 'EUR',
+                creatorKey: fakeKey('ana'))),
+      ];
+      ana.tick();
+      entries.add(await signEntry(
+          host: ana, entry: joinBill(host: ana, name: 'Ana', payTo: 'u1ana')));
+      for (var i = 0; i < 2; i++) {
+        signer.tick();
+      }
+      entries.add(await signEntry(
+          host: signer,
+          entry: joinBill(
+              host: signer,
+              name: 'Ben',
+              payTo: 'u1ben',
+              identityKey: fakeKey('ben'))));
+      ana.tick();
+      entries.add(await signEntry(
+          host: ana,
+          entry: addExpense(
+            host: ana,
+            expenseId: 'x1',
+            paidBy: 'ana',
+            amount: 9000,
+            split: const {
+              'type': 'equal',
+              'among': ['ana', 'ben'],
+            },
+          )));
+      ana.tick();
+      entries.add(await signEntry(
+          host: ana,
+          entry: setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234)));
+      final log = BillLog(ben, billId: entries.first['id'] as String);
+      expect(log.add(entries), isEmpty);
+      for (var i = 0; i < 5; i++) {
+        ben.tick();
+      }
+      return (log: log, ben: ben);
+    }
+
+    final d = await signedDinner(benSigns: true);
+    expect(d.log.fold().identities.bound.keys, containsAll(['ana', 'ben']));
+    final settled =
+        await settle(d.ben, d.log, obligationFor(d.ben, d.log.fold())!);
+    expect(settled.records.single['sig'], 'good');
+    final after = d.log.fold();
+    expect(after.setAside, isEmpty);
+    expect(after.bill.payments.single.from, 'ben',
+        reason: "ben's own record is on the bill on ben's own device");
+
+    // The rule the signature satisfies: the same record unsigned is not the
+    // bound payer speaking, and a verifying fold sets it aside.
+    final u = await signedDinner(benSigns: false);
+    final unsigned =
+        await settle(u.ben, u.log, obligationFor(u.ben, u.log.fold())!);
+    expect(unsigned.records.single.containsKey('sig'), isFalse);
+    final refused = u.log.fold();
+    expect(refused.bill.payments, isEmpty);
+    expect(refused.setAside.single.code, splitz.SplitCode.unauthorizedEntry);
+  });
+
   test('a send that was built but not broadcast records nothing', () async {
     // A wallet answers with three outcomes, not two. A transaction built and
     // not yet handed to the network may still land: recorded as paid it

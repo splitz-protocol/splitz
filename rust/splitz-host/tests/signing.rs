@@ -77,7 +77,7 @@ fn a_real_signature_binds_a_key_to_a_participant_under_10_7() {
         join_bill(host, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap()
     }));
 
-    let folded = fold_verified(&wallet, &entries, None).expect("the log folds");
+    let folded = fold_verified(&wallet, bill_id(&entries), &entries, None).expect("the log folds");
     assert!(folded.set_aside.is_empty());
     assert_eq!(folded.identities.bound.get("ana"), Some(&ana_key));
     assert_eq!(folded.identities.bound.get("ben"), Some(&ben_key));
@@ -103,7 +103,7 @@ fn a_create_signed_by_the_wrong_key_opens_no_bill_at_all() {
     // not verify against the key it itself states, and a log with no surviving
     // create opens nothing — so writing down somebody else's key does not get
     // a bill off the ground, it stops one existing.
-    match fold_verified(&wallet, &entries, None) {
+    match fold_verified(&wallet, bill_id(&entries), &entries, None) {
         Err(FoldFailure::Refused(e)) => assert_eq!(e.code, code::LOG_NO_CREATE),
         other => panic!("expected log_no_create, got {other:?}"),
     }
@@ -111,7 +111,8 @@ fn a_create_signed_by_the_wrong_key_opens_no_bill_at_all() {
     // And the same log folds fine with no verifier: §10.7 then binds nothing
     // rather than refusing, which is the honest answer for a device that
     // cannot check a signature.
-    let unchecked = fold_unverified(&wallet, &entries).expect("it folds unverified");
+    let unchecked =
+        fold_unverified(&wallet, bill_id(&entries), &entries).expect("it folds unverified");
     assert_eq!(unchecked.bill.participants.len(), 1);
     assert_eq!(unchecked.bill.participants[0].id, "ana");
     assert!(unchecked.identities.bound.is_empty());
@@ -156,7 +157,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
         .unwrap()
     }));
 
-    let folded = fold_verified(&wallet, &entries, None).expect("the log folds");
+    let folded = fold_verified(&wallet, bill_id(&entries), &entries, None).expect("the log folds");
     assert!(folded.identities.contested.contains("ben"));
     assert!(
         !folded.identities.bound.contains_key("ben"),
@@ -236,4 +237,13 @@ fn a_fold_that_asks_an_unanticipated_question_fails_loudly() {
             .is_err()
     );
     assert!(!empty.unanswered().is_empty());
+}
+
+/// The bill a test log opens: the id of its create entry.
+fn bill_id(entries: &[serde_json::Value]) -> &str {
+    entries
+        .iter()
+        .find(|e| e["kind"] == "createBill")
+        .and_then(|e| e["id"].as_str())
+        .expect("the log holds a create")
 }

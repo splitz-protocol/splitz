@@ -214,14 +214,21 @@ Future<Settled> settle(
     throw StateError('a send that succeeded must carry a transaction id');
   }
 
+  // Signed before they are kept. A verifying fold applies an entry written
+  // as a bound participant only from a copy that verifies against their key
+  // (§10.3), so an unsigned record of this payer's own payment would be set
+  // aside on this device and the debt offered to them again.
   final records = <Map<String, dynamic>>[];
   for (final entry in owed.entries) {
-    final record = recordPayment(
+    final record = await signEntry(
       host: host,
-      paymentId: paymentIdForSend(txid, entry.key),
-      to: entry.key,
-      amount: entry.value,
-      reference: txid,
+      entry: recordPayment(
+        host: host,
+        paymentId: paymentIdForSend(txid, entry.key),
+        to: entry.key,
+        amount: entry.value,
+        reference: txid,
+      ),
     );
     log.add([record]);
     records.add(record);

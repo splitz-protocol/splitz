@@ -137,7 +137,10 @@ void main() {
     final pulled = await ben.sync.pull(id);
     expect(pulled.entries.length, 2);
     expect(pulled.unopenable, 0);
-    expect(foldUnverified(ben.wallet, pulled.entries).bill.name, 'Dinner');
+    expect(
+      foldUnverified(ben.wallet, pulled.entries, billId: id).bill.name,
+      'Dinner',
+    );
 
     ben.wallet.tick();
     ben.wallet.tick();
@@ -151,6 +154,7 @@ void main() {
       foldUnverified(
         anaWallet,
         back.entries,
+        billId: id,
       ).bill.participants.map((p) => p.id),
       ['ana', 'ben'],
     );

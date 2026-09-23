@@ -104,7 +104,7 @@ void main(List<String> args) {
     setRateEntry(ana.facts(), 'EUR', 300000, 'a fixed feed', ana.signingSeed()),
   );
 
-  final folded = foldEntries(ana.facts(), ana.entries);
+  final folded = foldEntries(ana.facts(), billId, ana.entries);
   check(
     'both people are on the bill',
     folded.bill.participants.length == 2,
@@ -131,7 +131,7 @@ void main(List<String> args) {
   ben.entries
     ..clear()
     ..addAll(mergeEntries(ben.entries, ana.entries).entries);
-  final owed = obligationOf(ben.facts(), ben.entries, const []);
+  final owed = obligationOf(ben.facts(), billId, ben.entries, const []);
   check('ben has an obligation', owed != null, owed?.request.uri ?? 'none');
   final settlement = owed!.settlements.single;
   check(
@@ -169,7 +169,7 @@ void main(List<String> args) {
   ana.entries
     ..clear()
     ..addAll(mergeEntries(ana.entries, ben.entries).entries);
-  final afterPayment = foldEntries(ana.facts(), ana.entries);
+  final afterPayment = foldEntries(ana.facts(), billId, ana.entries);
   check(
     'ana sees the payment',
     afterPayment.bill.payments.length == 1,
@@ -180,7 +180,7 @@ void main(List<String> args) {
     afterPayment.bill.confirmedPayments.isEmpty,
     '${afterPayment.bill.confirmedPayments}',
   );
-  final stillOwed = obligationOf(ben.facts(), ben.entries, const [])!;
+  final stillOwed = obligationOf(ben.facts(), billId, ben.entries, const [])!;
   check(
     'so ben is asked for nothing twice',
     stillOwed.settlements.isEmpty,
@@ -208,7 +208,7 @@ void main(List<String> args) {
   ben.entries
     ..clear()
     ..addAll(mergeEntries(ben.entries, ana.entries).entries);
-  final settled = obligationOf(ben.facts(), ben.entries, const [])!;
+  final settled = obligationOf(ben.facts(), billId, ben.entries, const [])!;
   check(
     'once confirmed, the debt is gone',
     settled.settlements.isEmpty && settled.awaiting.isEmpty,
@@ -216,7 +216,7 @@ void main(List<String> args) {
   );
 
   print('the log reads as a history');
-  final history = historyOf(ana.facts(), ana.entries);
+  final history = historyOf(ana.facts(), billId, ana.entries);
   final kinds = history.map((e) => e.kind).toSet();
   check(
     'every kind a person needs is there',

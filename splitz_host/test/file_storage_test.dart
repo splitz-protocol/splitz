@@ -69,7 +69,7 @@ void main() {
     );
 
     expect(await store.billIds(), [id]);
-    final folded = foldUnverified(wallet, await store.read(id));
+    final folded = foldUnverified(wallet, await store.read(id), billId: id);
     expect(folded.bill.expenses.single.description, 'Pizza');
     // And the bill's key came back, so its contents can still be sealed.
     expect(await keys.readBillKey(id), isNotNull);

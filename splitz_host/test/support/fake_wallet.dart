@@ -110,3 +110,7 @@ class FakeHost implements splitz.BillHost {
   splitz.Broadcast get broadcast =>
       (uri) async => splitz.Sent.sent('tx-${uri.hashCode}');
 }
+
+/// The bill a test log opens: the id of its create entry.
+String billIdOf(List<Map<String, dynamic>> entries) =>
+    entries.firstWhere((e) => e['kind'] == 'createBill')['id'] as String;

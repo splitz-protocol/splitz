@@ -1003,7 +1003,8 @@ any other entry; when none survives, the bill has no rate and §7's conversions
 are unavailable rather than guessed at.
 
 **`sig`** carries the author's signature when the transport provides one.
-Unsigned entries MUST be accepted: a bill among people at one table is consensus
+When present it MUST be a string, and an entry whose `sig` is anything else is
+refused with `bill_type_error`. Unsigned entries MUST be accepted: a bill among people at one table is consensus
 by agreement, not by cryptography, and refusing them would claim a guarantee
 this protocol does not make. Nothing in this version verifies a signature;
 §10.4 says what that costs.
@@ -1030,7 +1031,8 @@ meant to be the same entry, and nothing in an unauthenticated log guarantees
 it, so union needs a rule for the case where they differ:
 
 1. **A copy carrying a `sig` beats one that does not.**
-2. **Otherwise the entry whose canonical encoding (§9.3) sorts higher under
+2. **Two copies carrying different `sig` values are both kept.**
+3. **Otherwise the entry whose canonical encoding (§9.3) sorts higher under
    §2.3 wins.**
 
 The first part exists because a signed and an unsigned copy of one entry is the
@@ -1043,6 +1045,21 @@ below the closing brace, so the unsigned copy always wins — and §10.7 then se
 it aside, because an entry from a bound author carrying no signature does not
 verify. The merge would destroy the only usable copy of an entry both devices
 hold.
+
+**Why two signed copies are both kept.** §9.5's digest does not cover `sig`,
+so a copy of a signed entry with its signature replaced keeps the entry's id.
+Ed25519 is deterministic (RFC 8032 §5.1.6): an author signing one entry
+produces one signature, so two different signatures under one id mean at least
+one is not the author's. Nothing in the two entries says which. Resolving the
+pair by canonical order hands the id to whichever signature sorts higher —
+anyone holding the invite can then replace the bill's `createBill` with a copy
+no verifier accepts, and every device that verifies stops opening the bill,
+the genuine copy losing every later merge. Keeping both leaves the question
+for the fold, which has the key (§10.3).
+
+Copies differ only where §9.5's digest does not reach, so every kept copy of
+an id carries the same payload. Keeping them costs storage and nothing else:
+anyone holding the invite can already append entries without limit.
 
 **The merge enforces §10.1 before the rule above is reached.** An entry that
 does not carry the payload its kind uses is refused at ingress and never
@@ -1074,7 +1091,8 @@ conventions produce different bills from the same pair of logs, and neither is
 detectably wrong.
 
 Idempotence and associativity do not depend on the rule: union keyed by entry
-id with any deterministic pairwise resolution has both. Only commutativity
+id and signature, with any deterministic resolution among copies that share
+both, has both. Only commutativity
 distinguishes the rule above from resolving by arrival, and it is the only one
 of the three a conformance case can falsify.
 
@@ -1157,11 +1175,21 @@ of their own naming another currency and take every amount that stated none off
 the bill.
 
 **One id names one entry, in the fold as in the merge.** A log holding two
-copies of an id is reduced by §10.2's rule before anything is applied: a
-re-sent entry would otherwise be applied twice, and one expense sent twice
-doubles what everybody owes. §9.5 makes two entries under one id agree in
-every member the digest covers, so the reduction is a formality — but a reader
-that skips it is wrong on exactly the input gossip produces most often.
+copies of an id is reduced to one before anything is applied: a re-sent entry
+would otherwise be applied twice, and one expense sent twice doubles what
+everybody owes.
+
+- A fold given a verifier resolves identities (§10.7) over every copy first.
+  An entry whose author has a key — the creator, through `creatorKey`, or a
+  participant bound under §10.7 — is applied from a copy whose `sig` verifies
+  against that key. When no copy does, the entry is set aside with
+  `unauthorized_entry`. Among copies that verify, and for an author with no
+  key, the copy whose canonical encoding sorts higher is applied.
+- A fold given no verifier applies the copy whose canonical encoding sorts
+  higher.
+
+§9.5 makes every copy agree in every member the digest covers, so which copy
+applies changes nothing but whether the entry applies at all.
 
 **An entry that cannot be applied MUST be set aside and reported, not raised as
 a failure of the whole fold.** The log is append-only and merges by union, so a
@@ -1447,10 +1475,15 @@ over the live set §10.3 folds.
 
 **What follows from a binding.** For a participant whose key is bound:
 
-- A `joinBill` changing their record MUST be authored by them and MUST verify
-  against their key, or it is set aside with `unauthorized_entry`. This is what
-  stops a relay blob redirecting a payout.
-- Any entry authored as them MUST verify against their key, or it is set aside.
+- A `joinBill` carrying their id — creating their record or changing it —
+  MUST be authored by them and MUST verify against their key, or it is set
+  aside with `unauthorized_entry`. This is what stops a relay blob redirecting
+  a payout, including to a participant who never joined by an entry of their
+  own, such as a creator.
+- Any entry authored as them MUST verify against their key, or it is set aside
+  with `unauthorized_entry`. §10.3 applies this to every copy of the entry,
+  so an unsigned copy, or one signed with any other key, never speaks for
+  them.
 
 **An unbound or contested identity is admitted unverified**, exactly as if this
 section did not exist. Refusing its entries would let anyone make a bill
@@ -1515,20 +1548,25 @@ and doing so takes the first withdrawal back: the entry it removed is on the
 bill again. Somebody who withdraws an expense in error must be able to undo it,
 and this is the only mechanism that does.
 
-**A withdrawal is in force unless a later withdrawal, itself in force and
-authorised, names it.** Later is by the total order of §10.2.
+**A withdrawal is in force unless a withdrawal naming it is itself in force
+and authorised.** `at` plays no part. A `voidEntry` names its target by id, and
+§9.5 makes an id the digest of an entry's content, so a withdrawal can only
+name one that already existed when it was written: what one withdrawal names
+orders it after the other, whatever instants their authors wrote. Deciding by
+`at` instead lets an author's clock, or a backdated entry, leave an undo
+ignored while `withdrawn` reports it applied.
+
+The same digest makes the chains acyclic: an entry cannot name one that names
+it, since each id would have to be computed from the other. So the rule has
+one answer for any set, resolved from the withdrawals that nothing names
+inwards. A chain of three puts the first back in force.
 
 Authorisation is decided first, for every withdrawal, and only an authorised
 one counts when deciding what is in force. Resolving over every withdrawal
 instead lets somebody who may not withdraw an entry cancel the withdrawal of
 somebody who may: the fold reports their entry set aside with
 `unauthorized_entry` and restores the entry anyway, refusing the action and
-honouring it in the same breath. Resolving from the latest entry
-backwards gives one answer for any set: by the time a withdrawal is considered,
-every withdrawal that could name it has already been decided. A chain of three
-therefore puts the first back in force, and a pair that name each other
-resolves without oscillating, because only the later of the two can be in force
-first.
+honouring it in the same breath.
 
 An implementation MUST resolve withdrawals this way before applying any of
 them. Applying them in one pass leaves a withdrawn withdrawal still in effect,

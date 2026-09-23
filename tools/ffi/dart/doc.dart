@@ -86,8 +86,13 @@ void main(List<String> args) {
   // id, in either direction, any number of times.
   final log = mergeEntries(anaLog, benLog).entries;
 
+  // The bill these entries belong to, read back from the entry that opened
+  // it. Every fold names it, so a create for another bill pushed into the
+  // channel cannot make this one unopenable.
+  final billId = (jsonDecode(anaLog.first) as Map)['id'] as String;
+
   final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
-  final folded = foldEntries(benFacts, log);
+  final folded = foldEntries(benFacts, billId, log);
   print('on the bill: ${folded.bill.participants.map((p) => p.id).join(', ')}');
   // Render these. An entry the fold set aside is one a person cannot see
   // otherwise, and its §12 code is what a wallet turns into a sentence.
@@ -96,7 +101,7 @@ void main(List<String> args) {
   // Null when the bill carries no rate: an unpriced bill is an ordinary bill,
   // not a refusal. The third argument names the contested participants the
   // payer has been shown and chosen to pay anyway (§10.7).
-  final owed = obligationOf(benFacts, log, const []);
+  final owed = obligationOf(benFacts, billId, log, const []);
   if (owed == null) throw StateError('a bill with a rate owes something');
 
   final settlement = owed.settlements.single;

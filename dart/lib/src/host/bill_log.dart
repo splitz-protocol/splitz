@@ -49,11 +49,20 @@ class FoldedBill {
 
 /// One bill's entries, and the answers derived from them.
 class BillLog {
-  BillLog(this._host, {List<Map<String, dynamic>>? entries})
+  /// [billId] names the bill these entries belong to. A device that holds a
+  /// bill always knows it, and a fold that is not told reads whatever single
+  /// create the log holds — so anyone holding the invite who pushes a valid
+  /// create for another bill into the channel makes this one unopenable
+  /// (§10.3's `ambiguous_create`). It is omitted only by a caller about to
+  /// learn the id from the log, such as one opening a bill it just created.
+  BillLog(this._host, {List<Map<String, dynamic>>? entries, this.billId})
       : _entries = [...?entries];
 
   final BillHost _host;
   final List<Map<String, dynamic>> _entries;
+
+  /// The bill these entries belong to, when the caller named it.
+  final String? billId;
 
   /// The entries this device holds, in the order §10.2 puts them.
   List<Map<String, dynamic>> get entries =>
@@ -79,8 +88,8 @@ class BillLog {
   FoldedBill fold() {
     final verify = _host.verify;
     final result = verify == null
-        ? splitz.foldLog(_entries)
-        : splitz.foldLog(_entries, verify: verify);
+        ? splitz.foldLog(_entries, billId: billId)
+        : splitz.foldLog(_entries, billId: billId, verify: verify);
     return FoldedBill(
       bill: splitz.decodeBill(result.bill),
       setAside: result.setAside,

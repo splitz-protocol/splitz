@@ -14,7 +14,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import derive_bill_id, resolve_identities, b64url  # noqa: E402
+from _spec import b64url, derive_bill_id, resolve_identities, stand_in  # noqa: E402
 
 
 def AT(m):
@@ -127,7 +127,7 @@ def main():
         create_entry = next(e for e in entries if e["kind"] == "createBill")
         bound, contested = resolve_identities(
             entries, create_entry,
-            verify=lambda e, key, v=verified: e["id"] in v,
+            verify=stand_in(verified),
         )
         out.append({
             "name": name,
