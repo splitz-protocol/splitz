@@ -17,10 +17,15 @@ import 'wallet.dart';
 /// rewritten whole on every change, so a process that dies mid-write loses
 /// every bill instead of one — and the bill being written is the one least
 /// likely to be recoverable from a peer.
-class FileBillStorage implements BillStorage {
+class FileBillStorage implements ScopedBillStorage {
   FileBillStorage(this.directory);
 
   final Directory directory;
+
+  /// The directory's absolute path: two storages over one directory share
+  /// one queue of writes per bill.
+  @override
+  Object get scope => directory.absolute.path;
 
   /// A stored name, as a file name that maps back to it.
   ///

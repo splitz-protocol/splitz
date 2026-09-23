@@ -48,6 +48,13 @@ class InMemoryBillStorage implements BillStorage {
   Future<int> sweepUnfinishedWrites() async => 0;
 }
 
+/// Storage that can say what it writes to, so that two objects over the
+/// same place are recognised as one.
+abstract interface class ScopedBillStorage implements BillStorage {
+  /// Equal for two storages that write to the same place.
+  Object get scope;
+}
+
 /// The bills this device holds, and the entries each is made of.
 class BillStore {
   BillStore(this._storage);
@@ -136,17 +143,30 @@ class BillStore {
   Future<void> forget(String billId) =>
       _serial(billId, () => _storage.delete(_name(billId)));
 
-  /// The last operation queued on each bill.
-  final Map<String, Future<void>> _tails = {};
+  /// The last operation queued on each bill, per storage.
+  ///
+  /// Shared by every store in the process, and keyed by what the storage
+  /// writes to rather than by this object: two stores over one directory —
+  /// a screen opened twice — would otherwise each serialize only their own
+  /// writes and interleave with the other's.
+  static final Map<Object, Map<String, Future<void>>> _tailsByScope = {};
+
+  Object get _scope {
+    final storage = _storage;
+    return storage is ScopedBillStorage ? storage.scope : storage;
+  }
 
   Future<T> _serial<T>(String billId, Future<T> Function() body) {
-    final run = (_tails[billId] ?? Future<void>.value()).then((_) => body());
+    final scope = _scope;
+    final tails = _tailsByScope.putIfAbsent(scope, () => {});
+    final run = (tails[billId] ?? Future<void>.value()).then((_) => body());
     final tail = run.then<void>((_) {}, onError: (Object _) {});
-    _tails[billId] = tail;
+    tails[billId] = tail;
     // Dropped once nothing is queued behind it, so the map holds only bills
     // with work in flight.
     tail.then((_) {
-      if (identical(_tails[billId], tail)) _tails.remove(billId);
+      if (identical(tails[billId], tail)) tails.remove(billId);
+      if (tails.isEmpty) _tailsByScope.remove(scope);
     });
     return run;
   }

@@ -21,6 +21,18 @@ class _SlowStorage extends InMemoryBillStorage {
   }
 }
 
+/// Files whose reads take a turn of the event loop, as [_SlowStorage].
+class _SlowFiles extends FileBillStorage {
+  _SlowFiles(super.directory);
+
+  @override
+  Future<String?> read(String key) async {
+    final value = await super.read(key);
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+    return value;
+  }
+}
+
 /// A relay whose fetch answers only when the test says so.
 class _HeldRelay implements SplitsRelay {
   final InMemorySplitsRelay inner = InMemorySplitsRelay();
@@ -69,6 +81,39 @@ void main() {
     ]);
 
     final ids = [for (final e in await store.read(id)) e['id']];
+    expect(ids, containsAll([create['id'], a['id'], b['id']]));
+  });
+
+  test('two stores over one directory keep each other\'s entries', () async {
+    // A screen opened twice builds two stores over the same files. Their
+    // merges into one bill must queue behind each other, not only behind
+    // their own.
+    final dir = await Directory.systemTemp.createTemp('twostores');
+    addTearDown(() => dir.delete(recursive: true));
+    final create = splitz.createBill(
+      host: host,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: 'A' * 43,
+    );
+    final id = create['id'] as String;
+    final first = BillStore(_SlowFiles(dir));
+    final second = BillStore(_SlowFiles(dir));
+    await first.merge(id, [create]);
+    wallet.tick();
+    final a = splitz.joinBill(host: host, name: 'Ana', payTo: 'u1ana');
+    final b = splitz.joinBill(
+      host: WalletBillHost(FakeWallet(id: 'ben')),
+      name: 'Ben',
+      payTo: 'u1ben',
+    );
+
+    await Future.wait([
+      first.merge(id, [a]),
+      second.merge(id, [b]),
+    ]);
+
+    final ids = [for (final e in await first.read(id)) e['id']];
     expect(ids, containsAll([create['id'], a['id'], b['id']]));
   });
 
