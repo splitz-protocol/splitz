@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use crate::error::{code, Result, SplitError};
 use crate::instant::canonical_instant;
 use crate::model::{Bill, Expense, Participant, PaymentRecord, Payout};
-use crate::money::check_currency;
+use crate::money::{check_currency, MAX_ENTRY_AMOUNT};
 use crate::rate::ExchangeRate;
 
 /// The wire format version this crate writes and the highest it reads.
@@ -209,7 +209,7 @@ pub fn decode_expense(raw: &Value, currency: &str, ids: &BTreeSet<String>) -> Re
             ));
         }
     }
-    Ok(Expense {
+    let expense = Expense {
         id: string(raw.get("id").unwrap_or(&Value::Null))?,
         description: match raw.get("description") {
             None => String::new(),
@@ -224,7 +224,19 @@ pub fn decode_expense(raw: &Value, currency: &str, ids: &BTreeSet<String>) -> Re
                 .ok_or_else(|| type_error("an instant"))?,
         )?,
         split,
-    })
+    };
+    // §2.2. Checked once the payload has decoded, so an entry wrong in two ways
+    // is refused for the same one everywhere.
+    if !(-MAX_ENTRY_AMOUNT..=MAX_ENTRY_AMOUNT).contains(&expense.amount) {
+        return Err(SplitError::new(
+            code::AMOUNT_TOO_LARGE,
+            format!(
+                "An expense of {} is past the {MAX_ENTRY_AMOUNT} cap",
+                expense.amount
+            ),
+        ));
+    }
+    Ok(expense)
 }
 
 /// Decodes one payment payload (§9.2), against the ids already on the bill.
@@ -268,6 +280,12 @@ pub fn decode_payment(
         return Err(SplitError::new(
             code::NEGATIVE_AMOUNT,
             format!("A payment of {amount} is negative"),
+        ));
+    }
+    if amount > MAX_ENTRY_AMOUNT {
+        return Err(SplitError::new(
+            code::AMOUNT_TOO_LARGE,
+            format!("A payment of {amount} is past the {MAX_ENTRY_AMOUNT} cap"),
         ));
     }
 

@@ -91,6 +91,15 @@ every total, sum and intermediate product formed from amounts. An operation
 whose result would exceed that range MUST be refused with `amount_overflow`, or
 with the narrower code §3 and §7 name, and MUST NOT be allowed to wrap.
 
+**One expense or payment MUST carry at most `9999999999` minor units in
+magnitude** — ten digits — refused with `amount_too_large`. The check comes
+after the rest of the payload has decoded (§9.1, §9.2). Ten digits rather than
+eleven keeps every single entry priceable: §7.1 forms `minorUnits ×
+100000000`, which fits a signed 64-bit integer up to `92233720368`. A balance
+reaches the 64-bit bound only after 922337204 entries at the cap, so the
+overflow refusals below guard a log no bill holds in practice; they stay,
+because wrapping is never allowed.
+
 The bound is stated as a number rather than left to whichever integer type an
 implementation happens to have, so that every implementation accepts and
 refuses the same inputs. A wrapped total satisfies every check downstream of
@@ -326,9 +335,9 @@ would carry a balance out of range is set aside with `amount_overflow`, and so
 is every confirmation of a payment that would; the payment stays unconfirmed.
 A payment is set aside the same way when it would carry the total one
 participant has recorded paying another, confirmed or not, out of range —
-§14.4 sums the unconfirmed part of that total. Without these, one expense of
-the largest amount §2.2 admits, written by anyone holding the invite, leaves
-§5 refusing the whole bill on every device and nobody able to settle.
+§14.4 sums the unconfirmed part of that total. Without these, a log long
+enough to pass the 64-bit bound, written by anyone holding the invite, would
+leave §5 refusing the whole bill on every device and nobody able to settle.
 
 `creditors` is the positive balances, most owed first, ties by ascending id.
 `debtors` is the negative balances, largest debt first, ties by ascending id.
@@ -1959,7 +1968,7 @@ not stop the rest of a sync: anybody who has the channel can push one.
 ## 12. Error codes
 
 `empty_weights`, `negative_weight`, `zero_weight_sum`, `allocation_overflow`,
-`weight_sum_overflow`, `negative_share`, `amount_overflow`,
+`weight_sum_overflow`, `negative_share`, `amount_overflow`, `amount_too_large`,
 `exact_limit_too_large`, `unauthorized_entry`, `amend_kind_mismatch`,
 `bill_ambiguous_entry`, `bill_missing_entry_payload`, `empty_split`,
 `exact_total_mismatch`, `percentage_not_full_scale`, `itemized_no_items`,

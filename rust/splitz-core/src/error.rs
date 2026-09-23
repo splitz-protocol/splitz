@@ -17,6 +17,7 @@ pub mod code {
     // §4 split methods
     pub const NEGATIVE_SHARE: &str = "negative_share";
     pub const AMOUNT_OVERFLOW: &str = "amount_overflow";
+    pub const AMOUNT_TOO_LARGE: &str = "amount_too_large";
     pub const EMPTY_SPLIT: &str = "empty_split";
     pub const EXACT_TOTAL_MISMATCH: &str = "exact_total_mismatch";
     pub const PERCENTAGE_NOT_FULL_SCALE: &str = "percentage_not_full_scale";

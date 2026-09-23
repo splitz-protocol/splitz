@@ -17,6 +17,7 @@ abstract final class SplitCode {
   // §4 split methods
   static const negativeShare = 'negative_share';
   static const amountOverflow = 'amount_overflow';
+  static const amountTooLarge = 'amount_too_large';
   static const emptySplit = 'empty_split';
   static const exactTotalMismatch = 'exact_total_mismatch';
   static const percentageNotFullScale = 'percentage_not_full_scale';

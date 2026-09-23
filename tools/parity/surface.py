@@ -108,6 +108,7 @@ RENAMES = {
     "isZip321Address": "is_zip321_address",
     "zatoshiPerZec": "ZATOSHI_PER_ZEC",
     "maxAmount": "MAX_AMOUNT",
+    "maxEntryAmount": "MAX_ENTRY_AMOUNT",
     "minAmount": "MIN_AMOUNT",
     "maxZatoshi": "MAX_ZATOSHI",
     "maxMemoBytes": "MAX_MEMO_BYTES",

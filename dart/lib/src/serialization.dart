@@ -172,7 +172,7 @@ Expense decodeExpense(Object? raw, String billCurrency, Set<String> ids) {
           'An expense splits to $id, who is not on this bill');
     }
   }
-  return Expense(
+  final expense = Expense(
     id: _string(e['id']),
     description: e.containsKey('description') ? _string(e['description']) : '',
     paidBy: paidBy,
@@ -181,6 +181,13 @@ Expense decodeExpense(Object? raw, String billCurrency, Set<String> ids) {
     at: canonicalInstant(e['at']),
     split: split.cast<String, dynamic>(),
   );
+  // §2.2. Checked once the payload has decoded, so an entry wrong in two ways
+  // is refused for the same one everywhere.
+  if (expense.amount > maxEntryAmount || expense.amount < -maxEntryAmount) {
+    raise(SplitCode.amountTooLarge,
+        'An expense of ${expense.amount} is past the $maxEntryAmount cap');
+  }
+  return expense;
 }
 
 /// Decodes one payment payload (§9.2), against the ids already on the bill.
@@ -207,6 +214,10 @@ PaymentRecord decodePayment(Object? raw, String billCurrency, Set<String> ids) {
   final amount = _integer(p['amount']);
   if (amount < 0) {
     raise(SplitCode.negativeAmount, 'A payment of $amount is negative');
+  }
+  if (amount > maxEntryAmount) {
+    raise(SplitCode.amountTooLarge,
+        'A payment of $amount is past the $maxEntryAmount cap');
   }
 
   int? zatoshi;

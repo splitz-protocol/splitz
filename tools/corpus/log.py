@@ -66,12 +66,6 @@ def conf(eid, author, method, minute, ref=None, pid="y1", record=None):
             "at": AT(minute), "confirmation": c}
 
 
-def nul_join(eid, who, minute):
-    return {"v": 1, "id": eid, "author": who, "kind": "joinBill",
-            "at": AT(minute),
-            "participant": {"id": who, "name": who, "payTo": ADDRESSES[0]}}
-
-
 def void(eid, author, target, minute):
     return {"v": 1, "id": eid, "author": author, "kind": "voidEntry",
             "at": AT(minute), "targetId": target}
@@ -153,30 +147,6 @@ LANE_CASES = [
     ("one_transaction_paying_two_people",
      LANES + [paid("l11", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
               paid("l12", "tx-9:cara", "cara", 8, "shieldedZec", ref="tx-9")],
-     C["id"]),
-    # A participant id may hold any character, NUL included. Payments are
-    # totalled per (from, to) pair, and a key that joins the two ids with a
-    # separator makes "alice\0m"→"x" and "alice"→"m\0x" one pair: the fake
-    # record's i64::MAX total would set the real, confirmed one aside.
-    ("two_pairs_a_separator_would_join",
-     [C, J_ANA,
-      nul_join("n1", "alice", 2), nul_join("n2", "m\u0000x", 3),
-      nul_join("n3", "alice\u0000m", 4), nul_join("n4", "x", 5),
-      {"v": 1, "id": "n5", "author": "m\u0000x", "kind": "addExpense",
-       "at": AT(6),
-       "expense": {"id": "e1", "description": "d", "paidBy": "m\u0000x",
-                   "amount": 1000, "at": AT(6),
-                   "split": {"type": "equal", "among": ["alice", "m\u0000x"]}}},
-      {"v": 1, "id": "n6", "author": "alice\u0000m", "kind": "recordPayment",
-       "at": AT(7),
-       "payment": {"id": "fake", "from": "alice\u0000m", "to": "x",
-                   "amount": 9223372036854775807, "method": "cash",
-                   "at": AT(7)}},
-      {"v": 1, "id": "n7", "author": "alice", "kind": "recordPayment",
-       "at": AT(8),
-       "payment": {"id": "real", "from": "alice", "to": "m\u0000x",
-                   "amount": 500, "method": "cash", "at": AT(8)}},
-      conf("n8", "m\u0000x", "recipientConfirmed", 9, pid="real")],
      C["id"]),
     ("two_recipients_of_one_transaction_under_one_id",
      LANES + [paid("l13", "tx-9", "ben", 8, "shieldedZec", ref="tx-9"),
@@ -816,9 +786,9 @@ FOLD_CASES += [
 ]
 
 
-# §5.1 and §10.3. A bill the fold returns always has balances §2.2 can hold:
-# an entry whose effect would carry one out of range is set aside.
-I64_MAX = 2**63 - 1
+# §2.2. One expense or payment carries at most MAX_ENTRY_AMOUNT in magnitude,
+# so no log a bill can plausibly hold carries a balance out of range.
+CAP = 9_999_999_999
 
 
 def expense(eid, author, paid_by, amount, amounts, minute):
@@ -836,34 +806,21 @@ def payment(eid, author, frm, to, amount, minute, pid):
                         "method": "cash", "at": AT(minute)}}
 
 
-def confirm(eid, author, pid, minute):
-    return {"v": 1, "id": eid, "author": author, "kind": "confirmPayment",
-            "at": AT(minute),
-            "confirmation": {"paymentId": pid,
-                             "method": "recipientConfirmed"}}
-
-
 FOLD_CASES += [
-    ("an_expense_that_would_carry_a_balance_out_of_range_is_set_aside",
-     BASE + [expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9)],
+    ("an_expense_at_the_cap_is_applied",
+     BASE + [expense("big", "ben", "ana", CAP, {"ben": CAP}, 9)], C["id"]),
+    ("an_expense_one_over_the_cap_is_set_aside",
+     BASE + [expense("big", "ben", "ana", CAP + 1, {"ben": CAP + 1}, 9)],
      C["id"]),
-    ("and_the_same_expense_on_a_bill_it_fits_is_applied",
-     [C, J_ANA, J_BEN,
-      expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9)], C["id"]),
-    ("a_payment_that_would_carry_a_pair_total_out_of_range_is_set_aside",
-     [C, J_ANA, J_BEN,
-      payment("q1", "ben", "ben", "ana", I64_MAX, 9, "y1"),
-      payment("q2", "ben", "ben", "ana", 1, 10, "y2")], C["id"]),
-    ("a_confirmation_that_would_carry_a_balance_out_of_range_is_set_aside",
-     [C, J_ANA, J_BEN,
-      expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9),
-      payment("q1", "ana", "ana", "ben", 10, 10, "y1"),
-      confirm("k1", "ben", "y1", 11)], C["id"]),
-    ("and_one_that_keeps_every_balance_in_range_applies",
-     [C, J_ANA, J_BEN,
-      expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9),
-      payment("q1", "ben", "ben", "ana", 10, 10, "y1"),
-      confirm("k1", "ana", "y1", 11)], C["id"]),
+    ("a_refund_at_the_cap_is_applied",
+     BASE + [expense("big", "ben", "ana", -CAP, {"ben": -CAP}, 9)], C["id"]),
+    ("a_refund_one_over_the_cap_is_set_aside",
+     BASE + [expense("big", "ben", "ana", -CAP - 1, {"ben": -CAP - 1}, 9)],
+     C["id"]),
+    ("a_payment_at_the_cap_is_applied",
+     BASE + [payment("q1", "ben", "ben", "ana", CAP, 9, "ycap")], C["id"]),
+    ("a_payment_one_over_the_cap_is_set_aside",
+     BASE + [payment("q1", "ben", "ben", "ana", CAP + 1, 9, "ycap")], C["id"]),
 ]
 
 

@@ -59,11 +59,16 @@ def _join(rng, pid, minute):
             "participant": p}
 
 
+# §2.2: the entry cap and one past it, from either side.
+CAP = _spec.MAX_ENTRY_AMOUNT
+
+
 def _expense(rng, author, n, among):
     return {"v": 1, "author": author, "kind": "addExpense", "at": at(n),
             "expense": {"id": f"x{n}", "description": "dinner",
                         "paidBy": rng.choice(among), "amount": rng.choice(
-                            [1, 2, 9000, 10 ** 9, 0, -1]),
+                            [1, 2, 9000, 10 ** 9, 0, -1, CAP, CAP + 1,
+                             -CAP, -CAP - 1]),
                         "at": at(n),
                         "split": {"type": "equal", "among": among}}}
 
@@ -72,7 +77,7 @@ def _payment(rng, n, among):
     a, b = rng.sample(among, 2)
     return {"v": 1, "author": a, "kind": "recordPayment", "at": at(n),
             "payment": {"id": f"y{n}", "from": a, "to": b,
-                        "amount": rng.choice([1, 4500, 0]),
+                        "amount": rng.choice([1, 4500, 0, CAP, CAP + 1]),
                         "method": rng.choice(["cash", "shieldedZec", "swap"]),
                         "at": at(n)}}
 

@@ -16,6 +16,15 @@ import 'errors.dart';
 /// JavaScript.
 const int maxAmount = 9223372036854775807;
 
+/// The largest magnitude one expense or payment may carry, ten digits of minor
+/// units (SPEC.md §2.2).
+///
+/// Ten rather than eleven so that one entry is always priceable: §7.1 forms
+/// `minorUnits × 100000000`, which fits a signed 64-bit integer up to
+/// 92233720368 minor units. A balance reaches [maxAmount] only after about
+/// 922 million entries at this cap.
+const int maxEntryAmount = 9999999999;
+
 /// The most negative signed 64-bit integer. It has no positive counterpart, so
 /// taking its magnitude is the identity (SPEC.md §3, step 3).
 const int minAmount = -9223372036854775808;
