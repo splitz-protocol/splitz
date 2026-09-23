@@ -165,6 +165,7 @@ Withholdings withholdings(
   String payer, {
   Set<String> contestedIds = const {},
   Set<String> payAnyway = const {},
+  Map<String, String>? recordedBy,
 }) {
   final mine = plan.where((s) => s.from == payer);
 
@@ -174,6 +175,9 @@ Withholdings withholdings(
   for (final p in bill.payments) {
     if (p.from != payer) continue;
     if (bill.confirmedPayments.contains(p.id)) continue;
+    // A record somebody else wrote is their word, not a payment this payer
+    // has in flight.
+    if (recordedBy != null && recordedBy[p.id] != payer) continue;
     pending[p.to] = checkedAdd(pending[p.to] ?? 0, p.amount);
   }
 

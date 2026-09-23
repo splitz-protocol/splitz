@@ -1002,6 +1002,12 @@ the invite can re-push a copy of an entry with one member removed and take the
 expense, payment or withdrawal it carried off the bill, on every device, with
 nothing set aside to show for it.
 
+**An entry's `v`, when present, MUST be an integer of at least 1**, refused
+with `bill_type_error`. §9.5 leaves `v` out of the id, so a copy carrying any
+value keeps the honest entry's id, and one whose `v` is not an integer would
+reach the canonical encoding that §10.2's merge and order compare — which
+refuses it — and take every batch it travels in down with it.
+
 **The payload MUST be an object, and every id inside it MUST be a string**,
 refused with `bill_type_error`. §10.1 is the only gate between a peer's JSON
 and every pass that follows, and those passes index the payload without
@@ -1281,6 +1287,12 @@ differing as evidence that their bills differ.
   otherwise set aside with `amend_kind_mismatch`. An amendment replaces its
   target wholesale, so one carrying no payload silently deletes what it claims
   to correct.
+- An `amendEntry` MUST keep the id its target is about — a join's
+  `participant.id`, an expense's `id`, a payment's `id`, a confirmation's
+  `paymentId` — and is otherwise set aside with `amend_kind_mismatch`. A
+  correction that renames its subject is a different entry: a join renamed
+  out from under an expense takes its author off the bill and the debt with
+  them, and the §10.8 checks that read the target never see it.
 
 **A refund is an expense with a negative total**, and §3 step 7 negates every
 share to divide one. It carries **no special authorship**: anybody holding the
@@ -1354,7 +1366,7 @@ payload. `reference` and `note` are optional.
 |---|---|---|---|
 | `recipientConfirmed` | the payment's `to` | no | yes |
 | `walletReceived` | the payment's `to` | no | yes |
-| `onChain` | any participant | **yes** | yes |
+| `onChain` | the payment's `to` | **yes** | yes |
 | `payerAttested` | the payment's `from` | no | **no** |
 
 **Every method that settles anything is the recipient's.** The payer's own word
@@ -1379,9 +1391,8 @@ An unrecognised method is refused with `bill_unknown_confirmation_method`.
 whose author is not is set aside with `unauthorized_confirmation`. A
 confirmation's whole weight is in who gave it, so a method anyone may claim is
 a method that says nothing: without this rule one holder of the invite marks
-their own debt `recipientConfirmed` and every device shows it settled.
-`onChain` names a public transaction any participant can check independently,
-so it speaks for nobody in particular and any participant may author it.
+their own debt `recipientConfirmed`, or `onChain` with any string as its
+reference, and every device shows it settled.
 
 **`payerAttested` is never conclusive.** A payer saying they paid is the claim
 of the `recordPayment` entry, not evidence for it; attaching a reference or a
@@ -2088,8 +2099,11 @@ overpayment.
 paid is still in the plan §6 produces.
 
 - A wallet MUST NOT include such a debt in a request. A settlement carries
-  such a debt when a payment the payer recorded, and that is not confirmed,
-  names its payee **or any creditor whose debt it covers** (§6.3). Netting
+  such a debt when a payment the payer recorded — a record whose entry the
+  payer wrote — and that is not confirmed, names its payee **or any creditor
+  whose debt it covers** (§6.3). A record its payee wrote is their word, not
+  a payment the payer has in flight, and holding a debt back on it would let
+  any covered creditor stop the payer settling. Netting
   reroutes a debt the payer has already paid onto somebody else, and matching
   on the payee alone asks for it again.
 - Where the amount pending is **less** than the debt, the **whole** debt is

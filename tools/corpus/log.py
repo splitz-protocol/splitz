@@ -53,6 +53,12 @@ def conf(eid, author, method, minute, ref=None, pid="y1"):
             "at": AT(minute), "confirmation": c}
 
 
+def nul_join(eid, who, minute):
+    return {"v": 1, "id": eid, "author": who, "kind": "joinBill",
+            "at": AT(minute),
+            "participant": {"id": who, "name": who, "payTo": ADDRESSES[0]}}
+
+
 def void(eid, author, target, minute):
     return {"v": 1, "id": eid, "author": author, "kind": "voidEntry",
             "at": AT(minute), "targetId": target}
@@ -135,6 +141,30 @@ LANE_CASES = [
      LANES + [paid("l11", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
               paid("l12", "tx-9:cara", "cara", 8, "shieldedZec", ref="tx-9")],
      C["id"]),
+    # A participant id may hold any character, NUL included. Payments are
+    # totalled per (from, to) pair, and a key that joins the two ids with a
+    # separator makes "alice\0m"→"x" and "alice"→"m\0x" one pair: the fake
+    # record's i64::MAX total would set the real, confirmed one aside.
+    ("two_pairs_a_separator_would_join",
+     [C, J_ANA,
+      nul_join("n1", "alice", 2), nul_join("n2", "m\u0000x", 3),
+      nul_join("n3", "alice\u0000m", 4), nul_join("n4", "x", 5),
+      {"v": 1, "id": "n5", "author": "m\u0000x", "kind": "addExpense",
+       "at": AT(6),
+       "expense": {"id": "e1", "description": "d", "paidBy": "m\u0000x",
+                   "amount": 1000, "at": AT(6),
+                   "split": {"type": "equal", "among": ["alice", "m\u0000x"]}}},
+      {"v": 1, "id": "n6", "author": "alice\u0000m", "kind": "recordPayment",
+       "at": AT(7),
+       "payment": {"id": "fake", "from": "alice\u0000m", "to": "x",
+                   "amount": 9223372036854775807, "method": "cash",
+                   "at": AT(7)}},
+      {"v": 1, "id": "n7", "author": "alice", "kind": "recordPayment",
+       "at": AT(8),
+       "payment": {"id": "real", "from": "alice", "to": "m\u0000x",
+                   "amount": 500, "method": "cash", "at": AT(8)}},
+      conf("n8", "m\u0000x", "recipientConfirmed", 9, pid="real")],
+     C["id"]),
     ("two_recipients_of_one_transaction_under_one_id",
      LANES + [paid("l13", "tx-9", "ben", 8, "shieldedZec", ref="tx-9"),
               paid("l14", "tx-9", "cara", 8, "shieldedZec", ref="tx-9")],
@@ -156,11 +186,16 @@ LANE_CASES = [
      LANES + [paid("l21", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
               conf("l22", "cara", "recipientConfirmed", 9, pid="tx-9:ben")],
      C["id"]),
-    # `onChain` is the one method any participant may author, and the one that
-    # needs a reference.
-    ("any_participant_may_say_a_transaction_landed",
+    # `onChain` is the recipient's, like every method that settles: a
+    # shielded payment is visible to nobody else, and a payer or a third party
+    # naming a transaction proves nothing about it.
+    ("a_third_party_may_not_say_a_transaction_landed",
      LANES + [paid("l23", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
               conf("l24", "dan", "onChain", 9, "tx-9", pid="tx-9:ben")],
+     C["id"]),
+    ("the_recipient_says_a_transaction_landed",
+     LANES + [paid("l23", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              conf("l24", "ben", "onChain", 9, "tx-9", pid="tx-9:ben")],
      C["id"]),
     # A swap's ZEC leg is advisory and must still be a real amount.
     ("a_swap_payment_whose_zec_leg_is_zero",
@@ -186,6 +221,11 @@ FOLD_CASES = [
      BASE + [conf("c5", "ben", "recipientConfirmed", 5)], C["id"]),
     ("on_chain_without_a_reference",
      BASE + [conf("c6", "ana", "onChain", 5)], C["id"]),
+    # One copy of an honest entry with `v` changed keeps the honest id
+    # (§9.5). Refused at ingress, it leaves the bill opening as before.
+    ("a_copy_whose_version_is_a_fraction", BASE + [dict(E1, v=1.5)], C["id"]),
+    ("the_payer_may_not_say_his_own_transaction_landed",
+     BASE + [conf("c6b", "ben", "onChain", 5, "not-a-transaction")], C["id"]),
     ("a_confirmation_method_nobody_defines",
      BASE + [conf("c7", "ana", "sawItOnTheNews", 5)], C["id"]),
     ("a_confirmation_for_a_payment_the_bill_lacks",
@@ -309,7 +349,7 @@ FOLD_CASES = [
               "at": AT(6), "targetId": "j1", "participant": 7}], C["id"]),
     # A reference is a non-empty string; anything else names no transaction.
     ("an_on_chain_reference_that_is_a_number",
-     BASE + [{"v": 1, "id": "c10", "author": "ben", "kind": "confirmPayment",
+     BASE + [{"v": 1, "id": "c10", "author": "ana", "kind": "confirmPayment",
               "at": AT(6),
               "confirmation": {"paymentId": "y1", "method": "onChain",
                                "reference": 5}}], C["id"]),
@@ -399,6 +439,31 @@ FOLD_CASES = [
               "at": AT(6), "targetId": "e1",
               "expense": {"id": "x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    # §10.4. An amendment keeps the id its target is about. Ben renaming his
+    # own join would take him off the bill and his share of the dinner with
+    # him; renaming it and then withdrawing the old name would get past the
+    # §10.8 check that reads the target.
+    ("a_join_amended_to_another_id",
+     [C, J_ANA, J_BEN, E1,
+      {"v": 1, "id": "a4", "author": "ben", "kind": "amendEntry",
+       "at": AT(6), "targetId": "j2",
+       "participant": {"id": "ben-gone", "name": "Ben",
+                       "payTo": ADDRESSES[1]}}],
+     C["id"]),
+    ("a_join_amended_to_another_id_then_withdrawn",
+     [C, J_ANA, J_BEN, E1,
+      {"v": 1, "id": "a5", "author": "ben", "kind": "amendEntry",
+       "at": AT(6), "targetId": "j2",
+       "participant": {"id": "ben-gone", "name": "Ben",
+                       "payTo": ADDRESSES[1]}},
+      void("v9", "ben", "j2", 7)],
+     C["id"]),
+    ("a_payment_amended_to_another_id",
+     BASE + [{"v": 1, "id": "a6", "author": "ben", "kind": "amendEntry",
+              "at": AT(6), "targetId": "p1",
+              "payment": {"id": "y2", "from": "ben", "to": "ana",
+                          "amount": 4500, "method": "cash", "at": AT(4)}}],
      C["id"]),
     ("a_rejoin_replaces_the_record_and_reports_the_address",
      BASE + [{"v": 1, "id": "j3", "author": "ben", "kind": "joinBill", "at": AT(6),
@@ -571,6 +636,11 @@ ENTRY_CASES = [
     # string and win every merge it entered.
     ("a_signature_that_is_not_a_string_is_refused", dict(J_ANA, sig=None)),
     ("a_numeric_signature_is_refused", dict(J_ANA, sig=7)),
+    # §10.1. `v` is outside the id, so any value keeps the honest id; one that
+    # is not an integer would stop the merge's canonical comparison.
+    ("an_entry_whose_version_is_a_fraction", dict(J_ANA, v=1.5)),
+    ("an_entry_whose_version_is_a_string", dict(J_ANA, v="1")),
+    ("an_entry_whose_version_is_zero", dict(J_ANA, v=0)),
     # §10.1's depth bound, at the boundary and one past it. A case nested far
     # past a JSON reader's own recursion limit cannot live here: the file
     # would fail to parse and take the whole corpus down rather than test one

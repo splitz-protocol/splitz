@@ -67,12 +67,21 @@ class ConfirmationRule {
   final bool settles;
 }
 
+/// §10.4: the member naming what each kind of entry is about, which an
+/// amendment may not change.
+const Map<String, (String, String)> _amendedSubject = {
+  'joinBill': ('participant', 'id'),
+  'addExpense': ('expense', 'id'),
+  'recordPayment': ('payment', 'id'),
+  'confirmPayment': ('confirmation', 'paymentId'),
+};
+
 const Map<String, ConfirmationRule> confirmationMethods = {
   'recipientConfirmed': ConfirmationRule('to', false, true),
   'walletReceived': ConfirmationRule('to', false, true),
-  // Names a public transaction any participant can check, so it speaks for
-  // nobody in particular.
-  'onChain': ConfirmationRule(null, true, true),
+  // The recipient saying they opened the transaction and saw it land. A
+  // shielded payment is visible to nobody else, so nobody else can say it.
+  'onChain': ConfirmationRule('to', true, true),
   // A payer saying they paid is the claim of the record, not evidence for it.
   'payerAttested': ConfirmationRule('from', false, false),
 };
@@ -178,6 +187,17 @@ Map<String, dynamic> checkEntry(Object? raw) {
   // win every merge it entered.
   if (entry.containsKey('sig') && entry['sig'] is! String) {
     raise(SplitCode.billTypeError, 'A signature is a string');
+  }
+
+  // §10.1. `v` sits outside the id (§9.5), so a copy with any value keeps the
+  // honest id; one that is not an integer would reach the canonical encoding
+  // the merge and the order compare, and stop there.
+  if (entry.containsKey('v')) {
+    final v = entry['v'];
+    if (v is! int || v < 1) {
+      raise(SplitCode.billTypeError,
+          'An entry version is an integer of 1 or more');
+    }
   }
 
   final carried = [
@@ -387,6 +407,7 @@ class FoldResult {
     required this.withdrawn,
     required this.setAside,
     required this.identities,
+    required this.paymentAuthors,
   });
 
   /// The materialised bill, as a wire-form map.
@@ -410,6 +431,12 @@ class FoldResult {
   /// the host's, so a fold that cannot check a signature reports no binding
   /// and no contest rather than claiming there are none.
   final Identities identities;
+
+  /// Who wrote each payment record on the bill, by the payment's id.
+  ///
+  /// Not part of the bill document, which restates neither author nor
+  /// instant (§10.5). §14.4 withholds only for a record the payer wrote.
+  final Map<String, String> paymentAuthors;
 }
 
 /// Where a participant is paid (§10.3 step 4): the address of their first
@@ -569,6 +596,15 @@ FoldResult foldLog(List<Object?> rawEntries,
     }
     final wanted = payloadForKind[target['kind']];
     if (wanted != null && !e.containsKey(wanted)) {
+      aside(e, SplitCode.amendKindMismatch);
+      continue;
+    }
+    // §10.4. The id the target is about stays: renaming it makes a different
+    // entry the §10.8 checks never read.
+    final subject = _amendedSubject[target['kind']];
+    if (subject != null &&
+        (e[subject.$1] as Map)[subject.$2] !=
+            (target[subject.$1] as Map)[subject.$2]) {
       aside(e, SplitCode.amendKindMismatch);
       continue;
     }
@@ -806,13 +842,16 @@ FoldResult foldLog(List<Object?> rawEntries,
 
   final expenses = <Map<String, dynamic>>[];
   final payments = <Map<String, dynamic>>[];
+  final paymentAuthors = <String, String>{};
   // §5.1's balances, formed as this pass applies each entry and in the order
   // §5.1 forms them, so a bill this fold returns always has balances §2.2 can
   // hold. An entry whose effect would carry one out of range is set aside,
   // deterministically and in log order, rather than left to make §5 refuse
   // the whole bill.
   var running = {for (final id in participants.keys) id: 0};
-  final pairTotal = <String, int>{};
+  // Keyed by the pair itself: ids may hold any character, so no separator
+  // joins two of them into one string without collisions.
+  final pairTotal = <(String, String), int>{};
   for (final e in live) {
     final eff = effective(e);
     if (e['kind'] == 'addExpense') {
@@ -899,7 +938,7 @@ FoldResult foldLog(List<Object?> rawEntries,
       }
       // What one participant has recorded paying another, confirmed or not,
       // stays in range: §14.4 sums the unconfirmed part of it.
-      final pair = '${pay['from']}\u0000${pay['to']}';
+      final pair = (pay['from'] as String, pay['to'] as String);
       try {
         pairTotal[pair] =
             checkedAdd(pairTotal[pair] ?? 0, pay['amount'] as int);
@@ -908,6 +947,7 @@ FoldResult foldLog(List<Object?> rawEntries,
         continue;
       }
       payments.add(pay);
+      paymentAuthors[pay['id'] as String] = e['author'] as String;
     }
   }
 
@@ -1000,5 +1040,8 @@ FoldResult foldLog(List<Object?> rawEntries,
     withdrawn: sortedUtf8(voided),
     setAside: setAside,
     identities: identities,
+    paymentAuthors: {
+      for (final id in sortedUtf8(paymentAuthors.keys)) id: paymentAuthors[id]!,
+    },
   );
 }

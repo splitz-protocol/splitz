@@ -244,12 +244,19 @@ fn withholdings() {
                 })
                 .unwrap_or_default()
         };
+        let recorded_by: Option<std::collections::BTreeMap<String, String>> =
+            c.get("recordedBy").and_then(Value::as_object).map(|m| {
+                m.iter()
+                    .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_owned())))
+                    .collect()
+            });
         let w = splitz_core::withholdings(
             &plan,
             &bill,
             c["payer"].as_str().unwrap_or_default(),
             &ids("contested"),
             &ids("payAnyway"),
+            recorded_by.as_ref(),
         )?;
         Ok(json!({
             "carried": w.carried.iter().map(|s| {
@@ -371,6 +378,7 @@ fn log() {
             "replacedAddresses": r.replaced_addresses.iter().map(|a| json!({
                 "id": a.id, "from": a.from, "to": a.to,
             })).collect::<Vec<_>>(),
+            "paymentAuthors": r.payment_authors,
             "withdrawn": r.withdrawn,
             // The reason is prose (SPEC.md §12); only the code is compared.
             "setAside": r.set_aside.iter().map(|a| json!({

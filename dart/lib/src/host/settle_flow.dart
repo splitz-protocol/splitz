@@ -130,6 +130,7 @@ PayerObligation? obligationFor(
     host.me,
     contestedIds: folded.identities.contested,
     payAnyway: payAnyway,
+    recordedBy: folded.paymentAuthors,
   );
   final mine = split.carried;
   final awaiting = split.awaiting;

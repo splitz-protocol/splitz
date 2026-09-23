@@ -56,7 +56,8 @@ THREE = [ANA, BEN, CAI]
 def cases():
     out = []
 
-    def case(name, plan, b, payer, contested=(), pay_anyway=()):
+    def case(name, plan, b, payer, contested=(), pay_anyway=(),
+             recorded_by=None):
         out.append({
             "name": name,
             "plan": plan,
@@ -64,7 +65,9 @@ def cases():
             "payer": payer,
             **({"contested": list(contested)} if contested else {}),
             **({"payAnyway": list(pay_anyway)} if pay_anyway else {}),
-            "expect": withholdings(plan, b, payer, contested, pay_anyway),
+            **({"recordedBy": recorded_by} if recorded_by is not None else {}),
+            "expect": withholdings(plan, b, payer, contested, pay_anyway,
+                                   recorded_by),
         })
 
     # Section 14.4 with section 6.3's coverage. Ana owed ben and has paid
@@ -77,6 +80,16 @@ def cases():
     case("and_one_covering_a_debt_nobody_paid_is_carried",
          [rerouted], bill(THREE, [pay("p1", "ana", "cai", 5)],
                           confirmed=["p1"]), "ana")
+
+    # Section 14.4 withholds for a record the payer wrote. Ben is owed on a
+    # debt the settlement to cai covers; a record he wrote himself, saying ana
+    # paid him, is his word and not hers, and holds nothing back.
+    case("a_record_a_covered_creditor_wrote_holds_nothing_back",
+         [rerouted], bill(THREE, [pay("p1", "ana", "ben", 1)]), "ana",
+         recorded_by={"p1": "ben"})
+    case("and_one_the_payer_wrote_still_does",
+         [rerouted], bill(THREE, [pay("p1", "ana", "ben", 1)]), "ana",
+         recorded_by={"p1": "ana"})
 
     # Nothing held back.
     case("a_plain_debt_is_carried",

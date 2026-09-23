@@ -165,6 +165,7 @@ void main() {
       payAnyway: {
         for (final id in (c['payAnyway'] as List?) ?? const []) id as String,
       },
+      recordedBy: (c['recordedBy'] as Map?)?.cast<String, String>(),
     );
     produce({
       'carried': [
@@ -300,6 +301,7 @@ void main() {
         for (final a in r.replacedAddresses)
           {'id': a.id, 'from': a.from, 'to': a.to},
       ],
+      'paymentAuthors': r.paymentAuthors,
       'withdrawn': r.withdrawn,
       'setAside': [
         // The reason is prose (SPEC.md §12); only the code is compared.

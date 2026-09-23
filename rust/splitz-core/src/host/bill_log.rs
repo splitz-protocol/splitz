@@ -6,6 +6,7 @@
 //! truth that goes stale without saying so.
 
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 use crate::authority::Identities;
 use crate::error::Result;
@@ -43,6 +44,8 @@ pub struct FoldedBill {
     /// Empty of contests when the host does not verify: without a verifier no
     /// self-claim is checked, so nothing is bound and nothing is contested.
     pub identities: Identities,
+    /// Who wrote each payment record on the bill, by the payment's id (§14.4).
+    pub payment_authors: BTreeMap<String, String>,
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -117,6 +120,7 @@ impl<'h> BillLog<'h> {
             withdrawn: result.withdrawn,
             replaced_addresses: result.replaced_addresses,
             identities: result.identities,
+            payment_authors: result.payment_authors,
         })
     }
 

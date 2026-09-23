@@ -24,6 +24,7 @@ class FoldedBill {
     required this.withdrawn,
     required this.replacedAddresses,
     required this.identities,
+    this.paymentAuthors = const {},
   });
 
   final splitz.Bill bill;
@@ -45,6 +46,9 @@ class FoldedBill {
   /// Empty of contests when the host does not verify: without a verifier no
   /// self-claim is checked, so nothing is bound and nothing is contested.
   final splitz.Identities identities;
+
+  /// Who wrote each payment record on the bill, by the payment's id (§14.4).
+  final Map<String, String> paymentAuthors;
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -96,6 +100,7 @@ class BillLog {
       withdrawn: result.withdrawn,
       replacedAddresses: result.replacedAddresses,
       identities: result.identities,
+      paymentAuthors: result.paymentAuthors,
     );
   }
 

@@ -148,6 +148,7 @@ pub fn obligation_for(
         host.me(),
         &folded.identities.contested,
         pay_anyway,
+        Some(&folded.payment_authors),
     )?;
 
     // `render_obligation` is the protocol's own answer to the hazard in §8.5:

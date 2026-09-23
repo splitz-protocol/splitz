@@ -185,12 +185,18 @@ pub fn withholdings(
     payer: &str,
     contested_ids: &BTreeSet<String>,
     pay_anyway: &BTreeSet<String>,
+    recorded_by: Option<&BTreeMap<String, String>>,
 ) -> Result<Withholdings> {
     // Section 10.5: only a confirmed payment moves a balance, so a debt this
     // payer has already paid is still in the plan. Records to one id sum.
     let mut pending: BTreeMap<&str, i64> = BTreeMap::new();
     for p in &bill.payments {
         if p.from != payer || bill.confirmed_payments.contains(&p.id) {
+            continue;
+        }
+        // A record somebody else wrote is their word, not a payment this
+        // payer has in flight.
+        if recorded_by.is_some_and(|by| by.get(&p.id).map(String::as_str) != Some(payer)) {
             continue;
         }
         let held = pending.entry(p.to.as_str()).or_insert(0);

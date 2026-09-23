@@ -670,7 +670,7 @@ SETTLEMENT_METHODS = ("shieldedZec", "swap", "cash")
 CONFIRMATION_METHODS = {
     "recipientConfirmed": ("to", False, True),
     "walletReceived":     ("to", False, True),
-    "onChain":            (None, True, True),
+    "onChain":            ("to", True, True),
     "payerAttested":      ("from", False, False),
 }
 
@@ -1341,6 +1341,16 @@ def seal_log(entries):
     return None  # never settles: a reference cycle
 
 
+# Section 10.4: the member naming what each kind of entry is about, which an
+# amendment may not change.
+AMENDED_SUBJECT = {
+    "joinBill": ("participant", "id"),
+    "addExpense": ("expense", "id"),
+    "recordPayment": ("payment", "id"),
+    "confirmPayment": ("confirmation", "paymentId"),
+}
+
+
 def check_entry(entry):
     """Section 10.1. Refused before the entry reaches a log."""
     if not isinstance(entry, dict):
@@ -1359,6 +1369,13 @@ def check_entry(entry):
     # every string, so it would win every merge it entered.
     if "sig" in entry and not isinstance(entry["sig"], str):
         raise Refused("bill_type_error")
+    # Section 10.1. `v` sits outside the id (section 9.5), so a copy with any
+    # value keeps the honest id; one that is not an integer would reach the
+    # canonical encoding the merge and the order compare, and stop there.
+    if "v" in entry:
+        v = entry["v"]
+        if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+            raise Refused("bill_type_error")
     # Section 2.3, at entry ingress: the section 10.2 order depends on it.
     _check_scalar_values(entry)
 
@@ -1594,6 +1611,12 @@ def fold(entries, bill_id=None, verify=None):
         if want and want not in e:
             aside(e, "amend_kind_mismatch", "carries no payload of its target's kind")
             continue
+        # Section 10.4. The id the target is about stays: renaming it makes a
+        # different entry the section 10.8 checks never read.
+        subject = AMENDED_SUBJECT.get(target["kind"])
+        if subject and e[subject[0]].get(subject[1]) != target[subject[0]].get(subject[1]):
+            aside(e, "amend_kind_mismatch", "renames what its target is about")
+            continue
         amendments[e["targetId"]] = e
 
     creator = create["author"]
@@ -1784,6 +1807,9 @@ def fold(entries, bill_id=None, verify=None):
         rate = payload
 
     expenses, payments = [], []
+    # Who wrote each applied payment record, by its id: section 14.4 withholds
+    # only for a record the payer wrote.
+    payment_authors = {}
     # Section 5.1's balances, formed as this pass applies each entry and in
     # the order section 5.1 forms them, so a bill this fold returns always has
     # balances section 2.2 can hold. An entry whose effect would carry one out
@@ -1878,6 +1904,7 @@ def fold(entries, bill_id=None, verify=None):
                 continue
             pair_total[pair] = total
             payments.append(pay)
+            payment_authors[pay["id"]] = e["author"]
 
     # Confirmations, in a pass of their own once every payment is on the bill.
     known = {p["id"] for p in payments}
@@ -1945,6 +1972,9 @@ def fold(entries, bill_id=None, verify=None):
             {"bound": {k: identities[0][k] for k in sorted(identities[0])},
              "contested": sorted(identities[1])}),
         "replacedAddresses": replaced,
+        "paymentAuthors": {k: payment_authors[k]
+                           for k in sorted(payment_authors,
+                                           key=lambda k: k.encode("utf-8"))},
         "withdrawn": sorted(voided),
         # Section 10.2. Total: rows sharing an id are ordered by code.
         "setAside": sorted(set_aside, key=lambda r: (r["id"].encode("utf-8"),
@@ -2075,14 +2105,17 @@ def delta_for(entries, they_have):
     return {"state": "square", "uri": uri, "entryCount": len(missing)}
 
 
-def withholdings(plan, bill, payer, contested_ids=(), pay_anyway=()):
+def withholdings(plan, bill, payer, contested_ids=(), pay_anyway=(),
+                 recorded_by=None):
     """Splits `payer`'s settlements into what a request may carry and what
     section 14 holds back.
 
     Pure: reads the bill and the identities the fold resolved, and decides
     nothing a wallet is entitled to decide. `pay_anyway` names the contested
     ids a payer has accepted after being shown them, which section 10.7
-    permits and which is the only way through a contest.
+    permits and which is the only way through a contest. `recorded_by` maps
+    a payment id to the author of its record, as the fold reports it; given,
+    only a record the payer wrote withholds anything.
     """
     contested_ids = set(contested_ids)
     pay_anyway = set(pay_anyway)
@@ -2094,6 +2127,8 @@ def withholdings(plan, bill, payer, contested_ids=(), pay_anyway=()):
     pending = {}
     for p in bill.get("payments") or ():
         if p["from"] != payer or p["id"] in confirmed:
+            continue
+        if recorded_by is not None and recorded_by.get(p["id"]) != payer:
             continue
         pending[p["to"]] = _in_range(pending.get(p["to"], 0) + p["amount"])
 

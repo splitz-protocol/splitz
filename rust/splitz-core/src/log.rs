@@ -46,6 +46,18 @@ pub const BILL_ID_DOMAIN: &str = "splitz-bill-id-v1";
 /// are drawn from different spaces and neither can be presented as the other.
 pub const ENTRY_ID_DOMAIN: &str = "splitz-entry-id-v1";
 
+/// §10.4: the member naming what each kind of entry is about, which an
+/// amendment may not change.
+fn amended_subject(kind: &str) -> Option<(&'static str, &'static str)> {
+    match kind {
+        "joinBill" => Some(("participant", "id")),
+        "addExpense" => Some(("expense", "id")),
+        "recordPayment" => Some(("payment", "id")),
+        "confirmPayment" => Some(("confirmation", "paymentId")),
+        _ => None,
+    }
+}
+
 /// The payload each kind carries, and no other.
 pub fn payload_for(kind: &str) -> Option<&'static str> {
     match kind {
@@ -66,7 +78,9 @@ pub fn confirmation_rule(method: &str) -> Option<(Option<&'static str>, bool, bo
         "walletReceived" => Some((Some("to"), false, true)),
         // Names a public transaction any participant can check, so it speaks
         // for nobody in particular.
-        "onChain" => Some((None, true, true)),
+        // The recipient saying they saw the transaction land; a shielded
+        // payment is visible to nobody else.
+        "onChain" => Some((Some("to"), true, true)),
         // A payer saying they paid is the claim of the record, not evidence.
         "payerAttested" => Some((Some("from"), false, false)),
         _ => None,
@@ -153,6 +167,18 @@ pub fn check_entry(entry: &Value) -> Result<()> {
         return Err(SplitError::new(
             code::BILL_TYPE_ERROR,
             "A signature is a string",
+        ));
+    }
+    // §10.1. `v` sits outside the id (§9.5), so a copy with any value keeps
+    // the honest id; one that is not an integer would reach the canonical
+    // encoding the merge and the order compare, and stop there.
+    if entry
+        .get("v")
+        .is_some_and(|v| !v.as_u64().is_some_and(|n| n >= 1))
+    {
+        return Err(SplitError::new(
+            code::BILL_TYPE_ERROR,
+            "An entry version is an integer of 1 or more",
         ));
     }
 
@@ -477,6 +503,10 @@ pub struct FoldResult {
     /// curve operation the host's, so a fold that cannot check a signature
     /// reports no binding and no contest rather than claiming there are none.
     pub identities: Identities,
+    /// Who wrote each payment record on the bill, by the payment's id. Not
+    /// part of the bill document, which restates neither author nor instant
+    /// (§10.5). §14.4 withholds only for a record the payer wrote.
+    pub payment_authors: BTreeMap<String, String>,
 }
 
 fn split_pool(split: &Value) -> BTreeSet<String> {
@@ -678,6 +708,14 @@ pub fn fold_log_verified(
         }
         if let Some(wanted) = payload_for(field(target, "kind")) {
             if entry.get(wanted).is_none() {
+                aside!(entry, code::AMEND_KIND_MISMATCH);
+                continue;
+            }
+        }
+        // §10.4. The id the target is about stays: renaming it makes a
+        // different entry the §10.8 checks never read.
+        if let Some((payload, member)) = amended_subject(field(target, "kind")) {
+            if entry[payload].get(member) != target[payload].get(member) {
                 aside!(entry, code::AMEND_KIND_MISMATCH);
                 continue;
             }
@@ -950,6 +988,7 @@ pub fn fold_log_verified(
 
     let mut expenses: Vec<Value> = Vec::new();
     let mut payments: Vec<Value> = Vec::new();
+    let mut payment_authors: BTreeMap<String, String> = BTreeMap::new();
     // §5.1's balances, formed as this pass applies each entry and in the order
     // §5.1 forms them, so a bill this fold returns always has balances §2.2
     // can hold. An entry whose effect would carry one out of range is set
@@ -1097,6 +1136,9 @@ pub fn fold_log_verified(
                         continue;
                     }
                 }
+                if let Some(id) = pay.get("id").and_then(Value::as_str) {
+                    payment_authors.insert(id.to_owned(), field(entry, "author").to_owned());
+                }
                 payments.push(pay);
             }
             _ => {}
@@ -1224,5 +1266,6 @@ pub fn fold_log_verified(
         withdrawn: voided.into_iter().collect(),
         set_aside,
         identities,
+        payment_authors,
     })
 }
