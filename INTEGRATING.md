@@ -340,15 +340,17 @@ import 'package:splitz_dart_consumer/splitz_ffi.dart';
 /// sixteen unpredictable bytes are the wallet's to supply: this library reads
 /// no clock (§13) and owns no entropy.
 HostFacts facts(String me, String payTo, String at, int nonce) => HostFacts(
-    me: me,
-    payTo: payTo,
-    now: at,
-    nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)));
+  me: me,
+  payTo: payTo,
+  now: at,
+  nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)),
+);
 
 /// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
 /// key: 32 bytes, unpadded base64url.
-String seed(int first) =>
-    base64Url.encode(List.generate(32, (i) => (first + i) & 0xff)).replaceAll('=', '');
+String seed(int first) => base64Url
+    .encode(List.generate(32, (i) => (first + i) & 0xff))
+    .replaceAll('=', '');
 
 void main(List<String> args) {
   configureDefaultBindings(libraryPath: args[0]);
@@ -360,23 +362,51 @@ void main(List<String> args) {
   // canonicalises, with §9.5's id already derived; the wallet stores the
   // string and never inspects it.
   final anaLog = [
-    createBillEntry(facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
-        'Dinner', 'EUR', 'equal', identityKeyFromSeed(anaSeed), anaSeed),
-    joinBillEntry(facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2), 'Ana',
-        'u1ana', identityKeyFromSeed(anaSeed), anaSeed),
-    addExpenseEntry(facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3), 'x1',
-        'ana', 9000, '{"type":"equal","among":["ana","ben"]}', 'dinner', anaSeed),
+    createBillEntry(
+      facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
+      'Dinner',
+      'EUR',
+      'equal',
+      identityKeyFromSeed(anaSeed),
+      anaSeed,
+    ),
+    joinBillEntry(
+      facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2),
+      'Ana',
+      'u1ana',
+      identityKeyFromSeed(anaSeed),
+      anaSeed,
+    ),
+    addExpenseEntry(
+      facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3),
+      'x1',
+      'ana',
+      9000,
+      '{"type":"equal","among":["ana","ben"]}',
+      'dinner',
+      anaSeed,
+    ),
     // §7 snapshots one rate onto the bill, so six devices do not price one
     // dinner six ways. 300000 minor units per ZEC is €3000.00.
-    setRateEntry(facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4), 'EUR',
-        300000, 'a fixed feed', anaSeed),
+    setRateEntry(
+      facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4),
+      'EUR',
+      300000,
+      'a fixed feed',
+      anaSeed,
+    ),
   ];
 
   // Ben's own device writes Ben's join: §10.4 decides what an entry's author
   // may say, and a participant joins for themselves.
   final benLog = [
-    joinBillEntry(facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5), 'Ben',
-        'u1ben', identityKeyFromSeed(benSeed), benSeed),
+    joinBillEntry(
+      facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5),
+      'Ben',
+      'u1ben',
+      identityKeyFromSeed(benSeed),
+      benSeed,
+    ),
   ];
 
   // Merging is how two devices come to agree (§10.2). It is a set union by
@@ -405,10 +435,13 @@ void main(List<String> args) {
   print('withheld: ${owed.request.withheldMinorUnits}');
 
   if (settlement.to != 'ana' || settlement.amount != 4500) {
-    throw StateError('half of 9000 is 4500 to ana, saw '
-        '${settlement.amount} to ${settlement.to}');
+    throw StateError(
+      'half of 9000 is 4500 to ana, saw '
+      '${settlement.amount} to ${settlement.to}',
+    );
   }
-  if (!owed.request.uri!.startsWith('zcash:u1ana')) throw StateError(owed.request.uri!);
+  if (!owed.request.uri!.startsWith('zcash:u1ana'))
+    throw StateError(owed.request.uri!);
   if (owed.request.withheldMinorUnits != 0) {
     throw StateError('${owed.request.withheldMinorUnits}');
   }

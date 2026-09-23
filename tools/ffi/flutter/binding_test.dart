@@ -17,10 +17,11 @@ const libraryPath = String.fromEnvironment('SPLITZ_LIBRARY');
 
 /// The facts §15.1 says a wallet owns, for one call.
 HostFacts facts(String me, String at, int nonce) => HostFacts(
-    me: me,
-    payTo: 'u1$me',
-    now: at,
-    nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)));
+  me: me,
+  payTo: 'u1$me',
+  now: at,
+  nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)),
+);
 
 /// The Ed25519 seed a wallet keeps in the platform keychain: 32 bytes,
 /// unpadded base64url.
@@ -28,8 +29,11 @@ const seed = 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA';
 
 void main() {
   setUpAll(() {
-    expect(libraryPath, isNotEmpty,
-        reason: 'pass --dart-define=SPLITZ_LIBRARY=<path to the cdylib>');
+    expect(
+      libraryPath,
+      isNotEmpty,
+      reason: 'pass --dart-define=SPLITZ_LIBRARY=<path to the cdylib>',
+    );
     configureDefaultBindings(libraryPath: libraryPath);
   });
 
@@ -38,10 +42,18 @@ void main() {
     expect(key.length, 43);
 
     final create = createBillEntry(
-        facts('ana', '2026-10-28T19:31:00.000Z', 1), 'Dinner', 'EUR', 'equal', key, seed);
+      facts('ana', '2026-10-28T19:31:00.000Z', 1),
+      'Dinner',
+      'EUR',
+      'equal',
+      key,
+      seed,
+    );
     expect(create, contains('"kind":"createBill"'));
 
-    final folded = foldEntries(facts('ana', '2026-10-28T19:32:00.000Z', 2), [create]);
+    final folded = foldEntries(facts('ana', '2026-10-28T19:32:00.000Z', 2), [
+      create,
+    ]);
     expect(folded.bill.name, 'Dinner');
     expect(folded.setAside, isEmpty);
     expect(folded.identities.bound.keys, contains('ana'));
@@ -50,16 +62,51 @@ void main() {
   test('one payer owes half of a priced bill', () {
     final key = identityKeyFromSeed(seed);
     final log = [
-      createBillEntry(facts('ana', '2026-10-28T19:31:00.000Z', 1), 'Dinner', 'EUR',
-          'equal', key, seed),
-      joinBillEntry(facts('ana', '2026-10-28T19:32:00.000Z', 2), 'Ana', 'u1ana', key, seed),
-      joinBillEntry(facts('ben', '2026-10-28T19:33:00.000Z', 3), 'Ben', 'u1ben', key, seed),
-      addExpenseEntry(facts('ana', '2026-10-28T19:34:00.000Z', 4), 'x1', 'ana', 9000,
-          '{"type":"equal","among":["ana","ben"]}', 'dinner', seed),
-      setRateEntry(facts('ana', '2026-10-28T19:35:00.000Z', 5), 'EUR', 300000, 'a feed', seed),
+      createBillEntry(
+        facts('ana', '2026-10-28T19:31:00.000Z', 1),
+        'Dinner',
+        'EUR',
+        'equal',
+        key,
+        seed,
+      ),
+      joinBillEntry(
+        facts('ana', '2026-10-28T19:32:00.000Z', 2),
+        'Ana',
+        'u1ana',
+        key,
+        seed,
+      ),
+      joinBillEntry(
+        facts('ben', '2026-10-28T19:33:00.000Z', 3),
+        'Ben',
+        'u1ben',
+        key,
+        seed,
+      ),
+      addExpenseEntry(
+        facts('ana', '2026-10-28T19:34:00.000Z', 4),
+        'x1',
+        'ana',
+        9000,
+        '{"type":"equal","among":["ana","ben"]}',
+        'dinner',
+        seed,
+      ),
+      setRateEntry(
+        facts('ana', '2026-10-28T19:35:00.000Z', 5),
+        'EUR',
+        300000,
+        'a feed',
+        seed,
+      ),
     ];
     final merged = mergeEntries(const [], log).entries;
-    final owed = obligationOf(facts('ben', '2026-10-28T19:36:00.000Z', 6), merged, const []);
+    final owed = obligationOf(
+      facts('ben', '2026-10-28T19:36:00.000Z', 6),
+      merged,
+      const [],
+    );
     expect(owed, isNotNull);
     expect(owed!.settlements.single.amount, 4500);
     expect(owed.request.uri, startsWith('zcash:u1ana'));

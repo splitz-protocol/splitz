@@ -18,6 +18,8 @@ jobs:
         working-directory: dart
       - run: dart format --output=none --set-exit-if-changed .
         working-directory: dart
+      # The binding's Dart consumers sit outside both packages.
+      - run: dart format --output=none --set-exit-if-changed tools/ffi
       - run: dart test
         working-directory: dart
       # `dart analyze` type-checks the samples; it does not call them. A

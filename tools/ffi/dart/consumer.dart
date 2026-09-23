@@ -33,10 +33,12 @@ class Device {
 
   /// §9.4 derives a bill's id from this. A shipped wallet uses the platform's
   /// own entropy.
-  Uint8List nonce() =>
-      Uint8List.fromList(List.generate(16, (i) => (seedByte + minute + i) & 0xff));
+  Uint8List nonce() => Uint8List.fromList(
+    List.generate(16, (i) => (seedByte + minute + i) & 0xff),
+  );
 
-  HostFacts facts() => HostFacts(me: me, payTo: payTo, now: now(), nonce: nonce());
+  HostFacts facts() =>
+      HostFacts(me: me, payTo: payTo, now: now(), nonce: nonce());
 
   /// The Ed25519 seed this account signs with, as §9.4 writes a key: unpadded
   /// base64url, which is what a keychain holds.
@@ -61,38 +63,69 @@ void main(List<String> args) {
   print('ana opens a bill and joins it');
   final anaKey = identityKeyFromSeed(ana.signingSeed());
   final create = createBillEntry(
-      ana.facts(), 'Dinner', 'EUR', 'equal', anaKey, ana.signingSeed());
+    ana.facts(),
+    'Dinner',
+    'EUR',
+    'equal',
+    anaKey,
+    ana.signingSeed(),
+  );
   ana.add(create);
   final billId = (jsonDecode(create) as Map)['id'] as String;
   check('the bill has a §9.4 id', billId.isNotEmpty, billId);
 
-  ana.add(joinBillEntry(
-      ana.facts(), 'Ana', 'u1ana', anaKey, ana.signingSeed()));
+  ana.add(
+    joinBillEntry(ana.facts(), 'Ana', 'u1ana', anaKey, ana.signingSeed()),
+  );
 
   print('ben joins, and the two logs merge');
   final benKey = identityKeyFromSeed(ben.signingSeed());
   ben.entries.addAll(ana.entries);
-  ben.add(joinBillEntry(
-      ben.facts(), 'Ben', 'u1ben', benKey, ben.signingSeed()));
+  ben.add(
+    joinBillEntry(ben.facts(), 'Ben', 'u1ben', benKey, ben.signingSeed()),
+  );
 
   print('ana adds an expense they share, and prices it');
   ana.entries
     ..clear()
     ..addAll(mergeEntries(ana.entries, ben.entries).entries);
-  ana.add(addExpenseEntry(ana.facts(), 'x1', 'ana', 9000,
-      '{"type":"equal","among":["ana","ben"]}', 'dinner', ana.signingSeed()));
-  ana.add(setRateEntry(ana.facts(), 'EUR', 300000, 'a fixed feed', ana.signingSeed()));
+  ana.add(
+    addExpenseEntry(
+      ana.facts(),
+      'x1',
+      'ana',
+      9000,
+      '{"type":"equal","among":["ana","ben"]}',
+      'dinner',
+      ana.signingSeed(),
+    ),
+  );
+  ana.add(
+    setRateEntry(ana.facts(), 'EUR', 300000, 'a fixed feed', ana.signingSeed()),
+  );
 
   final folded = foldEntries(ana.facts(), ana.entries);
-  check('both people are on the bill', folded.bill.participants.length == 2,
-      folded.bill.participants.map((p) => p.id).join(', '));
+  check(
+    'both people are on the bill',
+    folded.bill.participants.length == 2,
+    folded.bill.participants.map((p) => p.id).join(', '),
+  );
   check('nothing was set aside', folded.setAside.isEmpty, '${folded.setAside}');
-  check('both keys are bound under §10.7', folded.identities.bound.length == 2,
-      '${folded.identities.bound.keys}');
-  check('no identity is contested', folded.identities.contested.isEmpty,
-      '${folded.identities.contested}');
-  check('the expense is nine thousand minor units',
-      folded.bill.expenses.single.amount == 9000, '${folded.bill.expenses.single.amount}');
+  check(
+    'both keys are bound under §10.7',
+    folded.identities.bound.length == 2,
+    '${folded.identities.bound.keys}',
+  );
+  check(
+    'no identity is contested',
+    folded.identities.contested.isEmpty,
+    '${folded.identities.contested}',
+  );
+  check(
+    'the expense is nine thousand minor units',
+    folded.bill.expenses.single.amount == 9000,
+    '${folded.bill.expenses.single.amount}',
+  );
 
   print('ben owes half of it');
   ben.entries
@@ -101,16 +134,25 @@ void main(List<String> args) {
   final owed = obligationOf(ben.facts(), ben.entries, const []);
   check('ben has an obligation', owed != null, owed?.request.uri ?? 'none');
   final settlement = owed!.settlements.single;
-  check('it is four and a half thousand to ana',
-      settlement.to == 'ana' && settlement.amount == 4500,
-      '${settlement.to} ${settlement.amount}');
-  check('the request is a ZIP 321 URI naming ana\'s address',
-      owed.request.uri!.startsWith('zcash:u1ana'), owed.request.uri!);
-  check('nothing is withheld', owed.request.withheldMinorUnits == 0,
-      '${owed.request.withheldMinorUnits}');
+  check(
+    'it is four and a half thousand to ana',
+    settlement.to == 'ana' && settlement.amount == 4500,
+    '${settlement.to} ${settlement.amount}',
+  );
+  check(
+    'the request is a ZIP 321 URI naming ana\'s address',
+    owed.request.uri!.startsWith('zcash:u1ana'),
+    owed.request.uri!,
+  );
+  check(
+    'nothing is withheld',
+    owed.request.withheldMinorUnits == 0,
+    '${owed.request.withheldMinorUnits}',
+  );
 
   print('the wallet sends it, then records what §14.3 allows');
-  ben.add(recordPaymentEntry(
+  ben.add(
+    recordPaymentEntry(
       ben.facts(),
       const PaymentDraft(
         paymentId: 'tx-ben-1',
@@ -121,49 +163,82 @@ void main(List<String> args) {
         zatoshi: null,
         note: null,
       ),
-      ben.signingSeed()));
+      ben.signingSeed(),
+    ),
+  );
   ana.entries
     ..clear()
     ..addAll(mergeEntries(ana.entries, ben.entries).entries);
   final afterPayment = foldEntries(ana.facts(), ana.entries);
-  check('ana sees the payment', afterPayment.bill.payments.length == 1,
-      '${afterPayment.bill.payments.map((p) => p.id)}');
-  check('and it is not confirmed', afterPayment.bill.confirmedPayments.isEmpty,
-      '${afterPayment.bill.confirmedPayments}');
+  check(
+    'ana sees the payment',
+    afterPayment.bill.payments.length == 1,
+    '${afterPayment.bill.payments.map((p) => p.id)}',
+  );
+  check(
+    'and it is not confirmed',
+    afterPayment.bill.confirmedPayments.isEmpty,
+    '${afterPayment.bill.confirmedPayments}',
+  );
   final stillOwed = obligationOf(ben.facts(), ben.entries, const [])!;
-  check('so ben is asked for nothing twice', stillOwed.settlements.isEmpty,
-      '${stillOwed.settlements}');
-  check('and is told what is in flight', stillOwed.awaiting.single.paid == 4500,
-      '${stillOwed.awaiting}');
+  check(
+    'so ben is asked for nothing twice',
+    stillOwed.settlements.isEmpty,
+    '${stillOwed.settlements}',
+  );
+  check(
+    'and is told what is in flight',
+    stillOwed.awaiting.single.paid == 4500,
+    '${stillOwed.awaiting}',
+  );
 
   // A payee confirms a payment they can see, by the id the bill carries. One
   // transaction paying several people writes one record each, so the id is not
   // the transaction's — the transaction is in `reference`.
   final toConfirm = afterPayment.bill.payments.single.id;
-  ana.add(confirmPaymentEntry(ana.facts(), toConfirm, 'recipientConfirmed',
-      null, ana.signingSeed()));
+  ana.add(
+    confirmPaymentEntry(
+      ana.facts(),
+      toConfirm,
+      'recipientConfirmed',
+      null,
+      ana.signingSeed(),
+    ),
+  );
   ben.entries
     ..clear()
     ..addAll(mergeEntries(ben.entries, ana.entries).entries);
   final settled = obligationOf(ben.facts(), ben.entries, const [])!;
-  check('once confirmed, the debt is gone',
-      settled.settlements.isEmpty && settled.awaiting.isEmpty,
-      'settlements=${settled.settlements.length} awaiting=${settled.awaiting.length}');
+  check(
+    'once confirmed, the debt is gone',
+    settled.settlements.isEmpty && settled.awaiting.isEmpty,
+    'settlements=${settled.settlements.length} awaiting=${settled.awaiting.length}',
+  );
 
   print('the log reads as a history');
   final history = historyOf(ana.facts(), ana.entries);
   final kinds = history.map((e) => e.kind).toSet();
-  check('every kind a person needs is there',
-      kinds.containsAll([
-        BillEventKind.opened, BillEventKind.joined, BillEventKind.expenseAdded,
-        BillEventKind.priced, BillEventKind.paymentRecorded,
-        BillEventKind.paymentConfirmed,
-      ]),
-      '$kinds');
-  check('newest first', history.first.at.compareTo(history.last.at) >= 0,
-      '${history.first.at} .. ${history.last.at}');
+  check(
+    'every kind a person needs is there',
+    kinds.containsAll([
+      BillEventKind.opened,
+      BillEventKind.joined,
+      BillEventKind.expenseAdded,
+      BillEventKind.priced,
+      BillEventKind.paymentRecorded,
+      BillEventKind.paymentConfirmed,
+    ]),
+    '$kinds',
+  );
+  check(
+    'newest first',
+    history.first.at.compareTo(history.last.at) >= 0,
+    '${history.first.at} .. ${history.last.at}',
+  );
 
-  print(failures == 0
-      ? 'CONSUMER RESULT: dart drives a whole bill with no callbacks, $failures failures'
-      : 'CONSUMER RESULT: $failures check(s) failed');
+  print(
+    failures == 0
+        ? 'CONSUMER RESULT: dart drives a whole bill with no callbacks, $failures failures'
+        : 'CONSUMER RESULT: $failures check(s) failed',
+  );
 }
