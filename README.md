@@ -38,7 +38,7 @@ spec — so no case was produced by the same code it's meant to be checking.
 
 A wallet has to provide seven things: a way to send a transaction, somewhere to
 keep secrets, storage, a relay to sync through, exchange rates, swaps, and its
-own account details. Those are the seven interfaces in `SPEC.md` §15, 28 calls
+own account details. Those are the seven interfaces in `SPEC.md` §15, 21 calls
 in all. Everything else is the library's job.
 
 Rust wallets use the crates directly, and Dart and Flutter wallets use the Dart
@@ -63,9 +63,11 @@ unpublishable. Depend on this repository by git, pinned to a commit.
 | Rust | `splitz-core` and `splitz-host` | the same, in Rust |
 | Kotlin, Swift, JavaScript | `splitz-ffi`, built by `tools/package/{android,ios,npm}.sh` | the protocol through a generated binding; the wallet layer is yours to write |
 
-Dart — both packages, **pinned to the same commit**. Pub refuses a branch name
-here: `splitz_host` reaches `splitz_core` by a path inside the repository, which
-resolves to a commit, and a direct dependency on `main` is not that commit.
+Dart — both packages, **pinned to the same commit, by its full 40-character
+sha**. `splitz_host` reaches `splitz_core` by a path inside the repository,
+which pub resolves to the full sha of that commit, and pub compares refs as
+written: a branch name, or a short sha, names the same commit and is still
+refused as a different ref.
 
 ```yaml
 dependencies:
@@ -73,12 +75,12 @@ dependencies:
     git:
       url: https://github.com/KamaIOps/Splitz-Protocol.git
       path: dart
-      ref: <commit sha>
+      ref: <full commit sha>
   splitz_host:
     git:
       url: https://github.com/KamaIOps/Splitz-Protocol.git
       path: splitz_host
-      ref: <commit sha>
+      ref: <full commit sha>
 ```
 
 Rust — cargo finds each crate in the workspace by name:
@@ -121,7 +123,7 @@ it says what a pass looks like.
 cd dart && dart test                 # +586: All tests passed!
                                      #   every one of the 490 shared cases
                                      #   among them
-cd splitz_host && dart test          # +142: All tests passed!
+cd splitz_host && dart test          # +143: All tests passed!
 cd rust && cargo test                # every "test result: ok", 191 in all
 cd dart && dart run example/dinner.dart
                                      # one bill, three people, the fewest
@@ -182,9 +184,10 @@ follows §14, which is about what the wallet has to do rather than what goes
 over the wire.
 
 `SPEC.md` §12 lists 78 reasons the library can refuse something. Every one has
-a test case except the two the spec excuses by name: their input is a document
-that any correct JSON reader would reject, so a test case containing one would
-break the whole file rather than test anything.
+a test case except the one the spec excuses by name, `bill_not_scalar_values`:
+its input is a document any correct JSON reader rejects, so a test case holding
+it would break the whole file rather than test anything. Each implementation
+carries that case in its own suite.
 
 `CONFORMANCE.md` explains what passing does and doesn't prove.
 `vectors/README.md` describes the file format.

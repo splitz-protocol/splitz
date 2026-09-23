@@ -65,9 +65,10 @@ def exceptions(text: str) -> set[str]:
     """The codes §12 itself exempts from needing a vector, by name."""
     body = section_12(text)
     tail = body[body.find("**The code is part of the protocol"):]
-    return {m for m in re.findall(r"`([a-z][a-z0-9_]{3,})`", tail)
-            if "exception" in tail[max(0, tail.index(f"`{m}`") - 200):
-                                   tail.index(f"`{m}`") + 200]}
+    # The form §12 names one in: "`code` is that exception". A code merely
+    # near the word is not exempted by it.
+    return set(re.findall(
+        r"`([a-z][a-z0-9_]{3,})` is (?:that|the|an|one) exception", tail))
 
 
 def _reference_codes() -> set[str]:

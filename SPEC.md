@@ -1737,7 +1737,13 @@ missing or empty `k` is `invite_missing_key`; an unparseable `x` is
 `invite_not_an_invite`.
 
 Scanning the code is the whole of joining: no account, no server. That also
-means anyone who photographs the screen can join, which is what `x` is for.
+means anyone who photographs the screen can join, and holds the bill's key for
+good: **an invite is a bearer credential this protocol cannot revoke.** `x` does
+not change that. It is unauthenticated text, so removing it yields an invite
+that opens the same bill, and the §11.2 payload carries no `x` at all. A key
+that has been shown is shown; a host that wants to stop reading by people who
+saw it has to move the bill to a new key, which this version does not specify.
+`x` is a freshness hint a host MAY show a joiner, and nothing more.
 
 **This protocol parses `x` and does not enforce it.** No refusal code here
 means "expired", and no reader compares it to a clock: a clock is not in this
@@ -1949,21 +1955,19 @@ not stop the rest of a sync: anybody who has the channel can push one.
 and is not.** A user-facing string MUST be derived from the code.
 
 **Every code in this list MUST have at least one vector that produces it**, with
-two exceptions named below. A refusal nothing exercises is either unreachable,
+one exception, named below. A refusal nothing exercises is either unreachable,
 misspelled at one of its two ends, or firing on the wrong input, and no lane
 would say which.
 
-`balances_nonzero_residual` is that exception when it is raised from a
-document. Section 4 requires every split to sum exactly to its expense total,
-so an expense moves the sum of net balances by zero, and a payment credits and
-debits the same amount. No bill can therefore produce a non-zero residual.
+`balances_nonzero_residual` cannot be raised by §5 from a bill. Section 4
+requires every split to sum exactly to its expense total, so an expense moves
+the sum of net balances by zero; a payment credits and debits the same amount;
+and every step is checked arithmetic that refuses with `amount_overflow` rather
+than wrap. It is reachable from §6, which takes balances directly rather than
+deriving them, and a caller may hand it a set that does not sum to zero —
+which is what its vectors in `settlement.json` do.
 
-It is reachable from §6, which takes balances directly rather than deriving
-them, and a caller may hand it a set that does not sum to zero. Cases in
-`settlement.json` do exactly that, so the exception no longer applies to the
-corpus as shipped.
-
-`bill_not_scalar_values` is the second exception, and it is structural. The
+`bill_not_scalar_values` is that exception, and it is structural. The
 input that produces it is a JSON document carrying a lone surrogate, and a
 conformant JSON reader refuses such a document: a vector file containing one
 could not be parsed by an implementation whose strings are UTF-8 by
