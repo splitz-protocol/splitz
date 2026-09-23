@@ -2127,13 +2127,17 @@ The device itself: who it speaks as, what it can spend, where its secrets go.
   authored by, and §10.4 decides what that id authorises. It MUST be stable for
   the life of an installed wallet; an id that changes between runs makes this
   device a new participant on every bill it has already touched.
-- `account` MAY carry a viewing key and MAY carry none. When it carries one it
-  MUST be derived from the wallet's seed, so that reinstalling from the same
-  mnemonic yields the same signing identity. An identifier the wallet's own
-  database assigns MUST NOT be supplied in its place: it is handed out at
-  import time, so an identity filed under it is a stranger to every bill naming
-  it after a restore. No viewing key means the identity is unrecoverable; it
-  still signs correctly.
+- `account` MAY carry an identity secret and MAY carry none. When it carries
+  one it MUST be derived from what only the account's owner holds — for a
+  software wallet, its mnemonic and passphrase — so that reinstalling from the
+  same mnemonic yields the same signing identity. It MUST NOT be anything the
+  wallet shows or shares, such as a viewing key: whoever holds it can sign as
+  this participant, bind uncontested (§10.7), and redirect what they are paid.
+  An identifier the wallet's own database assigns MUST NOT be supplied in its
+  place either: it is handed out at import time, so an identity filed under it
+  is a stranger to every bill naming it after a restore. No secret — a
+  hardware account keeps none on the phone — means the identity is random and
+  unrecoverable; it still signs correctly.
 - `now` MUST produce a §9.3 instant. It MUST be read when an entry is written
   and MUST NOT be read while folding: §10.2 orders a log by instant, so a fold
   that consulted a clock would answer differently for one unchanged entry set.

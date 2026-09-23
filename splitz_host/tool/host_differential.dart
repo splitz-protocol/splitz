@@ -9,7 +9,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart' as hashing;
 import 'package:splitz_core/host.dart' as seam;
 import 'package:splitz_core/splitz_core.dart' as protocol;
 import 'package:splitz_host/splitz_host.dart';
@@ -365,14 +364,17 @@ Future<Object?> answer(Map<String, dynamic> op) async {
         'againstTrueKey': await signer.verifyEntry(signed, trueKey),
       };
     case 'identity_seed':
-      final viewingKey = op['viewingKey'] as String;
-      // Random on both sides when there is no viewing key, so there is
-      // nothing to compare.
-      if (viewingKey.isEmpty) return null;
+      final secret = SplitsSigner.decode(op['secret'] as String);
+      // Random on both sides when there is no secret, so there is nothing to
+      // compare.
+      if (secret.isEmpty) return null;
+      // Through the keychain path a wallet reaches, not a restated formula:
+      // two sides each computing their own digest would agree by construction.
+      final keys = SplitsKeys(store: InMemorySecretStore());
       return SplitsSigner.encode(
-        hashing.sha256
-            .convert(utf8.encode('${SplitsKeys.identityDomain}:$viewingKey'))
-            .bytes,
+        await keys.ensureIdentitySeed(
+          WalletAccount(id: 'differential', identitySecret: secret),
+        ),
       );
     case 'seal_open':
       final key = op['key'] as String;

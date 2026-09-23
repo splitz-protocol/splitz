@@ -1,8 +1,8 @@
 //! A bill's key and this account's signing identity (SPEC.md §9.4, §10.7).
 
 use splitz_host::{
-    is_well_formed_key, InMemorySecretStore, Randomness, Signer, SplitsKeys, WalletAccount,
-    KEY_LENGTH_BYTES,
+    is_well_formed_key, InMemorySecretStore, Randomness, SecretStore, Signer, SplitsKeys,
+    WalletAccount, KEY_LENGTH_BYTES,
 };
 use std::cell::Cell;
 
@@ -122,13 +122,13 @@ fn forgetting_a_bill_forgets_its_key() {
 }
 
 #[test]
-fn an_identity_derived_from_a_viewing_key_survives_a_reinstall() {
+fn an_identity_derived_from_a_secret_survives_a_reinstall() {
     let store = InMemorySecretStore::default();
     let random = Counter::from(0);
     let keys = SplitsKeys::new(&store, &random);
     let account = WalletAccount {
         id: "acct-1".to_owned(),
-        viewing_key: Some("uview1abc".to_owned()),
+        identity_secret: Some(vec![1, 2, 3]),
     };
     let first = keys.ensure_identity_seed(&account).unwrap();
 
@@ -137,7 +137,7 @@ fn an_identity_derived_from_a_viewing_key_survives_a_reinstall() {
     let (fresh_store, fresh_random) = (InMemorySecretStore::default(), Counter::from(200));
     let after_restore = WalletAccount {
         id: "acct-9".to_owned(),
-        viewing_key: Some("uview1abc".to_owned()),
+        identity_secret: Some(vec![1, 2, 3]),
     };
     assert_eq!(
         SplitsKeys::new(&fresh_store, &fresh_random)
@@ -155,11 +155,11 @@ fn two_accounts_do_not_share_an_identity() {
     let keys = SplitsKeys::new(&store, &random);
     let a = WalletAccount {
         id: "acct-1".to_owned(),
-        viewing_key: Some("uview1abc".to_owned()),
+        identity_secret: Some(vec![1, 2, 3]),
     };
     let b = WalletAccount {
         id: "acct-2".to_owned(),
-        viewing_key: Some("uview1def".to_owned()),
+        identity_secret: Some(vec![4, 5, 6]),
     };
     assert_ne!(
         keys.ensure_identity_seed(&a).unwrap(),
@@ -168,13 +168,13 @@ fn two_accounts_do_not_share_an_identity() {
 }
 
 #[test]
-fn an_account_with_no_viewing_key_still_signs_and_says_it_cannot_recover() {
+fn an_account_with_no_secret_still_signs_and_says_it_cannot_recover() {
     let store = InMemorySecretStore::default();
     let random = Counter::from(0);
     let keys = SplitsKeys::new(&store, &random);
     let account = WalletAccount {
         id: "acct-1".to_owned(),
-        viewing_key: None,
+        identity_secret: None,
     };
     let seed = keys.ensure_identity_seed(&account).unwrap();
     assert_eq!(seed.len(), KEY_LENGTH_BYTES);
@@ -197,14 +197,47 @@ fn a_stored_identity_is_returned_unchanged_whatever_the_account_now_says() {
     let keys = SplitsKeys::new(&store, &random);
     let before = WalletAccount {
         id: "acct-1".to_owned(),
-        viewing_key: None,
+        identity_secret: None,
     };
     let seed = keys.ensure_identity_seed(&before).unwrap();
-    // A viewing key arriving later must not silently rotate an identity other
+    // A secret arriving later must not silently rotate an identity other
     // participants have already pinned.
     let after = WalletAccount {
         id: "acct-1".to_owned(),
-        viewing_key: Some("uview1abc".to_owned()),
+        identity_secret: Some(vec![1, 2, 3]),
     };
     assert_eq!(keys.ensure_identity_seed(&after).unwrap(), seed);
+}
+
+#[test]
+fn the_seed_is_sha256_of_the_domain_a_zero_byte_and_the_secret() {
+    // Pinned against a digest computed outside this crate:
+    //   printf 'splitz.identity.v2\x00\x01\x02\x03' | shasum -a 256
+    let seed = splitz_host::identity_seed_from(&[1, 2, 3]);
+    let hex: String = seed.iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(
+        hex,
+        "30da771c99ad554a64185a76297a22e32b18a03a8a8bd49fe2ea50c39aaf3a9b"
+    );
+}
+
+#[test]
+fn an_identity_stored_under_the_viewing_key_derivation_is_not_read() {
+    let store = InMemorySecretStore::default();
+    store
+        .write(
+            "splitz_identity_seed_acct-1",
+            &splitz_host::base64url_encode(&[7u8; 32]),
+        )
+        .unwrap();
+    let random = Counter::from(0);
+    let keys = SplitsKeys::new(&store, &random);
+    let account = WalletAccount {
+        id: "acct-1".to_owned(),
+        identity_secret: Some(vec![1, 2, 3]),
+    };
+    assert_eq!(
+        keys.ensure_identity_seed(&account).unwrap(),
+        splitz_host::identity_seed_from(&[1, 2, 3])
+    );
 }

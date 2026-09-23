@@ -79,22 +79,22 @@ void main() {
     expect(await keys.readBillKey('b1'), isNull);
   });
 
-  test('an identity derived from a viewing key survives a reinstall', () async {
-    const account = WalletAccount(id: 'acct-1', viewingKey: 'uview1abc');
+  test('an identity derived from a secret survives a reinstall', () async {
+    const account = WalletAccount(id: 'acct-1', identitySecret: [1, 2, 3]);
 
     final first = await keys.ensureIdentitySeed(account);
 
     // A new device: a fresh keychain, and a wallet database that assigns a
     // different account identifier from the same mnemonic.
     final reinstalled = SplitsKeys(store: InMemorySecretStore());
-    const afterRestore = WalletAccount(id: 'acct-9', viewingKey: 'uview1abc');
+    const afterRestore = WalletAccount(id: 'acct-9', identitySecret: [1, 2, 3]);
     expect(await reinstalled.ensureIdentitySeed(afterRestore), first);
     expect(SplitsKeys.identityIsRecoverable(account), isTrue);
   });
 
   test('two accounts do not share an identity', () async {
-    const a = WalletAccount(id: 'acct-1', viewingKey: 'uview1abc');
-    const b = WalletAccount(id: 'acct-2', viewingKey: 'uview1def');
+    const a = WalletAccount(id: 'acct-1', identitySecret: [1, 2, 3]);
+    const b = WalletAccount(id: 'acct-2', identitySecret: [4, 5, 6]);
     expect(
       await keys.ensureIdentitySeed(a),
       isNot(await keys.ensureIdentitySeed(b)),
@@ -102,7 +102,7 @@ void main() {
   });
 
   test(
-    'an account with no viewing key still signs, and says it cannot recover',
+    'an account with no secret still signs, and says it cannot recover',
     () async {
       const account = WalletAccount(id: 'acct-1');
       final seed = await keys.ensureIdentitySeed(account);
@@ -126,10 +126,45 @@ void main() {
     () async {
       const before = WalletAccount(id: 'acct-1');
       final seed = await keys.ensureIdentitySeed(before);
-      // The viewing key arriving later must not silently rotate an identity that
+      // A secret arriving later must not silently rotate an identity that
       // other participants have already pinned.
-      const after = WalletAccount(id: 'acct-1', viewingKey: 'uview1abc');
+      const after = WalletAccount(id: 'acct-1', identitySecret: [1, 2, 3]);
       expect(await keys.ensureIdentitySeed(after), seed);
     },
   );
+
+  test('the seed is SHA-256 of the domain, a zero byte and the secret', () {
+    // Pinned against a digest computed outside this package:
+    //   printf 'splitz.identity.v2\x00\x01\x02\x03' | shasum -a 256
+    expect(
+      SplitsSigner.encode(identitySeedFrom([1, 2, 3])),
+      SplitsSigner.encode(
+        _hex(
+          '30da771c99ad554a64185a76297a22e32b18a03a8a8bd49fe2ea50c39aaf3a9b',
+        ),
+      ),
+    );
+  });
+
+  test(
+    'an identity stored under the viewing-key derivation is not read',
+    () async {
+      final store = InMemorySecretStore();
+      await store.write(
+        'splitz_identity_seed_acct-1',
+        SplitsSigner.encode(List<int>.filled(32, 7)),
+      );
+      final fresh = SplitsKeys(store: store);
+      const account = WalletAccount(id: 'acct-1', identitySecret: [1, 2, 3]);
+      expect(
+        await fresh.ensureIdentitySeed(account),
+        identitySeedFrom([1, 2, 3]),
+      );
+    },
+  );
 }
+
+List<int> _hex(String hex) => [
+  for (var i = 0; i < hex.length; i += 2)
+    int.parse(hex.substring(i, i + 2), radix: 16),
+];

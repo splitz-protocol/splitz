@@ -390,25 +390,25 @@ pub fn identity_key_from_seed(seed: String) -> Result<String> {
         })
 }
 
-/// The seed an account signs with, derived from its viewing key.
+/// The seed an account signs with, derived from its spending secret.
 ///
-/// A viewing key comes from the wallet seed, so the same mnemonic yields the
-/// same identity on a reinstalled device. An identifier the wallet's own
-/// database assigns does not — it is handed out at import time — so an
-/// identity filed only under that is a stranger to every bill naming it after
-/// a restore. A wallet with no viewing key mints a random seed instead, which
-/// signs correctly and cannot be recovered.
+/// `secret` is bytes the wallet derives from what only its owner holds — for
+/// a software wallet, the mnemonic and passphrase — so the same mnemonic
+/// yields the same identity on a reinstalled device. It MUST NOT be anything
+/// the wallet shows or shares, such as a viewing key: whoever holds it holds
+/// the identity. A wallet with no such secret mints a random seed instead,
+/// which signs correctly and cannot be recovered.
 #[uniffi::export]
-pub fn identity_seed_from_viewing_key(viewing_key: String) -> Result<String> {
-    if viewing_key.is_empty() {
+pub fn identity_seed_from_secret(secret: Vec<u8>) -> Result<String> {
+    if secret.is_empty() {
         return Err(SplitzError::Host {
-            detail: "an empty viewing key derives nothing; mint a random seed".to_owned(),
+            detail: "an empty secret derives nothing; mint a random seed".to_owned(),
             transient: false,
         });
     }
-    Ok(splitz_host::base64url_encode(&splitz_core::sha256(
-        format!("{}:{viewing_key}", splitz_host::IDENTITY_DOMAIN).as_bytes(),
-    )))
+    Ok(splitz_host::base64url_encode(
+        &splitz_host::identity_seed_from(&secret),
+    ))
 }
 
 /// Why `key` is not one the cipher can use, or `None` when it is.

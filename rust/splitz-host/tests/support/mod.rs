@@ -27,7 +27,7 @@ impl FakeWallet {
         Self {
             account: WalletAccount {
                 id: id.to_owned(),
-                viewing_key: Some(format!("uview-{id}")),
+                identity_secret: Some(format!("secret-{id}").into_bytes()),
             },
             sender: FakeSender::new(pay_to),
             secrets: InMemorySecretStore::default(),

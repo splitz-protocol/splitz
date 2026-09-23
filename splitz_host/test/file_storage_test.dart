@@ -80,7 +80,7 @@ void main() {
     () async {
       final secrets = FileSecretStore(File('${dir.path}/secrets.json'));
       final keys = SplitsKeys(store: secrets, random: Random(1));
-      const account = WalletAccount(id: 'ana', viewingKey: 'uview1abc');
+      const account = WalletAccount(id: 'ana', identitySecret: [1, 2, 3]);
 
       final first = await keys.ensureIdentitySeed(account);
       final afterRestart = await SplitsKeys(

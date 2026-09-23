@@ -10,12 +10,13 @@ use serde_json::{json, Value};
 use splitz_core::host::{
     add_expense, create_bill, join_bill, obligation_for, set_rate, settle, BillLog, SendResult,
 };
-use splitz_core::{decode_bill, sha256, signing_message, SetAside};
+use splitz_core::{decode_bill, signing_message, SetAside};
 use splitz_host::{
     activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, component_encode,
     is_well_formed_key, query_encode, BillEvent, BillStorage, BillStore, DraftItem, HostError,
-    HttpTransport, InMemoryBillStorage, OneClickSwaps, Sealing, Signer, SplitDraft, SplitKind,
-    SwapProvider, SwapQuote, SwapWatch, TradableAsset, IDENTITY_DOMAIN,
+    HttpTransport, InMemoryBillStorage, InMemorySecretStore, OneClickSwaps, Sealing, Signer,
+    SplitDraft, SplitKind, SplitsKeys, SwapProvider, SwapQuote, SwapWatch, SystemRandomness,
+    TradableAsset, WalletAccount,
 };
 
 /// A provider that answers with one scripted body and records its URLs.
@@ -419,14 +420,25 @@ fn answer(op: &Value) -> Value {
             })
         }
         "identity_seed" => {
-            let viewing_key = op["viewingKey"].as_str().unwrap_or("");
-            if viewing_key.is_empty() {
+            let secret = base64url_decode(op["secret"].as_str().unwrap_or("")).unwrap_or_default();
+            if secret.is_empty() {
                 // Random, on both sides, so there is nothing to compare.
                 json!(Value::Null)
             } else {
-                json!(base64url_encode(&sha256(
-                    format!("{IDENTITY_DOMAIN}:{viewing_key}").as_bytes()
-                )))
+                // Through the keychain path a wallet reaches, not a restated
+                // formula: two sides each computing their own digest would
+                // agree by construction.
+                let store = InMemorySecretStore::default();
+                let random = SystemRandomness;
+                let account = WalletAccount {
+                    id: "differential".to_owned(),
+                    identity_secret: Some(secret),
+                };
+                json!(base64url_encode(
+                    &SplitsKeys::new(&store, &random)
+                        .ensure_identity_seed(&account)
+                        .unwrap()
+                ))
             }
         }
         "seal_open" => {

@@ -68,10 +68,14 @@ fun main() {
     println("a wallet passes facts, not callbacks")
     check("an identity key is 43 unpadded base64url characters",
           anaKey.length == 43, anaKey)
-    check("a seed derived from a viewing key survives a reinstall",
-          identitySeedFromViewingKey("uview1abc") ==
-              identitySeedFromViewingKey("uview1abc"),
-          identitySeedFromViewingKey("uview1abc"))
+    val secret = "mnemonic words".toByteArray()
+    check("a seed derived from a spending secret survives a reinstall",
+          identitySeedFromSecret(secret) == identitySeedFromSecret(secret),
+          identitySeedFromSecret(secret))
+    check("and is the one the protocol pins",
+          identitySeedFromSecret(byteArrayOf(1, 2, 3)) ==
+              "MNp3HJmtVUpkGFp2KXoi4ysYoDqKi9Sf4upQw5qvOps",
+          identitySeedFromSecret(byteArrayOf(1, 2, 3)))
     check("a key of the wrong length is named, not accepted",
           billKeyProblem("AAAA") == "wrong_length" && billKeyProblem(anaKey) == null,
           "${billKeyProblem("AAAA")}")

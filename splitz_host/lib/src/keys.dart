@@ -25,7 +25,9 @@ class SplitsKeys {
   final Random _random;
 
   static const String _billPrefix = 'splitz_bill_key_';
-  static const String _identityPrefix = 'splitz_identity_seed_';
+  // v2: an identity stored under the v1 name was derived from a viewing key,
+  // which a wallet hands out, so it is never read again.
+  static const String _identityPrefix = 'splitz_identity_seed_v2_';
 
   /// Key length in bytes. 32 suits XChaCha20 and AES-256 alike, so the choice
   /// of cipher stays open, and it is also Ed25519's seed length.
@@ -40,7 +42,7 @@ class SplitsKeys {
   ///
   /// Changing it changes every identity derived afterwards, so it is versioned
   /// rather than edited.
-  static const String identityDomain = 'splitz.identity.v1';
+  static const String identityDomain = 'splitz.identity.v2';
 
   String _billKeyName(String billId) => '$_billPrefix$billId';
 
@@ -103,14 +105,13 @@ class SplitsKeys {
   /// account's entries on every bill, and its public half — published in that
   /// account's own join — is what other participants pin under §10.7.
   ///
-  /// [WalletAccount.viewingKey] is what makes it survive a reinstall. A viewing
-  /// key is derived from the wallet seed, so the same mnemonic yields the same
-  /// identity on a new device; the account identifier it is filed under does
-  /// not, because the wallet's own database assigns that at import. Keyed only
-  /// by the identifier, a restored participant would be a stranger to every
-  /// bill naming them.
+  /// [WalletAccount.identitySecret] is what makes it survive a reinstall: the
+  /// seed is SHA-256 of [identityDomain], a zero byte and the secret, so the
+  /// same mnemonic yields the same identity on a new device. The account
+  /// identifier it is filed under does not, because the wallet's own database
+  /// assigns that at import.
   ///
-  /// An account with no viewing key gets a random seed. It signs correctly and
+  /// An account with no secret gets a random seed. It signs correctly and
   /// simply cannot be recovered, which is a state to report rather than one to
   /// paper over.
   Future<List<int>> ensureIdentitySeed(WalletAccount account) async {
@@ -118,21 +119,27 @@ class SplitsKeys {
     if (stored != null && stored.isNotEmpty) {
       return SplitsSigner.decode(stored);
     }
-    final viewingKey = account.viewingKey;
-    final seed = viewingKey == null || viewingKey.isEmpty
+    final secret = account.identitySecret;
+    final seed = secret == null || secret.isEmpty
         ? List<int>.generate(keyLengthBytes, (_) => _random.nextInt(256))
-        : hashing.sha256
-              .convert(utf8.encode('$identityDomain:$viewingKey'))
-              .bytes;
+        : identitySeedFrom(secret);
     await _store.write(_identityName(account.id), SplitsSigner.encode(seed));
     return seed;
   }
 
   /// Whether this account's identity would survive a restore from its mnemonic.
   ///
-  /// False when the seed was drawn at random for want of a viewing key. The
+  /// False when the seed was drawn at random for want of a secret. The
   /// difference is invisible in every signature it makes and decisive the day
   /// the device is replaced, so it is reported rather than inferred.
   static bool identityIsRecoverable(WalletAccount account) =>
-      account.viewingKey != null && account.viewingKey!.isNotEmpty;
+      account.identitySecret != null && account.identitySecret!.isNotEmpty;
 }
+
+/// The identity seed [secret] derives: SHA-256 of [SplitsKeys.identityDomain],
+/// a zero byte, and the secret.
+List<int> identitySeedFrom(List<int> secret) => hashing.sha256.convert([
+  ...utf8.encode(SplitsKeys.identityDomain),
+  0,
+  ...secret,
+]).bytes;

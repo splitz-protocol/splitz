@@ -173,7 +173,7 @@ void main() {
     final signer = SplitsSigner();
     final ana = Device(FakeWallet(), relay);
     final seed = await ana.keys.ensureIdentitySeed(
-      const WalletAccount(id: 'ana', viewingKey: 'uv'),
+      const WalletAccount(id: 'ana', identitySecret: [9]),
     );
     final identityKey = await signer.publicKeyFromSeed(seed);
 

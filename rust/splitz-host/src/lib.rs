@@ -32,7 +32,8 @@ pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKi
 pub use error::{HostError, Result};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
 pub use keys::{
-    is_well_formed_key, Randomness, SplitsKeys, SystemRandomness, IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
+    identity_seed_from, is_well_formed_key, Randomness, SplitsKeys, SystemRandomness,
+    IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
 };
 pub use pricing::{FixedZecPrices, NoZecPrices};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};

@@ -99,24 +99,29 @@ class InMemorySecretStore implements SecretStore {
 
 /// Which wallet account is speaking, and what makes its identity recoverable.
 class WalletAccount {
-  const WalletAccount({required this.id, this.viewingKey});
+  const WalletAccount({required this.id, this.identitySecret});
 
   /// The participant id this device speaks as on every bill. Every entry it
   /// writes is authored by this id, and §10.4 decides what that authorises.
   final String id;
 
-  /// A unified full viewing key, when the wallet can supply one.
+  /// Bytes derived from the account's spending secret, when the wallet holds
+  /// one — for a software wallet, its mnemonic and passphrase.
   ///
-  /// It makes this account's signing identity recoverable: a viewing key is
-  /// derived from the wallet seed, so the same mnemonic yields the same
-  /// identity on a reinstalled device. An account identifier assigned by the
-  /// wallet's own database does not — it is handed out at import time — so an
-  /// identity filed only under that is a stranger to every bill naming it
-  /// after a restore.
+  /// It makes this account's signing identity recoverable: the same mnemonic
+  /// yields the same identity on a reinstalled device. An account identifier
+  /// assigned by the wallet's own database does not — it is handed out at
+  /// import time — so an identity filed only under that is a stranger to every
+  /// bill naming it after a restore.
   ///
-  /// Null is allowed and means the identity is random and unrecoverable. It
-  /// still signs correctly.
-  final String? viewingKey;
+  /// It MUST NOT be anything the wallet shows or shares: whoever holds it
+  /// holds the identity, and can write entries that bind as this participant
+  /// and redirect what they are paid. A viewing key is exactly such a thing.
+  ///
+  /// Null is allowed — a hardware account keeps no secret on the phone — and
+  /// means the identity is random and unrecoverable. It still signs
+  /// correctly.
+  final List<int>? identitySecret;
 }
 
 /// The wallet, as this package needs it.

@@ -239,29 +239,36 @@ pub struct WalletAccount {
     /// The participant id this device speaks as on every bill. Every entry it
     /// writes is authored by this id, and §10.4 decides what that authorises.
     pub id: String,
-    /// A unified full viewing key, when the wallet can supply one.
+    /// Bytes derived from the account's spending secret, when the wallet
+    /// holds one — for a software wallet, its mnemonic and passphrase.
     ///
-    /// It is what makes this account's signing identity survive a reinstall: a
-    /// viewing key is derived from the wallet seed, so the same mnemonic
-    /// yields the same identity on a new device. An account identifier the
-    /// wallet's own database assigns does not — it is handed out at import
-    /// time — so an identity filed only under that is a stranger to every bill
-    /// naming it after a restore.
+    /// It makes this account's signing identity survive a reinstall: the same
+    /// mnemonic yields the same identity on a new device. An account
+    /// identifier the wallet's own database assigns does not — it is handed
+    /// out at import time — so an identity filed only under that is a
+    /// stranger to every bill naming it after a restore.
     ///
-    /// `None` means the identity is random and unrecoverable. It still signs
-    /// correctly.
-    pub viewing_key: Option<String>,
+    /// It MUST NOT be anything the wallet shows or shares: whoever holds it
+    /// holds the identity, and can write entries that bind as this
+    /// participant and redirect what they are paid. A viewing key is exactly
+    /// such a thing.
+    ///
+    /// `None` — a hardware account keeps no secret on the phone — means the
+    /// identity is random and unrecoverable. It still signs correctly.
+    pub identity_secret: Option<Vec<u8>>,
 }
 
 impl WalletAccount {
     /// Whether this account's identity would survive a restore from its
     /// mnemonic.
     ///
-    /// False when the seed was drawn at random for want of a viewing key. The
+    /// False when the seed was drawn at random for want of a secret. The
     /// difference is invisible in every signature it makes and decisive the
     /// day the device is replaced, so it is reported rather than inferred.
     pub fn identity_is_recoverable(&self) -> bool {
-        self.viewing_key.as_deref().is_some_and(|k| !k.is_empty())
+        self.identity_secret
+            .as_deref()
+            .is_some_and(|s| !s.is_empty())
     }
 }
 

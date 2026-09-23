@@ -8,18 +8,23 @@ import 'package:splitz_host/splitz_host.dart';
 /// The clock is held still and the randomness is a counter: §9.3 instants order
 /// a log and §9.4 derives a bill id from a nonce, so a log that moves between
 /// runs cannot be asserted against a fixed expectation.
+/// A secret derived from the account id, standing in for a mnemonic's.
+const Object _derived = Object();
+
 class FakeWallet implements SplitsWallet {
   FakeWallet({
     String id = 'ana',
     String? payTo = 'u1ana000000000000000000',
-    String? viewingKey = 'unset',
+    Object? identitySecret = _derived,
     WalletSendOutcome outcome = const WalletSendOutcome(
       phase: WalletSendPhase.succeeded,
       txid: 'tx-1',
     ),
   }) : account = WalletAccount(
          id: id,
-         viewingKey: viewingKey == 'unset' ? 'uview-$id' : viewingKey,
+         identitySecret: identical(identitySecret, _derived)
+             ? 'secret-$id'.codeUnits
+             : identitySecret as List<int>?,
        ),
        sender = FakeSender(payToAddress: payTo, outcome: outcome);
 

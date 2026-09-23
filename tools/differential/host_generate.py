@@ -15,6 +15,11 @@ import random
 import sys
 
 
+
+def _b64(raw):
+    import base64
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
 def b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
@@ -343,8 +348,11 @@ def main() -> int:
                        "signWith": rng.choice(seeds),
                        "tamper": rng.random() < 0.3}, out)
         elif op == "identity_seed":
-            json.dump({"op": op, "viewingKey": rng.choice(
-                ["", "uview1abc", "uview1def", "日本語", "u" * 200])}, out)
+            # Unpadded base64url of the bytes a wallet derives from its
+            # spending secret; empty is an account with none.
+            json.dump({"op": op, "secret": rng.choice(
+                ["", _b64(b"\x01\x02\x03"), _b64("mnemonic words".encode()),
+                 _b64("日本語".encode()), _b64(bytes(range(256)))])}, out)
         elif op == "well_formed_key":
             json.dump({"op": op, "key": a_key_ish(rng)}, out)
         elif op == "seal_open":
