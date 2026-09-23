@@ -75,4 +75,3 @@ rust::quote_request_body   # The body a quote request carries. Dart builds it in
 rust::assets_from_tokens   # What a `/v0/tokens` answer lists. Dart's `_asset` and the loop in `tradableAssets`.
 rust::quote_from_response  # What a `/v0/quote` answer states. Dart reads it inline in `quote`.
 rust::status_from_response # What a `/v0/status` answer means. Dart reads it inline in `statusOf`.
-dart::ScopedBillStorage    # Lets two Dart stores over one directory share one queue of writes per bill; the Flutter screens build a store per route. Rust `BillStore` is reached only from tests and the differential example, never from two stores at once, so it has nothing to pair with.

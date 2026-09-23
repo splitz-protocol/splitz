@@ -48,13 +48,6 @@ class InMemoryBillStorage implements BillStorage {
   Future<int> sweepUnfinishedWrites() async => 0;
 }
 
-/// Storage that can say what it writes to, so that two objects over the
-/// same place are recognised as one.
-abstract interface class ScopedBillStorage implements BillStorage {
-  /// Equal for two storages that write to the same place.
-  Object get scope;
-}
-
 /// The bills this device holds, and the entries each is made of.
 class BillStore {
   BillStore(this._storage);
@@ -145,19 +138,14 @@ class BillStore {
 
   /// The last operation queued on each bill, per storage.
   ///
-  /// Shared by every store in the process, and keyed by what the storage
-  /// writes to rather than by this object: two stores over one directory —
-  /// a screen opened twice — would otherwise each serialize only their own
-  /// writes and interleave with the other's.
+  /// Shared by every store in the process and keyed by the storage object,
+  /// so two stores over one storage queue behind each other. A storage over a
+  /// shared medium hands out one object per medium ([FileBillStorage] does,
+  /// per directory) for this to cover it.
   static final Map<Object, Map<String, Future<void>>> _tailsByScope = {};
 
-  Object get _scope {
-    final storage = _storage;
-    return storage is ScopedBillStorage ? storage.scope : storage;
-  }
-
   Future<T> _serial<T>(String billId, Future<T> Function() body) {
-    final scope = _scope;
+    final scope = _storage;
     final tails = _tailsByScope.putIfAbsent(scope, () => {});
     final run = (tails[billId] ?? Future<void>.value()).then((_) => body());
     final tail = run.then<void>((_) {}, onError: (Object _) {});

@@ -17,15 +17,23 @@ import 'wallet.dart';
 /// rewritten whole on every change, so a process that dies mid-write loses
 /// every bill instead of one — and the bill being written is the one least
 /// likely to be recoverable from a peer.
-class FileBillStorage implements ScopedBillStorage {
-  FileBillStorage(this.directory);
+///
+/// One object per directory: asking twice for the same directory returns the
+/// same storage, so every [BillStore] over it shares one queue of writes per
+/// bill. Two stores over one directory — a screen opened twice — would
+/// otherwise each serialize only their own merges and interleave with the
+/// other's.
+class FileBillStorage implements BillStorage {
+  factory FileBillStorage(Directory directory) => _open.putIfAbsent(
+    directory.absolute.path,
+    () => FileBillStorage._(directory),
+  );
+
+  FileBillStorage._(this.directory);
+
+  static final Map<String, FileBillStorage> _open = {};
 
   final Directory directory;
-
-  /// The directory's absolute path: two storages over one directory share
-  /// one queue of writes per bill.
-  @override
-  Object get scope => directory.absolute.path;
 
   /// A stored name, as a file name that maps back to it.
   ///

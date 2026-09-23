@@ -21,18 +21,6 @@ class _SlowStorage extends InMemoryBillStorage {
   }
 }
 
-/// Files whose reads take a turn of the event loop, as [_SlowStorage].
-class _SlowFiles extends FileBillStorage {
-  _SlowFiles(super.directory);
-
-  @override
-  Future<String?> read(String key) async {
-    final value = await super.read(key);
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-    return value;
-  }
-}
-
 /// A relay whose fetch answers only when the test says so.
 class _HeldRelay implements SplitsRelay {
   final InMemorySplitsRelay inner = InMemorySplitsRelay();
@@ -97,8 +85,9 @@ void main() {
       creatorKey: 'A' * 43,
     );
     final id = create['id'] as String;
-    final first = BillStore(_SlowFiles(dir));
-    final second = BillStore(_SlowFiles(dir));
+    // Asked for twice, as two screens would.
+    final first = BillStore(FileBillStorage(dir));
+    final second = BillStore(FileBillStorage(Directory(dir.path)));
     await first.merge(id, [create]);
     wallet.tick();
     final a = splitz.joinBill(host: host, name: 'Ana', payTo: 'u1ana');
