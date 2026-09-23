@@ -11,14 +11,12 @@ use crate::error::{code, Result, SplitError};
 /// every implementation accepts and refuses the same inputs.
 pub const MAX_AMOUNT: i64 = i64::MAX;
 
-/// The largest magnitude one expense or payment may carry, ten digits of minor
-/// units (SPEC.md §2.2).
+/// The largest magnitude one expense may carry (SPEC.md §2.2).
 ///
-/// Ten rather than eleven so that one entry is always priceable: §7.1 forms
-/// `minorUnits × 100000000`, which fits an `i64` up to 92233720368 minor
-/// units. A balance reaches [`MAX_AMOUNT`] only after about 922 million
-/// entries at this cap.
-pub const MAX_ENTRY_AMOUNT: i64 = 9_999_999_999;
+/// The largest amount §7.1 can price: it forms `minorUnits × 100000000`,
+/// which fits an `i64` up to exactly this figure. A balance reaches
+/// [`MAX_AMOUNT`] only after 100000001 expenses at the cap.
+pub const MAX_ENTRY_AMOUNT: i64 = 92_233_720_368;
 
 /// The most negative amount. It has no positive counterpart, so taking its
 /// magnitude is the identity (SPEC.md §3, step 3).

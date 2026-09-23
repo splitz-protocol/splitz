@@ -17978,7 +17978,7 @@
         },
         {
           "v": 1,
-          "id": "Gm_QN7cXL3EtqWUo50QrsA",
+          "id": "aMgHu2I4A1VR3Yf2oSdxWg",
           "author": "ben",
           "kind": "addExpense",
           "at": "2026-10-28T19:09:00.000Z",
@@ -17986,12 +17986,12 @@
             "id": "xbig",
             "description": "big",
             "paidBy": "ana",
-            "amount": 9999999999,
+            "amount": 92233720368,
             "at": "2026-10-28T19:09:00.000Z",
             "split": {
               "type": "exact",
               "amounts": {
-                "ben": 9999999999
+                "ben": 92233720368
               }
             }
           }
@@ -18037,12 +18037,12 @@
               "id": "xbig",
               "description": "big",
               "paidBy": "ana",
-              "amount": 9999999999,
+              "amount": 92233720368,
               "at": "2026-10-28T19:09:00.000Z",
               "split": {
                 "type": "exact",
                 "amounts": {
-                  "ben": 9999999999
+                  "ben": 92233720368
                 }
               },
               "currency": "EUR"
@@ -18076,8 +18076,8 @@
         "withdrawn": [],
         "setAside": [],
         "balances": {
-          "ana": 10000004499,
-          "ben": -10000004499
+          "ana": 92233724868,
+          "ben": -92233724868
         }
       }
     },
@@ -18158,7 +18158,7 @@
         },
         {
           "v": 1,
-          "id": "4EZePdiDSGak0aKVLHiNCw",
+          "id": "ib-NmO5S4RIQCDXL6RvBPg",
           "author": "ben",
           "kind": "addExpense",
           "at": "2026-10-28T19:09:00.000Z",
@@ -18166,12 +18166,12 @@
             "id": "xbig",
             "description": "big",
             "paidBy": "ana",
-            "amount": 10000000000,
+            "amount": 92233720369,
             "at": "2026-10-28T19:09:00.000Z",
             "split": {
               "type": "exact",
               "amounts": {
-                "ben": 10000000000
+                "ben": 92233720369
               }
             }
           }
@@ -18242,7 +18242,7 @@
         "withdrawn": [],
         "setAside": [
           {
-            "id": "4EZePdiDSGak0aKVLHiNCw",
+            "id": "ib-NmO5S4RIQCDXL6RvBPg",
             "code": "amount_too_large"
           }
         ],
@@ -18329,7 +18329,7 @@
         },
         {
           "v": 1,
-          "id": "jhgrPw2VBqCgAWgs0SPQEA",
+          "id": "BLfFh482MLrgHaZPfZnZvg",
           "author": "ben",
           "kind": "addExpense",
           "at": "2026-10-28T19:09:00.000Z",
@@ -18337,12 +18337,12 @@
             "id": "xbig",
             "description": "big",
             "paidBy": "ana",
-            "amount": -9999999999,
+            "amount": -92233720368,
             "at": "2026-10-28T19:09:00.000Z",
             "split": {
               "type": "exact",
               "amounts": {
-                "ben": -9999999999
+                "ben": -92233720368
               }
             }
           }
@@ -18388,12 +18388,12 @@
               "id": "xbig",
               "description": "big",
               "paidBy": "ana",
-              "amount": -9999999999,
+              "amount": -92233720368,
               "at": "2026-10-28T19:09:00.000Z",
               "split": {
                 "type": "exact",
                 "amounts": {
-                  "ben": -9999999999
+                  "ben": -92233720368
                 }
               },
               "currency": "EUR"
@@ -18427,8 +18427,8 @@
         "withdrawn": [],
         "setAside": [],
         "balances": {
-          "ana": -9999995499,
-          "ben": 9999995499
+          "ana": -92233715868,
+          "ben": 92233715868
         }
       }
     },
@@ -18509,7 +18509,7 @@
         },
         {
           "v": 1,
-          "id": "2LyXJNOc2M9mTqLICGvFeQ",
+          "id": "PlFQ9P9n0qXl9f8J0FWxvQ",
           "author": "ben",
           "kind": "addExpense",
           "at": "2026-10-28T19:09:00.000Z",
@@ -18517,12 +18517,12 @@
             "id": "xbig",
             "description": "big",
             "paidBy": "ana",
-            "amount": -10000000000,
+            "amount": -92233720369,
             "at": "2026-10-28T19:09:00.000Z",
             "split": {
               "type": "exact",
               "amounts": {
-                "ben": -10000000000
+                "ben": -92233720369
               }
             }
           }
@@ -18593,7 +18593,7 @@
         "withdrawn": [],
         "setAside": [
           {
-            "id": "2LyXJNOc2M9mTqLICGvFeQ",
+            "id": "PlFQ9P9n0qXl9f8J0FWxvQ",
             "code": "amount_too_large"
           }
         ],
@@ -18604,7 +18604,7 @@
       }
     },
     {
-      "name": "a_payment_at_the_cap_is_applied",
+      "name": "a_payment_past_the_expense_cap_is_applied",
       "log": [
         {
           "v": 1,
@@ -18680,7 +18680,7 @@
         },
         {
           "v": 1,
-          "id": "zivPb8DkW3CjKEIpWTI8WQ",
+          "id": "Jc8niReTyVv74ieKHs_67g",
           "author": "ben",
           "kind": "recordPayment",
           "at": "2026-10-28T19:09:00.000Z",
@@ -18688,7 +18688,7 @@
             "id": "ycap",
             "from": "ben",
             "to": "ana",
-            "amount": 9999999999,
+            "amount": 92233720369,
             "method": "cash",
             "at": "2026-10-28T19:09:00.000Z"
           }
@@ -18745,7 +18745,7 @@
               "id": "ycap",
               "from": "ben",
               "to": "ana",
-              "amount": 9999999999,
+              "amount": 92233720369,
               "method": "cash",
               "at": "2026-10-28T19:09:00.000Z",
               "currency": "EUR"
@@ -18765,7 +18765,7 @@
         },
         "paymentDigests": {
           "y1": "fv0wZOT4gmzAhLTOGgufJg",
-          "ycap": "gCIUpEs3ZARSKRn9nnNRyw"
+          "ycap": "7EtX6b9Z8ihsb_oBU7DueA"
         },
         "withdrawn": [],
         "setAside": [],
@@ -18776,7 +18776,7 @@
       }
     },
     {
-      "name": "a_payment_one_over_the_cap_is_set_aside",
+      "name": "a_payment_that_would_carry_a_pair_total_out_of_range_is_set_aside",
       "log": [
         {
           "v": 1,
@@ -18816,53 +18816,32 @@
         },
         {
           "v": 1,
-          "id": "E4u_dfL3x5xNJk0FThKLjA",
-          "author": "ana",
-          "kind": "addExpense",
-          "at": "2026-10-28T19:03:00.000Z",
-          "expense": {
-            "id": "x1",
-            "description": "dinner",
-            "paidBy": "ana",
-            "amount": 9000,
-            "at": "2026-10-28T19:03:00.000Z",
-            "split": {
-              "type": "equal",
-              "among": [
-                "ana",
-                "ben"
-              ]
-            }
-          }
-        },
-        {
-          "v": 1,
-          "id": "PC5AEbDN1IJiepSBCCdT5A",
-          "author": "ben",
-          "kind": "recordPayment",
-          "at": "2026-10-28T19:04:00.000Z",
-          "payment": {
-            "id": "y1",
-            "from": "ben",
-            "to": "ana",
-            "amount": 4500,
-            "method": "cash",
-            "at": "2026-10-28T19:04:00.000Z"
-          }
-        },
-        {
-          "v": 1,
-          "id": "ebRMGYATwgyAD1hrhwpFfw",
+          "id": "bgKoF9pH7Hygi1T-d21ong",
           "author": "ben",
           "kind": "recordPayment",
           "at": "2026-10-28T19:09:00.000Z",
           "payment": {
-            "id": "ycap",
+            "id": "y1",
             "from": "ben",
             "to": "ana",
-            "amount": 10000000000,
+            "amount": 9223372036854775807,
             "method": "cash",
             "at": "2026-10-28T19:09:00.000Z"
+          }
+        },
+        {
+          "v": 1,
+          "id": "JOA0a8ZlYlZzjiJyRrB4Ug",
+          "author": "ben",
+          "kind": "recordPayment",
+          "at": "2026-10-28T19:10:00.000Z",
+          "payment": {
+            "id": "y2",
+            "from": "ben",
+            "to": "ana",
+            "amount": 1,
+            "method": "cash",
+            "at": "2026-10-28T19:10:00.000Z"
           }
         }
       ],
@@ -18886,31 +18865,15 @@
               "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
             }
           ],
-          "expenses": [
-            {
-              "id": "x1",
-              "description": "dinner",
-              "paidBy": "ana",
-              "amount": 9000,
-              "at": "2026-10-28T19:03:00.000Z",
-              "split": {
-                "type": "equal",
-                "among": [
-                  "ana",
-                  "ben"
-                ]
-              },
-              "currency": "EUR"
-            }
-          ],
+          "expenses": [],
           "payments": [
             {
               "id": "y1",
               "from": "ben",
               "to": "ana",
-              "amount": 4500,
+              "amount": 9223372036854775807,
               "method": "cash",
-              "at": "2026-10-28T19:04:00.000Z",
+              "at": "2026-10-28T19:09:00.000Z",
               "currency": "EUR"
             }
           ],
@@ -18926,18 +18889,18 @@
           "y1": "ben"
         },
         "paymentDigests": {
-          "y1": "fv0wZOT4gmzAhLTOGgufJg"
+          "y1": "xL8Cr8it5nD1wHO0pmYteA"
         },
         "withdrawn": [],
         "setAside": [
           {
-            "id": "ebRMGYATwgyAD1hrhwpFfw",
-            "code": "amount_too_large"
+            "id": "JOA0a8ZlYlZzjiJyRrB4Ug",
+            "code": "amount_overflow"
           }
         ],
         "balances": {
-          "ana": 4500,
-          "ben": -4500
+          "ana": 0,
+          "ben": 0
         }
       }
     },

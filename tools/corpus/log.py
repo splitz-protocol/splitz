@@ -5,7 +5,7 @@ SPEC.md sections 9.4, 10 and 10.5.
 """
 import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import (ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
+from _spec import (MAX_ENTRY_AMOUNT, ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
                    payment_digest,
                    seal_log, merge, order, fold, balances,
                    canonical_json, b64url, Refused, stand_in,
@@ -786,9 +786,11 @@ FOLD_CASES += [
 ]
 
 
-# §2.2. One expense or payment carries at most MAX_ENTRY_AMOUNT in magnitude,
-# so no log a bill can plausibly hold carries a balance out of range.
-CAP = 9_999_999_999
+# §2.2. One expense carries at most MAX_ENTRY_AMOUNT in magnitude. A payment
+# carries no cap of its own, and a pair total past the 64-bit bound is set
+# aside rather than wrapped.
+CAP = MAX_ENTRY_AMOUNT
+I64_MAX = 2**63 - 1
 
 
 def expense(eid, author, paid_by, amount, amounts, minute):
@@ -817,10 +819,13 @@ FOLD_CASES += [
     ("a_refund_one_over_the_cap_is_set_aside",
      BASE + [expense("big", "ben", "ana", -CAP - 1, {"ben": -CAP - 1}, 9)],
      C["id"]),
-    ("a_payment_at_the_cap_is_applied",
-     BASE + [payment("q1", "ben", "ben", "ana", CAP, 9, "ycap")], C["id"]),
-    ("a_payment_one_over_the_cap_is_set_aside",
-     BASE + [payment("q1", "ben", "ben", "ana", CAP + 1, 9, "ycap")], C["id"]),
+    ("a_payment_past_the_expense_cap_is_applied",
+     BASE + [payment("q1", "ben", "ben", "ana", CAP + 1, 9, "ycap")],
+     C["id"]),
+    ("a_payment_that_would_carry_a_pair_total_out_of_range_is_set_aside",
+     [C, J_ANA, J_BEN,
+      payment("q1", "ben", "ben", "ana", I64_MAX, 9, "y1"),
+      payment("q2", "ben", "ben", "ana", 1, 10, "y2")], C["id"]),
 ]
 
 

@@ -215,10 +215,6 @@ PaymentRecord decodePayment(Object? raw, String billCurrency, Set<String> ids) {
   if (amount < 0) {
     raise(SplitCode.negativeAmount, 'A payment of $amount is negative');
   }
-  if (amount > maxEntryAmount) {
-    raise(SplitCode.amountTooLarge,
-        'A payment of $amount is past the $maxEntryAmount cap');
-  }
 
   int? zatoshi;
   if (p.containsKey('zatoshi')) {

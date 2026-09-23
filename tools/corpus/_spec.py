@@ -41,8 +41,9 @@ def _ascii_digits(text):
 # i64::MAX is 9223372036854775807: 19 digits.
 I64_MAX_DIGITS = 19
 
-# Section 2.2: the largest magnitude one expense or payment may carry.
-MAX_ENTRY_AMOUNT = 9_999_999_999
+# Section 2.2: the largest magnitude one expense may carry, the largest amount
+# section 7.1 can price: I64_MAX // 100000000.
+MAX_ENTRY_AMOUNT = 92_233_720_368
 
 
 def bare_decimal(text):
@@ -881,8 +882,6 @@ def decode_payment(raw, currency, ids):
     amount = _int(raw.get("amount"))
     if amount < 0:
         raise Refused("negative_amount")
-    if amount > MAX_ENTRY_AMOUNT:
-        raise Refused("amount_too_large")
     p = {"id": _str(raw.get("id")), "from": frm, "to": to,
          "amount": amount, "currency": cur, "method": method,
          "at": parse_instant(raw.get("at"))}

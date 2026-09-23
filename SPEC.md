@@ -91,14 +91,16 @@ every total, sum and intermediate product formed from amounts. An operation
 whose result would exceed that range MUST be refused with `amount_overflow`, or
 with the narrower code §3 and §7 name, and MUST NOT be allowed to wrap.
 
-**One expense or payment MUST carry at most `9999999999` minor units in
-magnitude** — ten digits — refused with `amount_too_large`. The check comes
-after the rest of the payload has decoded (§9.1, §9.2). Ten digits rather than
-eleven keeps every single entry priceable: §7.1 forms `minorUnits ×
-100000000`, which fits a signed 64-bit integer up to `92233720368`. A balance
-reaches the 64-bit bound only after 922337204 entries at the cap, so the
-overflow refusals below guard a log no bill holds in practice; they stay,
-because wrapping is never allowed.
+**One expense MUST carry at most `92233720368` minor units in magnitude**,
+refused with `amount_too_large`. The check comes after the rest of the
+expense payload has decoded (§9.1). The figure is the largest §7.1 can price:
+`92233720368 × 100000000` fits a signed 64-bit integer and one unit more does
+not. A balance reaches the 64-bit bound only after 100000001 expenses at the
+cap, so the overflow refusals below guard a log no bill holds in practice;
+they stay, because wrapping is never allowed. A debt formed from several
+expenses can still exceed what one request prices, which §7.1 refuses with
+`rate_amount_too_large`. Payments carry no cap of their own: a payment
+settles a debt, and a debt is a sum of expenses.
 
 The bound is stated as a number rather than left to whichever integer type an
 implementation happens to have, so that every implementation accepts and

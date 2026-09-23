@@ -282,12 +282,6 @@ pub fn decode_payment(
             format!("A payment of {amount} is negative"),
         ));
     }
-    if amount > MAX_ENTRY_AMOUNT {
-        return Err(SplitError::new(
-            code::AMOUNT_TOO_LARGE,
-            format!("A payment of {amount} is past the {MAX_ENTRY_AMOUNT} cap"),
-        ));
-    }
 
     let zatoshi = match raw.get("zatoshi") {
         None => None,
