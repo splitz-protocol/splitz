@@ -135,13 +135,16 @@ void main() {
     Future<List<String>> pushThenRestart(List<String> extra) async {
       final io = _io();
       final first = await _relay(extra);
-      await HttpSplitsRelay(
-        origin: Uri.parse('http://127.0.0.1:${first.port}'),
-        post: io.post,
-        get: io.get,
-      ).push('d' * 64, ['kept']);
-      first.process.kill();
-      await first.process.exitCode;
+      try {
+        await HttpSplitsRelay(
+          origin: Uri.parse('http://127.0.0.1:${first.port}'),
+          post: io.post,
+          get: io.get,
+        ).push('d' * 64, ['kept']);
+      } finally {
+        first.process.kill();
+        await first.process.exitCode;
+      }
       final second = await _relay(extra);
       try {
         return await HttpSplitsRelay(

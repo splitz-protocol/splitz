@@ -46,5 +46,14 @@ Future<({Process process, int port})> startOnFreePort(
         .transform(const LineSplitter())
         .listen(read, onDone: done);
   }
-  return (process: process, port: await bound.future);
+  try {
+    final port = await bound.future.timeout(const Duration(seconds: 30));
+    // Port 0 is what was asked for, not what was bound.
+    if (port == 0) throw StateError('$script reported port 0:\n$seen');
+    return (process: process, port: port);
+  } on Object {
+    // Never left running: a caller that gets no port has nothing to kill.
+    process.kill();
+    rethrow;
+  }
 }
