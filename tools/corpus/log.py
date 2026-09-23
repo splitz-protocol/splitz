@@ -826,6 +826,18 @@ FOLD_CASES += [
      [C, J_ANA, J_BEN,
       payment("q1", "ben", "ben", "ana", I64_MAX, 9, "y1"),
       payment("q2", "ben", "ben", "ana", 1, 10, "y2")], C["id"]),
+    # §5.1. After E1 ana is owed 4500, so confirming a payment from her moves
+    # her balance up by its amount. One that would pass the 64-bit bound stays
+    # unconfirmed and its confirmation is set aside; one landing exactly on it
+    # applies.
+    ("a_confirmation_that_would_carry_a_balance_out_of_range_is_set_aside",
+     [C, J_ANA, J_BEN, E1,
+      payment("q1", "ana", "ana", "ben", I64_MAX, 9, "y2"),
+      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+    ("and_one_landing_on_the_bound_applies",
+     [C, J_ANA, J_BEN, E1,
+      payment("q1", "ana", "ana", "ben", I64_MAX - 4500, 9, "y2"),
+      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
 ]
 
 
