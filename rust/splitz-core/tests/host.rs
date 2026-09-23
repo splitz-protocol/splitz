@@ -14,8 +14,8 @@ use std::collections::BTreeSet;
 
 use splitz_core::host::{
     accept_scan, add_expense, base64url_no_pad, confirm_payment, create_bill, delta_for,
-    invite_for, join_bill, obligation_for, read_scan, record_payment, set_rate, settle,
-    shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
+    invite_for, join_bill, obligation_for, read_scan, record_payment, record_send, set_rate,
+    settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
     SignEntry, VerifyEntry,
 };
 use splitz_core::{check_entry, net_balances, sha256_hex, signing_message, Delta, Invite};
@@ -983,4 +983,57 @@ fn items_in_a_scanned_log_that_are_not_entries_are_refused_not_dropped() {
         rows,
         vec![":bill_type_error", ":bill_type_error", ":bill_type_error"]
     );
+}
+
+#[test]
+fn a_pending_send_found_on_chain_later_records_what_a_sent_one_would() {
+    // Two logs from one bill: in one the send succeeds at once; in the other
+    // it is left pending and recorded afterwards from the txid. The payments
+    // are the same, so a payee confirming either confirms the same one.
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let cat = FakeHost::paid_at("cat", "u1cat");
+    let entries = two_debts(&ana, &ben, &cat);
+
+    let mut now = BillLog::new(&ana);
+    now.add(entries.clone()).unwrap();
+    let owed = obligation_for(&ana, &now.fold().unwrap(), &BTreeSet::new())
+        .unwrap()
+        .unwrap();
+    let sent = settle(&ana, &mut now, &owed).unwrap();
+    assert_eq!(sent.result, SendResult::Sent);
+    let txid = sent.txid.clone().unwrap();
+
+    let pending = PendingHost(FakeHost::paid_at("ana", "u1ana"));
+    let mut later = BillLog::new(&pending);
+    later.add(entries).unwrap();
+    let owed = obligation_for(&pending, &later.fold().unwrap(), &BTreeSet::new())
+        .unwrap()
+        .unwrap();
+    assert!(settle(&pending, &mut later, &owed)
+        .unwrap()
+        .records
+        .is_empty());
+    let carried = owed.carried_to();
+    assert_eq!(
+        carried
+            .iter()
+            .map(|(k, v)| (k.as_str(), *v))
+            .collect::<Vec<_>>(),
+        vec![("ben", 3000), ("cat", 3000)]
+    );
+
+    let records = record_send(&pending, &mut later, &carried, &txid).unwrap();
+    // `at` is when the record was written, which is later for a recovery.
+    let payments = |rs: &[Value]| {
+        rs.iter()
+            .map(|r| {
+                let mut p = r["payment"].clone();
+                p.as_object_mut().unwrap().remove("at");
+                p
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(payments(&records), payments(&sent.records));
+    assert!(later.fold().unwrap().set_aside.is_empty());
 }

@@ -60,6 +60,24 @@ class PayerObligation {
   /// What the request will move, and what it leaves outstanding.
   int get carriedMinorUnits => request.carriedMinorUnits;
   int get withheldMinorUnits => request.withheldMinorUnits;
+
+  /// What the request pays each recipient, in minor units: the amounts a
+  /// send records, one record per recipient.
+  ///
+  /// **What the request carries, not what the payer owes.** The two differ
+  /// whenever a recipient's preferred payout is not a Zcash address: §8.5
+  /// leaves them out of the URI and reports them, and recording them would
+  /// claim a transaction settled a debt it never paid. Settlements to one
+  /// recipient sum, as they do in §14.
+  Map<String, int> get carriedTo {
+    final unpayable = {for (final u in request.unpayable) u.id};
+    final owed = <String, int>{};
+    for (final s in settlements) {
+      if (unpayable.contains(s.to)) continue;
+      owed[s.to] = (owed[s.to] ?? 0) + s.amount;
+    }
+    return owed;
+  }
 }
 
 /// What a settlement attempt produced.
@@ -178,20 +196,7 @@ Future<Settled> settle(
 
   // Captured first, deliberately: after `broadcast` returns, this device may
   // be anywhere.
-  //
-  // **What the request carries, not what the payer owes.** The two differ
-  // whenever a recipient's preferred payout is not a Zcash address: §8.5
-  // leaves them out of the URI and reports them, and recording them here
-  // would claim a transaction settled a debt it never paid — a debt the
-  // payee then has to contest rather than simply still be owed.
-  final unpayable = {for (final u in obligation.unpayable) u.id};
-  // Records to one recipient sum, as they do in §14. A map literal would keep
-  // the last settlement and drop the rest, recording less than was sent.
-  final owed = <String, int>{};
-  for (final s in obligation.settlements) {
-    if (unpayable.contains(s.to)) continue;
-    owed[s.to] = (owed[s.to] ?? 0) + s.amount;
-  }
+  final owed = obligation.carriedTo;
   if (owed.isEmpty) {
     return const Settled(
       result: SendResult.failed,
@@ -214,12 +219,30 @@ Future<Settled> settle(
     throw StateError('a send that succeeded must carry a transaction id');
   }
 
-  // Signed before they are kept. A verifying fold applies an entry written
-  // as a bound participant only from a copy that verifies against their key
-  // (§10.3), so an unsigned record of this payer's own payment would be set
-  // aside on this device and the debt offered to them again.
+  final records = await recordSend(host, log, owed, txid);
+  return Settled(result: SendResult.sent, txid: txid, records: records);
+}
+
+/// Records that the transaction [txid] paid [carried]: one signed payment
+/// record per recipient, appended to [log] and returned.
+///
+/// What [settle] writes after a send that succeeded, and what a wallet writes
+/// when a send it could not resolve at the time is later found on chain. The
+/// two must be the same records: a payment recorded twice under different
+/// ids is two payments to every reader.
+///
+/// Signed before they are kept. A verifying fold applies an entry written as
+/// a bound participant only from a copy that verifies against their key
+/// (§10.3), so an unsigned record of this payer's own payment would be set
+/// aside on this device and the debt offered to them again.
+Future<List<Map<String, dynamic>>> recordSend(
+  BillHost host,
+  BillLog log,
+  Map<String, int> carried,
+  String txid,
+) async {
   final records = <Map<String, dynamic>>[];
-  for (final entry in owed.entries) {
+  for (final entry in carried.entries) {
     final record = await signEntry(
       host: host,
       entry: recordPayment(
@@ -233,5 +256,5 @@ Future<Settled> settle(
     log.add([record]);
     records.add(record);
   }
-  return Settled(result: SendResult.sent, txid: txid, records: records);
+  return records;
 }

@@ -79,6 +79,31 @@ impl PayerObligation {
     pub fn withheld_minor_units(&self) -> i64 {
         self.request.withheld_minor_units
     }
+
+    /// What the request pays each recipient, in minor units: the amounts a
+    /// send records, one record per recipient.
+    ///
+    /// **What the request carries, not what the payer owes.** The two differ
+    /// whenever a recipient's preferred payout is not a Zcash address: §8.5
+    /// leaves them out of the URI and reports them, and recording them would
+    /// claim a transaction settled a debt it never paid. Settlements to one
+    /// recipient sum, as they do in §14.
+    pub fn carried_to(&self) -> BTreeMap<String, i64> {
+        let unpayable: BTreeSet<&str> = self
+            .request
+            .unpayable
+            .iter()
+            .map(|u| u.id.as_str())
+            .collect();
+        let mut owed: BTreeMap<String, i64> = BTreeMap::new();
+        for settlement in &self.settlements {
+            if unpayable.contains(settlement.to.as_str()) {
+                continue;
+            }
+            *owed.entry(settlement.to.clone()).or_insert(0) += settlement.amount;
+        }
+        owed
+    }
 }
 
 /// What a settlement attempt produced.
@@ -175,25 +200,8 @@ pub fn settle(
     };
 
     // Captured first, deliberately: after `broadcast` returns, this device may
-    // be anywhere. Records to one recipient sum, as they do in §14.
-    //
-    // **What the request carries, not what the payer owes.** The two differ
-    // whenever a recipient's preferred payout is not a Zcash address: §8.5
-    // leaves them out of the URI and reports them, and recording them here
-    // would claim a transaction settled a debt it never paid — a debt the
-    // payee then has to contest rather than simply still be owed.
-    let unpayable: BTreeSet<&str> = obligation
-        .unpayable()
-        .iter()
-        .map(|u| u.id.as_str())
-        .collect();
-    let mut owed: BTreeMap<&str, i64> = BTreeMap::new();
-    for settlement in &obligation.settlements {
-        if unpayable.contains(settlement.to.as_str()) {
-            continue;
-        }
-        *owed.entry(settlement.to.as_str()).or_insert(0) += settlement.amount;
-    }
+    // be anywhere.
+    let owed = obligation.carried_to();
     if owed.is_empty() {
         return Ok(Settled {
             result: SendResult::Failed,
@@ -228,20 +236,43 @@ pub fn settle(
         });
     };
 
-    // Signed before they are kept. A verifying fold applies an entry written
-    // as a bound participant only from a copy that verifies against their key
-    // (§10.3), so an unsigned record of this payer's own payment would be set
-    // aside on this device and the debt offered to them again.
+    let records = record_send(host, log, &owed, &txid)?;
+    Ok(Settled {
+        result: SendResult::Sent,
+        txid: Some(txid),
+        detail: None,
+        records,
+    })
+}
+
+/// Records that the transaction `txid` paid `carried`: one signed payment
+/// record per recipient, appended to `log` and returned.
+///
+/// What [`settle`] writes after a send that succeeded, and what a wallet
+/// writes when a send it could not resolve at the time is later found on
+/// chain. The two must be the same records: a payment recorded twice under
+/// different ids is two payments to every reader.
+///
+/// Signed before they are kept. A verifying fold applies an entry written as
+/// a bound participant only from a copy that verifies against their key
+/// (§10.3), so an unsigned record of this payer's own payment would be set
+/// aside on this device and the debt offered to them again.
+pub fn record_send(
+    host: &dyn BillHost,
+    log: &mut BillLog<'_>,
+    carried: &BTreeMap<String, i64>,
+    txid: &str,
+) -> Result<Vec<Value>> {
     let mut records = Vec::new();
-    for (to, amount) in owed {
-        let payment_id = payment_id_for_send(&txid, to);
+    for (to, amount) in carried {
+        let payment_id = payment_id_for_send(txid, to);
         let unsigned = record_payment(
             host,
             &payment_id,
             to,
-            amount,
+            *amount,
             "shieldedZec",
-            Some(&txid),
+            Some(txid),
             None,
             None,
             None,
@@ -250,10 +281,5 @@ pub fn settle(
         log.add(vec![record.clone()])?;
         records.push(record);
     }
-    Ok(Settled {
-        result: SendResult::Sent,
-        txid: Some(txid),
-        detail: None,
-        records,
-    })
+    Ok(records)
 }

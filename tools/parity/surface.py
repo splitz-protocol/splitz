@@ -146,6 +146,7 @@ RENAMES = {
     "acceptScan": "accept_scan",
     "obligationFor": "obligation_for",
     "paymentIdForSend": "payment_id_for_send",
+    "recordSend": "record_send",
 }
 
 

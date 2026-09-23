@@ -626,6 +626,16 @@ payment of theirs is awaiting confirmation** rather than asking them to pay it
 again — settlement reads balances, so a pending payment is not deducted and the
 same debt appears in the next plan.
 
+**A send that has not resolved blocks the next one.** A wallet reports three
+outcomes, not two (§14.3), and the third — built, not yet on the network — may
+still land. `settle` records nothing for it, so the debt stays in the plan and
+a second tap sends it again. Write down what the request carried
+(`PayerObligation.carriedTo` / `carried_to()`) **before** calling the wallet,
+keep it across a restart, and refuse another send from that bill until the
+person says which way it went. If the transaction turns up, `recordSend` /
+`record_send` writes the same records `settle` would have, so a payee confirms
+the same payment either way.
+
 **The rate belongs to the bill.** Snapshot it once and put it on the bill. Six
 people applying six live rates to one dinner compute six different amounts and
 the bill never closes.
@@ -706,6 +716,12 @@ Cai pays $162.50 in ONE transaction:
 
 A bill that shows only the result cannot explain why someone owes $100 to a
 person who never lent them money.
+
+**Show the part nothing explains.** `Settlement.unexplained` is the amount no
+direct debt of the payer's accounts for. §4 admits a negative expense, so a
+peer can write a "refund" that makes somebody owe them money they never
+borrowed; that excess is exactly this figure, and a screen that shows only the
+total asks the payer to send it.
 
 ## Conformance
 

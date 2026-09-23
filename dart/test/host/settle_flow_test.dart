@@ -314,6 +314,71 @@ void main() {
         reason: 'the debt stands exactly as it did before the attempt');
   });
 
+  test('a pending send found on chain later records what a sent one would',
+      () async {
+    // Two logs from one bill: in one the send succeeds at once; in the other
+    // it is left pending and recorded afterwards from the txid. The records
+    // are the same, so a payee confirming either confirms the same payment.
+    final now = twoDebts();
+    final sent =
+        await settle(now.ana, now.log, obligationFor(now.ana, now.log.fold())!);
+    expect(sent.result, SendResult.sent);
+
+    final later = twoDebts();
+    final pending = _FixedOutcome(later.ana, const Sent.pending());
+    final owed = obligationFor(pending, later.log.fold())!;
+    expect((await settle(pending, later.log, owed)).records, isEmpty);
+    expect(owed.carriedTo, {'ben': 3000, 'cat': 3000});
+
+    final records =
+        await recordSend(later.ana, later.log, owed.carriedTo, sent.txid!);
+    // `at` is when the record was written, which is later for a recovery.
+    Map<String, dynamic> payment(Map<String, dynamic> r) =>
+        {...r['payment'] as Map<String, dynamic>}..remove('at');
+    expect(records.map(payment).toList(), sent.records.map(payment).toList());
+    expect(later.log.fold().setAside, isEmpty);
+    expect(later.log.fold().bill.payments.map((p) => p.id).toSet(),
+        {'${sent.txid}:ben', '${sent.txid}:cat'});
+  });
+
+  test('what a request carries leaves out whom it cannot pay', () {
+    // Ana owes ben 30.00 and cat 30.00; cat has published no address, so the
+    // request carries ben's share alone and a send records only that.
+    final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
+    final ben = FakeHost(me: 'ben');
+    final cat = FakeHost(me: 'cat');
+    final create = createBill(
+        host: ana, name: 'Dinner', currency: 'EUR', creatorKey: fakeKey('ana'));
+    ana.tick();
+    final joinAna = joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
+    ben.tick();
+    ben.tick();
+    final joinBen = joinBill(host: ben, name: 'Ben', payTo: 'u1ben');
+    cat.tick();
+    cat.tick();
+    cat.tick();
+    final joinCat = joinBill(host: cat, name: 'Cat');
+    final among = const {
+      'type': 'equal',
+      'among': ['ana', 'ben', 'cat'],
+    };
+    ben.tick();
+    final e1 = addExpense(
+        host: ben, expenseId: 'x1', paidBy: 'ben', amount: 9000, split: among);
+    cat.tick();
+    final e2 = addExpense(
+        host: cat, expenseId: 'x2', paidBy: 'cat', amount: 9000, split: among);
+    ana.tick();
+    final rate = setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234);
+    final log = BillLog(ana);
+    expect(log.add([create, joinAna, joinBen, joinCat, e1, e2, rate]), isEmpty);
+
+    final owed = obligationFor(ana, log.fold())!;
+    expect(owed.settlements.map((s) => s.to), ['ben', 'cat']);
+    expect(owed.unpayable.map((u) => u.id), ['cat']);
+    expect(owed.carriedTo, {'ben': 3000});
+  });
+
   test('a send that failed records nothing and says why', () async {
     final d = dinner();
     final failing = _FixedOutcome(d.ben, const Sent.failed(detail: 'no funds'));
