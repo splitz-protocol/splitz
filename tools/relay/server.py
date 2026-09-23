@@ -41,6 +41,7 @@ import argparse
 import json
 import os
 import re
+import socket
 import threading
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -67,6 +68,11 @@ CHANNELS: "OrderedDict[str, list[str]]" = OrderedDict()
 HELD_CHARS = 0
 LOCK = threading.Lock()
 STATE_FILE: str | None = None
+
+# How long, and how much, an oversize body is read after its refusal (see
+# `Relay._linger`).
+LINGER_SECONDS = 2.0
+LINGER_BYTES = 4 * 1024 * 1024
 
 
 def load_state(path: str) -> None:
@@ -113,6 +119,29 @@ class Relay(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _linger(self) -> None:
+        """Lets a client still sending an oversize body read the refusal.
+
+        Closing with request bytes unread makes the kernel reset the
+        connection, and a client mid-write then sees the reset rather than the
+        413 already sent. So the write side is shut first and what the client
+        is still sending is read and discarded — at most `LINGER_BYTES`, for at
+        most `LINGER_SECONDS` — before the connection closes. The caps keep a
+        stranger from holding a thread by never finishing a body.
+        """
+        try:
+            self.wfile.flush()
+            self.connection.shutdown(socket.SHUT_WR)
+            self.connection.settimeout(LINGER_SECONDS)
+            discarded = 0
+            while discarded < LINGER_BYTES:
+                chunk = self.connection.recv(65536)
+                if not chunk:
+                    break
+                discarded += len(chunk)
+        except OSError:
+            pass
 
     def _channel(self) -> str | None:
         parts = self.path.strip("/").split("/")
@@ -167,6 +196,7 @@ class Relay(BaseHTTPRequestHandler):
         except TooLarge:
             self.close_connection = True
             self._send(413, {"error": f"a body over {MAX_BODY_BYTES} bytes"})
+            self._linger()
             return
         channel = self._channel()
         if channel is None:
@@ -231,7 +261,9 @@ def main() -> None:
         load_state(STATE_FILE)
         print(f"loaded {len(CHANNELS)} channels from {STATE_FILE}", flush=True)
     server = ThreadingHTTPServer((args.host, args.port), Relay)
-    print(f"relay on http://{args.host}:{args.port}", flush=True)
+    # The port actually bound: `--port 0` asks the OS for a free one, and a
+    # caller learns which from this line rather than guessing and probing.
+    print(f"relay on http://{args.host}:{server.server_address[1]}", flush=True)
     server.serve_forever()
 
 

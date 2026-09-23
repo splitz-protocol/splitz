@@ -7,6 +7,8 @@ import 'dart:io';
 import 'package:splitz_host/splitz_host.dart';
 import 'package:test/test.dart';
 
+import 'support/process_port.dart';
+
 /// Runs `tools/relay/server.py` and drives it through the real client.
 ///
 /// A relay is the only piece of §11.3 nobody here writes twice: the wallet
@@ -14,31 +16,8 @@ import 'package:test/test.dart';
 /// against a server written in the same file would prove they agree with each
 /// other, so this runs the server this repository ships, as a process, over a
 /// socket.
-Future<({Process process, int port})> _relay([
-  List<String> extra = const [],
-]) async {
-  final port = 39300 + DateTime.now().microsecond % 2000;
-  final process = await Process.start('python3', [
-    '../tools/relay/server.py',
-    '--port',
-    '$port',
-    ...extra,
-  ]);
-  final client = HttpClient();
-  for (var i = 0; i < 100; i++) {
-    try {
-      final request = await client.getUrl(
-        Uri.parse('http://127.0.0.1:$port/c/${'0' * 64}'),
-      );
-      await (await request.close()).drain<void>();
-      return (process: process, port: port);
-    } on Object {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-  }
-  process.kill();
-  throw StateError('the relay did not come up on $port');
-}
+Future<({Process process, int port})> _relay([List<String> extra = const []]) =>
+    startOnFreePort('../tools/relay/server.py', extra);
 
 ({JsonPost post, JsonGet get}) _io() {
   final client = HttpClient();
@@ -237,6 +216,19 @@ void main() {
         final big = push(['x' * 2000]);
         expect((await post(big)).$1, 413);
         expect((await post(big, chunked: true)).$1, 413);
+      },
+    );
+
+    test(
+      'a body far past the bound still reads its refusal, not a reset',
+      () async {
+        // Two megabytes cannot be written before the relay answers, so the
+        // client is mid-write when the refusal arrives. Closing with those
+        // bytes unread resets the connection and the client never sees 413.
+        final huge = push(['x' * 2000000]);
+        for (var i = 0; i < 3; i++) {
+          expect((await post(huge)).$1, 413);
+        }
       },
     );
   });

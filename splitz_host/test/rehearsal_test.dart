@@ -9,6 +9,7 @@ import 'package:splitz_core/host.dart' as splitz;
 import 'package:splitz_core/splitz_core.dart' show billToJson, canonicalJson;
 import 'package:splitz_host/splitz_host.dart';
 import 'package:test/test.dart';
+import 'support/process_port.dart';
 
 /// Four devices, one bill, one relay.
 ///
@@ -21,26 +22,11 @@ import 'package:test/test.dart';
 /// What it asserts is §10.2's claim — that devices seeing different subsets of
 /// the log materialise the same bill and the same money.
 Future<({Process process, Uri origin})> _relay() async {
-  final port = 39500 + DateTime.now().microsecond % 2000;
-  final process = await Process.start('python3', [
-    '../tools/relay/server.py',
-    '--port',
-    '$port',
-  ]);
-  final client = HttpClient();
-  for (var i = 0; i < 100; i++) {
-    try {
-      final request = await client.getUrl(
-        Uri.parse('http://127.0.0.1:$port/c/${'0' * 64}'),
-      );
-      await (await request.close()).drain<void>();
-      return (process: process, origin: Uri.parse('http://127.0.0.1:$port'));
-    } on Object {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-  }
-  process.kill();
-  throw StateError('the relay did not come up on $port');
+  final up = await startOnFreePort('../tools/relay/server.py', const []);
+  return (
+    process: up.process,
+    origin: Uri.parse('http://127.0.0.1:${up.port}'),
+  );
 }
 
 SplitsRelay _relayClient(Uri origin) {

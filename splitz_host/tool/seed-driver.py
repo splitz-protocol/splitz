@@ -142,6 +142,8 @@ class Driver(BaseHTTPRequestHandler):
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("seed_file", type=Path)
+    # 0 asks the OS for a free port; the line printed at start names the one
+    # bound.
     parser.add_argument("--port", type=int, default=39200)
     args = parser.parse_args()
 
@@ -149,7 +151,7 @@ def main() -> int:
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Driver)
     print(
         f"seed-driver: {len(Driver.phrases)} wallets on "
-        f"http://127.0.0.1:{args.port} — stop it when the run ends",
+        f"http://127.0.0.1:{server.server_address[1]} — stop it when the run ends",
         file=sys.stderr,
     )
     try:

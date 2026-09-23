@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 import 'package:splitz_host/splitz_host.dart';
+import 'support/process_port.dart';
 
 /// Runs `tool/seed-driver.py` against a throwaway seed file.
 ///
@@ -31,31 +32,8 @@ Future<({Process process, int port, Directory dir})> startDriver({
   // 600, so the driver's own warning about a world-readable file does not fire.
   await Process.run('chmod', ['600', file.path]);
 
-  final port = 39200 + DateTime.now().microsecond % 2000;
-  final process = await Process.start('python3', [
-    'tool/seed-driver.py',
-    file.path,
-    '--port',
-    '$port',
-  ]);
-
-  // Wait for it to bind rather than sleeping: a lane that starts before its
-  // driver fails somewhere further in, where the message names the wrong
-  // thing.
-  final client = HttpClient();
-  for (var i = 0; i < 100; i++) {
-    try {
-      final request = await client.getUrl(
-        Uri.parse('http://127.0.0.1:$port/health'),
-      );
-      await (await request.close()).drain<void>();
-      return (process: process, port: port, dir: dir);
-    } on Object {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-  }
-  process.kill();
-  throw StateError('the seed driver did not come up on $port');
+  final up = await startOnFreePort('tool/seed-driver.py', [file.path]);
+  return (process: up.process, port: up.port, dir: dir);
 }
 
 Future<String> Function(Uri) ioFetch() {
