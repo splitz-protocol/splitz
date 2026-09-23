@@ -66,10 +66,6 @@ RENAMES = {
     "paymentToJson": "payment_to_json",
     "rateToJson": "rate_to_json",
     "laneFor": "lane_for",
-    "laneDebts": "lane_debts",
-    "inLane": "in_lane",
-    "settleCash": "settle_cash",
-    "settleSwap": "settle_swap",
     "mergeLogs": "merge_logs",
     "orderEntries": "order_entries",
     "netBalances": "net_balances",
@@ -148,7 +144,6 @@ RENAMES = {
     "inviteFor": "invite_for",
     "shareableBill": "shareable_bill",
     "acceptScan": "accept_scan",
-    "hasJoined": "has_joined",
     "obligationFor": "obligation_for",
     "paymentIdForSend": "payment_id_for_send",
 }

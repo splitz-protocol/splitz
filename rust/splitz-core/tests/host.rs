@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 use splitz_core::host::{
     accept_scan, add_expense, base64url_no_pad, confirm_payment, create_bill, delta_for,
-    has_joined, invite_for, join_bill, obligation_for, read_scan, record_payment, set_rate, settle,
+    invite_for, join_bill, obligation_for, read_scan, record_payment, set_rate, settle,
     shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
     SignEntry, VerifyEntry,
 };
@@ -789,7 +789,11 @@ fn a_whole_bill_travels_in_one_square_and_opens_on_the_other_side() {
     }
     assert!(theirs.opens_a_bill());
     assert_eq!(theirs.fold().unwrap().bill.id, bill.id);
-    assert!(!has_joined(&ben, &theirs.fold().unwrap().bill));
+    let theirs_bill = theirs.fold().unwrap().bill;
+    assert!(
+        theirs_bill.participant(ben.me()).is_none(),
+        "holding a bill is not being on it"
+    );
 }
 
 #[test]

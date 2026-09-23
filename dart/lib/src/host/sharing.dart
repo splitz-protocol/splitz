@@ -11,7 +11,6 @@ library;
 import 'package:splitz_core/splitz_core.dart' as splitz;
 
 import 'bill_log.dart';
-import 'host.dart';
 
 /// What a scan produced.
 sealed class Scanned {
@@ -176,7 +175,3 @@ List<splitz.SetAside> acceptScan(BillLog log, ScannedBill scan) {
   });
   return refused;
 }
-
-/// Whether this host can act on [bill] — that is, whether it has joined.
-bool hasJoined(BillHost host, splitz.Bill bill) =>
-    bill.participants.any((p) => p.id == host.me);

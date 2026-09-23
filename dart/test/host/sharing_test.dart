@@ -42,7 +42,7 @@ void main() {
     final theirs = BillLog(ben);
     expect(acceptScan(theirs, got), isEmpty, reason: 'nothing to refuse');
     expect(theirs.fold().bill.id, o.log.fold().bill.id);
-    expect(hasJoined(ben, theirs.fold().bill), isFalse,
+    expect(theirs.fold().bill.participant(ben.me), isNull,
         reason: 'holding a bill is not being on it');
   });
 

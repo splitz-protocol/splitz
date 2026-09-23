@@ -10,12 +10,12 @@ use std::cell::Cell;
 use std::collections::BTreeSet;
 
 use splitz_core::host::{
-    add_expense, base64url_no_pad, create_bill, in_lane, join_bill, lane_debts, lane_for,
-    obligation_for, payment_id_for_send, record_payment, set_rate, settle, settle_cash,
-    settle_swap, BillHost, BillLog, SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
+    add_expense, base64url_no_pad, create_bill, join_bill, lane_for, obligation_for,
+    payment_id_for_send, record_payment, set_rate, settle, BillHost, BillLog, SendResult, Sent,
+    SettleLane, SignEntry, VerifyEntry,
 };
 use splitz_core::model::Participant;
-use splitz_core::{net_balances, settle_bill, DEFAULT_EXACT_LIMIT};
+use splitz_core::net_balances;
 
 // --- a wallet that does nothing ---------------------------------------------
 
@@ -144,10 +144,7 @@ fn each_of_the_four_payees_lands_in_the_lane_they_asked_for() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let log = three_lane_bill(&ana, vec![]);
     let folded = log.fold().unwrap();
-    let plan = settle_bill(&folded.bill, DEFAULT_EXACT_LIMIT).unwrap();
-    let laned = lane_debts(&plan.settlements, &folded.bill).unwrap();
-
-    let lane = |who: &str| laned.iter().find(|d| d.to == who).unwrap().lane;
+    let lane = |who: &str| lane_for(folded.bill.participant(who).unwrap());
     assert_eq!(lane("ben"), SettleLane::Zec);
     assert_eq!(lane("cara"), SettleLane::Swap);
     assert_eq!(lane("dan"), SettleLane::Cash);
@@ -161,14 +158,13 @@ fn a_swap_debt_carries_the_asset_and_the_chain_never_one_alone() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let log = three_lane_bill(&ana, vec![]);
     let folded = log.fold().unwrap();
-    let plan = settle_bill(&folded.bill, DEFAULT_EXACT_LIMIT).unwrap();
-    let laned = lane_debts(&plan.settlements, &folded.bill).unwrap();
-    let swap = in_lane(&laned, SettleLane::Swap);
-    let swap = swap.first().unwrap();
+    let cara = folded.bill.participant("cara").unwrap();
+    assert_eq!(lane_for(cara), SettleLane::Swap);
+    let swap = cara.payouts.first().unwrap();
 
-    assert_eq!(swap.asset(), Some("USDC"));
-    assert_eq!(swap.chain(), Some("base"));
-    assert_eq!(swap.address(), Some("0xcara"));
+    assert_eq!(swap.asset.as_deref(), Some("USDC"));
+    assert_eq!(swap.chain.as_deref(), Some("base"));
+    assert_eq!(swap.address.as_deref(), Some("0xcara"));
 }
 
 #[test]
@@ -267,15 +263,19 @@ fn a_settle_records_only_what_the_request_carried() {
 fn a_cash_settlement_records_cash_sends_nothing_and_is_folded() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let mut log = three_lane_bill(&ana, vec![]);
-    let record = settle_cash(
+    let record = record_payment(
         &ana,
-        &mut log,
         "cash-dan-1",
         "dan",
         1000,
+        "cash",
+        None,
+        None,
+        None,
         Some("handed over at the table"),
     )
     .unwrap();
+    log.add(vec![record.clone()]).unwrap();
 
     let payment = &record["payment"];
     assert_eq!(payment["method"], "cash");
@@ -293,17 +293,21 @@ fn a_cash_settlement_records_cash_sends_nothing_and_is_folded() {
 fn a_swap_settlement_records_the_intent_id_not_a_txid() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let mut log = three_lane_bill(&ana, vec![]);
-    let record = settle_swap(
+    // The swap's own identifier is the payment id as well as the reference:
+    // it is what a reader checks the record against.
+    let record = record_payment(
         &ana,
-        &mut log,
         "near-intent-7f3a",
         "cara",
         1000,
+        "swap",
+        Some("near-intent-7f3a"),
         Some(1000000),
         None,
         Some("USDC on base"),
     )
     .unwrap();
+    log.add(vec![record.clone()]).unwrap();
 
     let payment = &record["payment"];
     assert_eq!(payment["method"], "swap");
@@ -333,18 +337,31 @@ fn a_swap_settlement_records_the_intent_id_not_a_txid() {
 fn all_three_methods_coexist_on_one_bill_and_net_the_same_way() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let mut log = three_lane_bill(&ana, vec![]);
-    settle_cash(&ana, &mut log, "cash-dan-1", "dan", 1000, None).unwrap();
-    settle_swap(
+    let cash = record_payment(
         &ana,
-        &mut log,
-        "near-intent-7f3a",
-        "cara",
+        "cash-dan-1",
+        "dan",
         1000,
+        "cash",
+        None,
         None,
         None,
         None,
     )
     .unwrap();
+    let swap = record_payment(
+        &ana,
+        "near-intent-7f3a",
+        "cara",
+        1000,
+        "swap",
+        Some("near-intent-7f3a"),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    log.add(vec![cash, swap]).unwrap();
 
     let folded = log.fold().unwrap();
     assert!(folded.set_aside.is_empty());

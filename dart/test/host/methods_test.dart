@@ -78,25 +78,21 @@ import 'support/fake_host.dart';
 void main() {
   group('a payout preference chooses a lane', () {
     test('each of the four payees lands in the lane they asked for', () {
-      final bill = threeLaneBill();
-      final plan = splitz.settleBill(bill.folded.bill);
-      final laned = laneDebts(plan.settlements, bill.folded.bill);
-      final byWho = {for (final d in laned) d.to: d};
+      final bill = threeLaneBill().folded.bill;
+      SettleLane lane(String id) => laneFor(bill.participant(id)!);
 
-      expect(byWho['ben']!.lane, SettleLane.zec);
-      expect(byWho['cara']!.lane, SettleLane.swap);
-      expect(byWho['dan']!.lane, SettleLane.cash);
+      expect(lane('ben'), SettleLane.zec);
+      expect(lane('cara'), SettleLane.swap);
+      expect(lane('dan'), SettleLane.cash);
       // Declared nothing and has no payTo: not a lane, a debt that cannot be
       // settled until she publishes somewhere.
-      expect(byWho['eve']!.lane, SettleLane.none);
+      expect(lane('eve'), SettleLane.none);
     });
 
     test('a swap debt carries the asset AND the chain, never one alone', () {
-      final bill = threeLaneBill();
-      final plan = splitz.settleBill(bill.folded.bill);
-      final swap =
-          inLane(laneDebts(plan.settlements, bill.folded.bill), SettleLane.swap)
-              .single;
+      final cara = threeLaneBill().folded.bill.participant('cara')!;
+      expect(laneFor(cara), SettleLane.swap);
+      final swap = cara.payouts.first;
 
       expect(swap.asset, 'USDC');
       expect(swap.chain, 'base');
@@ -192,14 +188,15 @@ void main() {
 
     test('a cash settlement records cash, sends nothing, and is folded', () {
       final bill = threeLaneBill();
-      final record = settleCash(
-        bill.ana,
-        bill.log,
+      final record = recordPayment(
+        host: bill.ana,
         paymentId: 'cash-dan-1',
         to: 'dan',
         amount: 1000,
+        method: 'cash',
         note: 'handed over at the table',
       );
+      bill.log.add([record]);
 
       final payment = record['payment'] as Map<String, dynamic>;
       expect(payment['method'], 'cash');
@@ -215,15 +212,19 @@ void main() {
 
     test('a swap settlement records the intent id, not a txid', () {
       final bill = threeLaneBill();
-      final record = settleSwap(
-        bill.ana,
-        bill.log,
-        reference: 'near-intent-7f3a',
+      // The swap's own identifier is the payment id as well as the reference:
+      // it is what a reader checks the record against.
+      final record = recordPayment(
+        host: bill.ana,
+        paymentId: 'near-intent-7f3a',
         to: 'cara',
         amount: 1000,
+        method: 'swap',
+        reference: 'near-intent-7f3a',
         zatoshi: 1000000,
         note: 'USDC on base',
       );
+      bill.log.add([record]);
 
       final payment = record['payment'] as Map<String, dynamic>;
       expect(payment['method'], 'swap');
@@ -249,10 +250,21 @@ void main() {
 
     test('all three methods coexist on one bill and net the same way', () {
       final bill = threeLaneBill();
-      settleCash(bill.ana, bill.log,
-          paymentId: 'cash-dan-1', to: 'dan', amount: 1000);
-      settleSwap(bill.ana, bill.log,
-          reference: 'near-intent-7f3a', to: 'cara', amount: 1000);
+      bill.log.add([
+        recordPayment(
+            host: bill.ana,
+            paymentId: 'cash-dan-1',
+            to: 'dan',
+            amount: 1000,
+            method: 'cash'),
+        recordPayment(
+            host: bill.ana,
+            paymentId: 'near-intent-7f3a',
+            to: 'cara',
+            amount: 1000,
+            method: 'swap',
+            reference: 'near-intent-7f3a'),
+      ]);
 
       final folded = bill.log.fold();
       expect(folded.setAside, isEmpty);

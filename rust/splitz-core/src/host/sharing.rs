@@ -19,7 +19,6 @@ use crate::log::SetAside;
 use crate::model::Bill;
 
 use super::bill_log::BillLog;
-use super::host::BillHost;
 
 /// A bill and, on the full form, the invite that opens it.
 ///
@@ -152,9 +151,4 @@ pub fn delta_for(log: &BillLog<'_>, they_have: &BTreeSet<String>) -> Delta {
 /// Folds a scanned bill into this device's own log, reporting what it refused.
 pub fn accept_scan(log: &mut BillLog<'_>, scan: ScannedBill) -> Result<Vec<SetAside>> {
     log.add(scan.entries)
-}
-
-/// Whether this host can act on `bill` — that is, whether it has joined.
-pub fn has_joined(host: &dyn BillHost, bill: &Bill) -> bool {
-    bill.participants.iter().any(|p| p.id == host.me())
 }
