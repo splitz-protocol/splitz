@@ -136,6 +136,10 @@ enum SwapState {
   /// The deposit landed; the asset has not been delivered.
   processing,
 
+  /// The swap will not complete and the provider has begun returning the
+  /// ZEC to the refund address. Not finished: [failed] follows once it has.
+  refunding,
+
   /// The provider reports the recipient was paid. **Still not a
   /// confirmation**: §10.5 says only the recipient settles a debt.
   delivered,
@@ -414,8 +418,14 @@ class OneClickSwaps implements SwapProvider {
     final detailsMap = details is Map<String, dynamic> ? details : null;
     final hashes = detailsMap?['destinationChainTxHashes'];
     final first = hashes is List && hashes.isNotEmpty ? hashes.first : null;
+    // A provider reports a refund under way with the same status word as a
+    // delivery under way; only a positive `refundedAmount` tells them apart.
+    final state = _state(status);
+    final refunding =
+        (state == SwapState.awaitingDeposit || state == SwapState.processing) &&
+        _positiveDecimal(detailsMap?['refundedAmount']);
     return SwapStatus(
-      state: _state(status),
+      state: refunding ? SwapState.refunding : state,
       destinationTxHash: first is Map<String, dynamic>
           ? _optional(first, 'hash')
           : null,
@@ -471,6 +481,15 @@ class OneClickSwaps implements SwapProvider {
     }
     return v;
   }
+
+  /// Whether [raw] is a decimal string of digits naming more than zero.
+  ///
+  /// Read as text rather than as a number: the schema types the amount as a
+  /// string, and a figure past 64 bits must not wrap to zero or below.
+  static bool _positiveDecimal(Object? raw) =>
+      raw is String &&
+      RegExp(r'^[0-9]+$').hasMatch(raw) &&
+      raw.contains(RegExp('[1-9]'));
 
   static String? _optional(Map<String, dynamic> o, String key) {
     final v = o[key];

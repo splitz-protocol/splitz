@@ -118,6 +118,7 @@ void main() {
         'GetExecutionStatusResponse.status',
         'GetExecutionStatusResponse.swapDetails.destinationChainTxHashes[].hash',
         'GetExecutionStatusResponse.swapDetails.refundReason',
+        'GetExecutionStatusResponse.swapDetails.refundedAmount',
         'BadRequestResponse.message',
       ]) {
         expect(declares(path), isTrue, reason: path);

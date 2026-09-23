@@ -388,6 +388,10 @@ def main() -> int:
                     details["destinationChainTxHashes"] = hashes
                 if rng.random() < 0.5:
                     details["refundReason"] = rng.choice(["", "a note", 7])
+                if rng.random() < 0.5:
+                    details["refundedAmount"] = rng.choice(
+                        ["0", "000", "103000", "1", "", "-5", "1e3", 103000,
+                         "99999999999999999999999", None])
             if details is not None:
                 body["swapDetails"] = details
             for key in ["destinationTxHash", "message"]:

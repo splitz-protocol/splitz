@@ -113,6 +113,10 @@ pub enum SwapState {
     AwaitingDeposit,
     /// The deposit landed; the asset has not been delivered.
     Processing,
+    /// The swap will not complete and the provider has begun returning the
+    /// ZEC to the refund address. Not finished: [`SwapState::Failed`] follows
+    /// once it has.
+    Refunding,
     /// The provider reports the recipient was paid. **Still not a
     /// confirmation**: §10.5 says only the recipient settles a debt.
     Delivered,
@@ -319,8 +323,19 @@ pub fn status_from_response(body: &str) -> Result<SwapStatus, HostError> {
     // hash in `destinationChainTxHashes[].hash`, a failure's reason in
     // `refundReason`.
     let details = body.get("swapDetails").filter(|d| d.is_object());
+    // A provider reports a refund under way with the same status word as a
+    // delivery under way; only a positive `refundedAmount` tells them apart.
+    let state = state_of(&status);
+    let refunding = matches!(state, SwapState::AwaitingDeposit | SwapState::Processing)
+        && details
+            .and_then(|d| d.get("refundedAmount"))
+            .is_some_and(positive_decimal);
     Ok(SwapStatus {
-        state: state_of(&status),
+        state: if refunding {
+            SwapState::Refunding
+        } else {
+            state
+        },
         destination_tx_hash: details
             .and_then(|d| d.get("destinationChainTxHashes"))
             .and_then(Value::as_array)
@@ -422,6 +437,16 @@ fn required(object: &Value, key: &str) -> Result<String, HostError> {
         Some(value) if !value.is_empty() => Ok(value.to_owned()),
         _ => Err(swap_error(format!("The provider omitted {key}"), false)),
     }
+}
+
+/// Whether `raw` is a decimal string of digits naming more than zero.
+///
+/// Read as text rather than as a number: the schema types the amount as a
+/// string, and a figure past 64 bits must not wrap to zero or below.
+fn positive_decimal(raw: &Value) -> bool {
+    raw.as_str().is_some_and(|s| {
+        !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) && s.bytes().any(|b| b != b'0')
+    })
 }
 
 fn optional(object: &Value, key: &str) -> Option<String> {

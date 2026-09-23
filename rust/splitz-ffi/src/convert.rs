@@ -227,6 +227,7 @@ pub(crate) fn status(s: &splitz_host::SwapStatus) -> ffi::SwapStatus {
         state: match s.state {
             S::AwaitingDeposit => ffi::SwapState::AwaitingDeposit,
             S::Processing => ffi::SwapState::Processing,
+            S::Refunding => ffi::SwapState::Refunding,
             S::Delivered => ffi::SwapState::Delivered,
             S::Failed => ffi::SwapState::Failed,
         },

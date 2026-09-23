@@ -376,6 +376,46 @@ void main() {
       }
     });
 
+    test(
+      'a refund under way is told apart from a delivery under way',
+      () async {
+        // The provider answered PROCESSING with refundedAmount 103000 for a
+        // mainnet deposit short of its quote, before it reported REFUNDED.
+        for (final (word, refunded, expected) in [
+          ('PROCESSING', '103000', SwapState.refunding),
+          ('INCOMPLETE_DEPOSIT', '5', SwapState.refunding),
+          ('something_new', '1', SwapState.refunding),
+          ('PROCESSING', '99999999999999999999999', SwapState.refunding),
+          ('PROCESSING', '0', SwapState.processing),
+          ('PROCESSING', '000', SwapState.processing),
+          ('PROCESSING', '', SwapState.processing),
+          ('PROCESSING', '-5', SwapState.processing),
+          ('PROCESSING', '1e3', SwapState.processing),
+          ('PROCESSING', 103000, SwapState.processing),
+          ('SUCCESS', '103000', SwapState.delivered),
+          ('REFUNDED', '103000', SwapState.failed),
+          ('FAILED', '103000', SwapState.failed),
+        ]) {
+          final p = provider(
+            status: {
+              'status': word,
+              'swapDetails': {'refundedAmount': refunded},
+            },
+          );
+          final s = await p.swaps.statusOf(
+            SwapQuote(
+              depositAddress: 'u1provider',
+              amountInZatoshi: 1,
+              amountOut: '1',
+              asset: usdcOnBase(),
+              deadline: '2026-01-01T00:00:00.000Z',
+            ),
+          );
+          expect(s.state, expected, reason: '$word with $refunded');
+        }
+      },
+    );
+
     test('a word nobody here defined is NOT read as delivered', () async {
       // Reading an unknown status as success tells a payer their debt is
       // settled on the strength of a string this code has never seen.

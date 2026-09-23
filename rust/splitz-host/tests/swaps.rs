@@ -291,6 +291,38 @@ fn the_provider_vocabulary_maps_onto_the_states() {
 }
 
 #[test]
+fn a_refund_under_way_is_told_apart_from_a_delivery_under_way() {
+    // The provider answered PROCESSING with refundedAmount 103000 for a
+    // mainnet deposit short of its quote, before it reported REFUNDED.
+    for (word, refunded, expected) in [
+        ("PROCESSING", json!("103000"), SwapState::Refunding),
+        ("INCOMPLETE_DEPOSIT", json!("5"), SwapState::Refunding),
+        ("something_new", json!("1"), SwapState::Refunding),
+        (
+            "PROCESSING",
+            json!("99999999999999999999999"),
+            SwapState::Refunding,
+        ),
+        ("PROCESSING", json!("0"), SwapState::Processing),
+        ("PROCESSING", json!("000"), SwapState::Processing),
+        ("PROCESSING", json!(""), SwapState::Processing),
+        ("PROCESSING", json!("-5"), SwapState::Processing),
+        ("PROCESSING", json!("1e3"), SwapState::Processing),
+        ("PROCESSING", json!(103000), SwapState::Processing),
+        ("SUCCESS", json!("103000"), SwapState::Delivered),
+        ("REFUNDED", json!("103000"), SwapState::Failed),
+        ("FAILED", json!("103000"), SwapState::Failed),
+    ] {
+        let fake = FakeProvider {
+            status: Some(json!({"status": word, "swapDetails": {"refundedAmount": refunded}})),
+            ..Default::default()
+        };
+        let status = provider(&fake).status_of(&a_quote(None)).unwrap();
+        assert_eq!(status.state, expected, "{word} with {refunded}");
+    }
+}
+
+#[test]
 fn a_word_nobody_here_defined_is_not_read_as_delivered() {
     // Reading an unknown word as success would tell a payer their debt is
     // settled on the strength of a string nobody here has defined.

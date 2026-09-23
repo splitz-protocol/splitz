@@ -76,6 +76,7 @@ fn every_field_the_client_reads_is_one_the_schema_declares() {
         "GetExecutionStatusResponse.status",
         "GetExecutionStatusResponse.swapDetails.destinationChainTxHashes[].hash",
         "GetExecutionStatusResponse.swapDetails.refundReason",
+        "GetExecutionStatusResponse.swapDetails.refundedAmount",
         "BadRequestResponse.message",
     ] {
         assert!(declares(path), "{path}");

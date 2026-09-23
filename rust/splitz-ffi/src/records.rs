@@ -249,6 +249,8 @@ pub struct SwapQuote {
 pub enum SwapState {
     AwaitingDeposit,
     Processing,
+    /// The provider has begun returning the ZEC; `Failed` follows.
+    Refunding,
     /// The provider reports the recipient was paid. **Still not a
     /// confirmation**: §10.5 says only the recipient settles a debt.
     Delivered,
