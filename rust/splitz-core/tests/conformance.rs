@@ -144,7 +144,10 @@ fn payments_of(c: &serde_json::Value) -> Vec<splitz_core::Zip321Payment> {
 #[test]
 fn signing() {
     run_cases("signing.json", |c| {
-        Ok(json!(splitz_core::signing_message(&c["entry"])?))
+        Ok(json!(splitz_core::signing_message(
+            &c["entry"],
+            c["billId"].as_str().unwrap_or_default()
+        )?))
     });
 }
 
@@ -379,6 +382,7 @@ fn log() {
                 "id": a.id, "from": a.from, "to": a.to,
             })).collect::<Vec<_>>(),
             "paymentAuthors": r.payment_authors,
+            "paymentDigests": r.payment_digests,
             "withdrawn": r.withdrawn,
             // The reason is prose (SPEC.md §12); only the code is compared.
             "setAside": r.set_aside.iter().map(|a| json!({

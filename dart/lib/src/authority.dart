@@ -5,9 +5,13 @@ import 'canonical_json.dart';
 import 'ordering.dart';
 
 /// The domain separator an entry's signature covers.
-const String entrySigningDomain = 'splitz-entry-v1';
+const String entrySigningDomain = 'splitz-entry-v2';
 
-/// The bytes an entry's signature covers (§10.6).
+/// The bytes an entry's signature covers on the bill [billId] (§10.6).
+///
+/// The bill is part of the message because an entry does not name it: a
+/// participant's id and key are the same on every bill, so without it a
+/// signature made on one bill verifies on any other.
 ///
 /// `sig` is excluded because it is the output, and `v` because an entry does
 /// not carry its own format version through an implementation's object model:
@@ -16,12 +20,13 @@ const String entrySigningDomain = 'splitz-entry-v1';
 ///
 /// Returned as text. A test asserting that a signature verified would pass in
 /// two implementations that disagree about the bytes, each checking its own.
-String signingMessage(Map<String, dynamic> entry) {
+String signingMessage(Map<String, dynamic> entry, String billId) {
   final body = <String, dynamic>{
     for (final e in entry.entries)
       if (e.key != 'sig' && e.key != 'v') e.key: e.value,
   };
-  return entrySigningDomain + canonicalJson(body);
+  return entrySigningDomain +
+      canonicalJson(<String, dynamic>{'bill': billId, 'entry': body});
 }
 
 /// Whether the host takes an entry's signature to verify against a key.

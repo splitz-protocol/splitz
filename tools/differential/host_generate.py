@@ -16,6 +16,10 @@ import sys
 
 
 
+
+# Bills a signature is made or checked on (§10.6).
+BILLS = ["g0a5mrH6D5nx5bJ7KrgwVA", "AAAAAAAAAAAAAAAAAAAAAA", "b-2"]
+
 def _b64(raw):
     import base64
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
@@ -340,12 +344,18 @@ def main() -> int:
             json.dump({"op": op, "seed": rng.choice(seeds)}, out)
         elif op == "sign_entry":
             json.dump({"op": op, "seed": rng.choice(seeds),
-                       "entry": an_entry(rng)}, out)
+                       "entry": an_entry(rng),
+                       "bill": rng.choice(BILLS)}, out)
         elif op == "verify":
+            # Signed on one bill and sometimes checked on another: §10.6 puts
+            # the bill in the message, so both must refuse that.
+            bill = rng.choice(BILLS)
             json.dump({"op": op, "seed": rng.choice(seeds),
                        "entry": an_entry(rng),
                        "key": a_key_ish(rng),
                        "signWith": rng.choice(seeds),
+                       "bill": bill,
+                       "verifyOn": rng.choice(BILLS) if rng.random() < 0.3 else bill,
                        "tamper": rng.random() < 0.3}, out)
         elif op == "identity_seed":
             # Unpadded base64url of the bytes a wallet derives from its

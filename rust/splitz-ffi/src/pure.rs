@@ -61,8 +61,9 @@ fn seed_bytes(seed: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Signs `entry` with `seed` and returns it as the JSON §9.3 canonicalises.
-fn signed(facts: &HostFacts, seed: &[u8], entry: Value) -> Result<String> {
+/// Signs `entry` with `seed` on the bill `bill_id` (§10.6) and returns it as
+/// the JSON §9.3 canonicalises.
+fn signed(facts: &HostFacts, seed: &[u8], entry: Value, bill_id: &str) -> Result<String> {
     let sign = |message: &[u8]| {
         Signer
             .sign(seed, message)
@@ -73,13 +74,16 @@ fn signed(facts: &HostFacts, seed: &[u8], entry: Value) -> Result<String> {
         sign: Some(&sign),
         verify: None,
     };
-    Ok(sign_entry(&host, &entry)?.to_string())
+    Ok(sign_entry(&host, &entry, bill_id)?.to_string())
 }
 
-/// Builds an entry through a host that knows only the facts it was given.
+/// Builds an entry through a host that knows only the facts it was given, and
+/// signs it on `bill_id` — or, for the entry that opens a bill, on the id it
+/// derives.
 fn build(
     facts: &HostFacts,
     seed: &str,
+    bill_id: Option<&str>,
     make: impl Fn(&FactHost<'_>) -> splitz_core::Result<Value>,
 ) -> Result<String> {
     let seed = seed_bytes(seed)?;
@@ -94,7 +98,15 @@ fn build(
         verify: None,
     };
     let entry = make(&host)?;
-    signed(facts, &seed, entry)
+    let bill = match bill_id {
+        Some(id) => id.to_owned(),
+        None => entry
+            .get("id")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+    };
+    signed(facts, &seed, entry, &bill)
 }
 
 // --- entries a device writes -----------------------------------------------
@@ -110,7 +122,7 @@ pub fn create_bill_entry(
     creator_key: String,
     seed: String,
 ) -> Result<String> {
-    build(&facts, &seed, |host| {
+    build(&facts, &seed, None, |host| {
         create_bill(host, &name, &currency, &split_mode, &creator_key)
     })
 }
@@ -118,12 +130,13 @@ pub fn create_bill_entry(
 #[uniffi::export]
 pub fn join_bill_entry(
     facts: HostFacts,
+    bill_id: String,
     name: Option<String>,
     pay_to: Option<String>,
     identity_key: Option<String>,
     seed: String,
 ) -> Result<String> {
-    build(&facts, &seed, |host| {
+    build(&facts, &seed, Some(&bill_id), |host| {
         join_bill(
             host,
             name.as_deref(),
@@ -134,9 +147,12 @@ pub fn join_bill_entry(
     })
 }
 
+// A binding exports flat parameters, and each one is a member the entry needs.
+#[allow(clippy::too_many_arguments)]
 #[uniffi::export]
 pub fn add_expense_entry(
     facts: HostFacts,
+    bill_id: String,
     expense_id: String,
     paid_by: String,
     amount: i64,
@@ -145,7 +161,7 @@ pub fn add_expense_entry(
     seed: String,
 ) -> Result<String> {
     let split = parse(&split_json, "a split")?;
-    build(&facts, &seed, |host| {
+    build(&facts, &seed, Some(&bill_id), |host| {
         add_expense(
             host,
             &expense_id,
@@ -182,10 +198,11 @@ pub struct PaymentDraft {
 #[uniffi::export]
 pub fn record_payment_entry(
     facts: HostFacts,
+    bill_id: String,
     payment: PaymentDraft,
     seed: String,
 ) -> Result<String> {
-    build(&facts, &seed, |host| {
+    build(&facts, &seed, Some(&bill_id), |host| {
         record_payment(
             host,
             &payment.payment_id,
@@ -204,15 +221,21 @@ pub fn record_payment_entry(
 /// who could confirm their own would settle a debt by asserting twice that
 /// they paid it.
 #[uniffi::export]
+///
+/// `record` is the digest of the record being confirmed, from the folded
+/// bill's `payment_digests` (§10.5): the confirmation stands only while the
+/// record under `payment_id` still says what it said then.
 pub fn confirm_payment_entry(
     facts: HostFacts,
+    bill_id: String,
     payment_id: String,
     method: String,
     reference: Option<String>,
+    record: String,
     seed: String,
 ) -> Result<String> {
-    build(&facts, &seed, |host| {
-        confirm_payment(host, &payment_id, &method, reference.as_deref())
+    build(&facts, &seed, Some(&bill_id), |host| {
+        confirm_payment(host, &payment_id, &method, reference.as_deref(), &record)
     })
 }
 
@@ -221,19 +244,27 @@ pub fn confirm_payment_entry(
 #[uniffi::export]
 pub fn set_rate_entry(
     facts: HostFacts,
+    bill_id: String,
     currency: String,
     minor_units_per_zec: i64,
     source: Option<String>,
     seed: String,
 ) -> Result<String> {
-    build(&facts, &seed, |host| {
+    build(&facts, &seed, Some(&bill_id), |host| {
         set_rate(host, &currency, minor_units_per_zec, source.as_deref())
     })
 }
 
 #[uniffi::export]
-pub fn void_entry_for(facts: HostFacts, target_id: String, seed: String) -> Result<String> {
-    build(&facts, &seed, |host| void_entry(host, &target_id))
+pub fn void_entry_for(
+    facts: HostFacts,
+    bill_id: String,
+    target_id: String,
+    seed: String,
+) -> Result<String> {
+    build(&facts, &seed, Some(&bill_id), |host| {
+        void_entry(host, &target_id)
+    })
 }
 
 /// Replaces an entry this device wrote, wholesale (§10.3).
@@ -244,13 +275,14 @@ pub fn void_entry_for(facts: HostFacts, target_id: String, seed: String) -> Resu
 #[uniffi::export]
 pub fn amend_entry_for(
     facts: HostFacts,
+    bill_id: String,
     target_id: String,
     member: String,
     payload_json: String,
     seed: String,
 ) -> Result<String> {
     let payload = parse(&payload_json, "an amendment payload")?;
-    build(&facts, &seed, |host| {
+    build(&facts, &seed, Some(&bill_id), |host| {
         amend_entry(host, &target_id, &member, payload.clone())
     })
 }
@@ -291,7 +323,7 @@ pub fn fold_entries(
     entries: Vec<String>,
 ) -> Result<ffi::FoldedBill> {
     let entries = parse_entries(&entries)?;
-    let verified = Signer.prepare(entries.iter());
+    let verified = Signer.prepare(entries.iter(), &bill_id);
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
     let host = FactHost {
         facts: &facts,
@@ -327,7 +359,7 @@ pub fn history_of(
     entries: Vec<String>,
 ) -> Result<Vec<ffi::BillEvent>> {
     let parsed = parse_entries(&entries)?;
-    let verified = Signer.prepare(parsed.iter());
+    let verified = Signer.prepare(parsed.iter(), &bill_id);
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
     let host = FactHost {
         facts: &facts,
@@ -361,7 +393,7 @@ pub fn obligation_of(
     pay_anyway: Vec<String>,
 ) -> Result<Option<ffi::PayerObligation>> {
     let parsed = parse_entries(&entries)?;
-    let verified = Signer.prepare(parsed.iter());
+    let verified = Signer.prepare(parsed.iter(), &bill_id);
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
     let host = FactHost {
         facts: &facts,
@@ -453,6 +485,7 @@ pub fn channel_for_bill(bill_id: String) -> String {
 /// often it is sent.
 #[uniffi::export]
 pub fn blobs_to_push(
+    bill_id: String,
     entries: Vec<String>,
     bill_key: String,
     seed: String,
@@ -481,7 +514,7 @@ pub fn blobs_to_push(
         let mine = entry.get("author").and_then(Value::as_str) == Some(author_id.as_str())
             && entry.get("sig").is_none();
         let to_seal = if mine {
-            sign_entry(&host, entry)?
+            sign_entry(&host, entry, &bill_id)?
         } else {
             entry.clone()
         };
@@ -610,7 +643,7 @@ fn folded_bill(
     entries: &[String],
 ) -> Result<splitz_core::host::FoldedBill> {
     let parsed = parse_entries(entries)?;
-    let verified = Signer.prepare(parsed.iter());
+    let verified = Signer.prepare(parsed.iter(), bill_id);
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
     let host = FactHost {
         facts,
@@ -640,6 +673,7 @@ fn folded_bill(
 #[uniffi::export]
 pub fn payment_entries_for_send(
     facts: HostFacts,
+    bill_id: String,
     obligation: ffi::PayerObligation,
     txid: String,
     seed: String,
@@ -666,7 +700,7 @@ pub fn payment_entries_for_send(
     let mut records = Vec::with_capacity(owed.len());
     for (to, amount) in owed {
         let payment_id = splitz_core::host::payment_id_for_send(&txid, to);
-        records.push(build(&facts, &seed, |host| {
+        records.push(build(&facts, &seed, Some(&bill_id), |host| {
             record_payment(
                 host,
                 &payment_id,

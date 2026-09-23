@@ -247,10 +247,14 @@ Future<List<Map<String, dynamic>>> recordSend(
   Map<String, int> carried,
   String txid,
 ) async {
+  // The bill the records are signed for (§10.6): the one the log was opened
+  // for, or the one its entries create.
+  final billId = log.billId ?? log.fold().bill.id;
   final records = <Map<String, dynamic>>[];
   for (final entry in carried.entries) {
     final record = await signEntry(
       host: host,
+      billId: billId,
       entry: recordPayment(
         host: host,
         paymentId: paymentIdForSend(txid, entry.key),

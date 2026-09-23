@@ -46,7 +46,7 @@ Future<splitz.FoldedBill> foldVerified(
   List<int>? seed,
 }) async {
   final signing = signer ?? SplitsSigner();
-  final verified = await signing.prepare(entries);
+  final verified = await signing.prepare(entries, billId: billId);
 
   final host = WalletBillHost(
     wallet,

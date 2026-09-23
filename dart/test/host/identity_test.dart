@@ -18,10 +18,14 @@ import 'support/fake_host.dart';
 Future<String> Function(List<int>) signerFor(String key) =>
     (message) async => 'sig-by-$key:${splitz.sha256Hex(message)}';
 
-bool verifyByName(Map<String, dynamic> entry, String key) =>
+/// The bill every entry in this file is signed and verified on (§10.6).
+const String _bill = 'identity-test-bill';
+
+bool verifyByName(Map<String, dynamic> entry, String key,
+        {String bill = _bill}) =>
     entry['sig'] ==
     'sig-by-$key:'
-        '${splitz.sha256Hex(utf8.encode(splitz.signingMessage(entry)))}';
+        '${splitz.sha256Hex(utf8.encode(splitz.signingMessage(entry, bill)))}';
 
 FakeHost signing(String me, String key, {String? payTo}) => FakeHost(
       me: me,
@@ -36,7 +40,10 @@ FakeHost signing(String me, String key, {String? payTo}) => FakeHost(
 /// is the thing under test here, and a helper that writes the signature itself
 /// would pass with nothing behind [BillHost.sign] at all.
 Future<Map<String, dynamic>> signed(Map<String, dynamic> entry, String key) =>
-    signEntry(host: signing(entry['author'] as String, key), entry: entry);
+    signEntry(
+        host: signing(entry['author'] as String, key),
+        entry: entry,
+        billId: _bill);
 
 void main() {
   test('two keys claiming one id leaves that id contested', () async {
@@ -250,5 +257,21 @@ void main() {
     expect(accepted.settlements.single.to, 'ben');
     expect(accepted.uri, startsWith('zcash:u1impostor'),
         reason: 'the payer accepted this address, having been shown it');
+  });
+
+  test('a signature made on one bill does not verify on another', () async {
+    // §10.6: the message names the bill. A participant's id and key are the
+    // same on every bill, so a confirmation copied from one bill into another
+    // would otherwise verify there and settle a debt nobody paid there.
+    final key = fakeKey('ana');
+    final confirmation = await signed(
+        confirmPayment(
+            host: signing('ana', key),
+            paymentId: 'P',
+            method: 'recipientConfirmed',
+            record: 'r'),
+        key);
+    expect(verifyByName(confirmation, key), isTrue);
+    expect(verifyByName(confirmation, key, bill: 'another-bill'), isFalse);
   });
 }

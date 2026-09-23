@@ -42,8 +42,8 @@ pub use invite::{
 };
 pub use log::{
     check_entry, confirmation_rule, derive_bill_id, derive_entry_id, fold_log, merge_logs,
-    order_entries, payload_for, FoldResult, MergeResult, ReplacedAddress, SetAside, BILL_ID_DOMAIN,
-    ENTRY_ID_DOMAIN, ENTRY_KINDS,
+    order_entries, payload_for, payment_digest, FoldResult, MergeResult, ReplacedAddress, SetAside,
+    BILL_ID_DOMAIN, ENTRY_ID_DOMAIN, ENTRY_KINDS, PAYMENT_DIGEST_DOMAIN,
 };
 pub use model::{Bill, Expense, Participant, PaymentRecord, Payout};
 pub use money::{

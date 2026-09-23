@@ -149,15 +149,21 @@ Map<String, dynamic> recordPayment({
 
 /// Confirms a payment. Which methods settle a debt, and who may claim each, is
 /// §10.5's decision and nothing here widens it.
+///
+/// [record] is the digest of the record being confirmed, as the fold reports
+/// it in `paymentDigests` (§10.5): the confirmation stands only while the
+/// bill's record under [paymentId] still says what it said then.
 Map<String, dynamic> confirmPayment({
   required BillHost host,
   required String paymentId,
   required String method,
+  required String record,
   String? reference,
 }) {
   final confirmation = <String, dynamic>{
     'paymentId': paymentId,
     'method': method,
+    'record': record,
   };
   if (reference != null) confirmation['reference'] = reference;
   return _sealed(host, <String, dynamic>{
@@ -253,13 +259,18 @@ Map<String, dynamic> _sealed(BillHost host, Map<String, dynamic> body) {
 /// A host with no signer gets its entry back unsigned rather than an error.
 /// §10.7 then binds no key to that author, and a folded bill reports no
 /// identity binding rather than claiming one it cannot make.
+///
+/// [billId] is the bill the entry is written for, and is part of what is
+/// signed (§10.6), so the signature does not verify on any other bill. A
+/// `createBill` entry's bill is its own id.
 Future<Map<String, dynamic>> signEntry({
   required BillHost host,
   required Map<String, dynamic> entry,
+  required String billId,
 }) async {
   final sign = host.sign;
   if (sign == null) return entry;
-  final message = utf8.encode(splitz.signingMessage(entry));
+  final message = utf8.encode(splitz.signingMessage(entry, billId));
   return <String, dynamic>{...entry, 'sig': await sign(message)};
 }
 

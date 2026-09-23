@@ -10,6 +10,9 @@ import 'support/fake_wallet.dart';
 List<int> seedFor(String who) =>
     List<int>.generate(SplitsSigner.seedBytes, (i) => who.codeUnitAt(0) + i);
 
+/// The bill every entry in this file is signed and verified on (§10.6).
+const String _bill = 'signing-test-bill';
+
 void main() {
   final signer = SplitsSigner();
 
@@ -39,8 +42,16 @@ void main() {
     final host = WalletBillHost(wallet, sign: signer.signerFor(seed));
 
     final entry = splitz.joinBill(host: host, name: 'Ana');
-    final once = await splitz.signEntry(host: host, entry: entry);
-    final twice = await splitz.signEntry(host: host, entry: entry);
+    final once = await splitz.signEntry(
+      host: host,
+      entry: entry,
+      billId: _bill,
+    );
+    final twice = await splitz.signEntry(
+      host: host,
+      entry: entry,
+      billId: _bill,
+    );
     expect(once['sig'], twice['sig']);
     expect(
       once['id'],
@@ -60,16 +71,15 @@ void main() {
     final benWallet = FakeWallet(id: 'ben', payTo: 'u1ben');
     final ben = WalletBillHost(benWallet, sign: signer.signerFor(benSeed));
 
+    final create = splitz.createBill(
+      host: ana,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: anaKey,
+    );
+    final bill = create['id'] as String;
     final entries = <Map<String, dynamic>>[
-      await splitz.signEntry(
-        host: ana,
-        entry: splitz.createBill(
-          host: ana,
-          name: 'Dinner',
-          currency: 'EUR',
-          creatorKey: anaKey,
-        ),
-      ),
+      await splitz.signEntry(host: ana, entry: create, billId: bill),
     ];
     wallet.tick();
     entries.add(
@@ -81,6 +91,7 @@ void main() {
           payTo: 'u1ana',
           identityKey: anaKey,
         ),
+        billId: bill,
       ),
     );
     benWallet.tick();
@@ -94,6 +105,7 @@ void main() {
           payTo: 'u1ben',
           identityKey: benKey,
         ),
+        billId: bill,
       ),
     );
 
@@ -116,16 +128,15 @@ void main() {
     // Signs with somebody else's seed while claiming ana's key.
     final ana = WalletBillHost(wallet, sign: signer.signerFor(seedFor('zzz')));
 
+    final create = splitz.createBill(
+      host: ana,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: anaKey,
+    );
+    final bill = create['id'] as String;
     final entries = <Map<String, dynamic>>[
-      await splitz.signEntry(
-        host: ana,
-        entry: splitz.createBill(
-          host: ana,
-          name: 'Dinner',
-          currency: 'EUR',
-          creatorKey: anaKey,
-        ),
-      ),
+      await splitz.signEntry(host: ana, entry: create, billId: bill),
     ];
     wallet.tick();
     entries.add(
@@ -137,6 +148,7 @@ void main() {
           payTo: 'u1ana',
           identityKey: anaKey,
         ),
+        billId: bill,
       ),
     );
 
@@ -190,16 +202,15 @@ void main() {
       sign: signer.signerFor(impostorSeed),
     );
 
+    final create = splitz.createBill(
+      host: ana,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: anaKey,
+    );
+    final bill = create['id'] as String;
     final entries = <Map<String, dynamic>>[
-      await splitz.signEntry(
-        host: ana,
-        entry: splitz.createBill(
-          host: ana,
-          name: 'Dinner',
-          currency: 'EUR',
-          creatorKey: anaKey,
-        ),
-      ),
+      await splitz.signEntry(host: ana, entry: create, billId: bill),
     ];
     wallet.tick();
     entries.add(
@@ -211,6 +222,7 @@ void main() {
           payTo: 'u1ana',
           identityKey: anaKey,
         ),
+        billId: bill,
       ),
     );
     benWallet.tick();
@@ -224,6 +236,7 @@ void main() {
           payTo: 'u1ben',
           identityKey: benKey,
         ),
+        billId: bill,
       ),
     );
     for (var i = 0; i < 4; i++) {
@@ -238,6 +251,7 @@ void main() {
           payTo: 'u1impostor',
           identityKey: impostorKey,
         ),
+        billId: bill,
       ),
     );
 
@@ -257,7 +271,10 @@ void main() {
 
   test('an unsigned entry verifies against nothing', () async {
     final unsigned = <String, dynamic>{'id': 'e1', 'author': 'ana'};
-    expect(await signer.verifyEntry(unsigned, 'A' * 43), isFalse);
+    expect(
+      await signer.verifyEntry(unsigned, 'A' * 43, billId: _bill),
+      isFalse,
+    );
   });
 
   test('a malformed key or signature is false, not a crash', () async {
@@ -267,17 +284,24 @@ void main() {
     final signed = await splitz.signEntry(
       host: host,
       entry: splitz.joinBill(host: host, name: 'Ana'),
+      billId: _bill,
     );
 
-    expect(await signer.verifyEntry(signed, 'not base64url!!'), isFalse);
     expect(
-      await signer.verifyEntry(signed, 'AAAA'),
+      await signer.verifyEntry(signed, 'not base64url!!', billId: _bill),
+      isFalse,
+    );
+    expect(
+      await signer.verifyEntry(signed, 'AAAA', billId: _bill),
       isFalse,
       reason: 'four characters is three bytes, not a 32-byte key',
     );
 
     final tampered = <String, dynamic>{...signed, 'sig': '!!!!'};
-    expect(await signer.verifyEntry(tampered, 'A' * 43), isFalse);
+    expect(
+      await signer.verifyEntry(tampered, 'A' * 43, billId: _bill),
+      isFalse,
+    );
   });
 
   test('every question the fold asks was answered in advance', () async {
@@ -286,16 +310,15 @@ void main() {
     final key = await signer.publicKeyFromSeed(seed);
     final host = WalletBillHost(wallet, sign: signer.signerFor(seed));
 
+    final create = splitz.createBill(
+      host: host,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: key,
+    );
+    final bill = create['id'] as String;
     final entries = <Map<String, dynamic>>[
-      await splitz.signEntry(
-        host: host,
-        entry: splitz.createBill(
-          host: host,
-          name: 'Dinner',
-          currency: 'EUR',
-          creatorKey: key,
-        ),
-      ),
+      await splitz.signEntry(host: host, entry: create, billId: bill),
     ];
     wallet.tick();
     entries.add(
@@ -307,10 +330,11 @@ void main() {
           payTo: 'u1ana',
           identityKey: key,
         ),
+        billId: bill,
       ),
     );
 
-    final verified = await signer.prepare(entries);
+    final verified = await signer.prepare(entries, billId: bill);
     protocol.foldLog(entries, verify: verified.verify);
     expect(
       verified.unanswered,
@@ -325,17 +349,23 @@ void main() {
     final seed = seedFor('ana');
     final key = await signer.publicKeyFromSeed(seed);
     final host = WalletBillHost(wallet, sign: signer.signerFor(seed));
+    final unsigned = splitz.createBill(
+      host: host,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: key,
+    );
+    final bill = unsigned['id'] as String;
     final create = await splitz.signEntry(
       host: host,
-      entry: splitz.createBill(
-        host: host,
-        name: 'Dinner',
-        currency: 'EUR',
-        creatorKey: key,
-      ),
+      entry: unsigned,
+      billId: bill,
     );
 
-    final empty = await signer.prepare(const <Map<String, dynamic>>[]);
+    final empty = await signer.prepare(
+      const <Map<String, dynamic>>[],
+      billId: bill,
+    );
     // The fold asks, gets `false` for want of an answer, and drops the create
     // — so it refuses the whole log. The question still went on the record.
     expect(
@@ -361,6 +391,8 @@ void main() {
 /// A signer whose preparation answers nothing, to trip the guard.
 class _PreparesNothing extends SplitsSigner {
   @override
-  Future<VerifiedLog> prepare(Iterable<Map<String, dynamic>> entries) =>
-      super.prepare(const <Map<String, dynamic>>[]);
+  Future<VerifiedLog> prepare(
+    Iterable<Map<String, dynamic>> entries, {
+    required String billId,
+  }) => super.prepare(const <Map<String, dynamic>>[], billId: billId);
 }

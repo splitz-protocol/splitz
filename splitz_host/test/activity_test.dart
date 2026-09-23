@@ -209,6 +209,7 @@ void main() {
           host: ben,
           paymentId: 'p1',
           method: 'recipientConfirmed',
+          record: b.log.fold().paymentDigests['p1']!,
         ),
       ]);
 
@@ -249,6 +250,7 @@ void main() {
           host: ben,
           paymentId: 'p1',
           method: 'recipientConfirmed',
+          record: b.log.fold().paymentDigests['p1']!,
         ),
       ]);
       expect(awaitingConfirmationBy(b.log.fold().bill, 'ben'), isEmpty);

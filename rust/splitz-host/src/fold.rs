@@ -73,7 +73,7 @@ pub fn fold_verified(
         }
     }
     let signer = Signer;
-    let verified = signer.prepare(entries.iter());
+    let verified = signer.prepare(entries.iter(), bill_id);
 
     let sign_closure;
     let sign: Option<SignEntry<'_>> = match seed {

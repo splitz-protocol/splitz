@@ -365,7 +365,7 @@ Future<Object?> answer(Map<String, dynamic> op) async {
       final entry = (op['entry'] as Map).cast<String, dynamic>();
       final String message;
       try {
-        message = protocol.signingMessage(entry);
+        message = protocol.signingMessage(entry, op['bill'] as String);
       } on protocol.SplitError catch (e) {
         return {'error': e.code};
       }
@@ -374,9 +374,11 @@ Future<Object?> answer(Map<String, dynamic> op) async {
     case 'verify':
       final entry = (op['entry'] as Map).cast<String, dynamic>();
       final signWith = SplitsSigner.decode(op['signWith'] as String);
+      final bill = op['bill'] as String;
+      final verifyOn = op['verifyOn'] as String? ?? bill;
       String message;
       try {
-        message = protocol.signingMessage(entry);
+        message = protocol.signingMessage(entry, bill);
       } on protocol.SplitError {
         return {'signable': false};
       }
@@ -389,8 +391,13 @@ Future<Object?> answer(Map<String, dynamic> op) async {
         'againstGivenKey': await signer.verifyEntry(
           signed,
           op['key'] as String,
+          billId: verifyOn,
         ),
-        'againstTrueKey': await signer.verifyEntry(signed, trueKey),
+        'againstTrueKey': await signer.verifyEntry(
+          signed,
+          trueKey,
+          billId: verifyOn,
+        ),
       };
     case 'identity_seed':
       final secret = SplitsSigner.decode(op['secret'] as String);

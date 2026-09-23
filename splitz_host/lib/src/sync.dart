@@ -74,7 +74,11 @@ class SplitsSync {
               authorId != null &&
               entry['author'] == authorId &&
               entry['sig'] == null)
-          ? await splitz.signEntry(host: _SigningOnly(sign), entry: entry)
+          ? await splitz.signEntry(
+              host: _SigningOnly(sign),
+              entry: entry,
+              billId: billId,
+            )
           : entry;
       blobs.add(await _sealing.seal(toSeal, key));
     }

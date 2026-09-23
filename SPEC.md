@@ -1360,6 +1360,17 @@ record carrying an id the bill already holds is set aside; the first stands. `by
 `author` and the instant is the entry's `at`; neither is restated in the
 payload. `reference` and `note` are optional.
 
+A confirmation carries `record`: the digest of the payment payload of the
+record it confirms, `base64url( SHA-256( "splitz-payment-v1" || canonical(P) )[0..16] )`,
+where `P` is the record's `payment` member as written, less its `id` — the
+same shape as §9.5's entry id, under its own domain. **A confirmation applies only while the bill's record
+under `paymentId` has that digest**, and is otherwise set aside with
+`unknown_payment`. A record withdrawn and written again under the same id, or
+amended since, is a payment nobody confirmed — without this, a payer records a
+cent, has it confirmed, and then rewrites the record to the whole debt. A
+reader reports each record's digest beside the bill it folds, so a wallet can
+write the confirmation.
+
 `method` is one of four, and each speaks for a particular participant:
 
 | `method` | may be authored by | needs a `reference` | settles the debt |
@@ -1441,11 +1452,20 @@ perfectly.
 The message is:
 
 ```
-"splitz-entry-v1" || canonical(E)
+"splitz-entry-v2" || canonical({"bill": B, "entry": E})
 ```
 
-where `E` is the entry's JSON object (§9) **with `sig` and `v` removed**,
-encoded canonically (§9.3), and the whole is UTF-8. The signature is Ed25519
+where `B` is the id of the bill the entry is written for (§9.4) and `E` is the
+entry's JSON object (§9) **with `sig` and `v` removed**, the object encoded
+canonically (§9.3), and the whole is UTF-8. A `createBill` entry's bill is its
+own id.
+
+**The bill is part of the message because an entry does not name it.** A
+participant's id and key are the same on every bill they are on, so a
+signature over the entry alone verifies on any bill: a confirmation Ana gave
+on one bill, carried into another, would settle a debt there that nobody paid.
+A verifier checks against the bill it is folding, never one read from the
+entry. The signature is Ed25519
 (RFC 8032) over that message. Both the 32-byte public key and the 64-byte
 signature are unpadded base64url.
 

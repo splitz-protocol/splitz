@@ -186,15 +186,21 @@ pub fn record_payment(
 
 /// Confirms a payment. Which methods settle a debt, and who may claim each, is
 /// §10.5's decision and nothing here widens it.
+///
+/// `record` is the digest of the record being confirmed, as the fold reports
+/// it in `payment_digests` (§10.5): the confirmation stands only while the
+/// bill's record under `payment_id` still says what it said then.
 pub fn confirm_payment(
     host: &dyn BillHost,
     payment_id: &str,
     method: &str,
     reference: Option<&str>,
+    record: &str,
 ) -> Result<Value> {
     let mut confirmation = Map::new();
     confirmation.insert("paymentId".to_owned(), Value::from(payment_id));
     confirmation.insert("method".to_owned(), Value::from(method));
+    confirmation.insert("record".to_owned(), Value::from(record));
     if let Some(reference) = reference {
         confirmation.insert("reference".to_owned(), Value::from(reference));
     }
@@ -272,11 +278,15 @@ pub fn void_entry(host: &dyn BillHost, target_id: &str) -> Result<Value> {
 /// A host with no signer gets its entry back unsigned rather than an error.
 /// §10.7 then binds no key to that author, and a folded bill reports no
 /// identity binding rather than claiming one it cannot make.
-pub fn sign_entry(host: &dyn BillHost, entry: &Value) -> Result<Value> {
+///
+/// `bill_id` is the bill the entry is written for, and is part of what is
+/// signed (§10.6), so the signature does not verify on any other bill. A
+/// `createBill` entry's bill is its own id.
+pub fn sign_entry(host: &dyn BillHost, entry: &Value, bill_id: &str) -> Result<Value> {
     let Some(sign) = host.signer() else {
         return Ok(entry.clone());
     };
-    let signature = sign(signing_message(entry)?.as_bytes());
+    let signature = sign(signing_message(entry, bill_id)?.as_bytes());
     let mut object = entry
         .as_object()
         .cloned()

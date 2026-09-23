@@ -419,7 +419,7 @@ fn answer(op: &Value) -> Value {
         }
         "sign_entry" => {
             let seed = base64url_decode(op["seed"].as_str().unwrap()).unwrap_or_default();
-            match signing_message(&op["entry"]) {
+            match signing_message(&op["entry"], op["bill"].as_str().unwrap_or("")) {
                 Err(e) => json!({ "error": e.code }),
                 Ok(message) => json!({
                     "message": message,
@@ -429,7 +429,9 @@ fn answer(op: &Value) -> Value {
         }
         "verify" => {
             let sign_with = base64url_decode(op["signWith"].as_str().unwrap()).unwrap_or_default();
-            let Ok(message) = signing_message(&op["entry"]) else {
+            let bill = op["bill"].as_str().unwrap_or("");
+            let verify_on = op["verifyOn"].as_str().unwrap_or(bill);
+            let Ok(message) = signing_message(&op["entry"], bill) else {
                 return json!({ "signable": false });
             };
             let Some(mut sig) = Signer.sign(&sign_with, message.as_bytes()) else {
@@ -443,8 +445,8 @@ fn answer(op: &Value) -> Value {
             let true_key = Signer.public_key_from_seed(&sign_with).unwrap_or_default();
             json!({
                 "signable": true,
-                "againstGivenKey": Signer.verify_entry(&entry, op["key"].as_str().unwrap()),
-                "againstTrueKey": Signer.verify_entry(&entry, &true_key),
+                "againstGivenKey": Signer.verify_entry(&entry, op["key"].as_str().unwrap(), verify_on),
+                "againstTrueKey": Signer.verify_entry(&entry, &true_key, verify_on),
             })
         }
         "identity_seed" => {

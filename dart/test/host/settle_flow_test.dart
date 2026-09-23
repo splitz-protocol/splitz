@@ -222,22 +222,25 @@ void main() {
         verify: verify,
       );
       final signer = FakeHost(me: 'ben', payToAddress: 'u1ben', sign: sign);
+      final create = createBill(
+          host: ana,
+          name: 'Dinner',
+          currency: 'EUR',
+          creatorKey: fakeKey('ana'));
+      final billId = create['id'] as String;
       final entries = <Map<String, dynamic>>[
-        await signEntry(
-            host: ana,
-            entry: createBill(
-                host: ana,
-                name: 'Dinner',
-                currency: 'EUR',
-                creatorKey: fakeKey('ana'))),
+        await signEntry(host: ana, entry: create, billId: billId),
       ];
       ana.tick();
       entries.add(await signEntry(
-          host: ana, entry: joinBill(host: ana, name: 'Ana', payTo: 'u1ana')));
+          billId: billId,
+          host: ana,
+          entry: joinBill(host: ana, name: 'Ana', payTo: 'u1ana')));
       for (var i = 0; i < 2; i++) {
         signer.tick();
       }
       entries.add(await signEntry(
+          billId: billId,
           host: signer,
           entry: joinBill(
               host: signer,
@@ -246,6 +249,7 @@ void main() {
               identityKey: fakeKey('ben'))));
       ana.tick();
       entries.add(await signEntry(
+          billId: billId,
           host: ana,
           entry: addExpense(
             host: ana,
@@ -259,6 +263,7 @@ void main() {
           )));
       ana.tick();
       entries.add(await signEntry(
+          billId: billId,
           host: ana,
           entry: setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234)));
       final log = BillLog(ben, billId: entries.first['id'] as String);
@@ -435,12 +440,13 @@ void main() {
     final settled = await settle(d.ben, d.log, benOwes);
 
     d.ana.tick();
-    // §10.5: `onChain` needs a reference, and anyone may state it.
+    // §10.5: `onChain` needs a reference, and is the payee's to state.
     final confirm = confirmPayment(
       host: d.ana,
       paymentId: '${settled.txid}:ana',
       method: 'onChain',
       reference: settled.txid,
+      record: d.log.fold().paymentDigests['${settled.txid}:ana']!,
     );
     d.log.add([confirm]);
 
@@ -549,6 +555,7 @@ void main() {
           host: ben,
           paymentId: '$txid:ben',
           method: 'recipientConfirmed',
+          record: d.log.fold().paymentDigests['$txid:ben']!,
         )
       ]),
       isEmpty,

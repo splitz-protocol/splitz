@@ -1262,6 +1262,16 @@ def derive_entry_id(entry):
     return _derive_id(ENTRY_ID_DOMAIN, entry)
 
 
+PAYMENT_DIGEST_DOMAIN = "splitz-payment-v1"
+
+
+def payment_digest(payment):
+    """Section 10.5. What a confirmation binds: the digest of the payment
+    payload its record carries, as written, less the `id` the confirmation
+    names beside it."""
+    return _derive_id(PAYMENT_DIGEST_DOMAIN, payment)
+
+
 # The members of a payload that name a participant or an entry (section 10.1).
 _ID_MEMBERS_OF = {
     "participant": ("id",),
@@ -1810,6 +1820,8 @@ def fold(entries, bill_id=None, verify=None):
     # Who wrote each applied payment record, by its id: section 14.4 withholds
     # only for a record the payer wrote.
     payment_authors = {}
+    # What each applied record says, as a confirmation binds it (10.5).
+    payment_digests = {}
     # Section 5.1's balances, formed as this pass applies each entry and in
     # the order section 5.1 forms them, so a bill this fold returns always has
     # balances section 2.2 can hold. An entry whose effect would carry one out
@@ -1905,6 +1917,7 @@ def fold(entries, bill_id=None, verify=None):
             pair_total[pair] = total
             payments.append(pay)
             payment_authors[pay["id"]] = e["author"]
+            payment_digests[pay["id"]] = payment_digest(eff["payment"])
 
     # Confirmations, in a pass of their own once every payment is on the bill.
     known = {p["id"] for p in payments}
@@ -1921,6 +1934,12 @@ def fold(entries, bill_id=None, verify=None):
         speaks_for, needs_ref, settles = CONFIRMATION_METHODS[method]
         if c.get("paymentId") not in known:
             aside(e, "unknown_payment", "vouches for a payment the bill does not hold")
+            continue
+        # Section 10.5. A confirmation binds what the record said when it was
+        # given. A record withdrawn and written again under the same id, or
+        # amended since, is a payment nobody confirmed.
+        if c.get("record") != payment_digests[c["paymentId"]]:
+            aside(e, "unknown_payment", "vouches for a record the bill no longer holds")
             continue
         if e["author"] not in participants:
             aside(e, "unknown_participant", "written by somebody not on the bill")
@@ -1975,6 +1994,9 @@ def fold(entries, bill_id=None, verify=None):
         "paymentAuthors": {k: payment_authors[k]
                            for k in sorted(payment_authors,
                                            key=lambda k: k.encode("utf-8"))},
+        "paymentDigests": {k: payment_digests[k]
+                           for k in sorted(payment_digests,
+                                           key=lambda k: k.encode("utf-8"))},
         "withdrawn": sorted(voided),
         # Section 10.2. Total: rows sharing an id are ordered by code.
         "setAside": sorted(set_aside, key=lambda r: (r["id"].encode("utf-8"),
@@ -1984,11 +2006,15 @@ def fold(entries, bill_id=None, verify=None):
 
 # --- Section 10.6: what a signature covers ------------------------------------
 
-ENTRY_SIGNING_DOMAIN = "splitz-entry-v1"
+ENTRY_SIGNING_DOMAIN = "splitz-entry-v2"
 
 
-def signing_message(entry):
-    """Section 10.6. The bytes an entry's signature covers.
+def signing_message(entry, bill_id):
+    """Section 10.6. The bytes an entry's signature covers, on `bill_id`.
+
+    The bill is part of the message because an entry does not name it: a
+    participant's id and key are the same on every bill, so without it a
+    signature from one bill verifies on any other.
 
     `sig` is excluded because it is the output, and `v` because an entry does
     not carry its own format version through an implementation's object model:
@@ -2000,7 +2026,7 @@ def signing_message(entry):
     the bytes, each checking its own.
     """
     body = {k: v for k, v in entry.items() if k not in ("sig", "v")}
-    return ENTRY_SIGNING_DOMAIN + canonical_json(body)
+    return ENTRY_SIGNING_DOMAIN + canonical_json({"bill": bill_id, "entry": body})
 
 
 # --- Section 10.7: who a participant is ---------------------------------------

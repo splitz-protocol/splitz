@@ -83,6 +83,8 @@ RENAMES = {
     "checkIdLists": "check_id_lists",
     "deriveEntryId": "derive_entry_id",
     "entryIdDomain": "ENTRY_ID_DOMAIN",
+    "paymentDigestDomain": "PAYMENT_DIGEST_DOMAIN",
+    "paymentDigest": "payment_digest",
     "isRerouted": "is_rerouted",
     "signingMessage": "signing_message",
     "resolveIdentities": "resolve_identities",

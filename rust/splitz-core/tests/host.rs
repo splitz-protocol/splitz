@@ -110,6 +110,11 @@ fn fake_key(who: &str) -> String {
 /// takes its message from the wrong place is caught here rather than agreeing
 /// with itself.
 fn signing_host(me: &str, key: &str, pay_to: Option<&str>) -> FakeHost {
+    signing_host_on(me, key, pay_to, TEST_BILL)
+}
+
+/// [`signing_host`], verifying on `bill`.
+fn signing_host_on(me: &str, key: &str, pay_to: Option<&str>, bill: &str) -> FakeHost {
     let owned = key.to_owned();
     let mut h = match pay_to {
         Some(a) => FakeHost::paid_at(me, a),
@@ -118,8 +123,9 @@ fn signing_host(me: &str, key: &str, pay_to: Option<&str>) -> FakeHost {
     h.sign = Some(Box::new(move |message: &[u8]| {
         format!("sig-by-{owned}:{}", sha256_hex(message))
     }));
-    h.verify = Some(Box::new(|entry: &Value, key: &str| {
-        let Ok(message) = signing_message(entry) else {
+    let bill = bill.to_owned();
+    h.verify = Some(Box::new(move |entry: &Value, key: &str| {
+        let Ok(message) = signing_message(entry, &bill) else {
             return false;
         };
         entry.get("sig").and_then(Value::as_str)
@@ -127,6 +133,9 @@ fn signing_host(me: &str, key: &str, pay_to: Option<&str>) -> FakeHost {
     }));
     h
 }
+
+/// The bill every entry in this file is signed and verified on (§10.6).
+const TEST_BILL: &str = "host-test-bill";
 
 fn equal_split(among: &[&str]) -> Value {
     json!({ "type": "equal", "among": among })
@@ -187,7 +196,7 @@ fn every_entry_kind_this_layer_writes_passes_ingress() {
             None,
         )
         .unwrap(),
-        confirm_payment(&ana, "tx1", "shieldedZec", Some("memo")).unwrap(),
+        confirm_payment(&ana, "tx1", "shieldedZec", Some("memo"), "r").unwrap(),
         set_rate(&ana, "EUR", 51234, Some("test")).unwrap(),
         void_entry(&ana, "e1").unwrap(),
     ];
@@ -203,7 +212,7 @@ fn a_wallet_that_does_not_sign_gets_its_entry_back_unsigned() {
     let ana = FakeHost::new("ana");
     assert!(ana.signer().is_none());
     let entry = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
-    let signed = sign_entry(&ana, &entry).unwrap();
+    let signed = sign_entry(&ana, &entry, TEST_BILL).unwrap();
 
     // Not an error, and not an empty signature either: §10.7 binds no key and
     // the fold reports no binding rather than claiming one.
@@ -215,7 +224,7 @@ fn a_wallet_that_does_not_sign_gets_its_entry_back_unsigned() {
 fn signing_does_not_move_the_id_and_covers_the_id() {
     let ana = signing_host("ana", &fake_key("ana"), Some("u1ana"));
     let entry = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
-    let signed = sign_entry(&ana, &entry).unwrap();
+    let signed = sign_entry(&ana, &entry, TEST_BILL).unwrap();
 
     // §9.5's digest covers every member but `id`, `sig` and `v`.
     assert_eq!(signed.get("id"), entry.get("id"));
@@ -223,7 +232,7 @@ fn signing_does_not_move_the_id_and_covers_the_id() {
     check_entry(&signed).expect("a signed entry still passes ingress");
 
     // §10.6's message covers `id`, so it is a message about this entry.
-    assert!(signing_message(&entry)
+    assert!(signing_message(&entry, TEST_BILL)
         .unwrap()
         .contains(entry.get("id").and_then(Value::as_str).unwrap()));
 }
@@ -279,16 +288,17 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
     let bill = |ben_signs: bool| {
         let ana = signing_host("ana", &fake_key("ana"), Some("u1ana"));
         let signer = signing_host("ben", &fake_key("ben"), Some("u1ben"));
-        let mut ben = signing_host("ben", &fake_key("ben"), Some("u1ben"));
+        let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+        let bill_id = create["id"].as_str().unwrap().to_owned();
+        // Ben's device verifies on this bill, as a real one folding it would.
+        let mut ben = signing_host_on("ben", &fake_key("ben"), Some("u1ben"), &bill_id);
         if !ben_signs {
             ben.sign = None;
         }
-        let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
-        let bill_id = create["id"].as_str().unwrap().to_owned();
-        let mut entries = vec![sign_entry(&ana, &create).unwrap()];
+        let mut entries = vec![sign_entry(&ana, &create, &bill_id).unwrap()];
         ana.tick();
         let join_ana = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
-        entries.push(sign_entry(&ana, &join_ana).unwrap());
+        entries.push(sign_entry(&ana, &join_ana, &bill_id).unwrap());
         signer.tick();
         signer.tick();
         let join_ben = join_bill(
@@ -299,14 +309,14 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
             None,
         )
         .unwrap();
-        entries.push(sign_entry(&signer, &join_ben).unwrap());
+        entries.push(sign_entry(&signer, &join_ben, &bill_id).unwrap());
         ana.tick();
         let expense =
             add_expense(&ana, "x1", "ana", 9000, equal_split(&["ana", "ben"]), None).unwrap();
-        entries.push(sign_entry(&ana, &expense).unwrap());
+        entries.push(sign_entry(&ana, &expense, &bill_id).unwrap());
         ana.tick();
         let rate = set_rate(&ana, "EUR", 51234, None).unwrap();
-        entries.push(sign_entry(&ana, &rate).unwrap());
+        entries.push(sign_entry(&ana, &rate, &bill_id).unwrap());
         for _ in 0..5 {
             ben.tick();
         }
@@ -524,7 +534,8 @@ fn a_confirmation_is_what_clears_the_debt() {
     // how the money was seen to arrive, not how it was sent — and an entry
     // saying otherwise is set aside rather than settling anything.
     ana.tick();
-    let wrong = confirm_payment(&ana, &payment_id, "shieldedZec", None).unwrap();
+    let digest = log.fold().unwrap().payment_digests[&payment_id].clone();
+    let wrong = confirm_payment(&ana, &payment_id, "shieldedZec", None, &digest).unwrap();
     let mut aside = BillLog::with_entries(&ben, log.entries());
     aside.add(vec![wrong]).unwrap();
     assert_eq!(
@@ -539,7 +550,8 @@ fn a_confirmation_is_what_clears_the_debt() {
     );
 
     ana.tick();
-    let confirmation = confirm_payment(&ana, &payment_id, "recipientConfirmed", None).unwrap();
+    let confirmation =
+        confirm_payment(&ana, &payment_id, "recipientConfirmed", None, &digest).unwrap();
     log.add(vec![confirmation]).unwrap();
 
     let after = log.fold().unwrap();
@@ -587,6 +599,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
         sign_entry(
             &ana,
             &create_bill(&ana, "Dinner", "EUR", "equal", &ana_key).unwrap(),
+            TEST_BILL,
         )
         .unwrap(),
     );
@@ -595,6 +608,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
         sign_entry(
             &ana,
             &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap(),
+            TEST_BILL,
         )
         .unwrap(),
     );
@@ -604,6 +618,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
         sign_entry(
             &ben,
             &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap(),
+            TEST_BILL,
         )
         .unwrap(),
     );
@@ -631,6 +646,7 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
             None,
         )
         .unwrap(),
+        TEST_BILL,
     )
     .unwrap();
     log.add(vec![rival]).unwrap();
@@ -653,6 +669,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
     let mut entries = vec![sign_entry(
         &ana,
         &create_bill(&ana, "Dinner", "EUR", "equal", &ana_key).unwrap(),
+        TEST_BILL,
     )
     .unwrap()];
     ana.tick();
@@ -660,6 +677,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
         sign_entry(
             &ana,
             &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap(),
+            TEST_BILL,
         )
         .unwrap(),
     );
@@ -669,6 +687,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
         sign_entry(
             &ben,
             &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap(),
+            TEST_BILL,
         )
         .unwrap(),
     );
@@ -678,11 +697,19 @@ fn a_contested_payee_is_not_settled_to_silently() {
         sign_entry(
             &ben,
             &add_expense(&ben, "x1", "ben", 9000, equal_split(&["ana", "ben"]), None).unwrap(),
+            TEST_BILL,
         )
         .unwrap(),
     );
     ana.tick();
-    entries.push(sign_entry(&ana, &set_rate(&ana, "EUR", 51234, None).unwrap()).unwrap());
+    entries.push(
+        sign_entry(
+            &ana,
+            &set_rate(&ana, "EUR", 51234, None).unwrap(),
+            TEST_BILL,
+        )
+        .unwrap(),
+    );
 
     let mut log = BillLog::new(&ana);
     log.add(entries).unwrap();
@@ -707,6 +734,7 @@ fn a_contested_payee_is_not_settled_to_silently() {
             None,
         )
         .unwrap(),
+        TEST_BILL,
     )
     .unwrap();
     log.add(vec![rival]).unwrap();
@@ -952,7 +980,9 @@ fn one_transaction_paying_two_people_is_two_records_each_confirmable() {
         ben.tick();
     }
     let payment_id = format!("{txid}:ben");
-    let confirmation = confirm_payment(&ben, &payment_id, "recipientConfirmed", None).unwrap();
+    let digest = log.fold().unwrap().payment_digests[&payment_id].clone();
+    let confirmation =
+        confirm_payment(&ben, &payment_id, "recipientConfirmed", None, &digest).unwrap();
     log.add(vec![confirmation]).unwrap();
 
     let end = log.fold().unwrap();

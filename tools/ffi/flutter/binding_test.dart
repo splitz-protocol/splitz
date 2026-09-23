@@ -64,17 +64,21 @@ void main() {
 
   test('one payer owes half of a priced bill', () {
     final key = identityKeyFromSeed(seed);
+    final create = createBillEntry(
+      facts('ana', '2026-10-28T19:31:00.000Z', 1),
+      'Dinner',
+      'EUR',
+      'equal',
+      key,
+      seed,
+    );
+    // Every other entry is signed on the bill it belongs to (§10.6).
+    final billId = (jsonDecode(create) as Map)['id'] as String;
     final log = [
-      createBillEntry(
-        facts('ana', '2026-10-28T19:31:00.000Z', 1),
-        'Dinner',
-        'EUR',
-        'equal',
-        key,
-        seed,
-      ),
+      create,
       joinBillEntry(
         facts('ana', '2026-10-28T19:32:00.000Z', 2),
+        billId,
         'Ana',
         'u1ana',
         key,
@@ -82,6 +86,7 @@ void main() {
       ),
       joinBillEntry(
         facts('ben', '2026-10-28T19:33:00.000Z', 3),
+        billId,
         'Ben',
         'u1ben',
         key,
@@ -89,6 +94,7 @@ void main() {
       ),
       addExpenseEntry(
         facts('ana', '2026-10-28T19:34:00.000Z', 4),
+        billId,
         'x1',
         'ana',
         9000,
@@ -98,6 +104,7 @@ void main() {
       ),
       setRateEntry(
         facts('ana', '2026-10-28T19:35:00.000Z', 5),
+        billId,
         'EUR',
         300000,
         'a feed',

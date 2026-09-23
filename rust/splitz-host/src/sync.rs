@@ -108,7 +108,7 @@ impl<'a> SplitsSync<'a> {
                 && entry.get("author").and_then(Value::as_str) == author_id
                 && entry.get("sig").is_none();
             let to_seal = if mine {
-                sign_entry(&SigningOnly(&sign_closure), entry)
+                sign_entry(&SigningOnly(&sign_closure), entry, bill_id)
                     .map_err(|e| HostError::Sync(format!("An entry would not sign: {e}")))?
             } else {
                 entry.clone()

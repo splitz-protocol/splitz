@@ -33,34 +33,37 @@ const benSeed = seed(90);
 // Ana's device writes four entries. Each comes back as the JSON §9.3
 // canonicalises, with §9.5's id already derived; the wallet stores the string
 // and never inspects it.
+const create = splitz.create_bill_entry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
+  "Dinner", "EUR", "equal", splitz.identity_key_from_seed(anaSeed), anaSeed);
+
+// The bill these entries belong to, read back from the entry that opened it.
+// Every other entry is signed on it (§10.6), and every fold names it, so a
+// create for another bill pushed into the channel cannot make this one
+// unopenable.
+const billId = JSON.parse(create).id;
+
 const anaLog = [
-  splitz.create_bill_entry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
-    "Dinner", "EUR", "equal", splitz.identity_key_from_seed(anaSeed), anaSeed),
-  splitz.join_bill_entry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2),
+  create,
+  splitz.join_bill_entry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2), billId,
     "Ana", "u1ana", splitz.identity_key_from_seed(anaSeed), anaSeed),
-  splitz.add_expense_entry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3),
+  splitz.add_expense_entry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3), billId,
     "x1", "ana", 9000, '{"type":"equal","among":["ana","ben"]}', "dinner", anaSeed),
   // §7 snapshots one rate onto the bill, so six devices do not price one
   // dinner six ways. 300000 minor units per ZEC is €3000.00.
-  splitz.set_rate_entry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4),
+  splitz.set_rate_entry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4), billId,
     "EUR", 300000, "a fixed feed", anaSeed),
 ];
 
 // Ben's own device writes Ben's join: §10.4 decides what an entry's author may
 // say, and a participant joins for themselves.
 const benLog = [
-  splitz.join_bill_entry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5),
+  splitz.join_bill_entry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5), billId,
     "Ben", "u1ben", splitz.identity_key_from_seed(benSeed), benSeed),
 ];
 
 // Merging is how two devices come to agree (§10.2). It is a set union by id,
 // in either direction, any number of times.
 const log = splitz.merge_entries(anaLog, benLog).entries;
-
-// The bill these entries belong to, read back from the entry that opened it.
-// Every fold names it, so a create for another bill pushed into the channel
-// cannot make this one unopenable.
-const billId = JSON.parse(anaLog[0]).id;
 
 const benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6);
 const folded = splitz.fold_entries(benFacts, billId, log);

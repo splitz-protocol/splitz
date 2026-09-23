@@ -89,7 +89,7 @@ console.log("ana opens a bill and joins it");
 const create = splitz.create_bill_entry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed);
 ana.add(create);
 const billId = JSON.parse(create).id;
-ana.add(splitz.join_bill_entry(ana.facts(), "Ana", "u1ana", anaKey, ana.seed));
+ana.add(splitz.join_bill_entry(ana.facts(), billId, "Ana", "u1ana", anaKey, ana.seed));
 
 console.log("ana shares it, and ben takes it from the code");
 const billKey = "-_" + "A".repeat(41);
@@ -99,21 +99,21 @@ check("the whole bill fits in one code", typeof payload === "string",
 const scanned = splitz.read_scanned(payload);
 check("the scan names the same bill", scanned.bill_id === billId, `${scanned.bill_id}`);
 ben.entries = splitz.merge_entries(ben.entries, scanned.entries).entries;
-ben.add(splitz.join_bill_entry(ben.facts(), "Ben", "u1ben", benKey, ben.seed));
+ben.add(splitz.join_bill_entry(ben.facts(), billId, "Ben", "u1ben", benKey, ben.seed));
 
 console.log("the two logs move through a relay that holds only ciphertext");
 const channel = splitz.channel_for_bill(billId);
 check("the channel is the bill id's hash, never the id",
       channel !== billId && channel.length === 64, channel.slice(0, 16) + "…");
-relay.push(channel, splitz.blobs_to_push(ben.entries, billKey, ben.seed, "ben"));
+relay.push(channel, splitz.blobs_to_push(billId, ben.entries, billKey, ben.seed, "ben"));
 const opened = splitz.open_blobs(relay.fetch(channel), billKey);
 check("every blob opened", Number(opened.unopenable) === 0, `unopenable=${opened.unopenable}`);
 ana.entries = splitz.merge_entries(ana.entries, opened.entries).entries;
 
 console.log("ana adds an expense they share, and prices it");
-ana.add(splitz.add_expense_entry(ana.facts(), "x1", "ana", 9000,
+ana.add(splitz.add_expense_entry(ana.facts(), billId, "x1", "ana", 9000,
     '{"type":"equal","among":["ana","ben"]}', "dinner", ana.seed));
-ana.add(splitz.set_rate_entry(ana.facts(), "EUR", 300000, "a fixed feed", ana.seed));
+ana.add(splitz.set_rate_entry(ana.facts(), billId, "EUR", 300000, "a fixed feed", ana.seed));
 
 const folded = splitz.fold_entries(ana.facts(), billId, ana.entries);
 check("both people are on the bill", folded.bill.participants.length === 2,
@@ -131,7 +131,7 @@ check("the request is a ZIP 321 URI naming ana's address",
       owed.request.uri.startsWith("zcash:u1ana"), owed.request.uri);
 
 console.log("the wallet sends, then records what §14.3 allows");
-const records = splitz.payment_entries_for_send(ben.facts(), owed, "tx-ben-1", ben.seed);
+const records = splitz.payment_entries_for_send(ben.facts(), billId, owed, "tx-ben-1", ben.seed);
 check("one record, for what the request carried", records.length === 1,
       `${records.length} record(s)`);
 for (const record of records) ben.add(record);
@@ -150,8 +150,8 @@ check("so ben is asked for nothing twice",
 // transaction paying several people writes one record each, so the id is not
 // the transaction's — the transaction is in `reference`.
 const toConfirm = afterPayment.bill.payments[0].id;
-ana.add(splitz.confirm_payment_entry(ana.facts(), toConfirm, "recipientConfirmed",
-    undefined, ana.seed));
+ana.add(splitz.confirm_payment_entry(ana.facts(), billId, toConfirm, "recipientConfirmed",
+    undefined, afterPayment.payment_digests.get(toConfirm), ana.seed));
 ben.take(ana);
 const settled = splitz.obligation_of(ben.facts(), billId, ben.entries, []);
 check("once confirmed, the debt is gone",

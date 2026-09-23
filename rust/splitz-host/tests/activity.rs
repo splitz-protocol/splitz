@@ -127,6 +127,15 @@ fn a_priced_bill_says_what_it_was_priced_at() {
     assert_eq!(priced.description.as_deref(), Some("a feed"));
 }
 
+/// The digest a confirmation of the log's payment record carries (§10.5).
+fn record_digest(entries: &[Value]) -> String {
+    let record = entries
+        .iter()
+        .find(|e| e["kind"] == "recordPayment")
+        .expect("the log holds a payment");
+    splitz_core::payment_digest(&record["payment"]).unwrap()
+}
+
 /// A bill two people are on, one owing the other.
 fn a_bill_with_a_payment(reference: Option<&str>, method: &str) -> (FakeWallet, Vec<Value>) {
     let ana = FakeWallet::new("ana", Some("u1ana"));
@@ -204,6 +213,7 @@ fn an_unconfirmed_payment_says_so() {
 fn the_payees_confirmation_flips_it_and_is_its_own_line() {
     let (ana, mut entries) = a_bill_with_a_payment(Some("tx-1"), "shieldedZec");
     ana.tick();
+    let digest = record_digest(&entries);
     let confirmation = confirm_payment(
         &WalletBillHost::new(&ana),
         "pay-1",
@@ -211,6 +221,7 @@ fn the_payees_confirmation_flips_it_and_is_its_own_line() {
         // transaction and speaks for nobody in particular.
         "recipientConfirmed",
         None,
+        &digest,
     )
     .unwrap();
     entries.push(confirmation);
@@ -253,6 +264,7 @@ fn only_the_payee_is_offered_the_confirmation() {
 fn a_confirmed_payment_leaves_the_waiting_list() {
     let (ana, mut entries) = a_bill_with_a_payment(Some("tx-1"), "shieldedZec");
     ana.tick();
+    let digest = record_digest(&entries);
     entries.push(
         confirm_payment(
             &WalletBillHost::new(&ana),
@@ -261,6 +273,7 @@ fn a_confirmed_payment_leaves_the_waiting_list() {
             // transaction and speaks for nobody in particular.
             "recipientConfirmed",
             None,
+            &digest,
         )
         .unwrap(),
     );

@@ -201,7 +201,10 @@ void main() {
       create['id'],
       reason: '§9.5 excludes sig, so signing cannot move the id',
     );
-    expect(await signer.verifyEntry(onTheWire, identityKey), isTrue);
+    expect(
+      await signer.verifyEntry(onTheWire, identityKey, billId: billId),
+      isTrue,
+    );
 
     // The local copy is untouched: signing happens on the way out.
     expect((await ana.store.read(billId)).single['sig'], isNull);

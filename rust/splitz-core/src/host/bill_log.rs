@@ -46,6 +46,9 @@ pub struct FoldedBill {
     pub identities: Identities,
     /// Who wrote each payment record on the bill, by the payment's id (§14.4).
     pub payment_authors: BTreeMap<String, String>,
+    /// What each payment record says, by the payment's id: the digest a
+    /// confirmation of it carries as `record` (§10.5).
+    pub payment_digests: BTreeMap<String, String>,
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -85,6 +88,16 @@ impl<'h> BillLog<'h> {
         self
     }
 
+    /// The bill these entries belong to: the one named with [`Self::for_bill`],
+    /// or the one their create entry opens. What an entry written for this
+    /// log is signed on (§10.6).
+    pub fn bill_id(&self) -> Result<String> {
+        match &self.bill_id {
+            Some(id) => Ok(id.clone()),
+            None => Ok(self.fold()?.bill.id),
+        }
+    }
+
     /// The entries this device holds, in the order §10.2 puts them.
     pub fn entries(&self) -> Vec<Value> {
         let mut ordered = self.entries.clone();
@@ -121,6 +134,7 @@ impl<'h> BillLog<'h> {
             replaced_addresses: result.replaced_addresses,
             identities: result.identities,
             payment_authors: result.payment_authors,
+            payment_digests: result.payment_digests,
         })
     }
 

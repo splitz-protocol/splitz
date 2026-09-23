@@ -110,6 +110,17 @@ pub fn derive_entry_id(entry: &Value) -> Result<String> {
     derive_id(ENTRY_ID_DOMAIN, entry)
 }
 
+/// The domain separator a payment digest covers (§10.5).
+pub const PAYMENT_DIGEST_DOMAIN: &str = "splitz-payment-v1";
+
+/// What a confirmation binds (§10.5): the digest of the payment payload a
+/// record carries, as written, less the `id` the confirmation names beside
+/// it. A confirmation carries it as `record`, and applies only while the
+/// record the bill holds under that id still says this.
+pub fn payment_digest(payment: &Value) -> Result<String> {
+    derive_id(PAYMENT_DIGEST_DOMAIN, payment)
+}
+
 fn derive_id(domain: &str, entry: &Value) -> Result<String> {
     let mut body = Map::new();
     if let Some(obj) = entry.as_object() {
@@ -507,6 +518,9 @@ pub struct FoldResult {
     /// part of the bill document, which restates neither author nor instant
     /// (§10.5). §14.4 withholds only for a record the payer wrote.
     pub payment_authors: BTreeMap<String, String>,
+    /// What each payment record on the bill says, by the payment's id: the
+    /// `payment_digest` a confirmation of it carries as `record` (§10.5).
+    pub payment_digests: BTreeMap<String, String>,
 }
 
 fn split_pool(split: &Value) -> BTreeSet<String> {
@@ -989,6 +1003,7 @@ pub fn fold_log_verified(
     let mut expenses: Vec<Value> = Vec::new();
     let mut payments: Vec<Value> = Vec::new();
     let mut payment_authors: BTreeMap<String, String> = BTreeMap::new();
+    let mut payment_digests: BTreeMap<String, String> = BTreeMap::new();
     // §5.1's balances, formed as this pass applies each entry and in the order
     // §5.1 forms them, so a bill this fold returns always has balances §2.2
     // can hold. An entry whose effect would carry one out of range is set
@@ -1138,6 +1153,7 @@ pub fn fold_log_verified(
                 }
                 if let Some(id) = pay.get("id").and_then(Value::as_str) {
                     payment_authors.insert(id.to_owned(), field(entry, "author").to_owned());
+                    payment_digests.insert(id.to_owned(), payment_digest(&eff["payment"])?);
                 }
                 payments.push(pay);
             }
@@ -1164,6 +1180,13 @@ pub fn fold_log_verified(
         };
         let payment_id = field(&c, "paymentId").to_owned();
         if !known.contains(&payment_id) {
+            aside!(entry, code::UNKNOWN_PAYMENT);
+            continue;
+        }
+        // §10.5. A confirmation binds what the record said when it was given.
+        if c.get("record").and_then(Value::as_str)
+            != payment_digests.get(&payment_id).map(String::as_str)
+        {
             aside!(entry, code::UNKNOWN_PAYMENT);
             continue;
         }
@@ -1267,5 +1290,6 @@ pub fn fold_log_verified(
         set_aside,
         identities,
         payment_authors,
+        payment_digests,
     })
 }

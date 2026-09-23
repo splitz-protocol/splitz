@@ -8,6 +8,7 @@
 import 'dart:typed_data';
 
 import 'package:splitz_core/host.dart' as splitz;
+import 'package:splitz_core/splitz_core.dart' as core;
 import 'package:test/test.dart';
 
 class _Host extends splitz.BillHost {
@@ -64,12 +65,18 @@ void main() {
   test('records sharing an id are refused, so one word settles one debt', () {
     final ana = _Host('ana');
     final entries = _bill(ana);
-    for (final who in ['ben', 'cai', 'dee']) {
-      entries.add(splitz.recordPayment(
-          host: ana, paymentId: txid, to: who, amount: 30));
-    }
+    final records = [
+      for (final who in ['ben', 'cai', 'dee'])
+        splitz.recordPayment(host: ana, paymentId: txid, to: who, amount: 30),
+    ];
+    entries.addAll(records);
+    // Ben confirms the record addressed to him, which is the one that stands.
     entries.add(splitz.confirmPayment(
-        host: _Host('ben'), paymentId: txid, method: 'recipientConfirmed'));
+        host: _Host('ben'),
+        paymentId: txid,
+        method: 'recipientConfirmed',
+        record: core.paymentDigest(
+            (records.first['payment'] as Map).cast<String, dynamic>())));
 
     final folded = splitz.BillLog(ana, entries: entries).fold();
 
@@ -85,18 +92,22 @@ void main() {
   test('one id per recipient is what a multi-recipient send must write', () {
     final ana = _Host('ana');
     final entries = _bill(ana);
-    for (final who in ['ben', 'cai', 'dee']) {
-      entries.add(splitz.recordPayment(
-          host: ana,
-          paymentId: '$txid:$who',
-          to: who,
-          amount: 30,
-          reference: txid));
-    }
+    final records = [
+      for (final who in ['ben', 'cai', 'dee'])
+        splitz.recordPayment(
+            host: ana,
+            paymentId: '$txid:$who',
+            to: who,
+            amount: 30,
+            reference: txid),
+    ];
+    entries.addAll(records);
     entries.add(splitz.confirmPayment(
         host: _Host('ben'),
         paymentId: '$txid:ben',
-        method: 'recipientConfirmed'));
+        method: 'recipientConfirmed',
+        record: core.paymentDigest(
+            (records.first['payment'] as Map).cast<String, dynamic>())));
 
     final folded = splitz.BillLog(ana, entries: entries).fold();
 

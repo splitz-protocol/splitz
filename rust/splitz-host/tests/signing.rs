@@ -10,12 +10,22 @@ use splitz_host::{
 };
 use support::{seed_for, FakeWallet};
 
-/// Signs `entry` with `seed` through the host seam, the way a wallet does.
-fn signed(wallet: &FakeWallet, seed: &[u8], build: impl Fn(&WalletBillHost) -> Value) -> Value {
+/// Signs `entry` with `seed` through the host seam, the way a wallet does, on
+/// `bill` — or, for the entry that opens a bill, on the id it derives.
+fn signed(
+    wallet: &FakeWallet,
+    seed: &[u8],
+    bill: Option<&str>,
+    build: impl Fn(&WalletBillHost) -> Value,
+) -> Value {
     let sign = |message: &[u8]| Signer.sign(seed, message).expect("a seed is 32 bytes");
     let host = WalletBillHost::new(wallet).signing_with(&sign);
     let entry = build(&host);
-    sign_entry(&host, &entry).expect("an entry this host wrote is signable")
+    let bill = bill.map_or_else(
+        || entry["id"].as_str().unwrap_or("").to_owned(),
+        str::to_owned,
+    );
+    sign_entry(&host, &entry, &bill).expect("an entry this host wrote is signable")
 }
 
 #[test]
@@ -45,8 +55,8 @@ fn signing_is_deterministic_so_a_re_pushed_entry_is_one_blob() {
     let host = WalletBillHost::new(&wallet).signing_with(&sign);
 
     let entry = join_bill(&host, Some("Ana"), None, None, None).unwrap();
-    let once = sign_entry(&host, &entry).unwrap();
-    let twice = sign_entry(&host, &entry).unwrap();
+    let once = sign_entry(&host, &entry, "b").unwrap();
+    let twice = sign_entry(&host, &entry, "b").unwrap();
     assert_eq!(once["sig"], twice["sig"]);
     assert_eq!(
         once["id"], entry["id"],
@@ -64,16 +74,17 @@ fn a_real_signature_binds_a_key_to_a_participant_under_10_7() {
 
     let ben_wallet = FakeWallet::new("ben", Some("u1ben"));
 
-    let mut entries = vec![signed(&wallet, &ana_seed, |host| {
+    let mut entries = vec![signed(&wallet, &ana_seed, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
     })];
+    let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
-    entries.push(signed(&wallet, &ana_seed, |host| {
+    entries.push(signed(&wallet, &ana_seed, Some(&bill), |host| {
         join_bill(host, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap()
     }));
     ben_wallet.tick();
     ben_wallet.tick();
-    entries.push(signed(&ben_wallet, &ben_seed, |host| {
+    entries.push(signed(&ben_wallet, &ben_seed, Some(&bill), |host| {
         join_bill(host, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap()
     }));
 
@@ -91,11 +102,12 @@ fn a_create_signed_by_the_wrong_key_opens_no_bill_at_all() {
     // Signs with somebody else's seed while claiming ana's key.
     let impostor = seed_for("zzz");
 
-    let mut entries = vec![signed(&wallet, &impostor, |host| {
+    let mut entries = vec![signed(&wallet, &impostor, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
     })];
+    let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
-    entries.push(signed(&wallet, &impostor, |host| {
+    entries.push(signed(&wallet, &impostor, Some(&bill), |host| {
         join_bill(host, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap()
     }));
 
@@ -131,31 +143,37 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
     let ben_wallet = FakeWallet::new("ben", Some("u1ben"));
     let impostor_wallet = FakeWallet::new("ben", Some("u1impostor"));
 
-    let mut entries = vec![signed(&wallet, &ana_seed, |host| {
+    let mut entries = vec![signed(&wallet, &ana_seed, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
     })];
+    let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
-    entries.push(signed(&wallet, &ana_seed, |host| {
+    entries.push(signed(&wallet, &ana_seed, Some(&bill), |host| {
         join_bill(host, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap()
     }));
     ben_wallet.tick();
     ben_wallet.tick();
-    entries.push(signed(&ben_wallet, &ben_seed, |host| {
+    entries.push(signed(&ben_wallet, &ben_seed, Some(&bill), |host| {
         join_bill(host, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap()
     }));
     for _ in 0..4 {
         impostor_wallet.tick();
     }
-    entries.push(signed(&impostor_wallet, &impostor_seed, |host| {
-        join_bill(
-            host,
-            Some("Ben"),
-            Some("u1impostor"),
-            Some(&impostor_key),
-            None,
-        )
-        .unwrap()
-    }));
+    entries.push(signed(
+        &impostor_wallet,
+        &impostor_seed,
+        Some(&bill),
+        |host| {
+            join_bill(
+                host,
+                Some("Ben"),
+                Some("u1impostor"),
+                Some(&impostor_key),
+                None,
+            )
+            .unwrap()
+        },
+    ));
 
     let folded = fold_verified(&wallet, bill_id(&entries), &entries, None).expect("the log folds");
     assert!(folded.identities.contested.contains("ben"));
@@ -168,26 +186,26 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
 #[test]
 fn an_unsigned_entry_verifies_against_nothing() {
     let unsigned = json!({"id": "e1", "author": "ana"});
-    assert!(!Signer.verify_entry(&unsigned, &"A".repeat(43)));
+    assert!(!Signer.verify_entry(&unsigned, &"A".repeat(43), "b"));
 }
 
 #[test]
 fn a_malformed_key_or_signature_is_false_not_a_crash() {
     let wallet = FakeWallet::ana();
     let seed = seed_for("ana");
-    let entry = signed(&wallet, &seed, |host| {
+    let entry = signed(&wallet, &seed, Some("b"), |host| {
         join_bill(host, Some("Ana"), None, None, None).unwrap()
     });
 
-    assert!(!Signer.verify_entry(&entry, "not base64url!!"));
+    assert!(!Signer.verify_entry(&entry, "not base64url!!", "b"));
     assert!(
-        !Signer.verify_entry(&entry, "AAAA"),
+        !Signer.verify_entry(&entry, "AAAA", "b"),
         "four characters is three bytes, not a 32-byte key"
     );
 
     let mut tampered = entry.clone();
     tampered["sig"] = Value::from("!!!!");
-    assert!(!Signer.verify_entry(&tampered, &"A".repeat(43)));
+    assert!(!Signer.verify_entry(&tampered, &"A".repeat(43), "b"));
 }
 
 #[test]
@@ -196,15 +214,16 @@ fn every_question_the_fold_asks_was_answered_in_advance() {
     let seed = seed_for("ana");
     let key = Signer.public_key_from_seed(&seed).unwrap();
 
-    let mut entries = vec![signed(&wallet, &seed, |host| {
+    let mut entries = vec![signed(&wallet, &seed, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &key).unwrap()
     })];
+    let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
-    entries.push(signed(&wallet, &seed, |host| {
+    entries.push(signed(&wallet, &seed, Some(&bill), |host| {
         join_bill(host, Some("Ana"), Some("u1ana"), Some(&key), None).unwrap()
     }));
 
-    let verified = Signer.prepare(entries.iter());
+    let verified = Signer.prepare(entries.iter(), &bill);
     let verify = |entry: &Value, k: &str| verified.verify(entry, k);
     let host = WalletBillHost::new(&wallet).verifying_with(&verify);
     splitz_core::host::BillLog::with_entries(&host, entries.clone())
@@ -222,11 +241,11 @@ fn a_fold_that_asks_an_unanticipated_question_fails_loudly() {
     let wallet = FakeWallet::ana();
     let seed = seed_for("ana");
     let key = Signer.public_key_from_seed(&seed).unwrap();
-    let create = signed(&wallet, &seed, |host| {
+    let create = signed(&wallet, &seed, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &key).unwrap()
     });
 
-    let empty = Signer.prepare(std::iter::empty());
+    let empty = Signer.prepare(std::iter::empty(), "b");
     let verify = |entry: &Value, k: &str| empty.verify(entry, k);
     let host = WalletBillHost::new(&wallet).verifying_with(&verify);
     // The fold asks, gets `false` for want of an answer, and drops the create
@@ -246,4 +265,19 @@ fn bill_id(entries: &[serde_json::Value]) -> &str {
         .find(|e| e["kind"] == "createBill")
         .and_then(|e| e["id"].as_str())
         .expect("the log holds a create")
+}
+
+#[test]
+fn a_signature_made_on_one_bill_does_not_verify_on_another() {
+    // §10.6: the message names the bill. A participant's id and key are the
+    // same on every bill, so a confirmation copied from one bill into another
+    // would otherwise verify there and settle a debt nobody paid there.
+    let wallet = FakeWallet::ana();
+    let seed = seed_for("ana");
+    let key = Signer.public_key_from_seed(&seed).unwrap();
+    let entry = signed(&wallet, &seed, Some("bill-a"), |host| {
+        join_bill(host, Some("Ana"), None, Some(&key), None).unwrap()
+    });
+    assert!(Signer.verify_entry(&entry, &key, "bill-a"));
+    assert!(!Signer.verify_entry(&entry, &key, "bill-b"));
 }

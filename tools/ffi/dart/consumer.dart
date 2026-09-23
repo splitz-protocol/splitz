@@ -75,14 +75,28 @@ void main(List<String> args) {
   check('the bill has a §9.4 id', billId.isNotEmpty, billId);
 
   ana.add(
-    joinBillEntry(ana.facts(), 'Ana', 'u1ana', anaKey, ana.signingSeed()),
+    joinBillEntry(
+      ana.facts(),
+      billId,
+      'Ana',
+      'u1ana',
+      anaKey,
+      ana.signingSeed(),
+    ),
   );
 
   print('ben joins, and the two logs merge');
   final benKey = identityKeyFromSeed(ben.signingSeed());
   ben.entries.addAll(ana.entries);
   ben.add(
-    joinBillEntry(ben.facts(), 'Ben', 'u1ben', benKey, ben.signingSeed()),
+    joinBillEntry(
+      ben.facts(),
+      billId,
+      'Ben',
+      'u1ben',
+      benKey,
+      ben.signingSeed(),
+    ),
   );
 
   print('ana adds an expense they share, and prices it');
@@ -92,6 +106,7 @@ void main(List<String> args) {
   ana.add(
     addExpenseEntry(
       ana.facts(),
+      billId,
       'x1',
       'ana',
       9000,
@@ -101,7 +116,14 @@ void main(List<String> args) {
     ),
   );
   ana.add(
-    setRateEntry(ana.facts(), 'EUR', 300000, 'a fixed feed', ana.signingSeed()),
+    setRateEntry(
+      ana.facts(),
+      billId,
+      'EUR',
+      300000,
+      'a fixed feed',
+      ana.signingSeed(),
+    ),
   );
 
   final folded = foldEntries(ana.facts(), billId, ana.entries);
@@ -154,6 +176,7 @@ void main(List<String> args) {
   ben.add(
     recordPaymentEntry(
       ben.facts(),
+      billId,
       const PaymentDraft(
         paymentId: 'tx-ben-1',
         to: 'ana',
@@ -199,9 +222,11 @@ void main(List<String> args) {
   ana.add(
     confirmPaymentEntry(
       ana.facts(),
+      billId,
       toConfirm,
       'recipientConfirmed',
       null,
+      afterPayment.paymentDigests[toConfirm]!,
       ana.signingSeed(),
     ),
   );

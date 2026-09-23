@@ -118,6 +118,9 @@ pub struct FoldedBill {
     pub withdrawn: Vec<String>,
     pub replaced_addresses: Vec<ReplacedAddress>,
     pub identities: Identities,
+    /// What each payment record says, by the payment's id: the `record` a
+    /// confirmation of it carries (§10.5).
+    pub payment_digests: std::collections::HashMap<String, String>,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]

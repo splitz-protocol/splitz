@@ -226,35 +226,38 @@ fun main() {
     // Ana's device writes four entries. Each comes back as the JSON §9.3
     // canonicalises, with §9.5's id already derived; the wallet stores the
     // string and never inspects it.
+    val create = createBillEntry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
+        "Dinner", "EUR", "equal", identityKeyFromSeed(anaSeed), anaSeed)
+
+    // The bill these entries belong to, read back from the entry that opened
+    // it. Every other entry is signed on it (§10.6), and every fold names it,
+    // so a create for another bill pushed into the channel cannot make this
+    // one unopenable.
+    val billId = Regex("\"id\":\"([^\"]+)\"").find(create)!!.groupValues[1]
+
     val anaLog = listOf(
-        createBillEntry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
-            "Dinner", "EUR", "equal", identityKeyFromSeed(anaSeed), anaSeed),
-        joinBillEntry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2),
+        create,
+        joinBillEntry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2), billId,
             "Ana", "u1ana", identityKeyFromSeed(anaSeed), anaSeed),
-        addExpenseEntry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3),
+        addExpenseEntry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3), billId,
             "x1", "ana", 9000, """{"type":"equal","among":["ana","ben"]}""",
             "dinner", anaSeed),
         // §7 snapshots one rate onto the bill, so six devices do not price one
         // dinner six ways. 300000 minor units per ZEC is €3000.00.
-        setRateEntry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4),
+        setRateEntry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4), billId,
             "EUR", 300000, "a fixed feed", anaSeed),
     )
 
     // Ben's own device writes Ben's join: §10.4 decides what an entry's author
     // may say, and a participant joins for themselves.
     val benLog = listOf(
-        joinBillEntry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5),
+        joinBillEntry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5), billId,
             "Ben", "u1ben", identityKeyFromSeed(benSeed), benSeed),
     )
 
     // Merging is how two devices come to agree (§10.2). It is a set union by
     // id, in either direction, any number of times.
     val log = mergeEntries(anaLog, benLog).entries
-
-    // The bill these entries belong to, read back from the entry that opened
-    // it. Every fold names it, so a create for another bill pushed into the
-    // channel cannot make this one unopenable.
-    val billId = Regex("\"id\":\"([^\"]+)\"").find(anaLog.first())!!.groupValues[1]
 
     val benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6)
     val folded = foldEntries(benFacts, billId, log)
@@ -366,17 +369,26 @@ void main(List<String> args) {
   // Ana's device writes four entries. Each comes back as the JSON §9.3
   // canonicalises, with §9.5's id already derived; the wallet stores the
   // string and never inspects it.
+  final create = createBillEntry(
+    facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
+    'Dinner',
+    'EUR',
+    'equal',
+    identityKeyFromSeed(anaSeed),
+    anaSeed,
+  );
+
+  // The bill these entries belong to, read back from the entry that opened
+  // it. Every other entry is signed on it (§10.6), and every fold names it,
+  // so a create for another bill pushed into the channel cannot make this
+  // one unopenable.
+  final billId = (jsonDecode(create) as Map)['id'] as String;
+
   final anaLog = [
-    createBillEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
-      'Dinner',
-      'EUR',
-      'equal',
-      identityKeyFromSeed(anaSeed),
-      anaSeed,
-    ),
+    create,
     joinBillEntry(
       facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2),
+      billId,
       'Ana',
       'u1ana',
       identityKeyFromSeed(anaSeed),
@@ -384,6 +396,7 @@ void main(List<String> args) {
     ),
     addExpenseEntry(
       facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3),
+      billId,
       'x1',
       'ana',
       9000,
@@ -395,6 +408,7 @@ void main(List<String> args) {
     // dinner six ways. 300000 minor units per ZEC is €3000.00.
     setRateEntry(
       facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4),
+      billId,
       'EUR',
       300000,
       'a fixed feed',
@@ -407,6 +421,7 @@ void main(List<String> args) {
   final benLog = [
     joinBillEntry(
       facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5),
+      billId,
       'Ben',
       'u1ben',
       identityKeyFromSeed(benSeed),
@@ -417,11 +432,6 @@ void main(List<String> args) {
   // Merging is how two devices come to agree (§10.2). It is a set union by
   // id, in either direction, any number of times.
   final log = mergeEntries(anaLog, benLog).entries;
-
-  // The bill these entries belong to, read back from the entry that opened
-  // it. Every fold names it, so a create for another bill pushed into the
-  // channel cannot make this one unopenable.
-  final billId = (jsonDecode(anaLog.first) as Map)['id'] as String;
 
   final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
   final folded = foldEntries(benFacts, billId, log);
@@ -491,34 +501,37 @@ const benSeed = seed(90);
 // Ana's device writes four entries. Each comes back as the JSON §9.3
 // canonicalises, with §9.5's id already derived; the wallet stores the string
 // and never inspects it.
+const create = splitz.create_bill_entry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
+  "Dinner", "EUR", "equal", splitz.identity_key_from_seed(anaSeed), anaSeed);
+
+// The bill these entries belong to, read back from the entry that opened it.
+// Every other entry is signed on it (§10.6), and every fold names it, so a
+// create for another bill pushed into the channel cannot make this one
+// unopenable.
+const billId = JSON.parse(create).id;
+
 const anaLog = [
-  splitz.create_bill_entry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
-    "Dinner", "EUR", "equal", splitz.identity_key_from_seed(anaSeed), anaSeed),
-  splitz.join_bill_entry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2),
+  create,
+  splitz.join_bill_entry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2), billId,
     "Ana", "u1ana", splitz.identity_key_from_seed(anaSeed), anaSeed),
-  splitz.add_expense_entry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3),
+  splitz.add_expense_entry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3), billId,
     "x1", "ana", 9000, '{"type":"equal","among":["ana","ben"]}', "dinner", anaSeed),
   // §7 snapshots one rate onto the bill, so six devices do not price one
   // dinner six ways. 300000 minor units per ZEC is €3000.00.
-  splitz.set_rate_entry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4),
+  splitz.set_rate_entry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4), billId,
     "EUR", 300000, "a fixed feed", anaSeed),
 ];
 
 // Ben's own device writes Ben's join: §10.4 decides what an entry's author may
 // say, and a participant joins for themselves.
 const benLog = [
-  splitz.join_bill_entry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5),
+  splitz.join_bill_entry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5), billId,
     "Ben", "u1ben", splitz.identity_key_from_seed(benSeed), benSeed),
 ];
 
 // Merging is how two devices come to agree (§10.2). It is a set union by id,
 // in either direction, any number of times.
 const log = splitz.merge_entries(anaLog, benLog).entries;
-
-// The bill these entries belong to, read back from the entry that opened it.
-// Every fold names it, so a create for another bill pushed into the channel
-// cannot make this one unopenable.
-const billId = JSON.parse(anaLog[0]).id;
 
 const benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6);
 const folded = splitz.fold_entries(benFacts, billId, log);
@@ -586,9 +599,11 @@ attaching a memo to a transparent recipient (8).
    real mainnet Unified Addresses so that running it exercises yours.
 3. **Transaction construction, fees, signing, broadcast.**
 4. **The curve operation.** §10.6 fixes the bytes a signature covers; producing
-   and checking the Ed25519 signature is the host's. `signingMessage(entry)`
-   returns exactly those bytes, so a wallet signs and verifies what every other
-   implementation does.
+   and checking the Ed25519 signature is the host's.
+   `signingMessage(entry, billId)` returns exactly those bytes, so a wallet
+   signs and verifies what every other implementation does. The bill is part
+   of the message: a signature made on one bill does not verify on another,
+   so verify on the bill being folded, never on one taken from the entry.
 
    **Hand the verifier to the fold**: `foldLog(entries, verify: ...)` takes a
    `bool Function(entry, key)`. With one, a `createBill` whose signature fails

@@ -100,6 +100,7 @@ pub(crate) fn folded(f: &splitz_core::host::FoldedBill) -> ffi::FoldedBill {
             bound: f.identities.bound.clone().into_iter().collect(),
             contested: f.identities.contested.iter().cloned().collect(),
         },
+        payment_digests: f.payment_digests.clone().into_iter().collect(),
     }
 }
 

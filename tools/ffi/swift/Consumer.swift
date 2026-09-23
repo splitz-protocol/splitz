@@ -87,10 +87,10 @@ func run() throws {
     try ana.add(create)
     let billId = (try JSONSerialization.jsonObject(with: Data(create.utf8))
         as! [String: Any])["id"] as! String
-    try ana.add(try joinBillEntry(facts: ana.facts(), name: "Ana",
+    try ana.add(try joinBillEntry(facts: ana.facts(), billId: billId, name: "Ana",
                                   payTo: "u1ana", identityKey: anaKey,
                                   seed: ana.seed))
-    try ben.add(try joinBillEntry(facts: ben.facts(), name: "Ben",
+    try ben.add(try joinBillEntry(facts: ben.facts(), billId: billId, name: "Ben",
                                   payTo: "u1ben", identityKey: benKey,
                                   seed: ben.seed))
     try ben.take(ana)
@@ -98,10 +98,10 @@ func run() throws {
 
     print("ana adds an expense they share, and prices it")
     try ana.add(try addExpenseEntry(
-        facts: ana.facts(), expenseId: "x1", paidBy: "ana", amount: 9000,
+        facts: ana.facts(), billId: billId, expenseId: "x1", paidBy: "ana", amount: 9000,
         splitJson: #"{"type":"equal","among":["ana","ben"]}"#,
         description: "dinner", seed: ana.seed))
-    try ana.add(try setRateEntry(facts: ana.facts(), currency: "EUR",
+    try ana.add(try setRateEntry(facts: ana.facts(), billId: billId, currency: "EUR",
                                  minorUnitsPerZec: 300000,
                                  source: "a fixed feed", seed: ana.seed))
 
@@ -123,7 +123,7 @@ func run() throws {
           owed!.request.uri!.hasPrefix("zcash:u1ana"), owed!.request.uri!)
 
     print("the wallet sends, then records what §14.3 allows")
-    let records = try paymentEntriesForSend(facts: ben.facts(),
+    let records = try paymentEntriesForSend(facts: ben.facts(), billId: billId,
                                             obligation: owed!,
                                             txid: "tx-ben-1", seed: ben.seed)
     check("one record, for what the request carried", records.count == 1,
@@ -138,10 +138,12 @@ func run() throws {
           "\(afterPayment.bill.confirmedPayments)")
 
     let toConfirm = afterPayment.bill.payments[0].id
-    try ana.add(try confirmPaymentEntry(facts: ana.facts(),
+    try ana.add(try confirmPaymentEntry(facts: ana.facts(), billId: billId,
                                         paymentId: toConfirm,
                                         method: "recipientConfirmed",
-                                        reference: nil, seed: ana.seed))
+                                        reference: nil,
+                                        record: afterPayment.paymentDigests[toConfirm]!,
+                                        seed: ana.seed))
     try ben.take(ana)
     let settled = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries,
                                    payAnyway: [])!

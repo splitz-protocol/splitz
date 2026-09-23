@@ -265,6 +265,7 @@ pub fn record_send(
     carried: &BTreeMap<String, i64>,
     txid: &str,
 ) -> Result<Vec<Value>> {
+    let bill_id = log.bill_id()?;
     let mut records = Vec::new();
     for (to, amount) in carried {
         let payment_id = payment_id_for_send(txid, to);
@@ -279,7 +280,7 @@ pub fn record_send(
             None,
             None,
         )?;
-        let record = sign_entry(host, &unsigned)?;
+        let record = sign_entry(host, &unsigned, &bill_id)?;
         log.add(vec![record.clone()])?;
         records.push(record);
     }

@@ -106,11 +106,13 @@ class Device implements splitz.BillHost {
   /// pulled its own entries back, and §10.1 opens no bill from an unsigned
   /// create when a verifier is present.
   Future<void> write(String billId, Map<String, dynamic> entry) async =>
-      store.merge(billId, [await splitz.signEntry(host: this, entry: entry)]);
+      store.merge(billId, [
+        await splitz.signEntry(host: this, entry: entry, billId: billId),
+      ]);
 
   Future<splitz.FoldedBill> fold(String billId) async {
     final entries = await store.read(billId);
-    final prepared = await _signer.prepare(entries);
+    final prepared = await _signer.prepare(entries, billId: billId);
     _verify = prepared.verify;
     return splitz.BillLog(this, entries: entries).fold();
   }
@@ -212,6 +214,7 @@ void main() {
         payTo: 'u1mallory',
         identityKey: await mallory.identityKey,
       ),
+      billId: billId,
     );
     await mallory.store.merge(billId, [forged]);
     await mallory.sync.push(billId);

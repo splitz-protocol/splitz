@@ -25,6 +25,7 @@ class FoldedBill {
     required this.replacedAddresses,
     required this.identities,
     this.paymentAuthors = const {},
+    this.paymentDigests = const {},
   });
 
   final splitz.Bill bill;
@@ -49,6 +50,10 @@ class FoldedBill {
 
   /// Who wrote each payment record on the bill, by the payment's id (§14.4).
   final Map<String, String> paymentAuthors;
+
+  /// What each payment record says, by the payment's id: the digest a
+  /// confirmation of it carries as `record` (§10.5).
+  final Map<String, String> paymentDigests;
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -101,6 +106,7 @@ class BillLog {
       replacedAddresses: result.replacedAddresses,
       identities: result.identities,
       paymentAuthors: result.paymentAuthors,
+      paymentDigests: result.paymentDigests,
     );
   }
 

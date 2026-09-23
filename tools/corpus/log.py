@@ -6,6 +6,7 @@ SPEC.md sections 9.4, 10 and 10.5.
 import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
+                   payment_digest,
                    seal_log, merge, order, fold, balances,
                    canonical_json, b64url, Refused, stand_in,
                    non_canonical)
@@ -40,15 +41,27 @@ E1 = {"v": 1, "id": "e1", "author": "ana", "kind": "addExpense", "at": AT(3),
 P1 = {"v": 1, "id": "p1", "author": "ben", "kind": "recordPayment", "at": AT(4),
       "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
                   "method": "cash", "at": AT(4)}}
+# A payment of one cent under the id the bill's payment uses.
+P_CENT = {"v": 1, "id": "p9", "author": "ben", "kind": "recordPayment",
+          "at": AT(4),
+          "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 1,
+                      "method": "cash", "at": AT(4)}}
 J_DEE = {"v": 1, "id": "j3", "author": "dee", "kind": "joinBill", "at": AT(2),
          "participant": {"id": "dee", "name": "Dee"}}
 BASE = [C, J_ANA, J_BEN, E1, P1]
 
 
-def conf(eid, author, method, minute, ref=None, pid="y1"):
+# A confirmation written with no `record`, where `sealed` would otherwise fill
+# one in from the payment it names.
+NO_RECORD = object()
+
+
+def conf(eid, author, method, minute, ref=None, pid="y1", record=None):
     c = {"paymentId": pid, "method": method}
     if ref:
         c["reference"] = ref
+    if record is not None:
+        c["record"] = record
     return {"v": 1, "id": eid, "author": author, "kind": "confirmPayment",
             "at": AT(minute), "confirmation": c}
 
@@ -217,6 +230,31 @@ FOLD_CASES = [
     ("the_payer_attests_and_it_settles_nothing",
      BASE + [conf("c4", "ben", "payerAttested", 5)], C["id"]),
 
+    # §10.5. A confirmation binds the record it was given for, by digest.
+    ("a_confirmation_naming_no_record",
+     BASE + [conf("c13", "ana", "recipientConfirmed", 5, record=NO_RECORD)],
+     C["id"]),
+    # Ben records a cent, Ana confirms it, and Ben amends the record to the
+    # whole debt: the confirmation was for a cent.
+    ("a_confirmation_of_a_record_amended_since",
+     [C, J_ANA, J_BEN, E1, P_CENT,
+      conf("c14", "ana", "recipientConfirmed", 5),
+      {"v": 1, "id": "a7", "author": "ben", "kind": "amendEntry",
+       "at": AT(6), "targetId": "p9",
+       "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
+                   "method": "cash", "at": AT(4)}}],
+     C["id"]),
+    # The same, by withdrawing the record and writing a larger one under the
+    # same payment id.
+    ("a_confirmation_reused_after_its_record_is_rewritten",
+     [C, J_ANA, J_BEN, E1, P_CENT,
+      conf("c15", "ana", "recipientConfirmed", 5),
+      void("v10", "ben", "p9", 6),
+      {"v": 1, "id": "p10", "author": "ben", "kind": "recordPayment",
+       "at": AT(7),
+       "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
+                   "method": "cash", "at": AT(7)}}],
+     C["id"]),
     ("the_payer_may_not_confirm_his_own_debt",
      BASE + [conf("c5", "ben", "recipientConfirmed", 5)], C["id"]),
     ("on_chain_without_a_reference",
@@ -909,6 +947,28 @@ MERGE_CASES = [
 TESTS_THE_ID = {"an_entry_whose_id_is_chosen_rather_than_derived"}
 
 
+def with_records(entries):
+    """Fills each confirmation's `record` from the first payment in the log
+    carrying the id it names, as the wallet confirming it would (10.5). One
+    written with NO_RECORD is left without."""
+    payments = {}
+    for e in entries:
+        if e.get("kind") == "recordPayment" and isinstance(e.get("payment"), dict):
+            payments.setdefault(e["payment"].get("id"), e["payment"])
+    out = []
+    for e in entries:
+        c = e.get("confirmation")
+        if e.get("kind") == "confirmPayment" and isinstance(c, dict):
+            c = dict(c)
+            if c.get("record") is NO_RECORD:
+                del c["record"]
+            elif "record" not in c and c.get("paymentId") in payments:
+                c["record"] = payment_digest(payments[c["paymentId"]])
+            e = dict(e, confirmation=c)
+        out.append(e)
+    return out
+
+
 def sealed(entries):
     """Section 9.5 ids, derived.
 
@@ -917,7 +977,7 @@ def sealed(entries):
     unsealed copy is refused whole at ingress, so the case goes green while
     asserting nothing about the rule it is named for.
     """
-    out = seal_log(entries)
+    out = seal_log(with_records(entries))
     if out is None:
         raise AssertionError(
             "seal_log cannot build this log: every id is a digest of the entry "

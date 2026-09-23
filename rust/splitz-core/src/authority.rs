@@ -7,9 +7,13 @@ use crate::canonical_json::canonical_json;
 use crate::error::Result;
 
 /// The domain separator an entry's signature covers.
-pub const ENTRY_SIGNING_DOMAIN: &str = "splitz-entry-v1";
+pub const ENTRY_SIGNING_DOMAIN: &str = "splitz-entry-v2";
 
-/// The bytes an entry's signature covers (§10.6).
+/// The bytes an entry's signature covers on the bill `bill_id` (§10.6).
+///
+/// The bill is part of the message because an entry does not name it: a
+/// participant's id and key are the same on every bill, so without it a
+/// signature made on one bill verifies on any other.
 ///
 /// `sig` is excluded because it is the output, and `v` because an entry does
 /// not carry its own format version through an implementation's object model:
@@ -18,7 +22,7 @@ pub const ENTRY_SIGNING_DOMAIN: &str = "splitz-entry-v1";
 ///
 /// Returned as text. A test asserting that a signature verified would pass in
 /// two implementations that disagree about the bytes, each checking its own.
-pub fn signing_message(entry: &Value) -> Result<String> {
+pub fn signing_message(entry: &Value, bill_id: &str) -> Result<String> {
     let mut body = Map::new();
     if let Some(obj) = entry.as_object() {
         for (k, v) in obj {
@@ -27,9 +31,12 @@ pub fn signing_message(entry: &Value) -> Result<String> {
             }
         }
     }
+    let mut message = Map::new();
+    message.insert("bill".to_owned(), Value::from(bill_id));
+    message.insert("entry".to_owned(), Value::Object(body));
     Ok(format!(
         "{ENTRY_SIGNING_DOMAIN}{}",
-        canonical_json(&Value::Object(body))?
+        canonical_json(&Value::Object(message))?
     ))
 }
 

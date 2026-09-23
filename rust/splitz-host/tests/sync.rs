@@ -206,7 +206,7 @@ fn pushing_signs_this_devices_own_unsigned_entries() {
     for blob in &blobs {
         let entry = Sealing.open(blob, &key).unwrap();
         assert!(entry.get("sig").is_some(), "unsigned: {entry}");
-        assert!(Signer.verify_entry(&entry, &public_key));
+        assert!(Signer.verify_entry(&entry, &public_key, &bill_id));
     }
     // The stored log is untouched: signing happens on the way out.
     for entry in store.read(&bill_id).unwrap() {

@@ -60,7 +60,11 @@ void main() {
         'recordPayment':
             recordPayment(host: ana, paymentId: 'tx1', to: 'ben', amount: 4500),
         'confirmPayment': confirmPayment(
-            host: ana, paymentId: 'tx1', method: 'onChain', reference: 'tx:1'),
+            host: ana,
+            paymentId: 'tx1',
+            method: 'onChain',
+            reference: 'tx:1',
+            record: 'r'),
         'setRate': setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234),
         'voidEntry': voidEntry(host: ana, targetId: 'whatever'),
       };

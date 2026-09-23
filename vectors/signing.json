@@ -1,9 +1,10 @@
 {
   "description": "The message an entry's signature covers. SPEC.md section 10.6.",
-  "count": 13,
+  "count": 14,
   "cases": [
     {
       "name": "a_join_with_no_signature",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "j1",
@@ -15,10 +16,11 @@
           "name": "Ana"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}}"
     },
     {
       "name": "the_signature_is_not_covered",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "j1",
@@ -31,10 +33,11 @@
         },
         "sig": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}}"
     },
     {
       "name": "the_version_is_not_covered",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 99,
         "id": "j1",
@@ -46,10 +49,11 @@
           "name": "Ana"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}}"
     },
     {
       "name": "keys_are_ordered_by_utf8_bytes",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "kind": "joinBill",
         "at": "2026-10-28T19:30:00.000Z",
@@ -60,10 +64,11 @@
           "id": "ana"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}}"
     },
     {
       "name": "strings_are_escaped_as_rfc_8785_writes_them",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "j1",
@@ -75,10 +80,11 @@
           "name": "Fish & chips 1/2 <ok>\t\n\u0001 \"q\\"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Fish & chips 1/2 <ok>\\t\\n\\u0001 \\\"q\\\\\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Fish & chips 1/2 <ok>\\t\\n\\u0001 \\\"q\\\\\"}}}"
     },
     {
       "name": "the_id_is_covered",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "j2",
@@ -90,10 +96,11 @@
           "name": "Ana"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j2\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j2\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}}"
     },
     {
       "name": "an_expense",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "e1",
@@ -116,10 +123,11 @@
           }
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"expense\":{\"amount\":480000,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"description\":\"dinner\",\"id\":\"x1\",\"paidBy\":\"ana\",\"split\":{\"among\":[\"ana\",\"ben\"],\"type\":\"equal\"}},\"id\":\"e1\",\"kind\":\"addExpense\"}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"expense\":{\"amount\":480000,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"description\":\"dinner\",\"id\":\"x1\",\"paidBy\":\"ana\",\"split\":{\"among\":[\"ana\",\"ben\"],\"type\":\"equal\"}},\"id\":\"e1\",\"kind\":\"addExpense\"}}"
     },
     {
       "name": "a_payment_naming_an_address",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "p1",
@@ -137,10 +145,11 @@
           "reference": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ben\",\"id\":\"p1\",\"kind\":\"recordPayment\",\"payment\":{\"amount\":4500,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"from\":\"ben\",\"id\":\"y1\",\"method\":\"shieldedZec\",\"reference\":\"u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx\",\"to\":\"ana\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ben\",\"id\":\"p1\",\"kind\":\"recordPayment\",\"payment\":{\"amount\":4500,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"from\":\"ben\",\"id\":\"y1\",\"method\":\"shieldedZec\",\"reference\":\"u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx\",\"to\":\"ana\"}}}"
     },
     {
       "name": "a_name_outside_the_basic_multilingual_plane",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "j3",
@@ -152,10 +161,11 @@
           "name": "Ana 😀"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j3\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana 😀\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j3\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana 😀\"}}}"
     },
     {
       "name": "a_name_that_needs_escaping",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "j4",
@@ -167,10 +177,11 @@
           "name": "Zcon7 dîner ✨"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j4\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Zcon7 dîner ✨\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j4\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Zcon7 dîner ✨\"}}}"
     },
     {
       "name": "the_create_entry_covers_its_key_and_nonce",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "b1",
@@ -183,10 +194,11 @@
         "creatorKey": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
         "nonce": "nnnnnnnnnnnnnnnnnnnnnn"
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"creatorKey\":\"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\",\"currency\":\"MXN\",\"id\":\"b1\",\"kind\":\"createBill\",\"name\":\"Dinner\",\"nonce\":\"nnnnnnnnnnnnnnnnnnnnnn\",\"splitMode\":\"equal\"}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"creatorKey\":\"kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\",\"currency\":\"MXN\",\"id\":\"b1\",\"kind\":\"createBill\",\"name\":\"Dinner\",\"nonce\":\"nnnnnnnnnnnnnnnnnnnnnn\",\"splitMode\":\"equal\"}}"
     },
     {
       "name": "a_confirmation",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "c1",
@@ -196,13 +208,15 @@
         "confirmation": {
           "paymentId": "y1",
           "method": "onChain",
-          "reference": "tx:abc"
+          "reference": "tx:abc",
+          "record": "cmVjb3JkZGlnZXN0MDAwMA"
         }
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"confirmation\":{\"method\":\"onChain\",\"paymentId\":\"y1\",\"reference\":\"tx:abc\"},\"id\":\"c1\",\"kind\":\"confirmPayment\"}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"confirmation\":{\"method\":\"onChain\",\"paymentId\":\"y1\",\"record\":\"cmVjb3JkZGlnZXN0MDAwMA\",\"reference\":\"tx:abc\"},\"id\":\"c1\",\"kind\":\"confirmPayment\"}}"
     },
     {
       "name": "a_withdrawal",
+      "billId": "g0a5mrH6D5nx5bJ7KrgwVA",
       "entry": {
         "v": 1,
         "id": "v1",
@@ -211,7 +225,23 @@
         "at": "2026-10-28T19:30:00.000Z",
         "targetId": "e1"
       },
-      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"v1\",\"kind\":\"voidEntry\",\"targetId\":\"e1\"}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"v1\",\"kind\":\"voidEntry\",\"targetId\":\"e1\"}}"
+    },
+    {
+      "name": "the_same_entry_on_another_bill",
+      "billId": "AAAAAAAAAAAAAAAAAAAAAA",
+      "entry": {
+        "v": 1,
+        "id": "j1",
+        "author": "ana",
+        "kind": "joinBill",
+        "at": "2026-10-28T19:30:00.000Z",
+        "participant": {
+          "id": "ana",
+          "name": "Ana"
+        }
+      },
+      "expect": "splitz-entry-v2{\"bill\":\"AAAAAAAAAAAAAAAAAAAAAA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}}"
     }
   ]
 }

@@ -34,17 +34,26 @@ void main(List<String> args) {
   // Ana's device writes four entries. Each comes back as the JSON §9.3
   // canonicalises, with §9.5's id already derived; the wallet stores the
   // string and never inspects it.
+  final create = createBillEntry(
+    facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
+    'Dinner',
+    'EUR',
+    'equal',
+    identityKeyFromSeed(anaSeed),
+    anaSeed,
+  );
+
+  // The bill these entries belong to, read back from the entry that opened
+  // it. Every other entry is signed on it (§10.6), and every fold names it,
+  // so a create for another bill pushed into the channel cannot make this
+  // one unopenable.
+  final billId = (jsonDecode(create) as Map)['id'] as String;
+
   final anaLog = [
-    createBillEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
-      'Dinner',
-      'EUR',
-      'equal',
-      identityKeyFromSeed(anaSeed),
-      anaSeed,
-    ),
+    create,
     joinBillEntry(
       facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2),
+      billId,
       'Ana',
       'u1ana',
       identityKeyFromSeed(anaSeed),
@@ -52,6 +61,7 @@ void main(List<String> args) {
     ),
     addExpenseEntry(
       facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3),
+      billId,
       'x1',
       'ana',
       9000,
@@ -63,6 +73,7 @@ void main(List<String> args) {
     // dinner six ways. 300000 minor units per ZEC is €3000.00.
     setRateEntry(
       facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4),
+      billId,
       'EUR',
       300000,
       'a fixed feed',
@@ -75,6 +86,7 @@ void main(List<String> args) {
   final benLog = [
     joinBillEntry(
       facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5),
+      billId,
       'Ben',
       'u1ben',
       identityKeyFromSeed(benSeed),
@@ -85,11 +97,6 @@ void main(List<String> args) {
   // Merging is how two devices come to agree (§10.2). It is a set union by
   // id, in either direction, any number of times.
   final log = mergeEntries(anaLog, benLog).entries;
-
-  // The bill these entries belong to, read back from the entry that opened
-  // it. Every fold names it, so a create for another bill pushed into the
-  // channel cannot make this one unopenable.
-  final billId = (jsonDecode(anaLog.first) as Map)['id'] as String;
 
   final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
   final folded = foldEntries(benFacts, billId, log);

@@ -44,12 +44,17 @@ class SplitsSigner {
         return encode(signature.bytes);
       };
 
-  /// Whether [entry]'s signature verifies against [publicKey].
+  /// Whether [entry]'s signature, made on the bill [billId], verifies against
+  /// [publicKey]. A signature made on any other bill does not (§10.6).
   ///
   /// False when the entry is unsigned, when either input is malformed, and when
   /// the signature simply does not match — all of which mean the same thing to
   /// §10.7: this entry was not written by the holder of that key.
-  Future<bool> verifyEntry(Map<String, dynamic> entry, String publicKey) async {
+  Future<bool> verifyEntry(
+    Map<String, dynamic> entry,
+    String publicKey, {
+    required String billId,
+  }) async {
     final signature = entry['sig'];
     if (signature is! String) return false;
 
@@ -68,7 +73,7 @@ class SplitsSigner {
     // one made there verifies here.
     final List<int> message;
     try {
-      message = utf8.encode(protocol.signingMessage(entry));
+      message = utf8.encode(protocol.signingMessage(entry, billId));
     } on protocol.SplitError {
       return false;
     }
@@ -86,7 +91,8 @@ class SplitsSigner {
     }
   }
 
-  /// Answers every signature question a fold of [entries] can ask, in advance.
+  /// Answers every signature question a fold of [entries] on the bill
+  /// [billId] can ask, in advance.
   ///
   /// `foldLog` takes a **synchronous** verifier, and this curve operation is
   /// asynchronous. Rather than block, every pair the fold can ask about is
@@ -105,7 +111,10 @@ class SplitsSigner {
   /// An answer depends only on the entry and the key, so answers are kept
   /// across calls: a bill folded again after one new entry verifies one entry,
   /// not every entry it holds.
-  Future<VerifiedLog> prepare(Iterable<Map<String, dynamic>> entries) async {
+  Future<VerifiedLog> prepare(
+    Iterable<Map<String, dynamic>> entries, {
+    required String billId,
+  }) async {
     final all = entries.toList();
     final keysOf = <String, Set<String>>{};
     for (final entry in all) {
@@ -129,10 +138,10 @@ class SplitsSigner {
     for (final entry in all) {
       final keys = {..._keysStatedBy(entry), ...?keysOf[entry['author']]};
       for (final key in keys) {
-        final known = _knownKey(entry, key);
+        final known = _knownKey(entry, key, billId);
         answers[_pair(entry, key)] = known == null
-            ? await verifyEntry(entry, key)
-            : _known[known] ??= await verifyEntry(entry, key);
+            ? await verifyEntry(entry, key, billId: billId)
+            : _known[known] ??= await verifyEntry(entry, key, billId: billId);
       }
     }
     return VerifiedLog._(answers);
@@ -146,9 +155,13 @@ class SplitsSigner {
   /// other content would otherwise file its `false` under the genuine
   /// entry's name. Null when the entry has no §10.6 message, and then nothing
   /// is kept.
-  static String? _knownKey(Map<String, dynamic> entry, String key) {
+  static String? _knownKey(
+    Map<String, dynamic> entry,
+    String key,
+    String billId,
+  ) {
     try {
-      return '${protocol.signingMessage(entry)}\u0000${entry['sig']}\u0000$key';
+      return '${protocol.signingMessage(entry, billId)}\u0000${entry['sig']}\u0000$key';
     } on protocol.SplitError {
       return null;
     }

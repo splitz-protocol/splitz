@@ -152,6 +152,19 @@ const String entryIdDomain = 'splitz-entry-id-v1';
 String deriveEntryId(Map<String, dynamic> entry) =>
     _deriveId(entryIdDomain, entry);
 
+/// The domain separator a payment digest covers (§10.5).
+const String paymentDigestDomain = 'splitz-payment-v1';
+
+/// What a confirmation binds (§10.5): the digest of the payment payload a
+/// record carries, as written, less the `id` the confirmation names beside
+/// it.
+///
+/// A confirmation carries it as `record`, and applies only while the record
+/// the bill holds under that id still says this. One withdrawn and written
+/// again, or amended since, is a payment nobody confirmed.
+String paymentDigest(Map<String, dynamic> payment) =>
+    _deriveId(paymentDigestDomain, payment);
+
 /// `value` as a map, or an empty one.
 ///
 /// For the passes that read inside a payload before it has been decoded: §10.1
@@ -408,6 +421,7 @@ class FoldResult {
     required this.setAside,
     required this.identities,
     required this.paymentAuthors,
+    required this.paymentDigests,
   });
 
   /// The materialised bill, as a wire-form map.
@@ -437,6 +451,10 @@ class FoldResult {
   /// Not part of the bill document, which restates neither author nor
   /// instant (§10.5). §14.4 withholds only for a record the payer wrote.
   final Map<String, String> paymentAuthors;
+
+  /// What each payment record on the bill says, by the payment's id: the
+  /// [paymentDigest] a confirmation of it carries as `record` (§10.5).
+  final Map<String, String> paymentDigests;
 }
 
 /// Where a participant is paid (§10.3 step 4): the address of their first
@@ -843,6 +861,7 @@ FoldResult foldLog(List<Object?> rawEntries,
   final expenses = <Map<String, dynamic>>[];
   final payments = <Map<String, dynamic>>[];
   final paymentAuthors = <String, String>{};
+  final paymentDigests = <String, String>{};
   // §5.1's balances, formed as this pass applies each entry and in the order
   // §5.1 forms them, so a bill this fold returns always has balances §2.2 can
   // hold. An entry whose effect would carry one out of range is set aside,
@@ -948,6 +967,9 @@ FoldResult foldLog(List<Object?> rawEntries,
       }
       payments.add(pay);
       paymentAuthors[pay['id'] as String] = e['author'] as String;
+      paymentDigests[pay['id'] as String] = paymentDigest(
+        (eff['payment'] as Map).cast<String, dynamic>(),
+      );
     }
   }
 
@@ -967,6 +989,11 @@ FoldResult foldLog(List<Object?> rawEntries,
       continue;
     }
     if (!known.contains(c['paymentId'])) {
+      aside(e, SplitCode.unknownPayment);
+      continue;
+    }
+    // §10.5. A confirmation binds what the record said when it was given.
+    if (c['record'] != paymentDigests[c['paymentId']]) {
       aside(e, SplitCode.unknownPayment);
       continue;
     }
@@ -1042,6 +1069,9 @@ FoldResult foldLog(List<Object?> rawEntries,
     identities: identities,
     paymentAuthors: {
       for (final id in sortedUtf8(paymentAuthors.keys)) id: paymentAuthors[id]!,
+    },
+    paymentDigests: {
+      for (final id in sortedUtf8(paymentDigests.keys)) id: paymentDigests[id]!,
     },
   );
 }

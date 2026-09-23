@@ -97,7 +97,10 @@ void main() {
   });
 
   runCases('signing.json', (c, produce) {
-    produce(signingMessage((c['entry'] as Map).cast<String, dynamic>()));
+    produce(signingMessage(
+      (c['entry'] as Map).cast<String, dynamic>(),
+      c['billId'] as String,
+    ));
   });
 
   runCases('authority.json', (c, produce) {
@@ -302,6 +305,7 @@ void main() {
           {'id': a.id, 'from': a.from, 'to': a.to},
       ],
       'paymentAuthors': r.paymentAuthors,
+      'paymentDigests': r.paymentDigests,
       'withdrawn': r.withdrawn,
       'setAside': [
         // The reason is prose (SPEC.md §12); only the code is compared.

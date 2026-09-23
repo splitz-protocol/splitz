@@ -72,7 +72,8 @@ CASES = [
     ("a_confirmation", {
         "v": 1, "id": "c1", "author": "ana", "kind": "confirmPayment", "at": AT,
         "confirmation": {"paymentId": "y1", "method": "onChain",
-                         "reference": "tx:abc"}}),
+                         "reference": "tx:abc",
+                         "record": "cmVjb3JkZGlnZXN0MDAwMA"}}),
 
     ("a_withdrawal", {
         "v": 1, "id": "v1", "author": "ana", "kind": "voidEntry", "at": AT,
@@ -80,20 +81,31 @@ CASES = [
 ]
 
 
+# The bill every case is signed on. An entry does not name its bill, so the
+# message carries it: the same entry signed on another bill is another message.
+BILL = "g0a5mrH6D5nx5bJ7KrgwVA"
+
+
 def main():
     out = []
     for name, entry in CASES:
-        out.append({"name": name, "entry": entry,
-                    "expect": signing_message(entry)})
+        out.append({"name": name, "billId": BILL, "entry": entry,
+                    "expect": signing_message(entry, BILL)})
+    # One entry on two bills: the message differs, so a signature made on one
+    # bill does not verify on the other.
+    out.append({"name": "the_same_entry_on_another_bill",
+                "billId": "AAAAAAAAAAAAAAAAAAAAAA", "entry": CASES[0][1],
+                "expect": signing_message(CASES[0][1], "AAAAAAAAAAAAAAAAAAAAAA")})
 
     # The two exclusions, checked rather than asserted: adding a signature or
     # changing the version must leave the message identical.
     base = dict(CASES[0][1])
-    unsigned = signing_message(base)
-    assert signing_message(dict(base, sig=SIG)) == unsigned, "sig is covered"
-    assert signing_message(dict(base, v=99)) == unsigned, "v is covered"
+    unsigned = signing_message(base, BILL)
+    assert signing_message(dict(base, sig=SIG), BILL) == unsigned, "sig is covered"
+    assert signing_message(dict(base, v=99), BILL) == unsigned, "v is covered"
     # Changing anything else must change it.
-    assert signing_message(dict(base, id="other")) != unsigned, "id is not covered"
+    assert signing_message(dict(base, id="other"), BILL) != unsigned, "id is not covered"
+    assert signing_message(base, "AAAAAAAAAAAAAAAAAAAAAA") != unsigned, "bill is not covered"
 
     doc = {"description": "The message an entry's signature covers. "
                           "SPEC.md section 10.6.",

@@ -61,12 +61,14 @@ impl Signer {
         ))
     }
 
-    /// Whether `entry`'s signature verifies against `public_key`.
+    /// Whether `entry`'s signature, made on the bill `bill_id`, verifies
+    /// against `public_key`. A signature made on any other bill does not
+    /// (§10.6).
     ///
     /// False when the entry is unsigned, when either input is malformed, and
     /// when the signature simply does not match — all of which mean the same
     /// thing to §10.7: this entry was not written by the holder of that key.
-    pub fn verify_entry(&self, entry: &Value, public_key: &str) -> bool {
+    pub fn verify_entry(&self, entry: &Value, public_key: &str, bill_id: &str) -> bool {
         let Some(signature) = entry.get("sig").and_then(Value::as_str) else {
             return false;
         };
@@ -87,14 +89,14 @@ impl Signer {
         // §10.6's message, from the protocol rather than from this encoder's
         // key order, so a signature made here verifies in another
         // implementation and one made there verifies here.
-        let Ok(message) = signing_message(entry) else {
+        let Ok(message) = signing_message(entry, bill_id) else {
             return false;
         };
         key.verify(message.as_bytes(), &signature).is_ok()
     }
 
-    /// Answers every signature question a fold of `entries` can ask, in
-    /// advance.
+    /// Answers every signature question a fold of `entries` on the bill
+    /// `bill_id` can ask, in advance.
     ///
     /// The fold takes a verifier it may call in any order and must be able to
     /// call more than once for one pair; answering ahead of it is what §10.7
@@ -109,7 +111,7 @@ impl Signer {
     /// Any other pair is a question this build did not expect, and
     /// [`VerifiedLog::unanswered`] records it rather than letting a `false`
     /// pass for an answer.
-    pub fn prepare<'a, I>(&self, entries: I) -> VerifiedLog
+    pub fn prepare<'a, I>(&self, entries: I, bill_id: &str) -> VerifiedLog
     where
         I: IntoIterator<Item = &'a Value>,
     {
@@ -144,7 +146,7 @@ impl Signer {
                 }
             }
             for key in keys {
-                answers.insert(pair(entry, &key), self.verify_entry(entry, &key));
+                answers.insert(pair(entry, &key), self.verify_entry(entry, &key, bill_id));
             }
         }
         VerifiedLog {
