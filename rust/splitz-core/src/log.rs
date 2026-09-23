@@ -417,6 +417,17 @@ pub fn merge_logs(logs: &[Vec<Value>]) -> Result<MergeResult> {
     })
 }
 
+/// Where a participant is paid (§10.3 step 4): the address of their first
+/// payout when they declare any, their payTo otherwise, or none. A value the
+/// decoder never read is taken as none.
+fn destination(participant: &Value) -> Option<String> {
+    let address = match participant.get("payouts").and_then(Value::as_array) {
+        Some(payouts) if !payouts.is_empty() => payouts[0].get("address"),
+        _ => participant.get("payTo"),
+    };
+    address.and_then(Value::as_str).map(str::to_owned)
+}
+
 /// The copy whose canonical encoding sorts highest (§10.2 rule 3).
 fn highest<'a>(copies: &[&'a Value]) -> Result<&'a Value> {
     let mut best = copies[0];
@@ -857,21 +868,6 @@ pub fn fold_log_verified(
         .cloned()
         .collect();
 
-    // §10.1. The latest live setRate decides, by §10.2's order, so the answer
-    // is a function of the log and not of which device last spoke.
-    let mut rate: Option<Value> = None;
-    for entry in &live {
-        if field(entry, "kind") != "setRate" {
-            continue;
-        }
-        let payload = effective(entry).get("rate").cloned().unwrap_or(Value::Null);
-        if let Err(e) = crate::serialization::decode_rate(&payload) {
-            aside!(entry, e.code);
-            continue;
-        }
-        rate = Some(payload);
-    }
-
     // Participants in a pass of their own, before anything that references
     // them.
     let mut participants: BTreeMap<String, Value> = BTreeMap::new();
@@ -910,22 +906,17 @@ pub fn fold_log_verified(
             aside!(entry, e.code);
             continue;
         }
-        // §10.3 step 4. The address this record replaces: the one held for
-        // the participant, or, for the first record, the one the join was
-        // written with before an amendment changed it. An address the decoder
-        // never read is taken as none.
+        // §10.3 step 4. The destination this record replaces: the one held
+        // for the participant, or, for the first record, the one the join was
+        // written with before an amendment changed it.
         let before = if let Some(held) = participants.get(&id) {
-            held.get("payTo").and_then(Value::as_str).map(str::to_owned)
+            destination(held)
         } else if amendments.contains_key(field(entry, "id")) {
-            entry
-                .get("participant")
-                .and_then(|o| o.get("payTo"))
-                .and_then(Value::as_str)
-                .map(str::to_owned)
+            entry.get("participant").and_then(destination)
         } else {
-            p.get("payTo").and_then(Value::as_str).map(str::to_owned)
+            destination(p)
         };
-        let after = p.get("payTo").and_then(Value::as_str).map(str::to_owned);
+        let after = destination(p);
         if before != after {
             replaced.push(ReplacedAddress {
                 id: id.clone(),
@@ -934,6 +925,27 @@ pub fn fold_log_verified(
             });
         }
         participants.insert(id, p.clone());
+    }
+
+    // §10.1. The latest live setRate by a participant decides, by §10.2's
+    // order, so the answer is a function of the log and not of which device
+    // last spoke. Decided after the participants, because only they may set
+    // it.
+    let mut rate: Option<Value> = None;
+    for entry in &live {
+        if field(entry, "kind") != "setRate" {
+            continue;
+        }
+        if !participants.contains_key(field(entry, "author")) {
+            aside!(entry, code::UNKNOWN_PARTICIPANT);
+            continue;
+        }
+        let payload = effective(entry).get("rate").cloned().unwrap_or(Value::Null);
+        if let Err(e) = crate::serialization::decode_rate(&payload) {
+            aside!(entry, e.code);
+            continue;
+        }
+        rate = Some(payload);
     }
 
     let mut expenses: Vec<Value> = Vec::new();

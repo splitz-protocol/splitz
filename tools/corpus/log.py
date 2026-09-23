@@ -282,7 +282,7 @@ FOLD_CASES = [
     # payload, a confirmation's reference and a payout's address each reached
     # a different pass in each implementation.
     ("a_rate_whose_price_is_a_string",
-     BASE + [{"v": 1, "id": "r1", "author": "cai", "kind": "setRate", "at": AT(6),
+     BASE + [{"v": 1, "id": "r1", "author": "ana", "kind": "setRate", "at": AT(6),
               "rate": {"currency": "EUR", "minorUnitsPerZec": "4200000",
                        "at": AT(6)}}], C["id"]),
     ("a_rate_whose_instant_is_a_number",
@@ -756,6 +756,30 @@ FOLD_CASES += [
       expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9),
       payment("q1", "ben", "ben", "ana", 10, 10, "y1"),
       confirm("k1", "ana", "y1", 11)], C["id"]),
+]
+
+
+# §10.1 and §10.3. Who may set the rate, and a destination that moves.
+FOLD_CASES += [
+    ("a_rate_set_by_somebody_not_on_the_bill_is_set_aside",
+     BASE + [{"v": 1, "id": "rz", "author": "zed", "kind": "setRate",
+              "at": AT(9),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": 1,
+                       "at": AT(9)}}], C["id"]),
+    ("and_one_set_by_a_participant_applies",
+     BASE + [{"v": 1, "id": "rb", "author": "ben", "kind": "setRate",
+              "at": AT(9),
+              "rate": {"currency": "EUR", "minorUnitsPerZec": 1,
+                       "at": AT(9)}}], C["id"]),
+    ("a_rejoin_that_moves_a_payout_address_is_reported",
+     [C, J_ANA,
+      dict(J_BEN, participant={"id": "ben", "name": "Ben", "payouts": [
+          {"type": "swap", "asset": "USDC", "chain": "base",
+           "address": "0xben"}]}),
+      {"v": 1, "id": "jb2", "author": "ben", "kind": "joinBill", "at": AT(8),
+       "participant": {"id": "ben", "name": "Ben", "payouts": [
+           {"type": "swap", "asset": "USDC", "chain": "base",
+            "address": "0xmallory"}]}}], C["id"]),
 ]
 
 

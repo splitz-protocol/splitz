@@ -23,18 +23,42 @@ use splitz_host::{
 struct ScriptedProvider {
     body: String,
     urls: std::cell::RefCell<Vec<String>>,
+    /// How the answer echoes the request: see [`echoed`].
+    echo: Option<String>,
 }
 
 impl HttpTransport for ScriptedProvider {
-    fn post(&self, url: &str, _body: &str) -> Result<String, String> {
+    fn post(&self, url: &str, sent: &str) -> Result<String, String> {
         self.urls.borrow_mut().push(url.to_owned());
-        Ok(self.body.clone())
+        Ok(echoed(&self.body, sent, self.echo.as_deref()))
     }
 
     fn get(&self, url: &str) -> Result<String, String> {
         self.urls.borrow_mut().push(url.to_owned());
         Ok(self.body.clone())
     }
+}
+
+/// `body`, answering the request `sent` as a provider does when `echo` says
+/// to: `asked` echoes it as `quoteRequest` and states its amount as the
+/// quote's `amountIn`; `other` echoes it for another recipient.
+fn echoed(body: &str, sent: &str, echo: Option<&str>) -> String {
+    let Ok(Value::Object(mut answer)) = serde_json::from_str::<Value>(body) else {
+        return body.to_owned();
+    };
+    let Some(echo) = echo else {
+        return body.to_owned();
+    };
+    let mut request: Value = serde_json::from_str(sent).unwrap_or(Value::Null);
+    if echo == "other" {
+        request["recipient"] = Value::from("0xsomebodyelse");
+    }
+    let amount = request.get("amount").cloned().unwrap_or(Value::Null);
+    answer.insert("quoteRequest".to_owned(), request);
+    if let Some(Value::Object(quote)) = answer.get_mut("quote") {
+        quote.entry("amountIn").or_insert(amount);
+    }
+    Value::Object(answer).to_string()
 }
 
 /// The swap refusals, by which one rather than by its wording.
@@ -50,6 +74,10 @@ fn swap_tag(e: &HostError) -> String {
         "omitted"
     } else if message.starts_with("Malformed") {
         "malformed"
+    } else if message.starts_with("A quote response carries the request") {
+        "no_echo"
+    } else if message.starts_with("The provider quoted a different") {
+        "mismatch"
     } else if message.starts_with("A quote response carries") {
         "no_quote"
     } else if message.contains("could not be reached") {
@@ -469,6 +497,7 @@ fn answer(op: &Value) -> Value {
             let provider = ScriptedProvider {
                 body: op["body"].to_string(),
                 urls: std::cell::RefCell::new(Vec::new()),
+                echo: None,
             };
             let deadline = || String::new();
             let swaps = OneClickSwaps::new(
@@ -507,6 +536,7 @@ fn answer(op: &Value) -> Value {
             let provider = ScriptedProvider {
                 body: op["body"].to_string(),
                 urls: std::cell::RefCell::new(Vec::new()),
+                echo: op["echo"].as_str().map(str::to_owned),
             };
             let stated = op["deadline"].as_str().unwrap_or("").to_owned();
             let deadline = move || stated.clone();

@@ -1042,6 +1042,13 @@ not of which device last spoke. A `setRate` may be amended and withdrawn like
 any other entry; when none survives, the bill has no rate and §7's conversions
 are unavailable rather than guessed at.
 
+**A `setRate` MUST be authored by a participant on the bill**, and one that is
+not is set aside with `unknown_participant`. The rate decides how much ZEC
+every request carries, so a rate written by somebody who owes nothing and is
+owed nothing turns every payer's request into whatever figure they chose.
+Participants may still set it, and a wallet MUST show a payer the rate a
+request was priced at and who set it (§14.2).
+
 **`sig`** carries the author's signature when the transport provides one.
 When present it MUST be a string, and an entry whose `sig` is anything else is
 refused with `bill_type_error`. Unsigned entries MUST be accepted: a bill among people at one table is consensus
@@ -1161,8 +1168,9 @@ depends on arrival order or on local state.
 
 4. Apply every non-voided `joinBill`, replaced by its amendment if any, subject
    to §10.4. **A participant who rejoins replaces their earlier record** rather
-   than being refused as a duplicate, and a replaced `payTo` MUST be recorded
-   and reported to the caller.
+   than being refused as a duplicate, and a replaced destination — the `payTo`,
+   or the `address` of the first payout when the record declares any — MUST be
+   recorded and reported to the caller.
 
 5. Apply every non-voided `addExpense` and `recordPayment`, replaced by their
    amendments if any.
@@ -2054,6 +2062,10 @@ nothing to omit.
 - Every pay-to address the fold recorded as replaced (§10.3).
 - Every debt with a payment recorded and not yet confirmed (§10.5).
 - Every contested identity among the recipients (§10.7).
+- The rate the request was priced at, who set it, and the ZEC amount and
+  address of every output. A participant owed money can set the rate, and a
+  request stated only in the bill's currency hides what that rate did to the
+  ZEC it asks for.
 
 ### 14.3 A send has three outcomes, not two
 

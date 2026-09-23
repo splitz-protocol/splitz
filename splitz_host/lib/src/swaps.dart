@@ -340,6 +340,31 @@ class OneClickSwaps implements SwapProvider {
     if (quote is! Map<String, dynamic>) {
       throw const SwapException('A quote response carries a quote');
     }
+    // The answer must be to the question asked. The provider echoes the
+    // request it quoted (`quoteRequest`, required by its schema); a quote for
+    // another recipient, asset or amount delivers somebody else's money, or
+    // this payer's to somebody else, and nothing downstream would notice.
+    final echoed = body['quoteRequest'];
+    if (echoed is! Map<String, dynamic>) {
+      throw const SwapException(
+        'A quote response carries the request it quotes',
+      );
+    }
+    for (final field in const [
+      'recipient',
+      'destinationAsset',
+      'originAsset',
+      'amount',
+      'refundTo',
+      'swapType',
+    ]) {
+      if ('${echoed[field]}' != '${request[field]}') {
+        throw SwapException('The provider quoted a different $field');
+      }
+    }
+    if ('${quote['amountIn']}' != '$amountInZatoshi') {
+      throw const SwapException('The provider quoted a different amount in');
+    }
     return SwapQuote(
       depositAddress: _string(quote, 'depositAddress'),
       depositMemo: _optional(quote, 'depositMemo'),

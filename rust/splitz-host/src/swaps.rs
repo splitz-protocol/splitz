@@ -239,9 +239,16 @@ pub fn assets_from_tokens(body: &str) -> Result<Vec<TradableAsset>, HostError> {
         .collect()
 }
 
-/// The quote a provider's answer states.
+/// The quote a provider's answer states, once it is shown to answer
+/// `request` — the body [`quote_request_body`] produced and the wallet posted.
+///
+/// The provider echoes the request it quoted (`quoteRequest`, required by its
+/// schema). A quote for another recipient, asset or amount delivers somebody
+/// else's money, or this payer's to somebody else, and nothing downstream
+/// would notice, so a difference in any of them is a refusal.
 pub fn quote_from_response(
     body: &str,
+    request: &str,
     asset: &TradableAsset,
     amount_in_zatoshi: i64,
     asked_deadline: &str,
@@ -253,6 +260,34 @@ pub fn quote_from_response(
     let Some(quote) = body.get("quote").filter(|q| q.is_object()) else {
         return Err(swap_error("A quote response carries a quote", false));
     };
+    let asked = decode_body(request, "quote request")?;
+    let Some(echoed) = body.get("quoteRequest").filter(|q| q.is_object()) else {
+        return Err(swap_error(
+            "A quote response carries the request it quotes",
+            false,
+        ));
+    };
+    for field in [
+        "recipient",
+        "destinationAsset",
+        "originAsset",
+        "amount",
+        "refundTo",
+        "swapType",
+    ] {
+        if echoed.get(field) != asked.get(field) {
+            return Err(swap_error(
+                format!("The provider quoted a different {field}"),
+                false,
+            ));
+        }
+    }
+    if quote.get("amountIn").and_then(Value::as_str) != Some(&amount_in_zatoshi.to_string()) {
+        return Err(swap_error(
+            "The provider quoted a different amount in",
+            false,
+        ));
+    }
     Ok(SwapQuote {
         deposit_address: required(quote, "depositAddress")?,
         deposit_memo: optional(quote, "depositMemo"),
@@ -454,7 +489,7 @@ impl SwapProvider for OneClickSwaps<'_> {
             self.referral.as_deref(),
         )?;
         let body = self.read(self.transport.post(&self.url("/v0/quote", &[]), &request))?;
-        quote_from_response(&body, asset, amount_in_zatoshi, &deadline)
+        quote_from_response(&body, &request, asset, amount_in_zatoshi, &deadline)
     }
 
     fn status_of(&self, quote: &SwapQuote) -> Result<SwapStatus, HostError> {

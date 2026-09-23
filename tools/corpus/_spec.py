@@ -1480,6 +1480,18 @@ def order(entries):
                                           canonical_json(e).encode("utf-8")))
 
 
+def _destination(participant):
+    """Section 10.3 step 4. Where a participant is paid: the address of their
+    first payout when they declare any, their payTo otherwise, or None."""
+    payouts = participant.get("payouts")
+    if isinstance(payouts, list) and payouts:
+        first = payouts[0] if isinstance(payouts[0], dict) else {}
+        address = first.get("address")
+    else:
+        address = participant.get("payTo")
+    return address if isinstance(address, str) else None
+
+
 def fold(entries, bill_id=None, verify=None):
     """Section 10.3. Returns the bill and everything the fold reached."""
     if not entries:
@@ -1712,21 +1724,6 @@ def fold(entries, bill_id=None, verify=None):
     def effective(entry):
         return amendments.get(entry["id"], entry)
 
-    # Section 10.1. The latest live setRate decides, by section 10.2's order,
-    # so the answer is a function of the log and not of which device last
-    # spoke.
-    rate = None
-    for e in live:
-        if e["kind"] != "setRate":
-            continue
-        payload = effective(e).get("rate")
-        try:
-            decode_rate(payload)
-        except Refused as r:
-            aside(e, r.code, "carries a rate this reader cannot decode")
-            continue
-        rate = payload
-
     # Participants, in a pass of their own.
     participants, replaced = {}, []
     for e in live:
@@ -1753,21 +1750,38 @@ def fold(entries, bill_id=None, verify=None):
         except Refused as r:
             aside(e, r.code, "carries a participant this reader cannot decode")
             continue
-        # Section 10.3 step 4. The address this record replaces: the one held
-        # for the participant, or, for the first record, the one the join was
-        # written with before an amendment changed it.
-        # An address the decoder never read is taken as none.
+        # Section 10.3 step 4. The destination this record replaces: the one
+        # held for the participant, or, for the first record, the one the
+        # join was written with before an amendment changed it. A destination
+        # the decoder never read is taken as none.
         if pid in participants:
-            before = participants[pid].get("payTo")
+            before = _destination(participants[pid])
         elif e["id"] in amendments:
-            before = _as_dict(e.get("participant")).get("payTo")
+            before = _destination(_as_dict(e.get("participant")))
         else:
-            before = p.get("payTo")
-        if not isinstance(before, str):
-            before = None
-        if before != p.get("payTo"):
-            replaced.append({"id": pid, "from": before, "to": p.get("payTo")})
+            before = _destination(p)
+        if before != _destination(p):
+            replaced.append({"id": pid, "from": before, "to": _destination(p)})
         participants[pid] = p
+
+    # Section 10.1. The latest live setRate by a participant decides, by
+    # section 10.2's order, so the answer is a function of the log and not of
+    # which device last spoke. Decided after the participants, because only
+    # they may set it.
+    rate = None
+    for e in live:
+        if e["kind"] != "setRate":
+            continue
+        if e["author"] not in participants:
+            aside(e, "unknown_participant", "sets a rate on a bill it is not on")
+            continue
+        payload = effective(e).get("rate")
+        try:
+            decode_rate(payload)
+        except Refused as r:
+            aside(e, r.code, "carries a rate this reader cannot decode")
+            continue
+        rate = payload
 
     expenses, payments = [], []
     # Section 5.1's balances, formed as this pass applies each entry and in

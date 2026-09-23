@@ -412,6 +412,17 @@ class FoldResult {
   final Identities identities;
 }
 
+/// Where a participant is paid (§10.3 step 4): the address of their first
+/// payout when they declare any, their payTo otherwise, or null. A value the
+/// decoder never read is taken as none, not cast.
+String? _destination(Map<String, dynamic> participant) {
+  final payouts = participant['payouts'];
+  final Object? address = payouts is List && payouts.isNotEmpty
+      ? _mapOf(payouts.first)['address']
+      : participant['payTo'];
+  return address is String ? address : null;
+}
+
 /// The copy whose canonical encoding sorts highest (§10.2 rule 3).
 Map<String, dynamic> _highest(List<Map<String, dynamic>> copies) =>
     copies.reduce(
@@ -722,21 +733,6 @@ FoldResult foldLog(List<Object?> rawEntries,
       if (!voided.contains(e['id']) && e['kind'] != 'voidEntry') e,
   ];
 
-  // §10.1. The latest live setRate decides, by §10.2's order, so the answer
-  // is a function of the log and not of which device last spoke.
-  Map<String, dynamic>? rate;
-  for (final e in live) {
-    if (e['kind'] != 'setRate') continue;
-    final payload = effective(e)['rate'];
-    try {
-      decodeRate(payload);
-    } on SplitError catch (err) {
-      aside(e, err.code);
-      continue;
-    }
-    rate = (payload as Map).cast<String, dynamic>();
-  }
-
   // Participants in a pass of their own, before anything that references them.
   final participants = <String, Map<String, dynamic>>{};
   final replaced = <ReplacedAddress>[];
@@ -773,21 +769,39 @@ FoldResult foldLog(List<Object?> rawEntries,
       aside(e, err.code);
       continue;
     }
-    // §10.3 step 4. The address this record replaces: the one held for the
-    // participant, or, for the first record, the one the join was written
+    // §10.3 step 4. The destination this record replaces: the one held for
+    // the participant, or, for the first record, the one the join was written
     // with before an amendment changed it.
-    // An address the decoder never read is taken as none, not cast.
-    final Object? held = participants.containsKey(id)
-        ? participants[id]!['payTo']
+    final before = participants.containsKey(id)
+        ? _destination(participants[id]!)
         : amendments.containsKey(e['id'])
-            ? _mapOf(e['participant'])['payTo']
-            : p['payTo'];
-    final before = held is String ? held : null;
-    final after = p['payTo'] as String?;
+            ? _destination(_mapOf(e['participant']))
+            : _destination(p);
+    final after = _destination(p);
     if (before != after) {
       replaced.add(ReplacedAddress(id, before, after));
     }
     participants[id] = p;
+  }
+
+  // §10.1. The latest live setRate by a participant decides, by §10.2's
+  // order, so the answer is a function of the log and not of which device last
+  // spoke. Decided after the participants, because only they may set it.
+  Map<String, dynamic>? rate;
+  for (final e in live) {
+    if (e['kind'] != 'setRate') continue;
+    if (!participants.containsKey(e['author'])) {
+      aside(e, SplitCode.unknownParticipant);
+      continue;
+    }
+    final payload = effective(e)['rate'];
+    try {
+      decodeRate(payload);
+    } on SplitError catch (err) {
+      aside(e, err.code);
+      continue;
+    }
+    rate = (payload as Map).cast<String, dynamic>();
   }
 
   final expenses = <Map<String, dynamic>>[];

@@ -21,7 +21,7 @@ nobody mistakes them for missing features.
 | **the plumbing** | `splitz_host/`, `rust/splitz-host` | signing entries, sealing them, storing them, syncing through a relay, swaps, activity |
 | **the binding** | `rust/splitz-ffi` | using the Rust crate from Kotlin, Swift, Dart or JavaScript |
 | **the seam** | `SPEC.md` §15 | the seven things a wallet has to provide |
-| **the test cases** | `vectors/` | 490 cases in 18 files any implementation can run, in no particular language |
+| **the test cases** | `vectors/` | 493 cases in 18 files any implementation can run, in no particular language |
 | **the extra checks** | `tools/` | everything a fixed set of test cases can't catch |
 
 A Flutter wallet can also take the screens ready-made: `splitz_flutter` is a
@@ -120,11 +120,11 @@ their minimum. Run each command from the repository root; the comment beside
 it says what a pass looks like.
 
 ```
-cd dart && dart test                 # +586: All tests passed!
-                                     #   every one of the 490 shared cases
+cd dart && dart test                 # +589: All tests passed!
+                                     #   every one of the 493 shared cases
                                      #   among them
-cd splitz_host && dart test          # +143: All tests passed!
-cd rust && cargo test                # every "test result: ok", 191 in all
+cd splitz_host && dart test          # +145: All tests passed!
+cd rust && cargo test                # every "test result: ok", 193 in all
 cd dart && dart run example/dinner.dart
                                      # one bill, three people, the fewest
                                      #   payments, and one payer's single

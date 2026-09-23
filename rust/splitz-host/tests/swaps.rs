@@ -35,16 +35,24 @@ impl HttpTransport for FakeProvider {
         if !problems.is_empty() {
             return Err(format!("answered 400: {}", problems.join(", ")));
         }
-        Ok(self
-            .quote
-            .clone()
-            .unwrap_or_else(|| {
-                json!({
-                    "quote": {"depositAddress": "u1provider", "amountOut": "12340000"},
-                    "correlationId": "near-intent-7f3a",
-                })
+        let mut answer = self.quote.clone().unwrap_or_else(|| {
+            json!({
+                "quote": {"depositAddress": "u1provider", "amountOut": "12340000"},
+                "correlationId": "near-intent-7f3a",
             })
-            .to_string())
+        });
+        // As the provider answers (tools/contracts/fixtures/quote.json): the
+        // request it quoted is echoed, and the quote states the amount in.
+        let sent: serde_json::Value = serde_json::from_str(body).unwrap();
+        if let Some(object) = answer.as_object_mut() {
+            object.entry("quoteRequest").or_insert_with(|| sent.clone());
+            if let Some(serde_json::Value::Object(quote)) = object.get_mut("quote") {
+                quote
+                    .entry("amountIn")
+                    .or_insert_with(|| sent["amount"].clone());
+            }
+        }
+        Ok(answer.to_string())
     }
 
     fn get(&self, url: &str) -> Result<String, String> {
@@ -372,4 +380,44 @@ fn the_hash_and_the_reason_come_from_swap_details() {
     }));
     assert_eq!(stray.destination_tx_hash, None);
     assert_eq!(stray.detail, None);
+}
+
+#[test]
+fn a_quote_for_another_recipient_is_refused() {
+    // The provider's answer names the request it quoted. One naming another
+    // recipient would send this payer's money to them.
+    let fake = FakeProvider {
+        quote: Some(json!({
+            "quote": {"depositAddress": "u1provider", "amountOut": "1"},
+            "quoteRequest": {
+                "recipient": "0xsomebodyelse",
+                "destinationAsset": "nep141:base-usdc",
+                "originAsset": "nep141:zec",
+                "amount": "1000000",
+                "refundTo": "u1ana",
+                "swapType": "EXACT_INPUT",
+            },
+        })),
+        ..Default::default()
+    };
+    match provider(&fake).quote(&usdc_on_base(), 1_000_000, "0xcara", "u1ana") {
+        Err(HostError::Swap { message, transient }) => {
+            assert!(message.contains("recipient"), "{message}");
+            assert!(!transient);
+        }
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_quote_for_another_amount_in_is_refused() {
+    let fake = FakeProvider {
+        quote: Some(json!({
+            "quote": {"depositAddress": "u1provider", "amountOut": "1", "amountIn": "5000000"},
+        })),
+        ..Default::default()
+    };
+    assert!(provider(&fake)
+        .quote(&usdc_on_base(), 1_000_000, "0xcara", "u1ana")
+        .is_err());
 }

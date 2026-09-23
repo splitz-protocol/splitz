@@ -88,6 +88,7 @@ fn a_live_quote_reads_into_the_quote_the_provider_issued() {
     let raw = fixture("quote.json");
     let q = quote_from_response(
         &fixture_text("quote.json"),
+        &raw["quoteRequest"].to_string(),
         &usdc_on_base(),
         1_000_000,
         "2026-10-28T19:40:00.000Z",
@@ -114,6 +115,7 @@ fn a_live_quote_reads_into_the_quote_the_provider_issued() {
 fn a_dry_quote_issues_no_deposit_address_and_is_refused_as_a_quote() {
     let refused = quote_from_response(
         &fixture_text("quote_dry.json"),
+        &fixture("quote_dry.json")["quoteRequest"].to_string(),
         &usdc_on_base(),
         1_000_000,
         "2026-10-28T19:40:00.000Z",

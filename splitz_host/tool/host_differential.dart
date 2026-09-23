@@ -26,6 +26,10 @@ String swapTag(SwapException e) {
       ? 'omitted'
       : m.startsWith('Malformed')
       ? 'malformed'
+      : m.startsWith('A quote response carries the request')
+      ? 'no_echo'
+      : m.startsWith('The provider quoted a different')
+      ? 'mismatch'
       : m.startsWith('A quote response carries')
       ? 'no_quote'
       : m.contains('could not be reached')
@@ -55,16 +59,20 @@ Map<String, Object?> quoteJson(SwapQuote q) => {
 };
 
 /// A provider that answers with one scripted body and records its URLs.
-({OneClickSwaps swaps, List<Uri> urls}) scripted(String body, String deadline) {
+({OneClickSwaps swaps, List<Uri> urls}) scripted(
+  String body,
+  String deadline, {
+  String? echo,
+}) {
   final urls = <Uri>[];
   return (
     swaps: OneClickSwaps(
       origin: Uri.parse('https://swap.example'),
       zecAssetId: 'nep141:zec',
       deadline: () => deadline,
-      post: (url, _) async {
+      post: (url, sent) async {
         urls.add(url);
-        return body;
+        return echoed(body, sent, echo);
       },
       get: (url) async {
         urls.add(url);
@@ -73,6 +81,27 @@ Map<String, Object?> quoteJson(SwapQuote q) => {
     ),
     urls: urls,
   );
+}
+
+/// [body], answering the request [sent] as a provider does when [echo] says
+/// to: `asked` echoes it as `quoteRequest` and states its amount as the
+/// quote's `amountIn`; `other` echoes it for another recipient.
+String echoed(String body, String sent, String? echo) {
+  final Object? decoded = jsonDecode(body);
+  if (echo == null || decoded is! Map<String, dynamic>) return body;
+  final request = (jsonDecode(sent) as Map).cast<String, dynamic>();
+  final answer = {
+    ...decoded,
+    'quoteRequest': {...request},
+  };
+  if (echo == 'other') {
+    (answer['quoteRequest'] as Map)['recipient'] = '0xsomebodyelse';
+  }
+  final quote = answer['quote'];
+  if (quote is Map && !quote.containsKey('amountIn')) {
+    answer['quote'] = {...quote, 'amountIn': request['amount']};
+  }
+  return jsonEncode(answer);
 }
 
 /// Rebuilds a split form from one operation's description of it.
@@ -434,7 +463,11 @@ Future<Object?> answer(Map<String, dynamic> op) async {
         return {'ok': false, 'why': swapTag(e)};
       }
     case 'swap_quote':
-      final p = scripted(jsonEncode(op['body']), op['deadline'] as String);
+      final p = scripted(
+        jsonEncode(op['body']),
+        op['deadline'] as String,
+        echo: op['echo'] as String?,
+      );
       try {
         final quote = await p.swaps.quote(
           asset: usdcOnBase(),

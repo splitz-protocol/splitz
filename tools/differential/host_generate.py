@@ -391,7 +391,12 @@ def main() -> int:
                        "recipient": rng.choice(["0xcara", ""]),
                        "refundTo": rng.choice(["u1ana", ""]),
                        "deadline": "2026-10-28T19:40:00.000Z",
-                       "body": a_quote_body(rng)}, out)
+                       "body": a_quote_body(rng),
+                       # How the scripted provider answers: echoing the
+                       # request it was sent, echoing it for another
+                       # recipient, or not at all.
+                       "echo": rng.choice(["asked", "asked", "asked",
+                                           "other", None])}, out)
         elif op == "swap_watch":
             json.dump({"op": op, "json": a_watch_json(rng)}, out)
         elif op == "split_draft":

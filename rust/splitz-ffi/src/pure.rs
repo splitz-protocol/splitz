@@ -722,16 +722,20 @@ pub fn swap_assets_from_tokens(body: String) -> Result<Vec<ffi::TradableAsset>> 
         .collect())
 }
 
-/// The quote a provider's `/v0/quote` answer states.
+/// The quote a provider's `/v0/quote` answer states, once it is shown to
+/// answer `request` — the body `swap_quote_request` produced and the wallet
+/// posted. A quote for another recipient, asset or amount is refused.
 #[uniffi::export]
 pub fn swap_quote_from_response(
     body: String,
+    request: String,
     asset: ffi::TradableAsset,
     amount_in_zatoshi: i64,
     asked_deadline: String,
 ) -> Result<ffi::SwapQuote> {
     Ok(convert::quote(&splitz_host::quote_from_response(
         &body,
+        &request,
         &convert::asset_back(&asset),
         amount_in_zatoshi,
         &asked_deadline,

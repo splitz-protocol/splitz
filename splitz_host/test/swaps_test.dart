@@ -68,8 +68,8 @@ provider({
         if (problems.isNotEmpty) {
           throw SwapException('answered 400: ${problems.join(', ')}');
         }
-        return jsonEncode(
-          quote ??
+        final answer = <String, Object?>{
+          ...(quote ??
               {
                 'correlationId': 'near-intent-7f3a',
                 'quote': {
@@ -77,8 +77,16 @@ provider({
                   'amountOut': '2500000',
                   'deadline': '2026-10-28T19:40:00.000Z',
                 },
-              },
-        );
+              }),
+        };
+        // As the provider answers (tools/contracts/fixtures/quote.json): the
+        // request it quoted is echoed, and the quote states the amount in.
+        answer.putIfAbsent('quoteRequest', () => sent);
+        final q = answer['quote'];
+        if (q is Map) {
+          answer['quote'] = {'amountIn': sent['amount'], ...q};
+        }
+        return jsonEncode(answer);
       },
     ),
   );
@@ -223,6 +231,60 @@ void main() {
         throwsA(isA<SwapException>()),
       );
       expect(p.posts, isEmpty);
+    });
+
+    test('a quote for another recipient', () async {
+      // The provider's answer names the request it quoted. One naming another
+      // recipient would send this payer's money to them.
+      final p = provider(
+        quote: {
+          'quote': {'depositAddress': 'u1provider', 'amountOut': '2500000'},
+          'quoteRequest': {
+            'recipient': '0xsomebodyelse',
+            'destinationAsset': 'nep141:base-usdc',
+            'originAsset': 'nep141:zec',
+            'amount': '1000000',
+            'refundTo': 'u1ana',
+            'swapType': 'EXACT_INPUT',
+          },
+        },
+      );
+      await expectLater(
+        p.swaps.quote(
+          asset: usdcOnBase(),
+          amountInZatoshi: 1000000,
+          recipient: '0xcara',
+          refundTo: 'u1ana',
+        ),
+        throwsA(
+          isA<SwapException>().having(
+            (e) => e.message,
+            'message',
+            contains('recipient'),
+          ),
+        ),
+      );
+    });
+
+    test('a quote for another amount in', () async {
+      final p = provider(
+        quote: {
+          'quote': {
+            'depositAddress': 'u1provider',
+            'amountOut': '2500000',
+            'amountIn': '5000000',
+          },
+        },
+      );
+      await expectLater(
+        p.swaps.quote(
+          asset: usdcOnBase(),
+          amountInZatoshi: 1000000,
+          recipient: '0xcara',
+          refundTo: 'u1ana',
+        ),
+        throwsA(isA<SwapException>()),
+      );
     });
 
     test('a response with no deposit address', () async {
