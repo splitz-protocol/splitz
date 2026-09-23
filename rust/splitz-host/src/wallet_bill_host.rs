@@ -76,7 +76,9 @@ impl BillHost for WalletBillHost<'_> {
         match outcome.phase {
             WalletSendPhase::Succeeded => match outcome.txid {
                 Some(txid) => Sent::sent(txid),
-                None => Sent::failed(Some(
+                // Pending, not failed: the wallet says money left, and a
+                // retry could pay it twice.
+                None => Sent::pending(Some(
                     "the wallet reported a send with no transaction id".to_owned(),
                 )),
             },

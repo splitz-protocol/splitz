@@ -50,8 +50,10 @@ class WalletBillHost extends splitz.BillHost {
     switch (outcome.phase) {
       case WalletSendPhase.succeeded:
         final txid = outcome.txid;
+        // Pending, not failed: the wallet says money left, and without an
+        // id nothing can be recorded — but a retry could pay it twice.
         if (txid == null) {
-          return const splitz.Sent.failed(
+          return const splitz.Sent.pending(
             detail: 'the wallet reported a send with no transaction id',
           );
         }

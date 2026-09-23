@@ -128,3 +128,16 @@ fn a_store_that_cannot_be_half_written_sweeps_nothing() {
         0
     );
 }
+
+#[test]
+fn a_send_reporting_success_with_no_transaction_id_is_pending() {
+    // The wallet says money left; with no id nothing can be recorded, and
+    // calling it failed would let a retry pay it again.
+    use splitz_core::host::{BillHost, SendResult};
+    let mut wallet = FakeWallet::ana();
+    wallet.sender.outcome.txid = None;
+    let host = WalletBillHost::new(&wallet);
+    let sent = host.broadcast("zcash:u1ben?amount=0.045");
+    assert_eq!(sent.result, SendResult::Pending);
+    assert!(sent.detail.unwrap().contains("no transaction id"));
+}

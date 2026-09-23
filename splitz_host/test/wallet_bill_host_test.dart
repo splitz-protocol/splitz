@@ -116,23 +116,21 @@ void main() {
     },
   );
 
-  test(
-    'a send reporting success with no transaction id is a failure',
-    () async {
-      // `WalletSendOutcome` cannot enforce this — a wallet is free to answer
-      // `succeeded` with nothing. Recording a payment whose id is absent would
-      // put an entry on the bill that no transaction backs.
-      final host = WalletBillHost(
-        FakeWallet(
-          outcome: const WalletSendOutcome(phase: WalletSendPhase.succeeded),
-        ),
-      );
+  test('a send reporting success with no transaction id is pending', () async {
+    // `WalletSendOutcome` cannot enforce this — a wallet is free to answer
+    // `succeeded` with nothing. Recording a payment whose id is absent would
+    // put an entry on the bill that no transaction backs, and calling it
+    // failed would let a retry pay it again.
+    final host = WalletBillHost(
+      FakeWallet(
+        outcome: const WalletSendOutcome(phase: WalletSendPhase.succeeded),
+      ),
+    );
 
-      final sent = await host.broadcast('zcash:u1ben?amount=0.045');
-      expect(sent.result, splitz.SendResult.failed);
-      expect(sent.detail, contains('no transaction id'));
-    },
-  );
+    final sent = await host.broadcast('zcash:u1ben?amount=0.045');
+    expect(sent.result, splitz.SendResult.pending);
+    expect(sent.detail, contains('no transaction id'));
+  });
 
   test('a bill folds, and what it refuses travels with it', () {
     final wallet = FakeWallet();

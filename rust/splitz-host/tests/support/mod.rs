@@ -75,7 +75,7 @@ impl SplitsWallet for FakeWallet {
 
 pub struct FakeSender {
     pay_to: Option<String>,
-    outcome: WalletSendOutcome,
+    pub outcome: WalletSendOutcome,
     pub sent: RefCell<Vec<String>>,
 }
 

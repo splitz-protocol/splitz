@@ -227,9 +227,10 @@ pub fn settle(
     }
 
     let Some(txid) = sent.txid else {
-        // `Sent::sent` cannot produce this; a hand-built `Sent` can.
+        // `Sent::sent` cannot produce this; a hand-built `Sent` can. Pending,
+        // not failed: the wallet said money left, so a retry could pay twice.
         return Ok(Settled {
-            result: SendResult::Failed,
+            result: SendResult::Pending,
             txid: None,
             detail: Some("the wallet reported a send with no transaction id".to_owned()),
             records: Vec::new(),

@@ -216,7 +216,12 @@ Future<Settled> settle(
 
   final txid = sent.txid;
   if (txid == null) {
-    throw StateError('a send that succeeded must carry a transaction id');
+    // A hand-built `Sent` can say sent with no id. Pending, not failed: the
+    // wallet said money left, so a retry could pay twice.
+    return const Settled(
+      result: SendResult.pending,
+      detail: 'the wallet reported a send with no transaction id',
+    );
   }
 
   final records = await recordSend(host, log, owed, txid);

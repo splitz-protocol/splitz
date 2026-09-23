@@ -132,8 +132,9 @@ class WalletBillHost extends BillHost {
         switch (outcome.phase) {
           case SendBroadcastPhase.succeeded:
             final txid = outcome.txid;
+            // Pending, not failed: money left, and a retry could pay twice.
             if (txid == null) {
-              return const Sent.failed(
+              return const Sent.pending(
                 detail: 'the wallet reported a send with no transaction id',
               );
             }

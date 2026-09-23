@@ -123,8 +123,8 @@ it says what a pass looks like.
 cd dart && dart test                 # +591: All tests passed!
                                      #   every one of the 493 shared cases
                                      #   among them
-cd splitz_host && dart test          # +147: All tests passed!
-cd rust && cargo test                # every "test result: ok", 195 in all
+cd splitz_host && dart test          # +148: All tests passed!
+cd rust && cargo test                # every "test result: ok", 196 in all
 cd dart && dart run example/dinner.dart
                                      # one bill, three people, the fewest
                                      #   payments, and one payer's single
