@@ -437,8 +437,20 @@ fn asset_from(token: &Value) -> Result<TradableAsset, HostError> {
         asset_id: required(token, "assetId")?,
         symbol: required(token, "symbol")?,
         chain: required(token, "blockchain")?,
-        decimals: token.get("decimals").and_then(Value::as_i64).unwrap_or(0) as i32,
+        decimals: decimals(token)?,
     })
+}
+
+/// The token's `decimals`, which the schema requires.
+///
+/// Refused rather than defaulted: a guessed figure shows what arrives off by
+/// a power of ten, beside a deposit that cannot be taken back.
+fn decimals(token: &Value) -> Result<i32, HostError> {
+    token
+        .get("decimals")
+        .and_then(Value::as_u64)
+        .and_then(|d| i32::try_from(d).ok())
+        .ok_or_else(|| swap_error("The provider omitted decimals".to_owned(), false))
 }
 
 /// The provider's own vocabulary, mapped onto §9.2's answers.

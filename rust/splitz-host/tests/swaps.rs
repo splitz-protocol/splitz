@@ -6,8 +6,8 @@ use std::cell::RefCell;
 
 use serde_json::{json, Value};
 use splitz_host::{
-    HostError, HttpTransport, OneClickSwaps, SwapProvider, SwapQuote, SwapState, TradableAsset,
-    UnconfiguredSwaps,
+    assets_from_tokens, HostError, HttpTransport, OneClickSwaps, SwapProvider, SwapQuote,
+    SwapState, TradableAsset, UnconfiguredSwaps,
 };
 
 /// A provider that answers from a script and records what it was asked.
@@ -420,4 +420,24 @@ fn a_quote_for_another_amount_in_is_refused() {
     assert!(provider(&fake)
         .quote(&usdc_on_base(), 1_000_000, "0xcara", "u1ana")
         .is_err());
+}
+
+#[test]
+fn a_token_that_states_no_decimals_is_refused_not_guessed() {
+    let listing = |decimals: Option<Value>| {
+        let mut token = json!({
+            "assetId": "nep141:base-usdc",
+            "symbol": "USDC",
+            "blockchain": "base",
+        });
+        if let Some(d) = decimals {
+            token["decimals"] = d;
+        }
+        assets_from_tokens(&json!([token]).to_string())
+    };
+    assert_eq!(listing(Some(json!(6))).unwrap()[0].decimals, 6);
+    for bad in [None, Some(json!("6")), Some(json!(-1)), Some(json!(6.5))] {
+        let err = listing(bad.clone()).unwrap_err();
+        assert!(err.to_string().contains("decimals"), "{bad:?}: {err}");
+    }
 }

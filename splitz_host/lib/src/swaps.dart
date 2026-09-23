@@ -291,8 +291,20 @@ class OneClickSwaps implements SwapProvider {
     assetId: _string(t, 'assetId'),
     symbol: _string(t, 'symbol'),
     chain: _string(t, 'blockchain'),
-    decimals: t['decimals'] is int ? t['decimals'] as int : 0,
+    decimals: _decimals(t),
   );
+
+  /// The token's `decimals`, which the schema requires.
+  ///
+  /// Refused rather than defaulted: a guessed figure shows what arrives off
+  /// by a power of ten, beside a deposit that cannot be taken back.
+  static int _decimals(Map<String, dynamic> t) {
+    final v = t['decimals'];
+    if (v is! int || v < 0) {
+      throw const SwapException('The provider omitted decimals');
+    }
+    return v;
+  }
 
   @override
   Future<SwapQuote> quote({

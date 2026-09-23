@@ -304,6 +304,38 @@ void main() {
       );
     });
 
+    test('a token that states no decimals is refused, not guessed', () async {
+      OneClickSwaps listing(Object? decimals) => OneClickSwaps(
+        origin: Uri.parse(origin),
+        zecAssetId: 'nep141:zec',
+        referral: 'a-wallet',
+        deadline: () => '2026-10-28T19:40:00.000Z',
+        get: (url) async => jsonEncode([
+          {
+            'assetId': 'nep141:base-usdc',
+            'symbol': 'USDC',
+            'blockchain': 'base',
+            'decimals': ?decimals,
+          },
+        ]),
+        post: (url, body) async => throw StateError('not quoted'),
+      );
+      expect((await listing(6).tradableAssets()).single.decimals, 6);
+      for (final bad in [null, '6', -1, 6.5]) {
+        await expectLater(
+          listing(bad).tradableAssets(),
+          throwsA(
+            isA<SwapException>().having(
+              (e) => e.message,
+              'message',
+              contains('decimals'),
+            ),
+          ),
+          reason: 'decimals: $bad',
+        );
+      }
+    });
+
     test('a transport failure is reported as retryable', () async {
       final p = provider(throwOnCall: const SocketishError());
       await expectLater(
