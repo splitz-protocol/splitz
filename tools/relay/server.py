@@ -117,25 +117,48 @@ SAVE_INTERVAL = 1.0
 DIRTY = threading.Event()
 
 
+# One writer of the state file at a time: the saver and the flush on stop
+# share `{STATE_FILE}.tmp`, and a stop must wait for a write already under way.
+SAVE_LOCK = threading.Lock()
+
+
 def saver() -> None:
-    """Writes the store whenever a push has changed it, at most once an interval."""
+    """Writes the store whenever a push has changed it, at most once an interval.
+
+    A failed write is reported and retried on the next interval; one disk error
+    does not end the saving.
+    """
     while True:
         DIRTY.wait()
         time.sleep(SAVE_INTERVAL)
-        flush()
+        try:
+            flush()
+        except OSError as err:
+            print(f"state file not written: {err}", file=sys.stderr, flush=True)
 
 
 def flush() -> None:
-    """Writes the store now, if a push changed it since the last write."""
-    if STATE_FILE is None or not DIRTY.is_set():
+    """Writes the store now, if a push changed it since the last write.
+
+    The dirty mark is cleared before the snapshot is taken, so a push after it
+    marks the store again; a write that fails marks it again too.
+    """
+    if STATE_FILE is None:
         return
-    with LOCK:
-        DIRTY.clear()
-        snapshot = {c: list(b) for c, b in CHANNELS.items()}
-    tmp = f"{STATE_FILE}.tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(snapshot, f)
-    os.replace(tmp, STATE_FILE)
+    with SAVE_LOCK:
+        if not DIRTY.is_set():
+            return
+        with LOCK:
+            DIRTY.clear()
+            snapshot = {c: list(b) for c, b in CHANNELS.items()}
+        tmp = f"{STATE_FILE}.tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(snapshot, f)
+            os.replace(tmp, STATE_FILE)
+        except OSError:
+            DIRTY.set()
+            raise
 
 
 class TooLarge(Exception):

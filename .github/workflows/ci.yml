@@ -81,6 +81,8 @@ jobs:
       # A generator that quietly narrowed would make every run print
       # "agreement" and mean nothing by it.
       - run: python3 tools/differential/test_generate.py
+      # The relay's state file: one writer at a time, and a refused save retried.
+      - run: python3 tools/relay/test_server.py
       - run: tools/differential/run.sh 1 1200
       - run: tools/differential/run.sh 2 1200
       - run: tools/differential/run.sh 3 1200
