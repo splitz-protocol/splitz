@@ -102,10 +102,10 @@ bool _isB64UrlOfLength(Object? value, int bytes) {
     if (!alphabet.contains(String.fromCharCode(unit))) return false;
   }
   try {
-    return base64Url
-            .decode(value.padRight((value.length + 3) & ~3, '='))
-            .length ==
-        bytes;
+    final raw = base64Url.decode(value.padRight((value.length + 3) & ~3, '='));
+    // §9.4: canonical, so re-encoding reproduces it exactly.
+    return raw.length == bytes &&
+        base64UrlEncode(raw).replaceAll('=', '') == value;
   } on FormatException {
     return false;
   }

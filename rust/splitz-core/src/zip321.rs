@@ -135,7 +135,9 @@ pub fn is_b64url(value: &str) -> bool {
 }
 
 /// The inverse of [`base64url`]. `None` for anything outside the alphabet,
-/// and for a trailing group of one character, which encodes no byte.
+/// for a trailing group of one character, which encodes no byte, and for a
+/// text that is not its bytes' canonical encoding — one whose last character
+/// carries bits beyond the last whole byte (§9.4).
 pub fn unbase64url(text: &str) -> Option<Vec<u8>> {
     if !is_b64url(text) {
         return None;
@@ -167,7 +169,7 @@ pub fn unbase64url(text: &str) -> Option<Vec<u8>> {
             out.push(acc as u8);
         }
     }
-    Some(out)
+    (base64url(&out) == text).then_some(out)
 }
 
 fn render_fiat(price: &FiatPrice) -> Result<String> {

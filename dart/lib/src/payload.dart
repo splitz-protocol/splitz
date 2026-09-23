@@ -44,7 +44,10 @@ List<int>? _unb64(String text) {
     if (!_b64urlAlphabet.contains(String.fromCharCode(unit))) return null;
   }
   try {
-    return base64Url.decode(text.padRight((text.length + 3) & ~3, '='));
+    final raw = base64Url.decode(text.padRight((text.length + 3) & ~3, '='));
+    // §9.4: a text that is not its bytes' canonical encoding is refused as one
+    // that does not decode.
+    return _b64(raw) == text ? raw : null;
   } on FormatException {
     return null;
   }

@@ -1,6 +1,6 @@
 {
   "description": "Sealed entry frames. SPEC.md section 11.3.",
-  "count": 8,
+  "count": 9,
   "cases": [
     {
       "name": "a_well_formed_frame",
@@ -48,6 +48,11 @@
     {
       "name": "an_empty_frame",
       "frame": "",
+      "error": "sealed_malformed"
+    },
+    {
+      "name": "a_frame_that_is_not_canonical_base64url",
+      "frame": "AW5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYx",
       "error": "sealed_malformed"
     }
   ]

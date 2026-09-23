@@ -577,6 +577,10 @@ def decode_payload(text):
         raise Refused("payload_damaged")
     try:
         raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+        # Section 9.4: a body that is not its bytes' canonical encoding is
+        # refused as one that does not decode.
+        if b64url(raw) != encoded:
+            raise ValueError("not canonical")
         import json as _json
         body = _json.loads(raw.decode("utf-8"))
     except Exception:
@@ -627,6 +631,9 @@ def parse_sealed_frame(text):
     try:
         raw = base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
     except Exception:
+        raise Refused("sealed_malformed")
+    # Section 9.4: canonical, so re-encoding reproduces it exactly.
+    if b64url(raw) != s:
         raise Refused("sealed_malformed")
     if len(raw) < 1 + NONCE_BYTES + TAG_BYTES:
         raise Refused("sealed_malformed")
@@ -1232,7 +1239,8 @@ def _b64url_len(text, want):
         raw = base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
     except Exception:
         return False
-    return len(raw) == want
+    # Section 9.4: canonical, so re-encoding reproduces it exactly.
+    return len(raw) == want and b64url(raw) == text
 
 
 def _derive_id(domain, entry):
@@ -2166,3 +2174,17 @@ def stand_in(verifies):
         sig = entry.get("sig")
         return isinstance(sig, str) and f"{entry.get('id')}|{sig}" in ok
     return verify
+
+def non_canonical(text):
+    """`text` with the lowest unused bit of its last character set.
+
+    Decodes to the same bytes under a lenient decoder; section 9.4 refuses
+    it. Only a text whose byte count is not a multiple of three has such a
+    bit.
+    """
+    alphabet = ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+                "0123456789-_")
+    assert len(text) % 4 in (2, 3), "no unused bits to set"
+    last = alphabet.index(text[-1])
+    assert last & 1 == 0, "already non-canonical"
+    return text[:-1] + alphabet[last | 1]

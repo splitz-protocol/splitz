@@ -7,7 +7,8 @@ import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
                    seal_log, merge, order, fold, balances,
-                   canonical_json, b64url, Refused, stand_in)
+                   canonical_json, b64url, Refused, stand_in,
+                   non_canonical)
 
 def AT(m):
     return f"2026-10-28T19:{m:02d}:00.000Z"
@@ -579,6 +580,12 @@ ENTRY_CASES = [
     ("an_entry_one_level_too_deep", at_depth(65)),
     ("a_create_entry_with_no_key", {k: v for k, v in C.items() if k != "creatorKey"}),
     ("a_create_entry_with_a_short_nonce", dict(C, nonce=b64url(b"n" * 8))),
+    # §9.4. A key that is not its bytes' canonical encoding is refused, so one
+    # bill has one creatorKey spelling on every reader.
+    ("a_create_entry_whose_key_is_not_canonical",
+     (lambda e: dict(e, id=derive_bill_id(e)))(
+         dict({k: v for k, v in C.items() if k != "id"},
+              creatorKey=non_canonical(KEY)))),
     ("a_create_entry_with_a_chosen_id", dict(C, id="weekend")),
     ("an_unknown_entry_kind", dict(J_ANA, kind="sendGift")),
     ("an_entry_carrying_two_payloads",

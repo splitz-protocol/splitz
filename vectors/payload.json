@@ -1,6 +1,6 @@
 {
   "description": "Scanned payloads. SPEC.md section 11.2.",
-  "count": 38,
+  "count": 39,
   "cases": [
     {
       "name": "encode_a_bill",
@@ -3682,6 +3682,11 @@
     {
       "name": "a_body_nested_two_hundred_deep",
       "payload": "splitz1:eyJsb2ciOltbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbWzFdXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV0sInYiOjF9",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_that_is_not_canonical_base64url",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOltdfR",
       "error": "payload_damaged"
     },
     {

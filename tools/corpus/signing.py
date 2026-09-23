@@ -33,6 +33,13 @@ CASES = [
         "kind": "joinBill", "at": AT, "author": "ana", "id": "j1",
         "participant": {"name": "Ana", "id": "ana"}}),
 
+    # Section 9.3's string rule: controls escaped, shorthand where RFC 8785
+    # has one, and `/`, `&`, `<`, `>`, U+007F and U+2028 written as they are.
+    ("strings_are_escaped_as_rfc_8785_writes_them", {
+        "v": 1, "id": "j1", "author": "ana", "kind": "joinBill", "at": AT,
+        "participant": {"id": "ana",
+                        "name": "Fish & chips 1/2 <ok>\t\n\x01\x7f\u2028\"q\\"}}),
+
     ("the_id_is_covered", {
         "v": 1, "id": "j2", "author": "ana", "kind": "joinBill", "at": AT,
         "participant": {"id": "ana", "name": "Ana"}}),

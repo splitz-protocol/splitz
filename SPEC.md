@@ -851,6 +851,16 @@ canonically: object keys in ascending order (§2.3), no insignificant
 whitespace. The `splitz1:` and `splitzd1:` payloads of §11.2 are encoded this
 way. Elsewhere key order carries no meaning and a reader MUST NOT depend on it.
 
+**A string is written as RFC 8785 §3.2.2.2 writes it.** `"` and `\` are escaped
+as `\"` and `\\`; U+0008, U+0009, U+000A, U+000C and U+000D as `\b`, `\t`,
+`\n`, `\f` and `\r`; every other code point below U+0020 as `\u` and four
+lower-case hexadecimal digits. Nothing else is escaped: `/`, `&`, `<`, `>`,
+U+007F, U+2028, U+2029 and every non-ASCII character are written as
+themselves, in UTF-8. Every id is a digest of this encoding (§9.4, §9.5), so an
+encoder that escapes one character more — `/` as `\/`, or `&` as `\u0026` —
+derives a different id for the same entry, and every conforming reader
+refuses what it writes.
+
 **A float is not an amount.** Canonical encoding MUST refuse a floating point
 number anywhere in a document with `canonical_json_float`, rather than
 truncating it or aborting: §2 puts every amount in minor units as an integer,
@@ -876,6 +886,13 @@ id = base64url( SHA-256( "splitz-bill-id-v1" || canonical(E) )[0..16] )
 where `E` is the `createBill` entry's JSON object (§9) **with `id`, `sig` and
 `v` removed**, encoded canonically (§9.3), and `canonical(E)` is its UTF-8
 bytes. `base64url` is unpadded, as everywhere in this protocol.
+
+**Every base64url value this protocol decodes MUST be the canonical encoding of
+its bytes**: the bits its last character carries beyond the last whole byte
+are zero, so encoding the decoded bytes again reproduces it exactly. One that
+is not is refused as that value is refused when it does not decode. RFC 4648
+§3.5 leaves this to the decoder, and two decoders choosing differently open a
+bill from one scanned code on one device and refuse it on the next.
 
 `id` is excluded because it is the output. `sig` because a signature covers the
 id in turn. `v` because an entry does not carry its own format version through

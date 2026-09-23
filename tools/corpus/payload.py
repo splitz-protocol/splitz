@@ -5,7 +5,7 @@ SPEC.md sections 11.2 and 11.3.
 """
 import base64, hashlib, json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import (ADDRESSES, encode_payload, decode_payload, parse_sealed_frame,
+from _spec import (ADDRESSES, non_canonical, encode_payload, decode_payload, parse_sealed_frame,
                    b64url, canonical_json, check_entry, seal_log, Refused,
                    PAYLOAD_CAP, NONCE_BYTES, TAG_BYTES)
 
@@ -173,6 +173,10 @@ def payload_cases():
         ("a_body_at_the_depth_limit",    deep(64)),
         ("a_body_one_level_too_deep",    deep(65)),
         ("a_body_nested_two_hundred_deep", deep(200)),
+        # Section 9.4. A body that is not its bytes' canonical encoding is
+        # refused as one that does not decode.
+        ("a_body_that_is_not_canonical_base64url",
+         non_canonical("splitz1:" + b64url(b'{"v":1,"log":[]}'))),
         ("a_delta_carries_no_invite",
          "splitzd1:" + b64url(b'{"v":1,"log":[],"invite":{"b":"Ab3","k":"Kk","v":1}}')),
     ]:
@@ -199,6 +203,8 @@ def sealed_cases():
         ("too_short_to_hold_a_tag",    b64url(bytes([1]) + b"n" * NONCE_BYTES + b"c" * 4)),
         ("not_base64url",              "!!!not base64!!!"),
         ("an_empty_frame",             ""),
+        # Section 9.4. The same frame with an unused bit set is refused.
+        ("a_frame_that_is_not_canonical_base64url", non_canonical(frame(1))),
     ]:
         case = {"name": name, "frame": text}
         try:

@@ -14,7 +14,7 @@ use crate::error::{code, Result, SplitError};
 use crate::instant::canonical_instant;
 use crate::money::{check_currency, checked_add, checked_sub, is_currency};
 use crate::sha256::sha256;
-use crate::zip321::base64url;
+use crate::zip321::{base64url, unbase64url};
 
 pub const ENTRY_KINDS: [&str; 8] = [
     "createBill",
@@ -73,24 +73,12 @@ pub fn confirmation_rule(method: &str) -> Option<(Option<&'static str>, bool, bo
     }
 }
 
+/// Whether `value` is the canonical unpadded base64url of `bytes` bytes (§9.4).
 fn is_b64url_of_length(value: Option<&str>, bytes: usize) -> bool {
-    let Some(text) = value else { return false };
-    if text.is_empty()
-        || !text
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
-    {
-        return false;
-    }
-    // Four base64url characters carry three bytes; the tail carries one or two.
-    let full = text.len() / 4 * 3;
-    let decoded = match text.len() % 4 {
-        0 => full,
-        2 => full + 1,
-        3 => full + 2,
-        _ => return false,
-    };
-    decoded == bytes
+    value
+        .filter(|text| !text.is_empty())
+        .and_then(unbase64url)
+        .is_some_and(|raw| raw.len() == bytes)
 }
 
 /// The bill id derived from the entry that opens a bill (§9.4).

@@ -1,6 +1,6 @@
 {
   "description": "The message an entry's signature covers. SPEC.md section 10.6.",
-  "count": 12,
+  "count": 13,
   "cases": [
     {
       "name": "a_join_with_no_signature",
@@ -61,6 +61,21 @@
         }
       },
       "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Ana\"}}"
+    },
+    {
+      "name": "strings_are_escaped_as_rfc_8785_writes_them",
+      "entry": {
+        "v": 1,
+        "id": "j1",
+        "author": "ana",
+        "kind": "joinBill",
+        "at": "2026-10-28T19:30:00.000Z",
+        "participant": {
+          "id": "ana",
+          "name": "Fish & chips 1/2 <ok>\t\n\u0001 \"q\\"
+        }
+      },
+      "expect": "splitz-entry-v1{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"id\":\"j1\",\"kind\":\"joinBill\",\"participant\":{\"id\":\"ana\",\"name\":\"Fish & chips 1/2 <ok>\\t\\n\\u0001 \\\"q\\\\\"}}"
     },
     {
       "name": "the_id_is_covered",

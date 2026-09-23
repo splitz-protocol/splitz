@@ -1,6 +1,6 @@
 {
   "description": "Entries, merge and folding. SPEC.md sections 9.4 and 10.",
-  "count": 138,
+  "count": 139,
   "cases": [
     {
       "name": "a_bill_with_one_expense",
@@ -16865,6 +16865,22 @@
         "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2s",
         "nonce": "bm5ubm5ubm4",
         "id": "g0a5mrH6D5nx5bJ7KrgwVA"
+      },
+      "error": "create_unbound"
+    },
+    {
+      "name": "a_create_entry_whose_key_is_not_canonical",
+      "entry": {
+        "v": 1,
+        "author": "ana",
+        "kind": "createBill",
+        "at": "2026-10-28T19:00:00.000Z",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "creatorKey": "a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2t",
+        "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+        "id": "MSx1kRYNrQfQUJlNVHCSGA"
       },
       "error": "create_unbound"
     },
