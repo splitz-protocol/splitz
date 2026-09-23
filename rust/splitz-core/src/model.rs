@@ -37,19 +37,21 @@ impl Participant {
     /// Returns the address rather than a flag, so a caller cannot reach for
     /// one that is not there.
     pub fn payable_address(&self) -> Option<&str> {
-        let address = if let Some(first) = self.payouts.first() {
-            if first.kind == "zec" {
-                first.address.as_deref()
-            } else {
-                None
-            }
-        } else {
-            self.pay_to.as_deref()
-        };
-        // An empty string is not an address. Returning one sends it into the
-        // renderer, which refuses the whole request — past the caller's choice
-        // to report an unpayable recipient instead of refusing.
-        address.filter(|a| !a.is_empty())
+        // One §8.3 does not admit is not returned: the renderer would refuse
+        // the whole request over it, past the caller's choice to report an
+        // unpayable recipient instead of refusing.
+        self.published_address()
+            .filter(|a| crate::zip321::is_zip321_address(a))
+    }
+
+    /// The Zcash address this participant published, as written, whether or
+    /// not a request can carry it.
+    pub fn published_address(&self) -> Option<&str> {
+        match self.payouts.first() {
+            None => self.pay_to.as_deref(),
+            Some(first) if first.kind == "zec" => first.address.as_deref(),
+            Some(_) => None,
+        }
     }
 }
 

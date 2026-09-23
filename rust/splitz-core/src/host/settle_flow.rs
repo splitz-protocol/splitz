@@ -57,8 +57,9 @@ impl PayerObligation {
     }
 
     /// Who the request could not carry, and why: `no_address` when nothing is
-    /// published, `payout_not_zec` when the preferred payout is a swap or
-    /// cash. The two need different remedies (§8.5).
+    /// published, `bad_address` when what is published is not an address
+    /// §8.3 admits, `payout_not_zec` when the preferred payout is a swap or
+    /// cash. Each needs a different remedy (§8.5).
     pub fn unpayable(&self) -> &[Unpayable] {
         &self.request.unpayable
     }
@@ -122,7 +123,7 @@ pub fn obligation_for(
         host.me(),
         &folded.identities.contested,
         pay_anyway,
-    );
+    )?;
 
     // `render_obligation` is the protocol's own answer to the hazard in §8.5:
     // either refuse the whole request, or render what can be carried and

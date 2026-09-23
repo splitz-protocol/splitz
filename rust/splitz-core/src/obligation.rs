@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::{code, Result, SplitError};
 use crate::model::Bill;
-use crate::money::checked_add;
+use crate::money::{checked_add, checked_sum};
 use crate::rate::{fiat_to_zatoshi, ExchangeRate, RateRounding};
 use crate::settle::Settlement;
 use crate::zip321::{render_uri, FiatPrice, Zip321Payment};
@@ -13,8 +13,9 @@ use crate::zip321::{render_uri, FiatPrice, Zip321Payment};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unpayable {
     pub id: String,
-    /// `no_address` when nothing is published, `payout_not_zec` when the
-    /// preferred payout is a swap or cash. The two need different remedies.
+    /// `no_address` when nothing is published, `bad_address` when what is
+    /// published is not an address §8.3 admits, `payout_not_zec` when the
+    /// preferred payout is a swap or cash. Each needs a different remedy.
     pub reason: &'static str,
     pub minor_units: i64,
 }
@@ -73,14 +74,21 @@ pub fn render_obligation(
         };
         match who.payable_address() {
             None => {
-                let reason = if who.payouts.is_empty() {
+                let bad = who.published_address().is_some_and(|a| !a.is_empty());
+                let reason = if bad {
+                    "bad_address"
+                } else if who.payouts.is_empty() {
                     "no_address"
                 } else {
                     "payout_not_zec"
                 };
                 if !skip_unpayable {
                     return Err(SplitError::new(
-                        code::ZIP321_NO_ADDRESS,
+                        if bad {
+                            code::ZIP321_BAD_ADDRESS
+                        } else {
+                            code::ZIP321_NO_ADDRESS
+                        },
                         format!(
                             "{} has published no address this request can carry",
                             settlement.to
@@ -177,7 +185,7 @@ pub fn withholdings(
     payer: &str,
     contested_ids: &BTreeSet<String>,
     pay_anyway: &BTreeSet<String>,
-) -> Withholdings {
+) -> Result<Withholdings> {
     // Section 10.5: only a confirmed payment moves a balance, so a debt this
     // payer has already paid is still in the plan. Records to one id sum.
     let mut pending: BTreeMap<&str, i64> = BTreeMap::new();
@@ -185,7 +193,8 @@ pub fn withholdings(
         if p.from != payer || bill.confirmed_payments.contains(&p.id) {
             continue;
         }
-        *pending.entry(p.to.as_str()).or_insert(0) += p.amount;
+        let held = pending.entry(p.to.as_str()).or_insert(0);
+        *held = checked_add(*held, p.amount, code::AMOUNT_OVERFLOW)?;
     }
 
     let pay_to: BTreeMap<&str, Option<&str>> = bill
@@ -198,11 +207,20 @@ pub fn withholdings(
     let mut awaiting = Vec::new();
     let mut contested = Vec::new();
     for s in plan.iter().filter(|s| s.from == payer) {
-        if let Some(paid) = pending.get(s.to.as_str()) {
+        // The payee, and every creditor whose debt this settlement covers
+        // (§6.3): netting can reroute a debt already paid onto somebody else.
+        let mut owed_to: BTreeSet<&str> = BTreeSet::new();
+        owed_to.insert(s.to.as_str());
+        owed_to.extend(s.covers.iter().map(|c| c.to.as_str()));
+        let in_flight: Vec<i64> = owed_to
+            .iter()
+            .filter_map(|t| pending.get(t).copied())
+            .collect();
+        if !in_flight.is_empty() {
             awaiting.push(Awaiting {
                 to: s.to.clone(),
                 owed: s.amount,
-                paid: *paid,
+                paid: checked_sum(in_flight, code::AMOUNT_OVERFLOW)?,
             });
         } else if contested_ids.contains(&s.to) && !pay_anyway.contains(&s.to) {
             contested.push(Contested {
@@ -218,9 +236,9 @@ pub fn withholdings(
             carried.push(s.clone());
         }
     }
-    Withholdings {
+    Ok(Withholdings {
         carried,
         awaiting,
         contested,
-    }
+    })
 }

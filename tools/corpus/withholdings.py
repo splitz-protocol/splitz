@@ -67,6 +67,17 @@ def cases():
             "expect": withholdings(plan, b, payer, contested, pay_anyway),
         })
 
+    # Section 14.4 with section 6.3's coverage. Ana owed ben and has paid
+    # him, not yet confirmed; netting reroutes the debt so the plan asks her
+    # to pay cai. The settlement covers the debt already paid, so it waits.
+    rerouted = dict(settle("ana", "cai", 1000),
+                    covers=[{"from": "ana", "to": "ben", "amount": 1000}])
+    case("a_rerouted_debt_already_paid_is_not_asked_for_again",
+         [rerouted], bill(THREE, [pay("p1", "ana", "ben", 1000)]), "ana")
+    case("and_one_covering_a_debt_nobody_paid_is_carried",
+         [rerouted], bill(THREE, [pay("p1", "ana", "cai", 5)],
+                          confirmed=["p1"]), "ana")
+
     # Nothing held back.
     case("a_plain_debt_is_carried",
          [settle("cai", "ana", 4500)], bill(THREE), "cai")

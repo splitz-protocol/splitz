@@ -51,6 +51,19 @@ int checkedAdd(int a, int b, [String code = SplitCode.amountOverflow]) {
   return sum;
 }
 
+/// [a] − [b], refused with [code] rather than wrapped (SPEC.md §2.2).
+///
+/// Not `checkedAdd(a, -b)`: negating the smallest 64-bit value wraps to
+/// itself, and the addition then checks the wrong operand.
+int checkedSubtract(int a, int b, [String code = SplitCode.amountOverflow]) {
+  final difference = a - b;
+  // Wrapping shows up as a result on the wrong side of `a`.
+  if ((b < 0 && difference < a) || (b > 0 && difference > a)) {
+    raise(code, 'Subtracting $b from $a overflows a 64-bit integer');
+  }
+  return difference;
+}
+
 /// [a] × [b], refused with [code] rather than wrapped (SPEC.md §2.2).
 int checkedMultiply(int a, int b, [String code = SplitCode.amountOverflow]) {
   if (a == 0 || b == 0) return 0;

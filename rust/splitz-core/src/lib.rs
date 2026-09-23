@@ -47,7 +47,8 @@ pub use log::{
 };
 pub use model::{Bill, Expense, Participant, PaymentRecord, Payout};
 pub use money::{
-    check_currency, checked_add, checked_mul, checked_sum, is_currency, MAX_AMOUNT, MIN_AMOUNT,
+    check_currency, checked_add, checked_mul, checked_sub, checked_sum, is_currency, MAX_AMOUNT,
+    MIN_AMOUNT,
 };
 pub use obligation::{
     render_obligation, withholdings, Awaiting, Contested, Obligation, Unpayable, Withholdings,
@@ -69,6 +70,6 @@ pub use settle::{
 pub use sha256::{sha256, sha256_hex};
 pub use split::{check_id_lists, split_expense, split_participants, Shares};
 pub use zip321::{
-    bounded_label, qchar, render_amount, render_uri, FiatPrice, Zip321Payment, MAX_FIAT_DIGITS,
-    MAX_LABEL_BYTES, MAX_MEMO_BYTES, MAX_PAYMENTS, MAX_ZATOSHI,
+    bounded_label, is_zip321_address, qchar, render_amount, render_uri, FiatPrice, Zip321Payment,
+    MAX_FIAT_DIGITS, MAX_LABEL_BYTES, MAX_MEMO_BYTES, MAX_PAYMENTS, MAX_ZATOSHI,
 };

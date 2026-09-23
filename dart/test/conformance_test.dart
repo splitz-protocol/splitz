@@ -143,7 +143,17 @@ void main() {
     final bill = decodeBill((c['bill'] as Map).cast<String, dynamic>());
     final plan = [
       for (final s in (c['plan'] as List).cast<Map<String, dynamic>>())
-        Settlement(s['from'] as String, s['to'] as String, s['amount'] as int),
+        Settlement(
+          s['from'] as String,
+          s['to'] as String,
+          s['amount'] as int,
+          covers: [
+            for (final d in (s['covers'] as List? ?? const [])
+                .cast<Map<String, dynamic>>())
+              DirectDebt(
+                  d['from'] as String, d['to'] as String, d['amount'] as int),
+          ],
+        ),
     ];
     final w = withholdings(
       plan,
@@ -159,7 +169,16 @@ void main() {
     produce({
       'carried': [
         for (final s in w.carried)
-          {'from': s.from, 'to': s.to, 'amount': s.amount},
+          {
+            'from': s.from,
+            'to': s.to,
+            'amount': s.amount,
+            if (s.covers.isNotEmpty)
+              'covers': [
+                for (final d in s.covers)
+                  {'from': d.from, 'to': d.to, 'amount': d.amount},
+              ],
+          },
       ],
       'awaiting': [
         for (final a in w.awaiting)

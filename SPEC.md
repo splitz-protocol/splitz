@@ -317,6 +317,19 @@ owing, subtract the smaller magnitude from the larger, and return any remainder
 to its side. Every value formed is no larger than one already in the set. The
 residual is zero exactly when both sides empty together.
 
+**A bill the fold returns always has balances §2.2 can hold.** Balances are
+formed in the order this section states them — expenses in the order the fold
+applies them, each crediting its payer before debiting each share, then
+confirmed payments in the order the bill lists them — and the fold (§10.3)
+applies each entry against the balances formed so far. An expense whose effect
+would carry a balance out of range is set aside with `amount_overflow`, and so
+is every confirmation of a payment that would; the payment stays unconfirmed.
+A payment is set aside the same way when it would carry the total one
+participant has recorded paying another, confirmed or not, out of range —
+§14.4 sums the unconfirmed part of that total. Without these, one expense of
+the largest amount §2.2 admits, written by anyone holding the invite, leaves
+§5 refusing the whole bill on every device and nobody able to settle.
+
 `creditors` is the positive balances, most owed first, ties by ascending id.
 `debtors` is the negative balances, largest debt first, ties by ascending id.
 
@@ -545,9 +558,10 @@ implementations' output comparable byte for byte.
   does not parse addresses, so an implementation MUST NOT attach a memo to a
   recipient it has not confirmed can receive one.
 
-- An address is written verbatim. It MUST be non-empty and **ASCII
-  alphanumeric** — `A`–`Z`, `a`–`z`, `0`–`9` and nothing else — which is all
-  the ZIP 321 grammar admits (`zip321_bad_address`): that grammar reads
+- An address is written verbatim. It MUST be present and non-empty
+  (`zip321_no_address`) and **ASCII alphanumeric** — `A`–`Z`, `a`–`z`, `0`–`9`
+  and nothing else — which is all the ZIP 321 grammar admits
+  (`zip321_bad_address`): that grammar reads
   `zcashaddress = 1*( ALPHA / DIGIT )`, and RFC 3986's `ALPHA` and `DIGIT` are
   ASCII. A Unicode-aware test is a different rule: it admits U+00E9 and
   U+FF12, which are letters and digits and are not in the grammar. **This is a
@@ -560,8 +574,10 @@ implementations' output comparable byte for byte.
   **The address is checked before any other parameter of the same payment**, so
   a payment invalid in two ways is refused with the same code everywhere.
 
-- A `label` MUST be at most **96** bytes of UTF-8 once decoded, truncated on a
-  character boundary if longer. Display names are chosen by whoever they belong
+- A `label` MUST be at most **96** bytes of UTF-8 once decoded, truncated if
+  longer at the last Unicode scalar value that fits whole — never inside one
+  scalar's encoding, and without regard to grapheme clusters, which would make
+  the cut depend on each implementation's Unicode tables. Display names are chosen by whoever they belong
   to, and nothing else in the pipeline bounds them.
 
 ### 8.4 Fiat price
@@ -612,6 +628,13 @@ recipients alongside the URI**. It MUST NOT do neither.
 Refusing the whole request over one missing address is the safe default, but it
 withholds every other output too, so the reporting form is what a wallet should
 offer.
+
+**A recipient whose published address is one §8.3 does not admit is excluded
+the same way**, reported with the reason `bad_address`, and refused with
+`zip321_bad_address` by an implementation that refuses rather than reports.
+Anyone may publish any string as their own address, so without this one
+participant's malformed `payTo` refuses every other output of every payer's
+request.
 
 The same holds for a recipient whose preferred payout is not a Zcash address at
 all. A `swap` or `cash` payout (§9) cannot become an output of this URI, so
@@ -2031,13 +2054,18 @@ overpayment.
 §10.5 moves a balance only on confirmation, so a debt this payer has already
 paid is still in the plan §6 produces.
 
-- A wallet MUST NOT include such a debt in a request.
+- A wallet MUST NOT include such a debt in a request. A settlement carries
+  such a debt when a payment the payer recorded, and that is not confirmed,
+  names its payee **or any creditor whose debt it covers** (§6.3). Netting
+  reroutes a debt the payer has already paid onto somebody else, and matching
+  on the payee alone asks for it again.
 - Where the amount pending is **less** than the debt, the **whole** debt is
   withheld rather than the remainder. Requesting the remainder overpays by the
   pending amount if that payment lands.
 - What is owed and what is pending are reported as two quantities. On a part
   payment they differ, and presenting the debt as the amount in flight states
-  something untrue.
+  something untrue. The pending amount is the sum over the payee and every
+  creditor the settlement covers.
 
 A payment that never lands is withheld by the same rule, and §10.8's
 withdrawal of its record is what releases the debt.

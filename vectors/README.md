@@ -1,6 +1,6 @@
 # Conformance vectors
 
-476 cases across 18 files. An implementation is conformant when it reproduces
+486 cases across 18 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape

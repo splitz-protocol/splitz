@@ -13,8 +13,9 @@ class Unpayable {
   const Unpayable(this.id, this.reason, this.minorUnits);
   final String id;
 
-  /// `no_address` when nothing is published, `payout_not_zec` when the
-  /// preferred payout is a swap or cash. The two need different remedies.
+  /// `no_address` when nothing is published, `bad_address` when what is
+  /// published is not an address §8.3 admits, `payout_not_zec` when the
+  /// preferred payout is a swap or cash. Each needs a different remedy.
   final String reason;
   final int minorUnits;
 }
@@ -73,9 +74,15 @@ Obligation renderObligation(
     }
     final address = who.payableAddress;
     if (address == null) {
-      final reason = who.payouts.isNotEmpty ? 'payout_not_zec' : 'no_address';
+      final published = who.publishedAddress;
+      final bad = published != null && published.isNotEmpty;
+      final reason = bad
+          ? 'bad_address'
+          : who.payouts.isNotEmpty
+              ? 'payout_not_zec'
+              : 'no_address';
       if (!skipUnpayable) {
-        raise(SplitCode.zip321NoAddress,
+        raise(bad ? SplitCode.zip321BadAddress : SplitCode.zip321NoAddress,
             '${s.to} has published no address this request can carry');
       }
       unpayable.add(Unpayable(s.to, reason, s.amount));
@@ -167,7 +174,7 @@ Withholdings withholdings(
   for (final p in bill.payments) {
     if (p.from != payer) continue;
     if (bill.confirmedPayments.contains(p.id)) continue;
-    pending[p.to] = (pending[p.to] ?? 0) + p.amount;
+    pending[p.to] = checkedAdd(pending[p.to] ?? 0, p.amount);
   }
 
   final payTo = <String, String?>{
@@ -178,8 +185,15 @@ Withholdings withholdings(
   final awaiting = <Awaiting>[];
   final contested = <Contested>[];
   for (final s in mine) {
-    if (pending.containsKey(s.to)) {
-      awaiting.add(Awaiting(s.to, s.amount, pending[s.to]!));
+    // The payee, and every creditor whose debt this settlement covers (§6.3):
+    // netting can reroute a debt already paid onto somebody else.
+    final owedTo = {s.to, for (final c in s.covers) c.to};
+    final inFlight = [
+      for (final t in owedTo)
+        if (pending.containsKey(t)) pending[t]!
+    ];
+    if (inFlight.isNotEmpty) {
+      awaiting.add(Awaiting(s.to, s.amount, checkedSum(inFlight)));
     } else if (contestedIds.contains(s.to) && !payAnyway.contains(s.to)) {
       contested.add(Contested(s.to, s.amount, payTo[s.to]));
     } else {

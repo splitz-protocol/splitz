@@ -2,6 +2,7 @@
 library;
 
 import 'rate.dart';
+import 'zip321.dart';
 
 /// How a participant wants to be paid, most preferred first.
 ///
@@ -46,17 +47,19 @@ class Participant {
   ///
   /// Returns the address, so a caller cannot reach for one that is not there.
   String? get payableAddress {
-    final String? address;
-    if (payouts.isNotEmpty) {
-      final first = payouts.first;
-      address = first.type == 'zec' ? first.address : null;
-    } else {
-      address = payTo;
-    }
-    // An empty string is not an address. Returning one sends it into the
-    // renderer, which refuses the whole request — past the caller's choice to
-    // report an unpayable recipient instead of refusing.
-    return (address == null || address.isEmpty) ? null : address;
+    final address = publishedAddress;
+    // One §8.3 does not admit is not returned: the renderer would refuse the
+    // whole request over it, past the caller's choice to report an unpayable
+    // recipient instead of refusing.
+    return (address == null || !isZip321Address(address)) ? null : address;
+  }
+
+  /// The Zcash address this participant published, as written, whether or
+  /// not a request can carry it.
+  String? get publishedAddress {
+    if (payouts.isEmpty) return payTo;
+    final first = payouts.first;
+    return first.type == 'zec' ? first.address : null;
   }
 }
 

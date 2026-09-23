@@ -792,6 +792,13 @@ FoldResult foldLog(List<Object?> rawEntries,
 
   final expenses = <Map<String, dynamic>>[];
   final payments = <Map<String, dynamic>>[];
+  // §5.1's balances, formed as this pass applies each entry and in the order
+  // §5.1 forms them, so a bill this fold returns always has balances §2.2 can
+  // hold. An entry whose effect would carry one out of range is set aside,
+  // deterministically and in log order, rather than left to make §5 refuse
+  // the whole bill.
+  var running = {for (final id in participants.keys) id: 0};
+  final pairTotal = <String, int>{};
   for (final e in live) {
     final eff = effective(e);
     if (e['kind'] == 'addExpense') {
@@ -821,7 +828,14 @@ FoldResult foldLog(List<Object?> rawEntries,
         // it downstream of this fold. An expense whose split §4 refuses cannot
         // be applied, so it is set aside here rather than raising out of
         // `netBalances` once the bill is already built.
-        splitExpense(decoded.amount, decoded.split);
+        final shares = splitExpense(decoded.amount, decoded.split);
+        final moved = {...running};
+        moved[decoded.paidBy] =
+            checkedAdd(moved[decoded.paidBy]!, decoded.amount);
+        shares.forEach((id, owed) {
+          moved[id] = checkedSubtract(moved[id]!, owed);
+        });
+        running = moved;
       } on SplitError catch (err) {
         aside(e, err.code);
         continue;
@@ -869,6 +883,16 @@ FoldResult foldLog(List<Object?> rawEntries,
         aside(e, SplitCode.duplicatePayment);
         continue;
       }
+      // What one participant has recorded paying another, confirmed or not,
+      // stays in range: §14.4 sums the unconfirmed part of it.
+      final pair = '${pay['from']}\u0000${pay['to']}';
+      try {
+        pairTotal[pair] =
+            checkedAdd(pairTotal[pair] ?? 0, pay['amount'] as int);
+      } on SplitError catch (err) {
+        aside(e, err.code);
+        continue;
+      }
       payments.add(pay);
     }
   }
@@ -878,6 +902,7 @@ FoldResult foldLog(List<Object?> rawEntries,
   // pass would set aside one that is merely early.
   final known = {for (final p in payments) p['id'] as String};
   final confirmed = <String>{};
+  final confirmedBy = <String, List<Map<String, dynamic>>>{};
   for (final e in live) {
     if (e['kind'] != 'confirmPayment') continue;
     final c =
@@ -911,7 +936,29 @@ FoldResult foldLog(List<Object?> rawEntries,
       aside(e, SplitCode.confirmationMissingReference);
       continue;
     }
-    if (rule.settles) confirmed.add(c['paymentId'] as String);
+    if (rule.settles) {
+      confirmed.add(c['paymentId'] as String);
+      confirmedBy.putIfAbsent(c['paymentId'] as String, () => []).add(e);
+    }
+  }
+
+  // Confirmed payments move balances in the order the bill lists them (§5.1).
+  // One that would carry a balance out of range stays unconfirmed, and every
+  // confirmation that settled it is set aside.
+  for (final pay in payments) {
+    if (!confirmed.contains(pay['id'])) continue;
+    final amount = pay['amount'] as int;
+    try {
+      final from = checkedAdd(running[pay['from']]!, amount);
+      final to = checkedSubtract(running[pay['to']]!, amount);
+      running[pay['from'] as String] = from;
+      running[pay['to'] as String] = to;
+    } on SplitError catch (err) {
+      confirmed.remove(pay['id']);
+      for (final e in confirmedBy[pay['id']]!) {
+        aside(e, err.code);
+      }
+    }
   }
 
   setAside.sort((a, b) {

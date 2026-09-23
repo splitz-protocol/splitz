@@ -216,7 +216,19 @@ fn withholdings() {
                         from: s["from"].as_str().unwrap_or_default().to_owned(),
                         to: s["to"].as_str().unwrap_or_default().to_owned(),
                         amount: s["amount"].as_i64().unwrap_or_default(),
-                        covers: Vec::new(),
+                        covers: s["covers"]
+                            .as_array()
+                            .map(|debts| {
+                                debts
+                                    .iter()
+                                    .map(|d| splitz_core::DirectDebt {
+                                        from: d["from"].as_str().unwrap_or_default().to_owned(),
+                                        to: d["to"].as_str().unwrap_or_default().to_owned(),
+                                        amount: d["amount"].as_i64().unwrap_or_default(),
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
                     })
                     .collect()
             })
@@ -238,11 +250,17 @@ fn withholdings() {
             c["payer"].as_str().unwrap_or_default(),
             &ids("contested"),
             &ids("payAnyway"),
-        );
+        )?;
         Ok(json!({
-            "carried": w.carried.iter().map(|s| json!({
-                "from": s.from, "to": s.to, "amount": s.amount,
-            })).collect::<Vec<_>>(),
+            "carried": w.carried.iter().map(|s| {
+                let mut row = json!({"from": s.from, "to": s.to, "amount": s.amount});
+                if !s.covers.is_empty() {
+                    row["covers"] = s.covers.iter().map(|d| json!({
+                        "from": d.from, "to": d.to, "amount": d.amount,
+                    })).collect();
+                }
+                row
+            }).collect::<Vec<_>>(),
             "awaiting": w.awaiting.iter().map(|a| json!({
                 "to": a.to, "owed": a.owed, "paid": a.paid,
             })).collect::<Vec<_>>(),

@@ -71,6 +71,19 @@ CASES = [
     ("and_refuses_the_request_when_not_skipping",
      [pay("ana", 7004), pay("dee", 9246)],
      [ANA, who("dee", "Dee", ""), CAI], False, True),
+    # A published address section 8.3 does not admit is reported, not
+    # carried: anyone may publish any string as their own address, and the
+    # renderer would refuse every other output over it.
+    ("an_address_no_request_can_carry_is_reported",
+     [pay("ana", 7004), pay("dee", 9246)],
+     [ANA, who("dee", "Dee", "u1dee-not-an-address"), CAI], True, True),
+    ("and_refuses_the_request_as_a_bad_address_when_not_skipping",
+     [pay("ana", 7004), pay("dee", 9246)],
+     [ANA, who("dee", "Dee", "u1dee-not-an-address"), CAI], False, True),
+    ("a_zec_payout_whose_address_no_request_can_carry",
+     [pay("ana", 7004), pay("gus", 9246)],
+     [ANA, who("gus", "Gus", None, [{"type": "zec", "address": "u1 gus"}]),
+      CAI], True, True),
     ("a_zec_payout_with_no_address",
      [pay("ana", 7004), pay("gus", 9246)],
      [ANA, who("gus", "Gus", None, [{"type": "zec"}]), CAI], True, True),

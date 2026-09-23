@@ -1003,6 +1003,13 @@ def _residual_is_zero(values):
     return not owed and not owes
 
 
+def _in_range(value):
+    """Section 2.2. `value`, or `amount_overflow` when 64 bits cannot hold it."""
+    if not I64_MIN <= value <= I64_MAX:
+        raise Refused("amount_overflow")
+    return value
+
+
 def balances(bill):
     """Section 5.1."""
     net = {p["id"]: 0 for p in bill["participants"]}
@@ -1011,12 +1018,12 @@ def balances(bill):
         for pid in shares:
             if pid not in net:
                 raise Refused("unknown_participant")
-        net[e["paidBy"]] += e["amount"]
+        net[e["paidBy"]] = _in_range(net[e["paidBy"]] + e["amount"])
         for pid, owed in shares.items():
-            net[pid] -= owed
+            net[pid] = _in_range(net[pid] - owed)
     for p in _confirmed(bill):
-        net[p["from"]] += p["amount"]
-        net[p["to"]] -= p["amount"]
+        net[p["from"]] = _in_range(net[p["from"]] + p["amount"])
+        net[p["to"]] = _in_range(net[p["to"]] - p["amount"])
     # The residual is a property of the set, not of an accumulation order: a
     # running total can exceed a signed 64-bit integer at some orderings of a
     # set whose total is zero, and the order a map yields is the
@@ -1755,6 +1762,17 @@ def fold(entries, bill_id=None, verify=None):
         participants[pid] = p
 
     expenses, payments = [], []
+    # Section 5.1's balances, formed as this pass applies each entry and in
+    # the order section 5.1 forms them, so a bill this fold returns always has
+    # balances section 2.2 can hold. An entry whose effect would carry one out
+    # of range is set aside, deterministically and in log order, rather than
+    # left to make section 5 refuse the whole bill.
+    running = {pid: 0 for pid in participants}
+    pair_total = {}
+
+    def _fits(v):
+        return I64_MIN <= v <= I64_MAX
+
     for e in live:
         eff = effective(e)
         if e["kind"] == "addExpense":
@@ -1781,10 +1799,20 @@ def fold(entries, bill_id=None, verify=None):
                 # expense whose split section 4 refuses cannot be applied, so
                 # it is set aside here rather than raising out of `balances`
                 # once the bill is already built.
-                split(_int(ex.get("amount")), ex.get("split"))
+                shares = split(_int(ex.get("amount")), ex.get("split"))
             except Refused as r:
                 aside(e, r.code, "carries an expense this reader cannot apply")
                 continue
+            moved = dict(running)
+            moved[ex["paidBy"]] += ex["amount"]
+            ok = _fits(moved[ex["paidBy"]])
+            for pid, owed in shares.items():
+                moved[pid] -= owed
+                ok = ok and _fits(moved[pid])
+            if not ok:
+                aside(e, "amount_overflow", "would carry a balance out of range")
+                continue
+            running = moved
             expenses.append(ex)
         elif e["kind"] == "recordPayment":
             pay = dict(eff["payment"])
@@ -1819,11 +1847,20 @@ def fold(entries, bill_id=None, verify=None):
                 aside(e, "duplicate_payment",
                       "carries a payment id the bill already holds")
                 continue
+            # What one participant has recorded paying another, confirmed or
+            # not, stays in range: section 14.4 sums the unconfirmed part of it.
+            pair = (pay["from"], pay["to"])
+            total = pair_total.get(pair, 0) + pay["amount"]
+            if not _fits(total):
+                aside(e, "amount_overflow", "would carry a total out of range")
+                continue
+            pair_total[pair] = total
             payments.append(pay)
 
     # Confirmations, in a pass of their own once every payment is on the bill.
     known = {p["id"] for p in payments}
     confirmed = set()
+    confirmed_by = {}
     for e in live:
         if e["kind"] != "confirmPayment":
             continue
@@ -1853,6 +1890,22 @@ def fold(entries, bill_id=None, verify=None):
             continue
         if settles:
             confirmed.add(c["paymentId"])
+            confirmed_by.setdefault(c["paymentId"], []).append(e)
+
+    # Confirmed payments move balances in the order the bill lists them
+    # (section 5.1). One that would carry a balance out of range stays
+    # unconfirmed, and every confirmation that settled it is set aside.
+    for pay in payments:
+        if pay["id"] not in confirmed:
+            continue
+        frm = running[pay["from"]] + pay["amount"]
+        to = running[pay["to"]] - pay["amount"]
+        if _fits(frm) and _fits(to):
+            running[pay["from"]], running[pay["to"]] = frm, to
+            continue
+        confirmed.discard(pay["id"])
+        for e in confirmed_by[pay["id"]]:
+            aside(e, "amount_overflow", "would carry a balance out of range")
 
     return {
         "bill": {"v": BILL_VERSION, "id": create["id"], "name": create.get("name", ""),
@@ -1956,22 +2009,25 @@ def resolve_identities(entries, create, verify):
 
 # --- Section 8.5: one payer's obligation --------------------------------------
 
+def published_address(participant):
+    """Section 9.1. The Zcash address a participant published, as written."""
+    payouts = participant.get("payouts") or []
+    if payouts:
+        first = payouts[0]
+        return first.get("address") if first.get("type") == "zec" else None
+    return participant.get("payTo")
+
+
 def payable_address(participant):
     """Section 9.1. The address a payment request can carry, if any.
 
     Returns the address rather than a flag, so a caller cannot reach for one
-    that is not there.
+    that is not there. One section 8.3 does not admit is not returned: the
+    renderer would refuse the whole request over it, past the caller's choice
+    to report an unpayable recipient instead of refusing.
     """
-    payouts = participant.get("payouts") or []
-    if payouts:
-        first = payouts[0]
-        address = first.get("address") if first.get("type") == "zec" else None
-    else:
-        address = participant.get("payTo")
-    # An empty string is not an address. Returning one sends it into the
-    # renderer, which refuses the whole request — past the caller's choice to
-    # report an unpayable recipient instead of refusing.
-    return address or None
+    address = published_address(participant)
+    return address if address and _ascii_alnum(address) else None
 
 
 def delta_for(entries, they_have):
@@ -2017,15 +2073,20 @@ def withholdings(plan, bill, payer, contested_ids=(), pay_anyway=()):
     for p in bill.get("payments") or ():
         if p["from"] != payer or p["id"] in confirmed:
             continue
-        pending[p["to"]] = pending.get(p["to"], 0) + p["amount"]
+        pending[p["to"]] = _in_range(pending.get(p["to"], 0) + p["amount"])
 
     pay_to = {p["id"]: p.get("payTo") for p in bill.get("participants") or ()}
 
     carried, awaiting, contested = [], [], []
     for s in mine:
-        if s["to"] in pending:
+        # The payee, and every creditor whose debt this settlement covers
+        # (section 6.3): netting can reroute a debt already paid onto
+        # somebody else.
+        owed_to = {s["to"]} | {c["to"] for c in s.get("covers") or ()}
+        in_flight = [pending[t] for t in sorted(owed_to) if t in pending]
+        if in_flight:
             awaiting.append({"to": s["to"], "owed": s["amount"],
-                             "paid": pending[s["to"]]})
+                             "paid": _checked_sum(in_flight)})
         elif s["to"] in contested_ids and s["to"] not in pay_anyway:
             contested.append({"to": s["to"], "amount": s["amount"],
                               "address": pay_to.get(s["to"])})
@@ -2056,9 +2117,14 @@ def render_obligation(settlements, participants, rate, currency,
         address = payable_address(who)
         if address is None:
             payouts = who.get("payouts") or []
-            reason = ("payout_not_zec" if payouts else "no_address")
+            if published_address(who):
+                reason, code = "bad_address", "zip321_bad_address"
+            elif payouts:
+                reason, code = "payout_not_zec", "zip321_no_address"
+            else:
+                reason, code = "no_address", "zip321_no_address"
             if not skip_unpayable:
-                raise Refused("zip321_no_address")
+                raise Refused(code)
             unpayable.append({"id": s["to"], "reason": reason,
                               "minorUnits": s["amount"]})
             withheld = _exact_i64(withheld + s["amount"])

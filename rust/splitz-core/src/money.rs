@@ -45,6 +45,19 @@ pub fn checked_add(a: i64, b: i64, refusal: &'static str) -> Result<i64> {
     })
 }
 
+/// `a - b`, refused rather than wrapped (SPEC.md §2.2).
+///
+/// Not `checked_add(a, -b)`: negating the smallest 64-bit value overflows
+/// before the addition is checked.
+pub fn checked_sub(a: i64, b: i64, refusal: &'static str) -> Result<i64> {
+    a.checked_sub(b).ok_or_else(|| {
+        SplitError::new(
+            refusal,
+            format!("Subtracting {b} from {a} overflows a 64-bit integer"),
+        )
+    })
+}
+
 /// `a * b`, refused rather than wrapped (SPEC.md §2.2).
 pub fn checked_mul(a: i64, b: i64, refusal: &'static str) -> Result<i64> {
     a.checked_mul(b).ok_or_else(|| {

@@ -12,7 +12,7 @@ use crate::authority::Identities;
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
 use crate::instant::canonical_instant;
-use crate::money::{check_currency, is_currency};
+use crate::money::{check_currency, checked_add, checked_sub, is_currency};
 use crate::sha256::sha256;
 use crate::zip321::base64url;
 
@@ -950,6 +950,14 @@ pub fn fold_log_verified(
 
     let mut expenses: Vec<Value> = Vec::new();
     let mut payments: Vec<Value> = Vec::new();
+    // §5.1's balances, formed as this pass applies each entry and in the order
+    // §5.1 forms them, so a bill this fold returns always has balances §2.2
+    // can hold. An entry whose effect would carry one out of range is set
+    // aside, deterministically and in log order, rather than left to make §5
+    // refuse the whole bill.
+    let mut running: BTreeMap<String, i64> =
+        participants.keys().map(|id| (id.clone(), 0)).collect();
+    let mut pair_total: BTreeMap<(String, String), i64> = BTreeMap::new();
     for entry in &live {
         let eff = effective(entry);
         match field(entry, "kind") {
@@ -993,11 +1001,24 @@ pub fn fold_log_verified(
                 // split §4 refuses cannot be applied, so it is set aside here
                 // rather than raising out of `net_balances` once the bill is
                 // already built.
-                let applied = crate::serialization::decode_expense(&ex, &currency, &ids)
-                    .and_then(|d| crate::split::split_expense(d.amount, &d.split).map(|_| ()));
-                if let Err(e) = applied {
-                    aside!(entry, e.code);
-                    continue;
+                let applied =
+                    crate::serialization::decode_expense(&ex, &currency, &ids).and_then(|d| {
+                        let shares = crate::split::split_expense(d.amount, &d.split)?;
+                        let mut moved = running.clone();
+                        let payer = moved.get_mut(&d.paid_by).expect("checked above");
+                        *payer = checked_add(*payer, d.amount, code::AMOUNT_OVERFLOW)?;
+                        for (id, owed) in &shares {
+                            let held = moved.get_mut(id).expect("decoded against the bill");
+                            *held = checked_sub(*held, *owed, code::AMOUNT_OVERFLOW)?;
+                        }
+                        Ok(moved)
+                    });
+                match applied {
+                    Ok(moved) => running = moved,
+                    Err(e) => {
+                        aside!(entry, e.code);
+                        continue;
+                    }
                 }
                 expenses.push(ex);
             }
@@ -1062,6 +1083,20 @@ pub fn fold_log_verified(
                     aside!(entry, code::DUPLICATE_PAYMENT);
                     continue;
                 }
+                // What one participant has recorded paying another, confirmed
+                // or not, stays in range: §14.4 sums the unconfirmed part.
+                let pair = (field(&pay, "from").to_owned(), field(&pay, "to").to_owned());
+                let amount = pay["amount"].as_i64().unwrap_or(0);
+                let held = pair_total.get(&pair).copied().unwrap_or(0);
+                match checked_add(held, amount, code::AMOUNT_OVERFLOW) {
+                    Ok(total) => {
+                        pair_total.insert(pair, total);
+                    }
+                    Err(e) => {
+                        aside!(entry, e.code);
+                        continue;
+                    }
+                }
                 payments.push(pay);
             }
             _ => {}
@@ -1073,6 +1108,7 @@ pub fn fold_log_verified(
     // would set aside one that is merely early.
     let known: BTreeSet<String> = payments.iter().map(|p| field(p, "id").to_owned()).collect();
     let mut confirmed: BTreeSet<String> = BTreeSet::new();
+    let mut confirmed_by: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for entry in &live {
         if field(entry, "kind") != "confirmPayment" {
             continue;
@@ -1120,7 +1156,40 @@ pub fn fold_log_verified(
             continue;
         }
         if settles {
+            confirmed_by
+                .entry(payment_id.clone())
+                .or_default()
+                .push(field(entry, "id").to_owned());
             confirmed.insert(payment_id);
+        }
+    }
+
+    // Confirmed payments move balances in the order the bill lists them
+    // (§5.1). One that would carry a balance out of range stays unconfirmed,
+    // and every confirmation that settled it is set aside.
+    for pay in &payments {
+        let id = field(pay, "id");
+        if !confirmed.contains(id) {
+            continue;
+        }
+        let amount = pay["amount"].as_i64().unwrap_or(0);
+        let (from, to) = (field(pay, "from"), field(pay, "to"));
+        let moved = checked_add(running[from], amount, code::AMOUNT_OVERFLOW)
+            .and_then(|f| checked_sub(running[to], amount, code::AMOUNT_OVERFLOW).map(|t| (f, t)));
+        match moved {
+            Ok((f, t)) => {
+                running.insert(from.to_owned(), f);
+                running.insert(to.to_owned(), t);
+            }
+            Err(e) => {
+                confirmed.remove(id);
+                for entry_id in &confirmed_by[id] {
+                    set_aside.push(SetAside {
+                        id: entry_id.clone(),
+                        code: e.code,
+                    });
+                }
+            }
         }
     }
 

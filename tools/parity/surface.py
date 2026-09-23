@@ -106,6 +106,8 @@ RENAMES = {
     "checkedAdd": "checked_add",
     "checkedSum": "checked_sum",
     "checkedMultiply": "checked_mul",
+    "checkedSubtract": "checked_sub",
+    "isZip321Address": "is_zip321_address",
     "zatoshiPerZec": "ZATOSHI_PER_ZEC",
     "maxAmount": "MAX_AMOUNT",
     "minAmount": "MIN_AMOUNT",

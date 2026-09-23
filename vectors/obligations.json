@@ -1,6 +1,6 @@
 {
   "description": "One payer's obligation as a payment request. SPEC.md section 8.5.",
-  "count": 17,
+  "count": 20,
   "cases": [
     {
       "name": "one_recipient",
@@ -584,6 +584,170 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "error": "zip321_no_address"
+    },
+    {
+      "name": "an_address_no_request_can_carry_is_reported",
+      "settlements": [
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 7004
+        },
+        {
+          "from": "cai",
+          "to": "dee",
+          "amount": 9246
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "dee",
+          "name": "Dee",
+          "payTo": "u1dee-not-an-address"
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": true,
+      "includeFiat": true,
+      "expect": {
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "payments": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 737264
+          }
+        ],
+        "unpayable": [
+          {
+            "id": "dee",
+            "reason": "bad_address",
+            "minorUnits": 9246
+          }
+        ],
+        "carriedMinorUnits": 7004,
+        "withheldMinorUnits": 9246,
+        "isComplete": false
+      }
+    },
+    {
+      "name": "and_refuses_the_request_as_a_bad_address_when_not_skipping",
+      "settlements": [
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 7004
+        },
+        {
+          "from": "cai",
+          "to": "dee",
+          "amount": 9246
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "dee",
+          "name": "Dee",
+          "payTo": "u1dee-not-an-address"
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": false,
+      "includeFiat": true,
+      "error": "zip321_bad_address"
+    },
+    {
+      "name": "a_zec_payout_whose_address_no_request_can_carry",
+      "settlements": [
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 7004
+        },
+        {
+          "from": "cai",
+          "to": "gus",
+          "amount": 9246
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "gus",
+          "name": "Gus",
+          "payouts": [
+            {
+              "type": "zec",
+              "address": "u1 gus"
+            }
+          ]
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": true,
+      "includeFiat": true,
+      "expect": {
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "payments": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 737264
+          }
+        ],
+        "unpayable": [
+          {
+            "id": "gus",
+            "reason": "bad_address",
+            "minorUnits": 9246
+          }
+        ],
+        "carriedMinorUnits": 7004,
+        "withheldMinorUnits": 9246,
+        "isComplete": false
+      }
     },
     {
       "name": "a_zec_payout_with_no_address",

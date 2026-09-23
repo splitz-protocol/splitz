@@ -7,6 +7,13 @@ use crate::error::{code, Result, SplitError};
 use crate::money::is_currency;
 use crate::rate::ZATOSHI_PER_ZEC;
 
+/// Whether `address` is one §8.3 admits: non-empty and ASCII alphanumeric.
+///
+/// Syntax only. A wallet still puts every address through its own decoder.
+pub fn is_zip321_address(address: &str) -> bool {
+    !address.is_empty() && address.bytes().all(|b| b.is_ascii_alphanumeric())
+}
+
 /// 21000000 ZEC, in zatoshi.
 pub const MAX_ZATOSHI: i64 = 21_000_000 * ZATOSHI_PER_ZEC;
 
@@ -219,7 +226,7 @@ pub fn render_uri(payments: &[Zip321Payment], include_fiat: bool) -> Result<Stri
                 "A payment names no address",
             ));
         }
-        if !p.address.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        if !is_zip321_address(&p.address) {
             return Err(SplitError::new(
                 code::ZIP321_BAD_ADDRESS,
                 "The ZIP 321 grammar admits only alphanumeric addresses",

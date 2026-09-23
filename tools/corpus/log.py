@@ -701,6 +701,57 @@ FOLD_CASES += [
 ]
 
 
+# §5.1 and §10.3. A bill the fold returns always has balances §2.2 can hold:
+# an entry whose effect would carry one out of range is set aside.
+I64_MAX = 2**63 - 1
+
+
+def expense(eid, author, paid_by, amount, amounts, minute):
+    return {"v": 1, "id": eid, "author": author, "kind": "addExpense",
+            "at": AT(minute),
+            "expense": {"id": "x" + eid, "description": "big",
+                        "paidBy": paid_by, "amount": amount, "at": AT(minute),
+                        "split": {"type": "exact", "amounts": amounts}}}
+
+
+def payment(eid, author, frm, to, amount, minute, pid):
+    return {"v": 1, "id": eid, "author": author, "kind": "recordPayment",
+            "at": AT(minute),
+            "payment": {"id": pid, "from": frm, "to": to, "amount": amount,
+                        "method": "cash", "at": AT(minute)}}
+
+
+def confirm(eid, author, pid, minute):
+    return {"v": 1, "id": eid, "author": author, "kind": "confirmPayment",
+            "at": AT(minute),
+            "confirmation": {"paymentId": pid,
+                             "method": "recipientConfirmed"}}
+
+
+FOLD_CASES += [
+    ("an_expense_that_would_carry_a_balance_out_of_range_is_set_aside",
+     BASE + [expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9)],
+     C["id"]),
+    ("and_the_same_expense_on_a_bill_it_fits_is_applied",
+     [C, J_ANA, J_BEN,
+      expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9)], C["id"]),
+    ("a_payment_that_would_carry_a_pair_total_out_of_range_is_set_aside",
+     [C, J_ANA, J_BEN,
+      payment("q1", "ben", "ben", "ana", I64_MAX, 9, "y1"),
+      payment("q2", "ben", "ben", "ana", 1, 10, "y2")], C["id"]),
+    ("a_confirmation_that_would_carry_a_balance_out_of_range_is_set_aside",
+     [C, J_ANA, J_BEN,
+      expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9),
+      payment("q1", "ana", "ana", "ben", 10, 10, "y1"),
+      confirm("k1", "ben", "y1", 11)], C["id"]),
+    ("and_one_that_keeps_every_balance_in_range_applies",
+     [C, J_ANA, J_BEN,
+      expense("big", "ben", "ana", I64_MAX, {"ben": I64_MAX}, 9),
+      payment("q1", "ben", "ben", "ana", 10, 10, "y1"),
+      confirm("k1", "ana", "y1", 11)], C["id"]),
+]
+
+
 def forgery_of(entry, **changed):
     """A re-pushed copy of `entry` with members changed, keeping its id.
 

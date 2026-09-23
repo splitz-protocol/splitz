@@ -140,7 +140,8 @@ pub struct Settlement {
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Unpayable {
     pub id: String,
-    /// `no_address` or `payout_not_zec`. The two need different remedies.
+    /// `no_address`, `bad_address` or `payout_not_zec`. Each needs a different
+    /// remedy.
     pub reason: String,
     pub minor_units: i64,
 }

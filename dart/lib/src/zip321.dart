@@ -10,6 +10,12 @@ import 'errors.dart';
 import 'money.dart';
 import 'rate.dart';
 
+/// Whether [address] is one §8.3 admits: non-empty and ASCII alphanumeric.
+///
+/// Syntax only. A wallet still puts every address through its own decoder.
+bool isZip321Address(String address) =>
+    RegExp(r'^[A-Za-z0-9]+$').hasMatch(address);
+
 /// 21000000 ZEC, in zatoshi.
 const int maxZatoshi = 2100000000000000;
 
@@ -153,7 +159,7 @@ String renderUri(List<Zip321Payment> payments, {bool includeFiat = false}) {
     if (p.address.isEmpty) {
       raise(SplitCode.zip321NoAddress, 'A payment names no address');
     }
-    if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(p.address)) {
+    if (!isZip321Address(p.address)) {
       raise(SplitCode.zip321BadAddress,
           'The ZIP 321 grammar admits only alphanumeric addresses');
     }
