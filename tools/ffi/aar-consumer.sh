@@ -53,7 +53,9 @@ echo "  none of those is loaded below: a JVM run loads the host library."
 # The host cdylib the JVM run binds to. The AAR's Kotlin was generated from a
 # release build of the same crate, so the checksums the binding asserts match.
 (cd "$root/rust" && "${CARGO:-cargo}" build --quiet --release -p splitz-ffi)
-libdir="$root/rust/target/release"
+# shellcheck source=../package/source.sh
+. "$root/tools/package/source.sh"
+libdir="$(cargo_target_dir "$root")/release"
 for name in libsplitz_ffi.dylib libsplitz_ffi.so splitz_ffi.dll; do
   [ -f "$libdir/$name" ] && host="$libdir/$name" && break
 done

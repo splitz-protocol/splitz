@@ -19,6 +19,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="$root/dist/ios"
 # Taken before the build: the source this package is compiled from.
 . "$root/tools/package/source.sh"
+target_dir="$(cargo_target_dir "$root")"
 stamp="$(rust_source_stamp "$root")"
 scripts="$(script_source_stamp "$root" ios)"
 DEVICE=aarch64-apple-ios
@@ -55,13 +56,13 @@ done
 # one fat archive. The device slice stays alone.
 sim_archives=()
 for t in "${SIMS[@]}"; do
-  sim_archives+=("$root/rust/target/$t/release/libsplitz_ffi.a")
+  sim_archives+=("$target_dir/$t/release/libsplitz_ffi.a")
 done
 lipo -create -output "$out/sim/libsplitz_ffi.a" "${sim_archives[@]}"
 
 mac_archives=()
 for t in "${MACS[@]}"; do
-  mac_archives+=("$root/rust/target/$t/release/libsplitz_ffi.a")
+  mac_archives+=("$target_dir/$t/release/libsplitz_ffi.a")
 done
 lipo -create -output "$out/mac/libsplitz_ffi.a" "${mac_archives[@]}"
 
@@ -74,7 +75,7 @@ lipo -create -output "$out/mac/libsplitz_ffi.a" "${mac_archives[@]}"
 (cd "$root/rust" && "${CARGO:-cargo}" build --quiet --release -p splitz-ffi)
 (cd "$root/rust" && "${CARGO:-cargo}" run --quiet --bin uniffi-bindgen \
    -p splitz-ffi -- generate \
-   --library "$root/rust/target/release/libsplitz_ffi.dylib" \
+   --library "$target_dir/release/libsplitz_ffi.dylib" \
    --language swift --out-dir "$out/swift")
 
 cp "$out/swift"/*.h "$out/headers/"
@@ -83,7 +84,7 @@ cp "$out/swift"/*.h "$out/headers/"
 cp "$out/swift"/*.modulemap "$out/headers/module.modulemap"
 
 xcodebuild -create-xcframework \
-  -library "$root/rust/target/$DEVICE/release/libsplitz_ffi.a" \
+  -library "$target_dir/$DEVICE/release/libsplitz_ffi.a" \
   -headers "$out/headers" \
   -library "$out/sim/libsplitz_ffi.a" \
   -headers "$out/headers" \
@@ -132,7 +133,7 @@ echo
 echo "swift package: $pkg"
 (cd "$pkg" && swift package describe --type json >/dev/null &&
    echo "  Package.swift parses")
-lipo -info "$root/rust/target/$DEVICE/release/libsplitz_ffi.a" | sed 's/^/  device: /'
+lipo -info "$target_dir/$DEVICE/release/libsplitz_ffi.a" | sed 's/^/  device: /'
 lipo -info "$out/sim/libsplitz_ffi.a" | sed 's/^/  sim:    /'
 lipo -info "$out/mac/libsplitz_ffi.a" | sed 's/^/  mac:    /'
 echo "  a consumer depends on it with:"

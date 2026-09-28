@@ -66,7 +66,7 @@ case "$target" in
   *-musl) export RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=-crt-static" ;;
 esac
 (cd "$root/rust" && "${CARGO:-cargo}" build --quiet --release -p splitz-ffi)
-lib="$root/rust/target/release"
+lib="$(cargo_target_dir "$root")/release"
 for name in libsplitz_ffi.dylib libsplitz_ffi.so splitz_ffi.dll; do
   [ -f "$lib/$name" ] && library="$lib/$name" && break
 done

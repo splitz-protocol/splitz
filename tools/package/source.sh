@@ -6,6 +6,16 @@
 # compiles and the lock file — with "+dirty" when rust/ carries uncommitted
 # changes, since those are compiled but named by no hash.
 
+# The directory cargo builds rust/ into, as cargo itself resolves it —
+# CARGO_TARGET_DIR, build.target-dir in a config file, or rust/target. A
+# package copied from any other directory ships whatever an earlier build left
+# there under a stamp naming HEAD.
+cargo_target_dir() {
+  local root="$1"
+  (cd "$root/rust" && "${CARGO:-cargo}" metadata --format-version 1 --no-deps) |
+    python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])'
+}
+
 rust_source_stamp() {
   local root="$1" tree
   tree="$(git -C "$root" rev-parse HEAD:rust)"

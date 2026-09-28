@@ -21,7 +21,9 @@ if ! command -v node >/dev/null || ! command -v npm >/dev/null; then
 fi
 
 (cd "$root/rust" && "${CARGO:-cargo}" build --quiet -p splitz-ffi)
-lib="$root/rust/target/debug"
+# shellcheck source=../package/source.sh
+. "$root/tools/package/source.sh"
+lib="$(cargo_target_dir "$root")/debug"
 for name in libsplitz_ffi.dylib libsplitz_ffi.so splitz_ffi.dll; do
   [ -f "$lib/$name" ] && library="$lib/$name" && break
 done

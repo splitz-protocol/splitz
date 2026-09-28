@@ -16,6 +16,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../package/source.sh
+. "$root/tools/package/source.sh"
 sdk="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 aar="$root/dist/android/splitz/build/outputs/aar/splitz-release.aar"
 work="$(mktemp -d)"
@@ -34,7 +36,7 @@ fi
 # Built outside the repository so no build/, .gradle/ or .kotlin/ lands in it.
 cp -R "$root/tools/ffi/aar/." "$work/"
 (cd "$work" && ANDROID_HOME="$sdk" gradle connectedDebugAndroidTest --no-daemon \
-   -PsplitzAar="$aar" -PsplitzLibDir="$root/rust/target/release")
+   -PsplitzAar="$aar" -PsplitzLibDir="$(cargo_target_dir "$root")/release")
 status=$?
 
 # The device's own stdout, which Gradle does not print.

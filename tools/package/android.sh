@@ -18,6 +18,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 out="$root/dist/android"
 # Taken before the build: the source this package is compiled from.
 . "$root/tools/package/source.sh"
+target_dir="$(cargo_target_dir "$root")"
 stamp="$(rust_source_stamp "$root")"
 scripts="$(script_source_stamp "$root" android)"
 API="${ANDROID_API_LEVEL:-21}"
@@ -71,14 +72,14 @@ for row in "${TARGETS[@]}"; do
   (cd "$root/rust" && env "$var=$linker" "AR_${triple//-/_}=$bin/llvm-ar" \
      "${CARGO:-cargo}" build --quiet --release -p splitz-ffi --target "$triple")
   mkdir -p "$out/jniLibs/$abi"
-  cp "$root/rust/target/$triple/release/libsplitz_ffi.so" "$out/jniLibs/$abi/"
+  cp "$target_dir/$triple/release/libsplitz_ffi.so" "$out/jniLibs/$abi/"
 done
 
 # uniffi reads the metadata by loading the library, so the Kotlin is generated
 # from a HOST build. The metadata comes from the source, not the target.
 (cd "$root/rust" && "${CARGO:-cargo}" build --quiet --release -p splitz-ffi)
-lib="$root/rust/target/release/libsplitz_ffi.dylib"
-[ -f "$lib" ] || lib="$root/rust/target/release/libsplitz_ffi.so"
+lib="$target_dir/release/libsplitz_ffi.dylib"
+[ -f "$lib" ] || lib="$target_dir/release/libsplitz_ffi.so"
 (cd "$root/rust" && "${CARGO:-cargo}" run --quiet --bin uniffi-bindgen \
    -p splitz-ffi -- generate --library "$lib" \
    --language kotlin --out-dir "$out/kotlin")
