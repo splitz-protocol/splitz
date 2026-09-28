@@ -173,7 +173,9 @@ pub fn parse_invite(text: &str) -> Result<Invite> {
     }
 
     let key = field("k").unwrap_or("");
-    if key.is_empty() || !is_b64url(key) {
+    // §11.1: `k` decodes as unpadded base64url, not merely draws from its
+    // alphabet.
+    if key.is_empty() || unbase64url(key).is_none() {
         return Err(SplitError::new(
             code::INVITE_MISSING_KEY,
             "An invite carries a base64url key",
@@ -237,7 +239,7 @@ pub fn render_invite(invite: &Invite) -> Result<String> {
             format!("Not a bill id: \"{}\"", invite.bill_id),
         ));
     }
-    if invite.key.is_empty() || !is_b64url(&invite.key) {
+    if invite.key.is_empty() || unbase64url(&invite.key).is_none() {
         return Err(SplitError::new(
             code::INVITE_MISSING_KEY,
             "An invite carries a base64url key",
@@ -329,6 +331,16 @@ pub fn encode_payload(prefix: &str, body: &Value) -> Result<String> {
 }
 
 /// Decodes a scanned payload.
+/// True when every number in `value` is one a double holds.
+fn all_numbers_finite(value: &Value) -> bool {
+    match value {
+        Value::Number(n) => n.as_f64().is_some_and(f64::is_finite),
+        Value::Array(items) => items.iter().all(all_numbers_finite),
+        Value::Object(map) => map.values().all(all_numbers_finite),
+        _ => true,
+    }
+}
+
 pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
     // Padding is stripped before the prefix is matched and before the size is
     // measured, so padding does not count toward the cap.
@@ -368,6 +380,13 @@ pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
         return Err(damaged());
     }
     if !within_depth(&body, MAX_DOCUMENT_DEPTH) {
+        return Err(damaged());
+    }
+    // §2.3 and §11.2, over the whole body before any entry is read. The parser
+    // refuses a string that is not Unicode scalar values; a number no double
+    // holds (`1e400`) parses, and makes the document damaged as a whole: one
+    // reader must not open a bill from a code another refuses.
+    if !all_numbers_finite(&body) {
         return Err(damaged());
     }
 

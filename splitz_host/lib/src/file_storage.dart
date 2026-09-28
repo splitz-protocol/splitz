@@ -88,10 +88,12 @@ class FileBillStorage implements BillStorage {
     if (!await file.exists()) return null;
     try {
       return await file.readAsString();
-    } on FileSystemException {
-      // Unreadable is the same as absent to a caller: the bill is not here.
-      // Raising would take down whatever listed the bills.
-      return null;
+    } on FileSystemException catch (e) {
+      // Present and unreadable is not absent: a caller that took it for
+      // absent would write over entries it never saw.
+      throw BillStorageUnreadable(key, e);
+    } on FormatException catch (e) {
+      throw BillStorageUnreadable(key, e);
     }
   }
 
@@ -133,16 +135,20 @@ class FileBillStorage implements BillStorage {
     return names;
   }
 
-  /// Removes any file left behind by a write that did not finish.
+  /// Removes every file a write left behind in an earlier process.
   ///
-  /// Safe to call at startup and harmless when there is nothing to remove.
-  /// A leftover is already invisible to [keys]; this stops them accumulating.
+  /// A write in this process names its temporary file with [_process], so a
+  /// sweep run while one is in flight — any load, not only the first — leaves
+  /// it be: deleting it would fail the rename and lose the entry being
+  /// written. A leftover is already invisible to [keys]; this stops them
+  /// accumulating.
   @override
   Future<int> sweepUnfinishedWrites() async {
     if (!await directory.exists()) return 0;
     var removed = 0;
     await for (final entity in directory.list(followLinks: false)) {
-      if (entity is File && _isUnfinished(entity.uri.pathSegments.last)) {
+      final name = entity.uri.pathSegments.last;
+      if (entity is File && _isUnfinished(name) && !_isThisProcess(name)) {
         await entity.delete();
         removed++;
       }
@@ -151,11 +157,19 @@ class FileBillStorage implements BillStorage {
   }
 }
 
-/// A temporary name beside [path], unique to one write.
+/// A temporary name beside [path], unique to one write, naming the process
+/// that wrote it.
 String _unfinished(String path) =>
-    '$path~${DateTime.now().microsecondsSinceEpoch}-'
+    '$path~$_process~${DateTime.now().microsecondsSinceEpoch}-'
     '${_writes++}.writing';
 int _writes = 0;
+
+/// This process, as its temporary files name it: its id and when it began,
+/// so a later process reusing the id is not mistaken for it.
+final String _process = '$pid-${DateTime.now().microsecondsSinceEpoch}';
+
+/// Whether [name] is a temporary file this process wrote.
+bool _isThisProcess(String name) => name.contains('~$_process~');
 
 /// A name a write left behind: this version's, or `<name>.writing` from one
 /// that used a single temporary name. No stored key ends so.

@@ -211,17 +211,20 @@ void main() {
     Future<String> sign(List<int> message) async => 'good';
     bool verify(Map<String, dynamic> e, String key) => e['sig'] == 'good';
 
+    // §10.7: a participant who publishes a key is named by the id it derives.
+    final benId = splitz.participantId(fakeKey('ben'))!;
+
     Future<({BillLog log, FakeHost ben})> signedDinner(
         {required bool benSigns}) async {
       final ana = FakeHost(
           me: 'ana', payToAddress: 'u1ana', sign: sign, verify: verify);
       final ben = FakeHost(
-        me: 'ben',
+        me: benId,
         payToAddress: 'u1ben',
         sign: benSigns ? sign : null,
         verify: verify,
       );
-      final signer = FakeHost(me: 'ben', payToAddress: 'u1ben', sign: sign);
+      final signer = FakeHost(me: benId, payToAddress: 'u1ben', sign: sign);
       final create = createBill(
           host: ana,
           name: 'Dinner',
@@ -256,9 +259,9 @@ void main() {
             expenseId: 'x1',
             paidBy: 'ana',
             amount: 9000,
-            split: const {
+            split: {
               'type': 'equal',
-              'among': ['ana', 'ben'],
+              'among': ['ana', benId],
             },
           )));
       ana.tick();
@@ -275,13 +278,13 @@ void main() {
     }
 
     final d = await signedDinner(benSigns: true);
-    expect(d.log.fold().identities.bound.keys, containsAll(['ana', 'ben']));
+    expect(d.log.fold().identities.bound.keys, containsAll(['ana', benId]));
     final settled =
         await settle(d.ben, d.log, obligationFor(d.ben, d.log.fold())!);
     expect(settled.records.single['sig'], 'good');
     final after = d.log.fold();
     expect(after.setAside, isEmpty);
-    expect(after.bill.payments.single.from, 'ben',
+    expect(after.bill.payments.single.from, benId,
         reason: "ben's own record is on the bill on ben's own device");
 
     // The rule the signature satisfies: the same record unsigned is not the
@@ -319,6 +322,42 @@ void main() {
         reason: 'the debt stands exactly as it did before the attempt');
   });
 
+  test('a pending send keeps the transaction the wallet built', () async {
+    // Nothing is recorded from it, but the id is what a person looks for in
+    // the wallet's history to learn which way the send went.
+    final d = dinner();
+    final pending = _FixedOutcome(
+        d.ben, const Sent.pending(detail: 'not confirmed', txid: 'tx-held'));
+    final settled =
+        await settle(pending, d.log, obligationFor(pending, d.log.fold())!);
+    expect(settled.result, SendResult.pending);
+    expect(settled.txid, 'tx-held');
+    expect(settled.records, isEmpty);
+    expect(d.log.fold().bill.payments, isEmpty);
+  });
+
+  test('a record states what it sent in ZEC and the rate it was priced at',
+      () async {
+    // §9.2. The payee confirms against a figure they can compare with what
+    // arrived: a fiat amount alone hides a rate lowered before paying.
+    final d = twoDebts();
+    final owed = obligationFor(d.ana, d.log.fold())!;
+    final settled = await settle(d.ana, d.log, owed);
+    final byTo = {
+      for (final r in settled.records)
+        (r['payment'] as Map)['to']: (r['payment'] as Map)
+    };
+    for (var i = 0; i < owed.request.payments.length; i++) {
+      final to = owed.request.recipients[i];
+      expect(byTo[to]!['zatoshi'], owed.request.payments[i].zatoshi);
+      expect(byTo[to]!['paidAtRate'], splitz.rateToJson(owed.rate));
+    }
+    final paid = d.log.fold().bill.payments;
+    expect(paid.map((p) => p.zatoshi), everyElement(isNotNull));
+    expect(paid.map((p) => p.paidAtRate?.minorUnitsPerZec),
+        everyElement(owed.rate.minorUnitsPerZec));
+  });
+
   test('a pending send found on chain later records what a sent one would',
       () async {
     // Two logs from one bill: in one the send succeeds at once; in the other
@@ -335,8 +374,9 @@ void main() {
     expect((await settle(pending, later.log, owed)).records, isEmpty);
     expect(owed.carriedTo, {'ben': 3000, 'cat': 3000});
 
-    final records =
-        await recordSend(later.ana, later.log, owed.carriedTo, sent.txid!);
+    final records = await recordSend(
+        later.ana, later.log, owed.carriedTo, sent.txid!,
+        zatoshi: owed.carriedZatoshi, rate: owed.rate);
     // `at` is when the record was written, which is later for a recovery.
     Map<String, dynamic> payment(Map<String, dynamic> r) =>
         {...r['payment'] as Map<String, dynamic>}..remove('at');
@@ -580,8 +620,6 @@ class _HostThatSyncsOnSend implements BillHost {
   @override
   String get me => _inner.me;
   @override
-  String? get payToAddress => _inner.payToAddress;
-  @override
   Clock get now => _inner.now;
   @override
   Randomness get randomBytes => _inner.randomBytes;
@@ -606,8 +644,6 @@ class _FixedOutcome implements BillHost {
 
   @override
   String get me => _inner.me;
-  @override
-  String? get payToAddress => _inner.payToAddress;
   @override
   Clock get now => _inner.now;
   @override

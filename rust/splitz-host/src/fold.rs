@@ -94,6 +94,9 @@ pub fn fold_verified(
     if let Some(sign) = sign {
         host = host.signing_with(sign);
     }
+    if let Some(me) = seed.and_then(|seed| signer.participant_id_from_seed(seed)) {
+        host = host.speaking_as(me);
+    }
 
     // The fold is attempted, and the unanswered check runs whether or not it
     // succeeded. An unanswered pair makes a *failure* as untrustworthy as a
@@ -112,9 +115,9 @@ pub fn fold_verified(
 
 /// Folds `entries` without checking any signature.
 ///
-/// For a device that holds no identity yet. §10.7 then binds no key and
-/// reports no contest, which is a different claim from reporting that nothing
-/// is contested — and is the honest one here.
+/// For a device that holds no identity yet. §10.7 then binds no key, which is
+/// a different claim from reporting that every key checked out — and is the
+/// honest one here.
 pub fn fold_unverified(
     wallet: &dyn SplitsWallet,
     bill_id: &str,

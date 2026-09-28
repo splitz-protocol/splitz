@@ -18,7 +18,6 @@ class MyWallet extends BillHost {
   @override
   final String me;
 
-  @override
   final String? payToAddress;
 
   @override

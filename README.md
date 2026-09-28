@@ -21,7 +21,7 @@ nobody mistakes them for missing features.
 | **the plumbing** | `splitz_host/`, `rust/splitz-host` | signing entries, sealing them, storing them, syncing through a relay, swaps, activity |
 | **the binding** | `rust/splitz-ffi` | using the Rust crate from Kotlin, Swift, Dart or JavaScript |
 | **the seam** | `SPEC.md` §15 | the seven things a wallet has to provide |
-| **the test cases** | `vectors/` | 511 cases in 18 files any implementation can run, in no particular language |
+| **the test cases** | `vectors/` | 553 cases in 18 files any implementation can run, in no particular language |
 | **the extra checks** | `tools/` | everything a fixed set of test cases can't catch |
 
 A Flutter wallet can also take the screens ready-made: `splitz_flutter` is a
@@ -120,11 +120,11 @@ their minimum. Run each command from the repository root; the comment beside
 it says what a pass looks like.
 
 ```
-cd dart && dart test                 # +610: All tests passed!
-                                     #   every one of the 511 shared cases
+cd dart && dart test                 # +653: All tests passed!
+                                     #   every one of the 553 shared cases
                                      #   among them
-cd splitz_host && dart test          # +150: All tests passed!
-cd rust && cargo test                # every "test result: ok", 197 in all
+cd splitz_host && dart test          # +155: All tests passed!
+cd rust && cargo test                # every "test result: ok", 203 in all
 cd dart && dart run example/dinner.dart
                                      # one bill, three people, the fewest
                                      #   payments, and one payer's single
@@ -183,7 +183,7 @@ An implementation conforms when it reproduces every case in `vectors/` and
 follows §14, which is about what the wallet has to do rather than what goes
 over the wire.
 
-`SPEC.md` §12 lists 78 reasons the library can refuse something. Every one has
+`SPEC.md` §12 lists 81 reasons the library can refuse something. Every one has
 a test case except the one the spec excuses by name, `bill_not_scalar_values`:
 its input is a document any correct JSON reader rejects, so a test case holding
 it would break the whole file rather than test anything. Each implementation

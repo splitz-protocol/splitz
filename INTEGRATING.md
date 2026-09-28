@@ -21,76 +21,199 @@ under **Use it in your wallet**.
 
 ## Dart
 
-```dart
+A whole program, run by `tools/examples/run.sh`. It plans one payer's share,
+renders it as one request, and records what the send paid — one record per
+payee, each under its own id (§10.5).
+
+```dart file=dart/example/integrating.dart
 import 'package:splitz_core/splitz_core.dart';
 
-final plan = settleBill(bill);                  // fewest payments
-// A bill with no `setRate` entry is an ordinary bill, so this is a branch and
-// not a `!`. There is no refusal code for "unpriced": it is not an error, and
-// there is nothing for a `SplitError` handler to catch.
-final rate = bill.rate;                         // snapshotted into the bill
-if (rate == null) return yourOwnUnpricedBillPath();
+// A bill: Ben and Cai each paid 30.00 split with Ana, so Ana owes each of
+// them 15.00, and it carries the rate §7 snapshotted onto it. A wallet has
+// this from a fold.
+final bill = decodeBill({
+  'v': 1,
+  'id': 'b1',
+  'currency': 'EUR',
+  'participants': [
+    {'id': 'ana', 'name': 'Ana', 'payTo': 'u1ana0000000000000000000'},
+    {'id': 'ben', 'name': 'Ben', 'payTo': 'u1ben0000000000000000000'},
+    {'id': 'cai', 'name': 'Cai', 'payTo': 'u1cai0000000000000000000'},
+  ],
+  'expenses': [
+    {
+      'id': 'x1',
+      'paidBy': 'ben',
+      'amount': 3000,
+      'at': '2026-10-28T19:30:00.000Z',
+      'split': {
+        'type': 'equal',
+        'among': ['ana', 'ben'],
+      },
+    },
+    {
+      'id': 'x2',
+      'paidBy': 'cai',
+      'amount': 3000,
+      'at': '2026-10-28T19:31:00.000Z',
+      'split': {
+        'type': 'equal',
+        'among': ['ana', 'cai'],
+      },
+    },
+  ],
+  'rate': {
+    'currency': 'EUR',
+    'minorUnitsPerZec': 300000,
+    'at': '2026-10-28T19:32:00.000Z',
+  },
+});
 
-for (final settlement in plan.settlements) {
-  if (settlement.from != me) continue;
+const me = 'ana';
 
-  final address = bill.participant(settlement.to)?.payableAddress;
-  if (address == null) {
-    // Reported, never dropped: a dropped output settles less than the plan
-    // says it does, and the payer cannot tell.
-    reportUnpayable(settlement.to);
-    continue;
+void main() {
+  final plan = settleBill(bill); // fewest payments
+  // A bill with no `setRate` entry is an ordinary bill, so this is a branch
+  // and not a `!`. There is no refusal code for "unpriced": it is not an
+  // error, and there is nothing for a `SplitError` handler to catch.
+  final rate = bill.rate;
+  if (rate == null) return;
+
+  final payments = <Zip321Payment>[];
+  final paidTo = <Settlement>[];
+  for (final settlement in plan.settlements) {
+    if (settlement.from != me) continue;
+
+    final address = bill.participant(settlement.to)?.payableAddress;
+    if (address == null) {
+      // Reported, never dropped: a dropped output settles less than the plan
+      // says it does, and the payer cannot tell.
+      print('cannot pay ${settlement.to} here');
+      continue;
+    }
+
+    payments.add(
+      Zip321Payment(
+        address: address,
+        zatoshi: fiatToZatoshi(settlement.amount, rate),
+        fiat: FiatPrice(bill.currency, settlement.amount),
+        label: bill.participant(settlement.to)?.name,
+      ),
+    );
+    paidTo.add(settlement);
   }
 
-  payments.add(Zip321Payment(
-    address: address,
-    zatoshi: fiatToZatoshi(settlement.amount, rate),
-    fiat: FiatPrice(bill.currency, settlement.amount),
-    label: bill.participant(settlement.to)?.name,
-  ));
+  final uri = renderUri(payments); // one transaction
+  print('request: $uri');
+  const txid = 'tx-from-the-wallet'; // what the wallet's broadcast returned
+
+  // A bill closes because a payment is confirmed, not because one was sent.
+  // One transaction paying two people is two records, and §10.5 requires each
+  // to carry its own id: under one id the second is set aside and its payee
+  // asked to be paid again. The transaction goes in `reference`, and each
+  // record states what it sent in ZEC and the rate it was priced at, so the
+  // payee confirms against a figure they can compare with what arrived.
+  //
+  // The protocol import exports no entry builder: at this level the wallet
+  // assembles the map and derives its §9.5 id with `deriveEntryId`.
+  // `package:splitz_core/host.dart` has `recordSend`, which does exactly this.
+  // `canonicalInstant` takes a string, not a clock value: this library
+  // exports nothing that reads a clock, because a clock is the host's (§13).
+  final at = canonicalInstant('2026-10-28T19:40:00.000Z');
+  final records = <Map<String, dynamic>>[];
+  for (var i = 0; i < paidTo.length; i++) {
+    final settlement = paidTo[i];
+    final entry = <String, dynamic>{
+      'v': 1,
+      'author': me,
+      'kind': 'recordPayment',
+      'at': at,
+      'payment': {
+        'id': '$txid:${settlement.to}',
+        'from': me,
+        'to': settlement.to,
+        'amount': settlement.amount,
+        'method': 'shieldedZec',
+        'at': at,
+        'reference': txid,
+        'zatoshi': payments[i].zatoshi,
+        'paidAtRate': rateToJson(rate),
+      },
+    };
+    entry['id'] = deriveEntryId(entry); // §9.5: the id IS the digest
+    records.add(checkEntry(entry));
+  }
+
+  final ids = {for (final r in records) (r['payment'] as Map)['id']};
+  print('records: ${records.length}, ids: ${ids.join(', ')}');
+  if (records.length != 2 || ids.length != 2) {
+    throw StateError('one record per payee, each its own id');
+  }
 }
-
-broadcast(renderUri(payments));                 // one transaction
-
-// A bill closes because a payment is confirmed, not because one was sent.
-// The protocol import exports no entry builder: at this level the wallet
-// assembles the map and derives its §9.5 id with `deriveEntryId`, then
-// appends it to its own log. `package:splitz_core/host.dart` has `recordPayment`
-// and the rest, which do exactly this and hand back an entry whose id is
-// already the digest; see **The wallet seam**.
-// `canonicalInstant` takes a string, not a clock value: this library exports
-// nothing that reads a clock, because a clock is the host's (§13).
-final nowIso = DateTime.now().toUtc().toIso8601String();
-final entry = <String, dynamic>{
-  'v': 1,
-  'author': me,
-  'kind': 'recordPayment',
-  'at': canonicalInstant(nowIso),
-  'payment': {
-    'id': txid,
-    'from': me,
-    'to': settlement.to,
-    'amount': settlement.amount,
-    'method': 'shieldedZec',
-    'at': canonicalInstant(nowIso),
-  },
-};
-entry['id'] = deriveEntryId(entry);            // §9.5: the id IS the digest
 ```
 
 ## Rust
 
-```rust
-let plan = splitz_core::settle_bill(&bill, splitz_core::DEFAULT_EXACT_LIMIT)?;
-let zatoshi = splitz_core::fiat_to_zatoshi(
-    settlement.amount,
+```rust file=rust/splitz-core/examples/integrating.rs
+use splitz_core::{decode_bill, fiat_to_zatoshi, render_uri, settle_bill, FiatPrice};
+use splitz_core::{RateRounding, Zip321Payment, DEFAULT_EXACT_LIMIT};
+
+fn main() -> splitz_core::Result<()> {
+    // Ben paid 30.00 split with Ana, so Ana owes him 15.00; the bill carries
+    // the rate §7 snapshotted onto it. A wallet has this from a fold.
+    let bill = decode_bill(&serde_json::json!({
+        "v": 1, "id": "b1", "currency": "EUR",
+        "participants": [
+            {"id": "ana", "name": "Ana", "payTo": "u1ana0000000000000000000"},
+            {"id": "ben", "name": "Ben", "payTo": "u1ben0000000000000000000"}
+        ],
+        "expenses": [{
+            "id": "x1", "paidBy": "ben", "amount": 3000,
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {"type": "equal", "among": ["ana", "ben"]}
+        }],
+        "rate": {"currency": "EUR", "minorUnitsPerZec": 300000,
+                 "at": "2026-10-28T19:32:00.000Z"}
+    }))?;
+
+    let plan = settle_bill(&bill, DEFAULT_EXACT_LIMIT)?;
     // A bill with no `setRate` entry is an ordinary bill; this is a branch,
     // not an `expect`.
-    bill.rate.as_ref().ok_or(NoRateYet)?,
-    Some(&bill.currency),
-    splitz_core::RateRounding::Up,
-)?;
-let uri = splitz_core::render_uri(&payments, true)?;
+    let Some(rate) = bill.rate.as_ref() else {
+        return Ok(());
+    };
+    let mut payments = Vec::new();
+    for settlement in plan.settlements.iter().filter(|s| s.from == "ana") {
+        let who = bill
+            .participant(&settlement.to)
+            .expect("the plan names participants");
+        // Reported, never dropped: a dropped output settles less than the
+        // plan says it does, and the payer cannot tell.
+        let Some(address) = who.payable_address() else {
+            println!("cannot pay {} here", settlement.to);
+            continue;
+        };
+        payments.push(Zip321Payment {
+            address: address.to_owned(),
+            zatoshi: fiat_to_zatoshi(
+                settlement.amount,
+                rate,
+                Some(&bill.currency),
+                RateRounding::Up,
+            )?,
+            fiat: Some(FiatPrice {
+                currency: bill.currency.clone(),
+                minor_units: settlement.amount,
+            }),
+            label: Some(who.name.clone()),
+            ..Default::default()
+        });
+    }
+    let uri = render_uri(&payments, true)?; // one transaction
+    println!("request: {uri}");
+    assert!(uri.starts_with("zcash:u1ben"), "{uri}");
+    Ok(())
+}
 ```
 
 ## The wallet seam
@@ -99,43 +222,132 @@ One import above the protocol, in both languages. It holds no key, opens no
 socket and reads no clock of its own: everything it cannot do is declared as
 one interface the wallet implements.
 
-```dart
-import 'package:splitz_core/splitz_core.dart' as splitz;
+```dart file=dart/example/seam.dart
+import 'dart:typed_data';
+
 import 'package:splitz_core/host.dart';
+import 'package:splitz_core/splitz_core.dart' as splitz;
 
 class MyWallet extends BillHost {
-  @override String get me => 'ana';
-  @override String? get payToAddress => 'u1ana…';
-  @override Clock get now => DateTime.now;
-  @override Randomness get randomBytes => secureRandom;
-  @override Broadcast get broadcast => (uri) async => Sent.sent(await send(uri));
+  @override
+  String get me => 'ana';
+  @override
+  Clock get now => DateTime.now;
+  @override
+  Randomness get randomBytes => secureRandom;
+  @override
+  Broadcast get broadcast => (uri) async => Sent.sent(await send(uri));
   // `sign` and `verify` default to null. Without them §10.7 binds no key and
   // a folded bill reports no identity binding rather than claiming one.
+
+  /// The address this wallet is paid at, which its join states.
+  String get myAddress => 'u1ana000000000000000000';
+
+  /// Stands in for the platform's secure random source.
+  Uint8List secureRandom(int n) =>
+      Uint8List.fromList(List<int>.generate(n, (i) => i * 7 + 1));
+
+  /// Stands in for the wallet's send path.
+  Future<String> send(String uri) async => 'tx-${uri.length}';
 }
 
-final host = MyWallet();
-final log = BillLog(host)
-  ..add([createBill(host: host, name: 'Dinner', currency: 'EUR',
-                    creatorKey: myEd25519PublicKeyBase64Url)]);
+Future<void> main() async {
+  final host = MyWallet();
+  final myEd25519PublicKeyBase64Url = base64UrlNoPad(
+    List<int>.generate(creatorKeyBytes, (i) => i),
+  );
 
-final folded = log.fold();                     // §10.3, plus what it refused
-final owed = obligationFor(host, folded);      // null when the bill has no rate
-if (owed != null) await settle(host, log, owed);
+  final log = BillLog(host)
+    ..add([
+      createBill(
+        host: host,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: myEd25519PublicKeyBase64Url,
+      ),
+    ]);
+
+  // A bill nobody has joined and nothing has been spent on still folds.
+  log.add([joinBill(host: host, name: 'Ana', payTo: host.myAddress)]);
+
+  final folded = log.fold(); // §10.3, plus what it refused
+  final owed = obligationFor(host, folded); // null when the bill has no rate
+  if (owed != null) await settle(host, log, owed);
+
+  print('bill       ${folded.bill.id}');
+  print('entries    ${log.entries.length}');
+  print('setAside   ${folded.setAside.length}');
+  print('obligation ${owed == null ? 'no rate yet' : owed.uri}');
+  print('identities ${folded.identities.bound.length} bound');
+  print('splitz     ${splitz.billVersion}');
+}
 ```
 
-```rust
-use splitz_core::host::{create_bill, obligation_for, settle, BillHost, BillLog, Sent};
+```rust file=rust/splitz-core/examples/seam.rs
+use splitz_core::host::{
+    base64url_no_pad, create_bill, join_bill, obligation_for, settle, BillHost, BillLog, Sent,
+    CREATOR_KEY_BYTES,
+};
+
+struct MyWallet;
+
+impl MyWallet {
+    /// The address this wallet is paid at, which its join states.
+    fn my_address(&self) -> Option<&str> {
+        Some("u1ana000000000000000000")
+    }
+}
 
 impl BillHost for MyWallet {
-    fn me(&self) -> &str { "ana" }
-    fn pay_to_address(&self) -> Option<&str> { Some("u1ana…") }
+    fn me(&self) -> &str {
+        "ana"
+    }
     // An RFC 3339 instant, not a date type: this crate depends on no calendar
     // library, and `canonical_instant` refuses anything that is not one.
-    fn now(&self) -> String { self.clock.now_rfc3339() }
-    fn random_bytes(&self, n: usize) -> Vec<u8> { self.rng.fill(n) }
+    fn now(&self) -> String {
+        "2026-10-28T19:30:00.000Z".to_owned()
+    }
+    fn random_bytes(&self, n: usize) -> Vec<u8> {
+        (0..n).map(|i| (i * 7 + 1) as u8).collect()
+    }
     // Synchronous, because this crate pulls in no async runtime and so cannot
     // own the executor a future would need. Block here, where you know yours.
-    fn broadcast(&self, uri: &str) -> Sent { Sent::sent(self.send(uri)) }
+    fn broadcast(&self, uri: &str) -> Sent {
+        Sent::sent(format!("tx-{}", uri.len()))
+    }
+}
+
+fn main() -> splitz_core::Result<()> {
+    let host = MyWallet;
+    let my_key = base64url_no_pad(&[0u8; CREATOR_KEY_BYTES]);
+
+    let mut log = BillLog::new(&host);
+    log.add(vec![create_bill(&host, "Dinner", "EUR", "equal", &my_key)?])?;
+    log.add(vec![join_bill(
+        &host,
+        Some("Ana"),
+        host.my_address(),
+        None,
+        None,
+    )?])?;
+
+    let folded = log.fold()?; // §10.3, plus what it set aside
+    let owed = obligation_for(&host, &folded)?;
+    if let Some(owed) = &owed {
+        settle(&host, &mut log, owed)?;
+    }
+
+    println!("bill       {}", folded.bill.id);
+    println!("entries    {}", log.entries().len());
+    println!("setAside   {}", folded.set_aside.len());
+    println!(
+        "obligation {}",
+        owed.as_ref()
+            .and_then(|o| o.uri().map(str::to_owned))
+            .unwrap_or_else(|| "no rate yet".to_owned())
+    );
+    println!("identities {} bound", folded.identities.bound.len());
+    Ok(())
 }
 ```
 
@@ -183,8 +395,7 @@ wallet passes the facts it owns and gets an answer:
 
 | `HostFacts` | what it is |
 |---|---|
-| `me` | the participant id every entry this device writes is authored by |
-| `payTo` | the address this device is paid at, or none |
+| `me` | the participant id every entry this device writes is authored by. A wallet that publishes an identity key speaks as the id that key derives — `participantIdForKey` — or the key binds nothing (§10.7) |
 | `now` | a §9.3 instant. Read when an entry is written, never while folding: §10.2 orders a log by instant, so a fold that read a clock would answer differently for one unchanged entry set |
 | `nonce` | sixteen bytes nobody can predict, for §9.4. Two bills opened in one second by one person are one bill when this can be guessed |
 
@@ -201,7 +412,8 @@ printed here and what is run ever differ.
 Two names to expect. The generated module follows each language's convention —
 `identityKeyFromSeed` in Kotlin and Dart, `identity_key_from_seed` in
 JavaScript — and the JavaScript generator spells record *fields* as Rust does,
-so a wallet passes `pay_to` there and `payTo` in the other two.
+so a record reads `withheld_minor_units` there and `withheldMinorUnits` in the
+other two.
 
 ### Kotlin
 
@@ -211,8 +423,8 @@ import uniffi.splitz_ffi.*
 /// The facts §15.1 says a wallet owns, for one call. A §9.3 instant and
 /// sixteen unpredictable bytes are the wallet's to supply: this library reads
 /// no clock (§13) and owns no entropy.
-fun facts(me: String, payTo: String, at: String, nonce: Int) =
-    HostFacts(me, payTo, at, ByteArray(16) { (nonce + it).toByte() })
+fun facts(me: String, at: String, nonce: Int) =
+    HostFacts(me, at, ByteArray(16) { (nonce + it).toByte() })
 
 /// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
 /// key: 32 bytes, unpadded base64url.
@@ -222,12 +434,18 @@ fun seed(first: Int): String = java.util.Base64.getUrlEncoder().withoutPadding()
 fun main() {
     val anaSeed = seed(1)
     val benSeed = seed(90)
+    // A wallet that publishes a key speaks as the participant id that key
+    // derives (§10.7), or the key binds nothing.
+    val anaKey = identityKeyFromSeed(anaSeed)
+    val benKey = identityKeyFromSeed(benSeed)
+    val ana = participantIdForKey(anaKey)
+    val ben = participantIdForKey(benKey)
 
     // Ana's device writes four entries. Each comes back as the JSON §9.3
-    // canonicalises, with §9.5's id already derived; the wallet stores the
-    // string and never inspects it.
-    val create = createBillEntry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
-        "Dinner", "EUR", "equal", identityKeyFromSeed(anaSeed), anaSeed)
+    // canonicalises, with §9.5's id already derived and signed; the wallet
+    // stores the string and never inspects it.
+    val create = createBillEntry(facts(ana, "2026-10-28T19:31:00.000Z", 1),
+        "Dinner", "EUR", "equal", anaKey, anaSeed)
 
     // The bill these entries belong to, read back from the entry that opened
     // it. Every other entry is signed on it (§10.6), and every fold names it,
@@ -237,50 +455,49 @@ fun main() {
 
     val anaLog = listOf(
         create,
-        joinBillEntry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2), billId,
-            "Ana", "u1ana", identityKeyFromSeed(anaSeed), anaSeed),
-        addExpenseEntry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3), billId,
-            "x1", "ana", 9000, """{"type":"equal","among":["ana","ben"]}""",
+        joinBillEntry(facts(ana, "2026-10-28T19:32:00.000Z", 2), billId,
+            "Ana", "u1ana", anaKey, listOf(), anaSeed),
+        addExpenseEntry(facts(ana, "2026-10-28T19:33:00.000Z", 3), billId,
+            "x1", ana, 9000, """{"type":"equal","among":["$ana","$ben"]}""",
             "dinner", anaSeed),
         // §7 snapshots one rate onto the bill, so six devices do not price one
         // dinner six ways. 300000 minor units per ZEC is €3000.00.
-        setRateEntry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4), billId,
+        setRateEntry(facts(ana, "2026-10-28T19:34:00.000Z", 4), billId,
             "EUR", 300000, "a fixed feed", anaSeed),
     )
 
     // Ben's own device writes Ben's join: §10.4 decides what an entry's author
     // may say, and a participant joins for themselves.
     val benLog = listOf(
-        joinBillEntry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5), billId,
-            "Ben", "u1ben", identityKeyFromSeed(benSeed), benSeed),
+        joinBillEntry(facts(ben, "2026-10-28T19:35:00.000Z", 5), billId,
+            "Ben", "u1ben", benKey, listOf(), benSeed),
     )
 
     // Merging is how two devices come to agree (§10.2). It is a set union by
     // id, in either direction, any number of times.
     val log = mergeEntries(anaLog, benLog).entries
 
-    val benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6)
+    val benFacts = facts(ben, "2026-10-28T19:36:00.000Z", 6)
     val folded = foldEntries(benFacts, billId, log)
-    println("on the bill: " + folded.bill.participants.joinToString { it.id })
+    println("on the bill: " + folded.bill.participants.joinToString { it.name })
     // Render these. An entry the fold set aside is one a person cannot see
     // otherwise, and its §12 code is what a wallet turns into a sentence.
     println("set aside: " + folded.setAside)
 
     // Null when the bill carries no rate: an unpriced bill is an ordinary
-    // bill, not a refusal. The second argument names the contested
-    // participants the payer has been shown and chosen to pay anyway (§10.7).
-    val owed = obligationOf(benFacts, billId, log, listOf())
+    // bill, not a refusal.
+    val owed = obligationOf(benFacts, billId, log)
         ?: error("a bill with a rate owes something")
 
     val settlement = owed.settlements.single()
-    println("ben pays ${settlement.amount} to ${settlement.to}")
+    println("ben pays ${settlement.amount} to ana")
     // The wallet broadcasts this; sending is not the library's (§13.3).
     println("request: ${owed.request.uri}")
     // Never dropped. A request that silently covers three debts of four is
     // indistinguishable, to the payer, from one that covers all of them.
     println("withheld: ${owed.request.withheldMinorUnits}")
 
-    check(settlement.to == "ana" && settlement.amount == 4500L) {
+    check(settlement.to == ana && settlement.amount == 4500L) {
         "half of 9000 is 4500 to ana, saw ${settlement.amount} to ${settlement.to}"
     }
     check(owed.request.uri!!.startsWith("zcash:u1ana")) { "${owed.request.uri}" }
@@ -347,9 +564,8 @@ import 'package:splitz_dart_consumer/splitz_ffi.dart';
 /// The facts §15.1 says a wallet owns, for one call. A §9.3 instant and
 /// sixteen unpredictable bytes are the wallet's to supply: this library reads
 /// no clock (§13) and owns no entropy.
-HostFacts facts(String me, String payTo, String at, int nonce) => HostFacts(
+HostFacts facts(String me, String at, int nonce) => HostFacts(
   me: me,
-  payTo: payTo,
   now: at,
   nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)),
 );
@@ -365,16 +581,22 @@ void main(List<String> args) {
 
   final anaSeed = seed(1);
   final benSeed = seed(90);
+  // A wallet that publishes a key speaks as the participant id that key
+  // derives (§10.7), or the key binds nothing.
+  final anaKey = identityKeyFromSeed(anaSeed);
+  final benKey = identityKeyFromSeed(benSeed);
+  final ana = participantIdForKey(anaKey);
+  final ben = participantIdForKey(benKey);
 
   // Ana's device writes four entries. Each comes back as the JSON §9.3
-  // canonicalises, with §9.5's id already derived; the wallet stores the
-  // string and never inspects it.
+  // canonicalises, with §9.5's id already derived and signed; the wallet
+  // stores the string and never inspects it.
   final create = createBillEntry(
-    facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
+    facts(ana, '2026-10-28T19:31:00.000Z', 1),
     'Dinner',
     'EUR',
     'equal',
-    identityKeyFromSeed(anaSeed),
+    anaKey,
     anaSeed,
   );
 
@@ -387,27 +609,31 @@ void main(List<String> args) {
   final anaLog = [
     create,
     joinBillEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2),
+      facts(ana, '2026-10-28T19:32:00.000Z', 2),
       billId,
       'Ana',
       'u1ana',
-      identityKeyFromSeed(anaSeed),
+      anaKey,
+      const [],
       anaSeed,
     ),
     addExpenseEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3),
+      facts(ana, '2026-10-28T19:33:00.000Z', 3),
       billId,
       'x1',
-      'ana',
+      ana,
       9000,
-      '{"type":"equal","among":["ana","ben"]}',
+      jsonEncode({
+        'type': 'equal',
+        'among': [ana, ben],
+      }),
       'dinner',
       anaSeed,
     ),
     // §7 snapshots one rate onto the bill, so six devices do not price one
     // dinner six ways. 300000 minor units per ZEC is €3000.00.
     setRateEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4),
+      facts(ana, '2026-10-28T19:34:00.000Z', 4),
       billId,
       'EUR',
       300000,
@@ -420,11 +646,12 @@ void main(List<String> args) {
   // may say, and a participant joins for themselves.
   final benLog = [
     joinBillEntry(
-      facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5),
+      facts(ben, '2026-10-28T19:35:00.000Z', 5),
       billId,
       'Ben',
       'u1ben',
-      identityKeyFromSeed(benSeed),
+      benKey,
+      const [],
       benSeed,
     ),
   ];
@@ -433,28 +660,29 @@ void main(List<String> args) {
   // id, in either direction, any number of times.
   final log = mergeEntries(anaLog, benLog).entries;
 
-  final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
+  final benFacts = facts(ben, '2026-10-28T19:36:00.000Z', 6);
   final folded = foldEntries(benFacts, billId, log);
-  print('on the bill: ${folded.bill.participants.map((p) => p.id).join(', ')}');
+  print(
+    'on the bill: ${folded.bill.participants.map((p) => p.name).join(', ')}',
+  );
   // Render these. An entry the fold set aside is one a person cannot see
   // otherwise, and its §12 code is what a wallet turns into a sentence.
   print('set aside: ${folded.setAside}');
 
   // Null when the bill carries no rate: an unpriced bill is an ordinary bill,
-  // not a refusal. The third argument names the contested participants the
-  // payer has been shown and chosen to pay anyway (§10.7).
-  final owed = obligationOf(benFacts, billId, log, const []);
+  // not a refusal.
+  final owed = obligationOf(benFacts, billId, log);
   if (owed == null) throw StateError('a bill with a rate owes something');
 
   final settlement = owed.settlements.single;
-  print('ben pays ${settlement.amount} to ${settlement.to}');
+  print('ben pays ${settlement.amount} to ana');
   // The wallet broadcasts this; sending is not the library's (§13.3).
   print('request: ${owed.request.uri}');
   // Never dropped. A request that silently covers three debts of four is
   // indistinguishable, to the payer, from one that covers all of them.
   print('withheld: ${owed.request.withheldMinorUnits}');
 
-  if (settlement.to != 'ana' || settlement.amount != 4500) {
+  if (settlement.to != ana || settlement.amount != 4500) {
     throw StateError(
       'half of 9000 is 4500 to ana, saw '
       '${settlement.amount} to ${settlement.to}',
@@ -479,11 +707,9 @@ load(process.argv[2]);
 
 // The facts §15.1 says a wallet owns, for one call. A §9.3 instant and sixteen
 // unpredictable bytes are the wallet's to supply: this library reads no clock
-// (§13) and owns no entropy. The generated record spells its fields as Rust
-// does, so it is `pay_to` here and `payTo` in Kotlin and Dart.
-const facts = (me, payTo, at, nonce) => ({
+// (§13) and owns no entropy.
+const facts = (me, at, nonce) => ({
   me,
-  pay_to: payTo,
   now: at,
   nonce: Uint8Array.from({ length: 16 }, (_, i) => (nonce + i) & 0xff),
 });
@@ -497,12 +723,18 @@ const seed = (first) =>
 
 const anaSeed = seed(1);
 const benSeed = seed(90);
+// A wallet that publishes a key speaks as the participant id that key derives
+// (§10.7), or the key binds nothing.
+const anaKey = splitz.identity_key_from_seed(anaSeed);
+const benKey = splitz.identity_key_from_seed(benSeed);
+const ana = splitz.participant_id_for_key(anaKey);
+const ben = splitz.participant_id_for_key(benKey);
 
 // Ana's device writes four entries. Each comes back as the JSON §9.3
-// canonicalises, with §9.5's id already derived; the wallet stores the string
-// and never inspects it.
-const create = splitz.create_bill_entry(facts("ana", "u1ana", "2026-10-28T19:31:00.000Z", 1),
-  "Dinner", "EUR", "equal", splitz.identity_key_from_seed(anaSeed), anaSeed);
+// canonicalises, with §9.5's id already derived and signed; the wallet stores
+// the string and never inspects it.
+const create = splitz.create_bill_entry(facts(ana, "2026-10-28T19:31:00.000Z", 1),
+  "Dinner", "EUR", "equal", anaKey, anaSeed);
 
 // The bill these entries belong to, read back from the entry that opened it.
 // Every other entry is signed on it (§10.6), and every fold names it, so a
@@ -512,49 +744,49 @@ const billId = JSON.parse(create).id;
 
 const anaLog = [
   create,
-  splitz.join_bill_entry(facts("ana", "u1ana", "2026-10-28T19:32:00.000Z", 2), billId,
-    "Ana", "u1ana", splitz.identity_key_from_seed(anaSeed), anaSeed),
-  splitz.add_expense_entry(facts("ana", "u1ana", "2026-10-28T19:33:00.000Z", 3), billId,
-    "x1", "ana", 9000, '{"type":"equal","among":["ana","ben"]}', "dinner", anaSeed),
+  splitz.join_bill_entry(facts(ana, "2026-10-28T19:32:00.000Z", 2), billId,
+    "Ana", "u1ana", anaKey, [], anaSeed),
+  splitz.add_expense_entry(facts(ana, "2026-10-28T19:33:00.000Z", 3), billId,
+    "x1", ana, 9000, JSON.stringify({ type: "equal", among: [ana, ben] }), "dinner",
+    anaSeed),
   // §7 snapshots one rate onto the bill, so six devices do not price one
   // dinner six ways. 300000 minor units per ZEC is €3000.00.
-  splitz.set_rate_entry(facts("ana", "u1ana", "2026-10-28T19:34:00.000Z", 4), billId,
+  splitz.set_rate_entry(facts(ana, "2026-10-28T19:34:00.000Z", 4), billId,
     "EUR", 300000, "a fixed feed", anaSeed),
 ];
 
 // Ben's own device writes Ben's join: §10.4 decides what an entry's author may
 // say, and a participant joins for themselves.
 const benLog = [
-  splitz.join_bill_entry(facts("ben", "u1ben", "2026-10-28T19:35:00.000Z", 5), billId,
-    "Ben", "u1ben", splitz.identity_key_from_seed(benSeed), benSeed),
+  splitz.join_bill_entry(facts(ben, "2026-10-28T19:35:00.000Z", 5), billId,
+    "Ben", "u1ben", benKey, [], benSeed),
 ];
 
 // Merging is how two devices come to agree (§10.2). It is a set union by id,
 // in either direction, any number of times.
 const log = splitz.merge_entries(anaLog, benLog).entries;
 
-const benFacts = facts("ben", "u1ben", "2026-10-28T19:36:00.000Z", 6);
+const benFacts = facts(ben, "2026-10-28T19:36:00.000Z", 6);
 const folded = splitz.fold_entries(benFacts, billId, log);
-console.log("on the bill: " + folded.bill.participants.map((p) => p.id).join(", "));
+console.log("on the bill: " + folded.bill.participants.map((p) => p.name).join(", "));
 // Render these. An entry the fold set aside is one a person cannot see
 // otherwise, and its §12 code is what a wallet turns into a sentence.
 console.log("set aside: " + JSON.stringify(folded.set_aside));
 
 // Undefined when the bill carries no rate: an unpriced bill is an ordinary
-// bill, not a refusal. The third argument names the contested participants the
-// payer has been shown and chosen to pay anyway (§10.7).
-const owed = splitz.obligation_of(benFacts, billId, log, []);
+// bill, not a refusal.
+const owed = splitz.obligation_of(benFacts, billId, log);
 if (owed === undefined) throw new Error("a bill with a rate owes something");
 
 const settlement = owed.settlements[0];
-console.log(`ben pays ${settlement.amount} to ${settlement.to}`);
+console.log(`ben pays ${settlement.amount} to ana`);
 // The wallet broadcasts this; sending is not the library's (§13.3).
 console.log(`request: ${owed.request.uri}`);
 // Never dropped. A request that silently covers three debts of four is
 // indistinguishable, to the payer, from one that covers all of them.
 console.log(`withheld: ${owed.request.withheld_minor_units}`);
 
-if (settlement.to !== "ana" || Number(settlement.amount) !== 4500) {
+if (settlement.to !== ana || Number(settlement.amount) !== 4500) {
   throw new Error(`half of 9000 is 4500 to ana, saw ${settlement.amount} to ${settlement.to}`);
 }
 if (!owed.request.uri.startsWith("zcash:u1ana")) throw new Error(owed.request.uri);
@@ -607,11 +839,17 @@ attaching a memo to a transparent recipient (8).
 
    **Hand the verifier to the fold**: `foldLog(entries, verify: ...)` takes a
    `bool Function(entry, key)`. With one, a `createBill` whose signature fails
-   opens no bill (§10.1), and `FoldResult.identities` carries `bound` and
-   `contested` (§10.7). Without one both are empty — the fold reports no
-   binding rather than claiming there is none. **A wallet MUST NOT settle to a
-   contested participant's address without putting it in front of the payer
-   first**, and that is the call that tells it which those are.
+   opens no bill (§10.1), an entry by a participant whose key is bound applies
+   only from a copy that verifies against that key, and
+   `FoldResult.identities.bound` names who is bound (§10.7). Without one it is
+   empty — the fold reports no binding rather than claiming there is none.
+
+   **A participant who publishes a key is named by it.** Their id is
+   `participantId(key)` — the digest of the key — so no second key can claim
+   them. A wallet whose account publishes an identity key writes every entry
+   under that id; a join stating a key under any other id is set aside with
+   `participant_id_not_derived`. The creator is the exception: the invite binds
+   them to `creatorKey` whatever their id.
 5. **Where a private key lives**, and how a participant comes by one.
 6. **Storage.**
 7. **Surfacing a changed pay-to address.** The fold reports every one.
@@ -714,8 +952,15 @@ per occurrence (§10.3).
 **One entry can never take the bill down.** Every payload member this
 library's own decoder requires is decided when the entry is applied, so a
 document the fold returns is one `decodeBill` accepts. A malformed expense is
-set aside with its own id and code and the rest of the bill opens. Do not
-write recovery code for an unopenable bill; write code that shows `setAside`.
+set aside with its own id and code and the rest of the bill opens, and an
+amendment that cannot be applied is set aside while the entry it corrects
+stands. Do not write recovery code for an unopenable bill; write code that
+shows `setAside`.
+
+**One debt can be past what a request prices.** A debt summed from many
+expenses can exceed what §7.1 converts, or what one §8.1 output carries at a
+low rate. `renderObligation` with `skipUnpayable` reports that recipient as
+`unpriceable` and carries the rest; without it the whole request is refused.
 
 ## What a payer sees
 

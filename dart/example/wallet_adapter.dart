@@ -86,7 +86,6 @@ class WalletBillHost extends BillHost {
 
   @override
   final String me;
-  @override
   final String? payToAddress;
   @override
   final Clock now;

@@ -22,12 +22,12 @@ library;
 export 'splitz_core.dart'
     show
         Awaiting,
-        Contested,
         Delta,
         DeltaSquare,
         Bill,
         NothingMissing,
         Participant,
+        participantId,
         Payout,
         Settlement,
         TooBigForOneSquare;

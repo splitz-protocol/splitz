@@ -7,6 +7,7 @@ import 'canonical_json.dart';
 import 'errors.dart';
 import 'invite.dart';
 import 'log.dart';
+import 'ordering.dart';
 import 'sha256.dart';
 
 /// What a version-40 QR code holds in byte mode at error-correction level M.
@@ -81,6 +82,23 @@ String encodePayload(String prefix, Map<String, dynamic> body) {
   return '$prefix$encoded';
 }
 
+/// True when every string in [value] is Unicode scalar values and every
+/// number is finite.
+bool _strict(Object? value) {
+  if (value is String) return !hasLoneSurrogate(value);
+  if (value is double) return value.isFinite;
+  if (value is Map) {
+    for (final e in value.entries) {
+      if (!_strict(e.key) || !_strict(e.value)) return false;
+    }
+  } else if (value is List) {
+    for (final v in value) {
+      if (!_strict(v)) return false;
+    }
+  }
+  return true;
+}
+
 /// Decodes a scanned payload.
 ScannedPayload decodePayload(String text) {
   // Padding is stripped before the prefix is matched and before the size is
@@ -117,6 +135,13 @@ ScannedPayload decodePayload(String text) {
   if (!withinDepth(body, maxDocumentDepth)) {
     raise(SplitCode.payloadDamaged,
         'A payload body nests deeper than $maxDocumentDepth');
+  }
+  // §2.3 and §11.2, over the whole body before any entry is read. A string
+  // with no UTF-8 encoding, or a number no double holds (`1e400`), makes the
+  // document damaged as a whole, as a strict JSON reader finds it: one reader
+  // must not open a bill from a code another refuses.
+  if (!_strict(body)) {
+    raise(SplitCode.payloadDamaged, 'A payload body is not strict JSON');
   }
   final map = body.cast<String, dynamic>();
 

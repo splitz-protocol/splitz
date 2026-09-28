@@ -8,9 +8,9 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::Result;
-use crate::obligation::{
-    render_obligation, withholdings, Awaiting, Contested, Obligation, Unpayable,
-};
+use crate::obligation::{render_obligation, withholdings, Awaiting, Obligation, Unpayable};
+use crate::rate::ExchangeRate;
+use crate::serialization::rate_to_json;
 use crate::settle::{settle_bill, Settlement, DEFAULT_EXACT_LIMIT};
 
 use super::bill_log::{BillLog, FoldedBill};
@@ -39,16 +39,12 @@ pub struct PayerObligation {
     /// this path until its record is voided.
     pub awaiting: Vec<Awaiting>,
 
-    /// Debts to a participant whose identity two keys claim.
-    ///
-    /// Left out of `settlements` and out of the request. The payer decides,
-    /// having been shown the contest — nothing here decides for them by paying
-    /// whichever record happens to be on the bill.
-    pub contested: Vec<Contested>,
-
     /// The protocol's answer: the request, what it carries, and who it could
     /// not carry with the reason for each.
     pub request: Obligation,
+
+    /// The rate `request` was priced at: the bill's, when this was read.
+    pub rate: ExchangeRate,
 }
 
 impl PayerObligation {
@@ -59,7 +55,8 @@ impl PayerObligation {
     /// Who the request could not carry, and why: `no_address` when nothing is
     /// published, `bad_address` when what is published is not an address
     /// §8.3 admits, `payout_not_zec` when the preferred payout is a swap or
-    /// cash. Each needs a different remedy (§8.5).
+    /// cash, `unpriceable` when the debt is past what one request prices.
+    /// Each needs a different remedy (§8.5).
     pub fn unpayable(&self) -> &[Unpayable] {
         &self.request.unpayable
     }
@@ -104,6 +101,16 @@ impl PayerObligation {
         }
         owed
     }
+
+    /// What the request sends each recipient, in zatoshi: the ZEC side of
+    /// [`Self::carried_to`], summed per recipient as the request carries it.
+    pub fn carried_zatoshi(&self) -> BTreeMap<String, i64> {
+        let mut sent: BTreeMap<String, i64> = BTreeMap::new();
+        for (payment, to) in self.request.payments.iter().zip(&self.request.recipients) {
+            *sent.entry(to.clone()).or_insert(0) += payment.zatoshi;
+        }
+        sent
+    }
 }
 
 /// What a settlement attempt produced.
@@ -114,7 +121,9 @@ impl PayerObligation {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settled {
     pub result: SendResult,
-    /// The transaction id, present when `result` is [`SendResult::Sent`].
+    /// The transaction id, present when `result` is [`SendResult::Sent`], and
+    /// when it is [`SendResult::Pending`] and the wallet named the transaction
+    /// it built. A pending one records nothing.
     pub txid: Option<String>,
     /// What to put in front of a person when nothing was recorded.
     pub detail: Option<String>,
@@ -128,26 +137,20 @@ pub struct Settled {
 ///
 /// Returns `None` when the bill carries no rate: an unpriced bill is an
 /// ordinary bill, not a refusal, and there is no §12 code to catch.
-pub fn obligation_for(
-    host: &dyn BillHost,
-    folded: &FoldedBill,
-    pay_anyway: &BTreeSet<String>,
-) -> Result<Option<PayerObligation>> {
+pub fn obligation_for(host: &dyn BillHost, folded: &FoldedBill) -> Result<Option<PayerObligation>> {
     let Some(rate) = folded.bill.rate.as_ref() else {
         return Ok(None);
     };
 
     // §14 decides this, not this layer: which debts a request may carry, and
-    // which wait on a confirmation or on a contest, is a function of the bill
-    // and the identities the fold resolved. A second implementation here is a
-    // second place for the rule to drift.
+    // which wait on a confirmation, is a function of the bill and the records
+    // the fold applied. A second implementation here is a second place for
+    // the rule to drift.
     let plan = settle_bill(&folded.bill, DEFAULT_EXACT_LIMIT)?;
     let split = withholdings(
         &plan.settlements,
         &folded.bill,
         host.me(),
-        &folded.identities.contested,
-        pay_anyway,
         Some(&folded.payment_authors),
     )?;
 
@@ -160,8 +163,8 @@ pub fn obligation_for(
     Ok(Some(PayerObligation {
         settlements: split.carried,
         awaiting: split.awaiting,
-        contested: split.contested,
         request,
+        rate: rate.clone(),
     }))
 }
 
@@ -221,7 +224,7 @@ pub fn settle(
     if sent.result != SendResult::Sent {
         return Ok(Settled {
             result: sent.result,
-            txid: None,
+            txid: sent.txid,
             detail: sent.detail,
             records: Vec::new(),
         });
@@ -238,7 +241,14 @@ pub fn settle(
         });
     };
 
-    let records = record_send(host, log, &owed, &txid)?;
+    let records = record_send(
+        host,
+        log,
+        &owed,
+        &txid,
+        &obligation.carried_zatoshi(),
+        Some(&obligation.rate),
+    )?;
     Ok(Settled {
         result: SendResult::Sent,
         txid: Some(txid),
@@ -249,6 +259,11 @@ pub fn settle(
 
 /// Records that the transaction `txid` paid `carried`: one signed payment
 /// record per recipient, appended to `log` and returned.
+///
+/// Each record states what it sent in ZEC, from `zatoshi`, and the rate it
+/// was priced at, from `rate` (§9.2): the payee confirms against a figure
+/// they can compare with what arrived, not a fiat amount alone, so a rate a
+/// payer lowered before paying shows on the record they confirm.
 ///
 /// What [`settle`] writes after a send that succeeded, and what a wallet
 /// writes when a send it could not resolve at the time is later found on
@@ -264,6 +279,8 @@ pub fn record_send(
     log: &mut BillLog<'_>,
     carried: &BTreeMap<String, i64>,
     txid: &str,
+    zatoshi: &BTreeMap<String, i64>,
+    rate: Option<&ExchangeRate>,
 ) -> Result<Vec<Value>> {
     let bill_id = log.bill_id()?;
     let mut records = Vec::new();
@@ -276,8 +293,8 @@ pub fn record_send(
             *amount,
             "shieldedZec",
             Some(txid),
-            None,
-            None,
+            zatoshi.get(to).copied(),
+            rate.map(rate_to_json),
             None,
         )?;
         let record = sign_entry(host, &unsigned, &bill_id)?;

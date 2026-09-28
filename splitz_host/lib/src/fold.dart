@@ -50,6 +50,7 @@ Future<splitz.FoldedBill> foldVerified(
 
   final host = WalletBillHost(
     wallet,
+    me: seed == null ? null : await signing.participantIdFromSeed(seed),
     sign: seed == null ? null : signing.signerFor(seed),
     verify: verified.verify,
   );
@@ -75,10 +76,9 @@ Future<splitz.FoldedBill> foldVerified(
 
 /// Folds [entries] without checking any signature.
 ///
-/// For a device that holds no identity yet. §10.7 then binds no key and reports
-/// no contest, which is a different claim from reporting that nothing is
-/// contested — and is the honest one here. [billId] is required for the reason
-/// [foldVerified] gives.
+/// For a device that holds no identity yet. §10.7 then binds no key, which is
+/// a different claim from reporting that every key checked out — and is the
+/// honest one here. [billId] is required for the reason [foldVerified] gives.
 splitz.FoldedBill foldUnverified(
   SplitsWallet wallet,
   List<Map<String, dynamic>> entries, {

@@ -21,7 +21,6 @@ use splitz_core::net_balances;
 
 struct FakeHost {
     me: String,
-    pay_to: Option<String>,
     counter: Cell<u8>,
 }
 
@@ -29,24 +28,14 @@ impl FakeHost {
     fn new(me: &str) -> Self {
         Self {
             me: me.to_owned(),
-            pay_to: None,
             counter: Cell::new(0),
         }
-    }
-
-    fn paid_at(me: &str, pay_to: &str) -> Self {
-        let mut h = Self::new(me);
-        h.pay_to = Some(pay_to.to_owned());
-        h
     }
 }
 
 impl BillHost for FakeHost {
     fn me(&self) -> &str {
         &self.me
-    }
-    fn pay_to_address(&self) -> Option<&str> {
-        self.pay_to.as_deref()
     }
     fn now(&self) -> String {
         "2026-10-28T19:30:00.000Z".to_owned()
@@ -141,7 +130,7 @@ fn three_lane_bill<'a>(ana: &'a FakeHost, extra: Vec<Value>) -> BillLog<'a> {
 
 #[test]
 fn each_of_the_four_payees_lands_in_the_lane_they_asked_for() {
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let log = three_lane_bill(&ana, vec![]);
     let folded = log.fold().unwrap();
     let lane = |who: &str| lane_for(folded.bill.participant(who).unwrap());
@@ -155,7 +144,7 @@ fn each_of_the_four_payees_lands_in_the_lane_they_asked_for() {
 
 #[test]
 fn a_swap_debt_carries_the_asset_and_the_chain_never_one_alone() {
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let log = three_lane_bill(&ana, vec![]);
     let folded = log.fold().unwrap();
     let cara = folded.bill.participant("cara").unwrap();
@@ -199,12 +188,10 @@ fn the_first_preference_decides_not_the_most_convenient_one() {
 
 #[test]
 fn only_ben_is_in_the_uri_and_the_other_three_are_reported() {
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let log = three_lane_bill(&ana, vec![]);
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ana, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ana, &folded).unwrap().unwrap();
 
     // `settlements` is the whole debt this device owes; the URI carries only
     // what §8.5 could render.
@@ -239,12 +226,10 @@ fn a_settle_records_only_what_the_request_carried() {
     // Recording them as paid by that transaction claims it settled a debt it
     // never paid, and leaves them contesting a payment rather than simply
     // still being owed.
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = three_lane_bill(&ana, vec![]);
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ana, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ana, &folded).unwrap().unwrap();
 
     let settled = settle(&ana, &mut log, &owed).unwrap();
     assert_eq!(settled.result, SendResult::Sent);
@@ -261,7 +246,7 @@ fn a_settle_records_only_what_the_request_carried() {
 
 #[test]
 fn a_cash_settlement_records_cash_sends_nothing_and_is_folded() {
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = three_lane_bill(&ana, vec![]);
     let record = record_payment(
         &ana,
@@ -291,7 +276,7 @@ fn a_cash_settlement_records_cash_sends_nothing_and_is_folded() {
 
 #[test]
 fn a_swap_settlement_records_the_intent_id_not_a_txid() {
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = three_lane_bill(&ana, vec![]);
     // The swap's own identifier is the payment id as well as the reference:
     // it is what a reader checks the record against.
@@ -335,7 +320,7 @@ fn a_swap_settlement_records_the_intent_id_not_a_txid() {
 
 #[test]
 fn all_three_methods_coexist_on_one_bill_and_net_the_same_way() {
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = three_lane_bill(&ana, vec![]);
     let cash = record_payment(
         &ana,
@@ -387,7 +372,7 @@ fn a_method_the_protocol_does_not_define_is_set_aside_at_the_fold() {
     // §10.1 admits the entry — it is well formed — and §10.3 sets it aside
     // when the bill is read. The debt stays owed rather than the whole log
     // becoming unreadable because one peer invented a method.
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = three_lane_bill(&ana, vec![]);
     log.add(vec![record_payment(
         &ana, "p1", "ben", 100, "venmo", None, None, None, None,
@@ -406,7 +391,7 @@ fn a_method_the_protocol_does_not_define_is_set_aside_at_the_fold() {
 #[test]
 fn a_payment_to_oneself_is_set_aside_whichever_method_it_claims() {
     for method in ["shieldedZec", "swap", "cash"] {
-        let ana = FakeHost::paid_at("ana", "u1ana");
+        let ana = FakeHost::new("ana");
         let mut log = three_lane_bill(&ana, vec![]);
         log.add(vec![record_payment(
             &ana,
@@ -434,7 +419,7 @@ fn a_payment_to_oneself_is_set_aside_whichever_method_it_claims() {
 fn a_zatoshi_leg_of_zero_is_set_aside() {
     // A swap that sent nothing is not a swap. §9.2 makes zatoshi advisory,
     // which is not the same as unchecked.
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = three_lane_bill(&ana, vec![]);
     log.add(vec![record_payment(
         &ana,
@@ -458,7 +443,7 @@ fn a_zatoshi_leg_of_zero_is_set_aside() {
 fn a_request_that_can_carry_nothing_sends_nothing() {
     // Everybody on this bill wants cash. There is no URI to broadcast, and
     // nothing may be recorded as sent.
-    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ana = FakeHost::new("ana");
     let mut log = BillLog::new(&ana);
     log.add(vec![
         create_bill(&ana, "D", "USD", "equal", &fake_key("ana")).unwrap(),
@@ -485,9 +470,7 @@ fn a_request_that_can_carry_nothing_sends_nothing() {
     .unwrap();
 
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ana, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ana, &folded).unwrap().unwrap();
     assert!(owed.uri().is_none());
 
     let settled = settle(&ana, &mut log, &owed).unwrap();

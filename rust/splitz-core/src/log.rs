@@ -8,11 +8,11 @@
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::authority::Identities;
+use crate::authority::{participant_id, Identities};
 use crate::canonical_json::canonical_json;
 use crate::error::{code, Result, SplitError};
 use crate::instant::canonical_instant;
-use crate::money::{check_currency, checked_add, checked_sub, is_currency};
+use crate::money::{check_currency, checked_add, checked_balance, checked_sub, is_currency};
 use crate::sha256::sha256;
 use crate::zip321::{base64url, unbase64url};
 
@@ -145,18 +145,64 @@ fn id_members_of(wanted: &str) -> &'static [&'static str] {
     }
 }
 
+/// §2.2 and §9.3. Every number in an entry is an integer a signed 64-bit
+/// value holds.
+///
+/// One outside that range is `amount_overflow` however it was written: a
+/// reader whose parser holds large integers as doubles cannot tell
+/// `9223372036854775808` from `9.223372036854775808e18`, so the code follows
+/// from the value. Any other non-integer is `canonical_json_float`, which is
+/// what §9.3's encoding refuses.
+fn check_numbers(value: &Value) -> Result<()> {
+    match value {
+        Value::Number(n) => {
+            if n.as_i64().is_some() {
+                return Ok(());
+            }
+            let past = n.as_u64().is_some()
+                || n.as_f64()
+                    .is_none_or(|f| !f.is_finite() || f.abs() >= 9_223_372_036_854_775_808.0);
+            if past {
+                Err(SplitError::new(
+                    code::AMOUNT_OVERFLOW,
+                    format!("A number past 64 bits: {n}"),
+                ))
+            } else {
+                Err(SplitError::new(
+                    code::CANONICAL_JSON_FLOAT,
+                    format!("A number that is not an integer: {n}"),
+                ))
+            }
+        }
+        Value::Array(items) => items.iter().try_for_each(check_numbers),
+        Value::Object(map) => map.values().try_for_each(check_numbers),
+        _ => Ok(()),
+    }
+}
+
 /// Checks an entry before it reaches a log (§10.1).
 ///
 /// An entry carrying more than one payload is refused because the currency
 /// fallback and the fold would otherwise read different ones. One carrying
 /// none is refused because removing a member makes an entry's canonical
 /// encoding sort higher than the same entry with it, so the merge would keep
-/// the stripped copy.
+/// the stripped copy. The checks run in the order §10.1 states, so an entry
+/// wrong in two ways is refused for the same one by every reader.
 pub fn check_entry(entry: &Value) -> Result<()> {
     if !entry.is_object() {
         return Err(SplitError::new(
             code::BILL_TYPE_ERROR,
             "An entry is an object",
+        ));
+    }
+
+    // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
+    // and every pass below walks it — deriving its id encodes it. A depth
+    // nobody bounded is a stack the peer chose.
+    if !crate::invite::within_depth(entry, crate::invite::MAX_DOCUMENT_DEPTH) {
+        return Err(SplitError::new(
+            code::BILL_TYPE_ERROR,
+            "An entry nests deeper than the document limit",
         ));
     }
 
@@ -182,26 +228,22 @@ pub fn check_entry(entry: &Value) -> Result<()> {
     }
     // §10.1. `v` sits outside the id (§9.5), so a copy with any value keeps
     // the honest id; one that is not an integer would reach the canonical
-    // encoding the merge and the order compare, and stop there.
+    // encoding the merge and the order compare, and stop there. Bounded as
+    // every integer is, at 2^63 - 1.
     if entry
         .get("v")
-        .is_some_and(|v| !v.as_u64().is_some_and(|n| n >= 1))
+        .is_some_and(|v| !v.as_i64().is_some_and(|n| n >= 1))
     {
         return Err(SplitError::new(
             code::BILL_TYPE_ERROR,
-            "An entry version is an integer of 1 or more",
+            "An entry version is an integer from 1 to 2^63-1",
         ));
     }
 
-    // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
-    // and every pass below walks it — deriving its id encodes it. A depth
-    // nobody bounded is a stack the peer chose.
-    if !crate::invite::within_depth(entry, crate::invite::MAX_DOCUMENT_DEPTH) {
-        return Err(SplitError::new(
-            code::BILL_TYPE_ERROR,
-            "An entry nests deeper than the document limit",
-        ));
-    }
+    // §2.2 and §9.3, at entry ingress, before any member is read. §2.3's
+    // check is the parser's: a string that is not Unicode scalar values never
+    // becomes a `Value`.
+    check_numbers(entry)?;
 
     let carried: Vec<&str> = PAYLOAD_NAMES
         .iter()
@@ -225,6 +267,14 @@ pub fn check_entry(entry: &Value) -> Result<()> {
                     format!("A {name} is an object"),
                 ));
             }
+        }
+    }
+    if let Some(target) = entry.get("targetId") {
+        if !target.is_string() {
+            return Err(SplitError::new(
+                code::BILL_TYPE_ERROR,
+                "A targetId is a string",
+            ));
         }
     }
 
@@ -257,14 +307,6 @@ pub fn check_entry(entry: &Value) -> Result<()> {
         }
         if let Some(split) = payload.get("split") {
             crate::split::check_id_lists(split)?;
-        }
-    }
-    if let Some(target) = entry.get("targetId") {
-        if !target.is_string() {
-            return Err(SplitError::new(
-                code::BILL_TYPE_ERROR,
-                "A targetId is a string",
-            ));
         }
     }
     if matches!(kind, "voidEntry" | "amendEntry")
@@ -364,12 +406,28 @@ fn field<'a>(entry: &'a Value, name: &str) -> &'a str {
     entry.get(name).and_then(Value::as_str).unwrap_or("")
 }
 
-/// The total order: `at`, then `author`, then `id`, all ascending.
+/// The canonical instant `at` names, or `at` itself when it names none: an
+/// entry that reached here unchecked still sorts, and every checked one sorts
+/// by its instant.
+fn instant_key(at: &str) -> String {
+    canonical_instant(at).unwrap_or_else(|_| at.to_owned())
+}
+
+/// The total order (§10.2): the instant `at` names, then `at` as written, then
+/// `author`, then `id`, all ascending.
+///
+/// By the instant rather than the text: §9.3 admits `t` and `z` and any number
+/// of fractional digits, and the text of an earlier instant can sort after a
+/// later one. The text then breaks ties between spellings of one instant.
 pub fn order_entries(entries: &mut [Value]) {
-    entries.sort_by(|a, b| {
-        field(a, "at")
-            .as_bytes()
-            .cmp(field(b, "at").as_bytes())
+    let mut keyed: Vec<(String, Value)> = entries
+        .iter()
+        .map(|e| (instant_key(field(e, "at")), e.clone()))
+        .collect();
+    keyed.sort_by(|(ka, a), (kb, b)| {
+        ka.as_bytes()
+            .cmp(kb.as_bytes())
+            .then(field(a, "at").as_bytes().cmp(field(b, "at").as_bytes()))
             .then(
                 field(a, "author")
                     .as_bytes()
@@ -385,6 +443,9 @@ pub fn order_entries(entries: &mut [Value]) {
                     .cmp(canonical_json(b).unwrap_or_default().as_bytes())
             })
     });
+    for (slot, (_, e)) in entries.iter_mut().zip(keyed) {
+        *slot = e;
+    }
 }
 
 /// Merges logs by set union, keyed by entry id and signature (§10.2).
@@ -509,10 +570,10 @@ pub struct FoldResult {
     /// indistinguishable from an entry that was never written.
     pub withdrawn: Vec<String>,
     pub set_aside: Vec<SetAside>,
-    /// Which key speaks for each participant, and which ids two keys claim
-    /// (§10.7). Empty when `fold_log` is given no verifier: §13 makes the
-    /// curve operation the host's, so a fold that cannot check a signature
-    /// reports no binding and no contest rather than claiming there are none.
+    /// Which key speaks for each participant (§10.7). Empty when `fold_log`
+    /// is given no verifier: §13 makes the curve operation the host's, so a
+    /// fold that cannot check a signature reports no binding rather than
+    /// claiming there is none.
     pub identities: Identities,
     /// Who wrote each payment record on the bill, by the payment's id. Not
     /// part of the bill document, which restates neither author nor instant
@@ -521,6 +582,19 @@ pub struct FoldResult {
     /// What each payment record on the bill says, by the payment's id: the
     /// `payment_digest` a confirmation of it carries as `record` (§10.5).
     pub payment_digests: BTreeMap<String, String>,
+    /// The entry that introduced each expense on the bill, by the expense's
+    /// own id: what an amendment or a withdrawal of it targets (§10.3). Taken
+    /// from the fold rather than from the log, which holds entries the fold
+    /// set aside under the same expense id.
+    pub expense_entries: BTreeMap<String, String>,
+    /// Who wrote each expense on the bill, by the expense's own id.
+    pub expense_authors: BTreeMap<String, String>,
+    /// The entry that recorded each payment on the bill, by the payment's id.
+    pub payment_entries: BTreeMap<String, String>,
+    /// The `setRate` entry whose rate the bill carries, or none with no rate.
+    pub rate_entry: Option<String>,
+    /// Who wrote that `setRate` (§14.2: a payer is shown who set the rate).
+    pub rate_author: Option<String>,
 }
 
 fn split_pool(split: &Value) -> BTreeSet<String> {
@@ -758,6 +832,11 @@ pub fn fold_log_verified(
             continue;
         };
         let kind = field(target, "kind");
+        // Only members the target states: a member it leaves out names nobody,
+        // and read as "" it would authorise an entry authored "".
+        let named = |value: &Value, member: &str| -> Option<String> {
+            value.get(member).and_then(Value::as_str).map(str::to_owned)
+        };
         let mut allowed: BTreeSet<String> = BTreeSet::new();
         allowed.insert(field(target, "author").to_owned());
         match kind {
@@ -770,16 +849,22 @@ pub fn fold_log_verified(
             // so the creator is not given this.
             "recordPayment" => {
                 if let Some(pay) = target.get("payment") {
-                    allowed.insert(field(pay, "from").to_owned());
-                    allowed.insert(field(pay, "to").to_owned());
+                    allowed.extend(named(pay, "from"));
+                    allowed.extend(named(pay, "to"));
                 }
             }
             "joinBill" => {
                 allowed.clear();
                 allowed.insert(creator.clone());
                 if let Some(p) = target.get("participant") {
-                    allowed.insert(field(p, "id").to_owned());
+                    allowed.extend(named(p, "id"));
                 }
+            }
+            // A rate prices every request on the bill, and the latest by `at`
+            // decides, so one dated far ahead outranks every later correction
+            // its author does not withdraw.
+            "setRate" => {
+                allowed.insert(creator.clone());
             }
             _ => {}
         }
@@ -876,27 +961,31 @@ pub fn fold_log_verified(
             if voided.contains(field(other, "id")) || field(other, "kind") == "voidEntry" {
                 continue;
             }
-            let eff = effective(other);
-            match field(other, "kind") {
-                "addExpense" => {
-                    if let Some(ex) = eff.get("expense") {
-                        let pool = ex.get("split").map(split_pool).unwrap_or_default();
-                        if field(ex, "paidBy") == gone || pool.contains(&gone) {
-                            named = true;
+            // The amendment and the entry it corrects are both read: the
+            // amendment may yet be set aside when it is applied, and the entry
+            // then applies as written.
+            for eff in [effective(other), other.clone()] {
+                match field(other, "kind") {
+                    "addExpense" => {
+                        if let Some(ex) = eff.get("expense") {
+                            let pool = ex.get("split").map(split_pool).unwrap_or_default();
+                            if field(ex, "paidBy") == gone || pool.contains(&gone) {
+                                named = true;
+                            }
                         }
                     }
-                }
-                "recordPayment" => {
-                    if let Some(pay) = eff.get("payment") {
-                        if field(pay, "from") == gone || field(pay, "to") == gone {
-                            named = true;
+                    "recordPayment" => {
+                        if let Some(pay) = eff.get("payment") {
+                            if field(pay, "from") == gone || field(pay, "to") == gone {
+                                named = true;
+                            }
                         }
                     }
+                    "confirmPayment" if field(other, "author") == gone => {
+                        named = true;
+                    }
+                    _ => {}
                 }
-                "confirmPayment" if field(other, "author") == gone => {
-                    named = true;
-                }
-                _ => {}
             }
             if named {
                 break;
@@ -920,6 +1009,19 @@ pub fn fold_log_verified(
         .cloned()
         .collect();
 
+    // §10.4. Each entry is applied as amended, then as written. An amendment
+    // that cannot be applied is set aside and the entry it corrects applies as
+    // written: correcting an entry into one that cannot be applied does not
+    // take the entry off the bill.
+    let versions = |entry: &Value| -> Vec<Value> {
+        let mut out = Vec::new();
+        if let Some(amendment) = amendments.get(field(entry, "id")) {
+            out.push(amendment.clone());
+        }
+        out.push(entry.clone());
+        out
+    };
+
     // Participants in a pass of their own, before anything that references
     // them.
     let mut participants: BTreeMap<String, Value> = BTreeMap::new();
@@ -928,47 +1030,66 @@ pub fn fold_log_verified(
         if field(entry, "kind") != "joinBill" {
             continue;
         }
-        let eff = effective(entry);
-        let Some(p) = eff.get("participant").filter(|p| p.is_object()) else {
-            aside!(entry, code::BILL_MISSING_ENTRY_PAYLOAD);
+        let author = field(entry, "author");
+        let Some((p, _)) = first_applied(versions(entry), &mut set_aside, |version| {
+            let p = version
+                .get("participant")
+                .filter(|p| p.is_object())
+                .ok_or_else(|| {
+                    SplitError::new(code::BILL_MISSING_ENTRY_PAYLOAD, "A join names nobody")
+                })?;
+            let id = field(p, "id");
+            if id.is_empty() {
+                return Err(SplitError::new(
+                    code::BILL_MISSING_ENTRY_PAYLOAD,
+                    "A join names no participant",
+                ));
+            }
+            if identities.bound.contains_key(id) && author != id {
+                // §10.7. A bound participant's record is theirs to create as
+                // well as to change, so a payout cannot be redirected to
+                // somebody who never joined by an entry of their own.
+                return Err(SplitError::new(
+                    code::UNAUTHORIZED_ENTRY,
+                    "Writes a bound participant",
+                ));
+            }
+            if participants.contains_key(id) && author != id {
+                // Without this, one join naming another participant's id and
+                // carrying your own address redirects every later settlement.
+                return Err(SplitError::new(
+                    code::UNAUTHORIZED_ENTRY,
+                    "Changes a record it does not own",
+                ));
+            }
+            // The decoder decides what a participant is, here rather than once
+            // the document is assembled: a member it would refuse sets this
+            // entry aside (§10.3) instead of making the whole bill undecodable.
+            let decoded = crate::serialization::decode_participant(p)?;
+            // §10.7. A record stating a key names the participant that key
+            // derives. Any other id would let a second key speak for somebody
+            // a first one already binds.
+            if let Some(key) = &decoded.identity_key {
+                if id != creator && participant_id(key).as_deref() != Some(id) {
+                    return Err(SplitError::new(
+                        code::PARTICIPANT_ID_NOT_DERIVED,
+                        format!("A key speaks for the id it derives, not {id}"),
+                    ));
+                }
+            }
+            Ok(p.clone())
+        }) else {
             continue;
         };
-        let id = field(p, "id").to_owned();
-        if id.is_empty() {
-            aside!(entry, code::BILL_MISSING_ENTRY_PAYLOAD);
-            continue;
-        }
-        if identities.bound.contains_key(&id) && field(entry, "author") != id {
-            // §10.7. A bound participant's record is theirs to create as well
-            // as to change, so a payout cannot be redirected to somebody who
-            // never joined by an entry of their own.
-            aside!(entry, code::UNAUTHORIZED_ENTRY);
-            continue;
-        }
-        if participants.contains_key(&id) && field(entry, "author") != id {
-            // Without this, one join naming another participant's id and
-            // carrying your own address redirects every later settlement.
-            aside!(entry, code::UNAUTHORIZED_ENTRY);
-            continue;
-        }
-        // The decoder decides what a participant is, here rather than once
-        // the document is assembled: a member it would refuse sets this entry
-        // aside (§10.3) instead of making the whole bill undecodable.
-        if let Err(e) = crate::serialization::decode_participant(p) {
-            aside!(entry, e.code);
-            continue;
-        }
+        let id = field(&p, "id").to_owned();
         // §10.3 step 4. The destination this record replaces: the one held
         // for the participant, or, for the first record, the one the join was
         // written with before an amendment changed it.
-        let before = if let Some(held) = participants.get(&id) {
-            destination(held)
-        } else if amendments.contains_key(field(entry, "id")) {
-            entry.get("participant").and_then(destination)
-        } else {
-            destination(p)
+        let before = match participants.get(&id) {
+            Some(held) => destination(held),
+            None => entry.get("participant").and_then(destination),
         };
-        let after = destination(p);
+        let after = destination(&p);
         if before != after {
             replaced.push(ReplacedAddress {
                 id: id.clone(),
@@ -976,7 +1097,7 @@ pub fn fold_log_verified(
                 to: after,
             });
         }
-        participants.insert(id, p.clone());
+        participants.insert(id, p);
     }
 
     // §10.1. The latest live setRate by a participant decides, by §10.2's
@@ -984,26 +1105,49 @@ pub fn fold_log_verified(
     // last spoke. Decided after the participants, because only they may set
     // it.
     let mut rate: Option<Value> = None;
+    let mut rate_entry: Option<String> = None;
+    let mut rate_author: Option<String> = None;
     for entry in &live {
         if field(entry, "kind") != "setRate" {
             continue;
         }
-        if !participants.contains_key(field(entry, "author")) {
-            aside!(entry, code::UNKNOWN_PARTICIPANT);
-            continue;
+        let author = field(entry, "author");
+        let applied = first_applied(versions(entry), &mut set_aside, |version| {
+            if !participants.contains_key(author) {
+                return Err(SplitError::new(
+                    code::UNKNOWN_PARTICIPANT,
+                    "Sets a rate on a bill it is not on",
+                ));
+            }
+            // §10.7. A rate prices every request on the bill, so a fold that
+            // verifies takes it only from a participant whose key it has
+            // bound: an unsigned join puts anybody holding the invite on it.
+            if verify.is_some() && !identities.bound.contains_key(author) {
+                return Err(SplitError::new(
+                    code::UNAUTHORIZED_ENTRY,
+                    "Sets a rate with no bound key",
+                ));
+            }
+            let payload = version.get("rate").cloned().unwrap_or(Value::Null);
+            crate::serialization::decode_rate(&payload)?;
+            Ok(payload)
+        });
+        if let Some((payload, _)) = applied {
+            rate = Some(payload);
+            rate_entry = Some(field(entry, "id").to_owned());
+            rate_author = Some(author.to_owned());
         }
-        let payload = effective(entry).get("rate").cloned().unwrap_or(Value::Null);
-        if let Err(e) = crate::serialization::decode_rate(&payload) {
-            aside!(entry, e.code);
-            continue;
-        }
-        rate = Some(payload);
     }
 
     let mut expenses: Vec<Value> = Vec::new();
     let mut payments: Vec<Value> = Vec::new();
     let mut payment_authors: BTreeMap<String, String> = BTreeMap::new();
     let mut payment_digests: BTreeMap<String, String> = BTreeMap::new();
+    // The entry that introduced each applied expense and payment, and who
+    // wrote it: what an amendment or a withdrawal targets, and whose it is.
+    let mut expense_entries: BTreeMap<String, String> = BTreeMap::new();
+    let mut expense_authors: BTreeMap<String, String> = BTreeMap::new();
+    let mut payment_entries: BTreeMap<String, String> = BTreeMap::new();
     // §5.1's balances, formed as this pass applies each entry and in the order
     // §5.1 forms them, so a bill this fold returns always has balances §2.2
     // can hold. An entry whose effect would carry one out of range is set
@@ -1012,149 +1156,169 @@ pub fn fold_log_verified(
     let mut running: BTreeMap<String, i64> =
         participants.keys().map(|id| (id.clone(), 0)).collect();
     let mut pair_total: BTreeMap<(String, String), i64> = BTreeMap::new();
+    let ids: BTreeSet<String> = participants.keys().cloned().collect();
     for entry in &live {
-        let eff = effective(entry);
         match field(entry, "kind") {
             "addExpense" => {
-                let mut ex = eff["expense"].clone();
-                let obj = ex.as_object_mut().ok_or_else(|| {
-                    SplitError::new(code::BILL_TYPE_ERROR, "An expense is an object")
-                })?;
-                // An amount that states no currency is denominated by the
-                // fold. One that states another is set aside, never
-                // restamped: that would keep the count and change the unit.
-                // §9.1 falls back only when the member is ABSENT. `as_str`
-                // alone cannot tell absent from present-and-not-a-string, and
-                // a present value that is not a currency is an entry that
-                // cannot be applied: §10.3 sets those aside.
-                match obj.get("currency") {
-                    None => {
-                        obj.insert("currency".into(), Value::String(currency.clone()));
-                    }
-                    Some(own) => match own.as_str() {
-                        Some(own) if is_currency(own) => {
-                            if own != currency {
-                                aside!(entry, code::CURRENCY_MISMATCH);
-                                continue;
+                let applied = first_applied(versions(entry), &mut set_aside, |version| {
+                    let mut ex = version["expense"].clone();
+                    let obj = ex.as_object_mut().ok_or_else(|| {
+                        SplitError::new(code::BILL_TYPE_ERROR, "An expense is an object")
+                    })?;
+                    // An amount that states no currency is denominated by the
+                    // fold. One that states another is set aside, never
+                    // restamped: that would keep the count and change the
+                    // unit. §9.1 falls back only when the member is ABSENT, and
+                    // a present value that is not a currency is an entry that
+                    // cannot be applied: §10.3 sets those aside.
+                    match obj.get("currency") {
+                        None => {
+                            obj.insert("currency".into(), Value::String(currency.clone()));
+                        }
+                        Some(own) => match own.as_str() {
+                            Some(own) if is_currency(own) => {
+                                if own != currency {
+                                    return Err(SplitError::new(
+                                        code::CURRENCY_MISMATCH,
+                                        "States another currency",
+                                    ));
+                                }
                             }
-                        }
-                        _ => {
-                            aside!(entry, code::BILL_BAD_CURRENCY);
-                            continue;
-                        }
-                    },
-                }
-                if !participants.contains_key(field(&ex, "paidBy")) {
-                    aside!(entry, code::UNKNOWN_PARTICIPANT);
-                    continue;
-                }
-                let ids: std::collections::BTreeSet<String> =
-                    participants.keys().cloned().collect();
-                // §4 is what turns an expense into what each person owes,
-                // and §5 runs it downstream of this fold. An expense whose
-                // split §4 refuses cannot be applied, so it is set aside here
-                // rather than raising out of `net_balances` once the bill is
-                // already built.
-                let applied =
-                    crate::serialization::decode_expense(&ex, &currency, &ids).and_then(|d| {
-                        let shares = crate::split::split_expense(d.amount, &d.split)?;
-                        let mut moved = running.clone();
-                        let payer = moved.get_mut(&d.paid_by).expect("checked above");
-                        *payer = checked_add(*payer, d.amount, code::AMOUNT_OVERFLOW)?;
-                        for (id, owed) in &shares {
-                            let held = moved.get_mut(id).expect("decoded against the bill");
-                            *held = checked_sub(*held, *owed, code::AMOUNT_OVERFLOW)?;
-                        }
-                        Ok(moved)
-                    });
-                match applied {
-                    Ok(moved) => running = moved,
-                    Err(e) => {
-                        aside!(entry, e.code);
-                        continue;
+                            _ => {
+                                return Err(SplitError::new(
+                                    code::BILL_BAD_CURRENCY,
+                                    "States no currency",
+                                ))
+                            }
+                        },
                     }
-                }
+                    if !participants.contains_key(field(&ex, "paidBy")) {
+                        return Err(SplitError::new(
+                            code::UNKNOWN_PARTICIPANT,
+                            "Paid by somebody not on the bill",
+                        ));
+                    }
+                    let d = crate::serialization::decode_expense(&ex, &currency, &ids)?;
+                    // One id names one expense. An amendment or a withdrawal is
+                    // written against the expense a reader shows, and two under
+                    // one id leave it to guess which.
+                    if expense_entries.contains_key(&d.id) {
+                        return Err(SplitError::new(
+                            code::DUPLICATE_EXPENSE,
+                            format!("Two expenses share {}", d.id),
+                        ));
+                    }
+                    // §4 is what turns an expense into what each person owes,
+                    // and §5 runs it downstream of this fold. An expense whose
+                    // split §4 refuses cannot be applied, so it is set aside
+                    // here rather than raising out of `net_balances` once the
+                    // bill is already built.
+                    let shares = crate::split::split_expense(d.amount, &d.split)?;
+                    let mut moved = running.clone();
+                    let payer = moved.get_mut(&d.paid_by).expect("checked above");
+                    *payer =
+                        checked_balance(checked_add(*payer, d.amount, code::AMOUNT_OVERFLOW)?)?;
+                    for (id, owed) in &shares {
+                        let held = moved.get_mut(id).expect("decoded against the bill");
+                        *held = checked_balance(checked_sub(*held, *owed, code::AMOUNT_OVERFLOW)?)?;
+                    }
+                    Ok((ex, moved))
+                });
+                let Some(((ex, moved), _)) = applied else {
+                    continue;
+                };
+                running = moved;
+                let id = field(&ex, "id").to_owned();
+                expense_entries.insert(id.clone(), field(entry, "id").to_owned());
+                expense_authors.insert(id, field(entry, "author").to_owned());
                 expenses.push(ex);
             }
             "recordPayment" => {
-                let mut pay = eff["payment"].clone();
                 let author = field(entry, "author");
-                // A payment moves both parties' balances, so without this any
-                // holder of the invite could clear a debt neither had settled.
-                if author != field(&pay, "from") && author != field(&pay, "to") {
-                    aside!(entry, code::UNAUTHORIZED_PAYMENT);
-                    continue;
-                }
-                if !participants.contains_key(field(&pay, "from"))
-                    || !participants.contains_key(field(&pay, "to"))
-                {
-                    aside!(entry, code::UNKNOWN_PARTICIPANT);
-                    continue;
-                }
-                if field(&pay, "from") == field(&pay, "to") {
-                    aside!(entry, code::SELF_PAYMENT);
-                    continue;
-                }
-                let obj = pay.as_object_mut().ok_or_else(|| {
-                    SplitError::new(code::BILL_TYPE_ERROR, "A payment is an object")
-                })?;
-                // §9.1 falls back only when the member is ABSENT. `as_str`
-                // alone cannot tell absent from present-and-not-a-string, and
-                // a present value that is not a currency is an entry that
-                // cannot be applied: §10.3 sets those aside.
-                match obj.get("currency") {
-                    None => {
-                        obj.insert("currency".into(), Value::String(currency.clone()));
+                let applied = first_applied(versions(entry), &mut set_aside, |version| {
+                    let mut pay = version["payment"].clone();
+                    // A payment moves both parties' balances, so without this
+                    // any holder of the invite could clear a debt neither had
+                    // settled.
+                    if author != field(&pay, "from") && author != field(&pay, "to") {
+                        return Err(SplitError::new(
+                            code::UNAUTHORIZED_PAYMENT,
+                            "Written by neither party",
+                        ));
                     }
-                    Some(own) => match own.as_str() {
-                        Some(own) if is_currency(own) => {
-                            if own != currency {
-                                aside!(entry, code::CURRENCY_MISMATCH);
-                                continue;
+                    if !participants.contains_key(field(&pay, "from"))
+                        || !participants.contains_key(field(&pay, "to"))
+                    {
+                        return Err(SplitError::new(
+                            code::UNKNOWN_PARTICIPANT,
+                            "Names somebody not on the bill",
+                        ));
+                    }
+                    if field(&pay, "from") == field(&pay, "to") {
+                        return Err(SplitError::new(code::SELF_PAYMENT, "Pays its own author"));
+                    }
+                    let obj = pay.as_object_mut().ok_or_else(|| {
+                        SplitError::new(code::BILL_TYPE_ERROR, "A payment is an object")
+                    })?;
+                    // §9.1 falls back only when the member is ABSENT, and a
+                    // present value that is not a currency is an entry that
+                    // cannot be applied: §10.3 sets those aside.
+                    match obj.get("currency") {
+                        None => {
+                            obj.insert("currency".into(), Value::String(currency.clone()));
+                        }
+                        Some(own) => match own.as_str() {
+                            Some(own) if is_currency(own) => {
+                                if own != currency {
+                                    return Err(SplitError::new(
+                                        code::CURRENCY_MISMATCH,
+                                        "States another currency",
+                                    ));
+                                }
                             }
-                        }
-                        _ => {
-                            aside!(entry, code::BILL_BAD_CURRENCY);
-                            continue;
-                        }
-                    },
-                }
-                let ids: std::collections::BTreeSet<String> =
-                    participants.keys().cloned().collect();
-                if let Err(e) = crate::serialization::decode_payment(&pay, &currency, &ids) {
-                    aside!(entry, e.code);
-                    continue;
-                }
-                // §10.5: a confirmation names one record, and a method that
-                // speaks for the payment's `to` is checked against that
-                // record's `to`. Two records under one id name a payee
-                // ambiguously, so one recipient's confirmation would settle a
-                // debt another never vouched for. The first record stands and
-                // the second is refused; one transaction paying several people
-                // carries the transaction in `reference`, not in the id.
-                let pay_id = field(&pay, "id").to_owned();
-                if payments.iter().any(|p| field(p, "id") == pay_id) {
-                    aside!(entry, code::DUPLICATE_PAYMENT);
-                    continue;
-                }
-                // What one participant has recorded paying another, confirmed
-                // or not, stays in range: §14.4 sums the unconfirmed part.
-                let pair = (field(&pay, "from").to_owned(), field(&pay, "to").to_owned());
-                let amount = pay["amount"].as_i64().unwrap_or(0);
-                let held = pair_total.get(&pair).copied().unwrap_or(0);
-                match checked_add(held, amount, code::AMOUNT_OVERFLOW) {
-                    Ok(total) => {
-                        pair_total.insert(pair, total);
+                            _ => {
+                                return Err(SplitError::new(
+                                    code::BILL_BAD_CURRENCY,
+                                    "States no currency",
+                                ))
+                            }
+                        },
                     }
-                    Err(e) => {
-                        aside!(entry, e.code);
-                        continue;
+                    crate::serialization::decode_payment(&pay, &currency, &ids)?;
+                    // §10.5: a confirmation names one record, and a method
+                    // that speaks for the payment's `to` is checked against
+                    // that record's `to`. Two records under one id name a payee
+                    // ambiguously, so one recipient's confirmation would settle
+                    // a debt another never vouched for. The first record stands
+                    // and the second is refused; one transaction paying several
+                    // people carries the transaction in `reference`.
+                    let pay_id = field(&pay, "id");
+                    if payments.iter().any(|p| field(p, "id") == pay_id) {
+                        return Err(SplitError::new(
+                            code::DUPLICATE_PAYMENT,
+                            "Two payments share an id",
+                        ));
                     }
-                }
-                if let Some(id) = pay.get("id").and_then(Value::as_str) {
-                    payment_authors.insert(id.to_owned(), field(entry, "author").to_owned());
-                    payment_digests.insert(id.to_owned(), payment_digest(&eff["payment"])?);
-                }
+                    // What one participant has recorded paying another,
+                    // confirmed or not, stays in range: §14.4 sums the
+                    // unconfirmed part.
+                    let pair = (field(&pay, "from").to_owned(), field(&pay, "to").to_owned());
+                    let amount = pay["amount"].as_i64().unwrap_or(0);
+                    let total = checked_add(
+                        pair_total.get(&pair).copied().unwrap_or(0),
+                        amount,
+                        code::AMOUNT_OVERFLOW,
+                    )?;
+                    Ok((pay, pair, total))
+                });
+                let Some(((pay, pair, total), version)) = applied else {
+                    continue;
+                };
+                pair_total.insert(pair, total);
+                let id = field(&pay, "id").to_owned();
+                payment_authors.insert(id.clone(), author.to_owned());
+                payment_entries.insert(id.clone(), field(entry, "id").to_owned());
+                payment_digests.insert(id, payment_digest(&version["payment"])?);
                 payments.push(pay);
             }
             _ => {}
@@ -1171,60 +1335,80 @@ pub fn fold_log_verified(
         if field(entry, "kind") != "confirmPayment" {
             continue;
         }
-        let eff = effective(entry);
-        let c = eff.get("confirmation").cloned().unwrap_or(Value::Null);
-        let Some((speaks_for, needs_reference, settles)) = confirmation_rule(field(&c, "method"))
-        else {
-            aside!(entry, code::BILL_UNKNOWN_CONFIRMATION_METHOD);
+        let author = field(entry, "author");
+        let applied = first_applied(versions(entry), &mut set_aside, |version| {
+            let c = version.get("confirmation").cloned().unwrap_or(Value::Null);
+            let Some((speaks_for, needs_reference, settles)) =
+                confirmation_rule(field(&c, "method"))
+            else {
+                return Err(SplitError::new(
+                    code::BILL_UNKNOWN_CONFIRMATION_METHOD,
+                    "No such method",
+                ));
+            };
+            let payment_id = field(&c, "paymentId").to_owned();
+            if !known.contains(&payment_id) {
+                return Err(SplitError::new(
+                    code::UNKNOWN_PAYMENT,
+                    "Vouches for no payment on the bill",
+                ));
+            }
+            // §10.5. A confirmation binds what the record said when it was
+            // given.
+            if c.get("record").and_then(Value::as_str)
+                != payment_digests.get(&payment_id).map(String::as_str)
+            {
+                return Err(SplitError::new(
+                    code::UNKNOWN_PAYMENT,
+                    "Vouches for a record since changed",
+                ));
+            }
+            if !participants.contains_key(author) {
+                return Err(SplitError::new(
+                    code::UNKNOWN_PARTICIPANT,
+                    "Written by somebody not on the bill",
+                ));
+            }
+            let pay = payments
+                .iter()
+                .find(|p| field(p, "id") == payment_id)
+                .expect("checked above");
+            if let Some(role) = speaks_for {
+                // A confirmation's whole weight is in who gave it, so a method
+                // anyone may claim is a method that says nothing.
+                if author != field(pay, role) {
+                    return Err(SplitError::new(
+                        code::UNAUTHORIZED_CONFIRMATION,
+                        "Speaks for somebody else",
+                    ));
+                }
+            }
+            // A non-empty STRING, not merely something `field` renders empty.
+            // A number or a list here is not a transaction id, and reading
+            // "present" three different ways settles a debt on one device and
+            // leaves it open on another.
+            let has_reference = c
+                .get("reference")
+                .and_then(Value::as_str)
+                .is_some_and(|r| !r.is_empty());
+            if needs_reference && !has_reference {
+                // One that says a payment is on a chain without saying where
+                // contains no chain.
+                return Err(SplitError::new(
+                    code::CONFIRMATION_MISSING_REFERENCE,
+                    "Names no transaction",
+                ));
+            }
+            Ok((payment_id, settles))
+        });
+        let Some(((payment_id, settles), version)) = applied else {
             continue;
         };
-        let payment_id = field(&c, "paymentId").to_owned();
-        if !known.contains(&payment_id) {
-            aside!(entry, code::UNKNOWN_PAYMENT);
-            continue;
-        }
-        // §10.5. A confirmation binds what the record said when it was given.
-        if c.get("record").and_then(Value::as_str)
-            != payment_digests.get(&payment_id).map(String::as_str)
-        {
-            aside!(entry, code::UNKNOWN_PAYMENT);
-            continue;
-        }
-        if !participants.contains_key(field(entry, "author")) {
-            aside!(entry, code::UNKNOWN_PARTICIPANT);
-            continue;
-        }
-        let pay = payments
-            .iter()
-            .find(|p| field(p, "id") == payment_id)
-            .expect("checked above");
-        if let Some(role) = speaks_for {
-            // A confirmation's whole weight is in who gave it, so a method
-            // anyone may claim is a method that says nothing.
-            if field(entry, "author") != field(pay, role) {
-                aside!(entry, code::UNAUTHORIZED_CONFIRMATION);
-                continue;
-            }
-        }
-        // A non-empty STRING, not merely something `field` renders empty. A
-        // number or a list here is not a transaction id, and reading
-        // "present" three different ways settles a debt on one device and
-        // leaves it open on another.
-        let has_reference = c
-            .get("reference")
-            .and_then(Value::as_str)
-            .is_some_and(|r| !r.is_empty());
-        if needs_reference && !has_reference {
-            // One that says a payment is on a chain without saying where
-            // contains no chain.
-            aside!(entry, code::CONFIRMATION_MISSING_REFERENCE);
-            continue;
-        }
         if settles {
             confirmed_by
                 .entry(payment_id.clone())
                 .or_default()
-                .push(field(entry, "id").to_owned());
+                .push(field(&version, "id").to_owned());
             confirmed.insert(payment_id);
         }
     }
@@ -1240,7 +1424,12 @@ pub fn fold_log_verified(
         let amount = pay["amount"].as_i64().unwrap_or(0);
         let (from, to) = (field(pay, "from"), field(pay, "to"));
         let moved = checked_add(running[from], amount, code::AMOUNT_OVERFLOW)
-            .and_then(|f| checked_sub(running[to], amount, code::AMOUNT_OVERFLOW).map(|t| (f, t)));
+            .and_then(checked_balance)
+            .and_then(|f| {
+                checked_sub(running[to], amount, code::AMOUNT_OVERFLOW)
+                    .and_then(checked_balance)
+                    .map(|t| (f, t))
+            });
         match moved {
             Ok((f, t)) => {
                 running.insert(from.to_owned(), f);
@@ -1291,5 +1480,29 @@ pub fn fold_log_verified(
         identities,
         payment_authors,
         payment_digests,
+        expense_entries,
+        expense_authors,
+        payment_entries,
+        rate_entry,
+        rate_author,
     })
+}
+
+/// The first of `versions` that `attempt` applies, and that version. Each one
+/// it refuses is set aside under its own id (§10.4).
+fn first_applied<T>(
+    versions: Vec<Value>,
+    set_aside: &mut Vec<SetAside>,
+    mut attempt: impl FnMut(&Value) -> Result<T>,
+) -> Option<(T, Value)> {
+    for version in versions {
+        match attempt(&version) {
+            Ok(result) => return Some((result, version)),
+            Err(e) => set_aside.push(SetAside {
+                id: field(&version, "id").to_owned(),
+                code: e.code,
+            }),
+        }
+    }
+    None
 }

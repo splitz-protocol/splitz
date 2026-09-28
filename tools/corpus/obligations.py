@@ -15,6 +15,7 @@ from _spec import ADDRESSES, Refused, render_obligation  # noqa: E402
 
 AT = "2026-10-28T19:30:00.000Z"
 RATE = {"currency": "MXN", "minorUnitsPerZec": 950000, "at": AT}
+LOW_RATE = {"currency": "MXN", "minorUnitsPerZec": 3000, "at": AT}
 
 
 def who(pid, name, address=None, payouts=None):
@@ -103,6 +104,18 @@ CASES = [
      [pay("dee", 9223372036854775806), pay("eli", 1)],
      [DEE_NO_ADDRESS, ELI_CASH, CAI], True, False),
 
+    # Section 8.5. One debt past what a request can price is reported beside
+    # the others, never a reason to carry none of them. 92233720369 is past
+    # what section 7.1 prices; 92233720368 at 3000 minor units a ZEC prices to
+    # 3074457345600000 zatoshi, past the 21000000 ZEC section 8.1 renders.
+    ("a_debt_section_7_cannot_price_is_reported_alongside",
+     [pay("ana", 7004), pay("ben", 92233720369)], [ANA, BEN, CAI], True, True),
+    ("and_an_unpriceable_debt_refuses_the_request_when_not_skipping",
+     [pay("ana", 7004), pay("ben", 92233720369)], [ANA, BEN, CAI], False, True),
+    ("a_debt_past_the_largest_request_is_reported_alongside",
+     [pay("ana", 7004), pay("ben", 92233720368)], [ANA, BEN, CAI], True, False,
+     LOW_RATE),
+
     # Pricing.
     ("an_amount_that_rounds_up", [pay("ana", 350)], [ANA, CAI], False, True),
     ("an_amount_that_divides_exactly",
@@ -112,12 +125,13 @@ CASES = [
 
 def main():
     out = []
-    for name, settlements, participants, skip, fiat in CASES:
+    for name, settlements, participants, skip, fiat, *rest in CASES:
+        rate = rest[0] if rest else RATE
         case = {"name": name, "settlements": settlements,
-                "participants": participants, "rate": RATE,
+                "participants": participants, "rate": rate,
                 "currency": "MXN", "skipUnpayable": skip, "includeFiat": fiat}
         try:
-            result = render_obligation(settlements, participants, RATE, "MXN",
+            result = render_obligation(settlements, participants, rate, "MXN",
                                        skip_unpayable=skip, include_fiat=fiat)
             # What the URI carries plus what it withholds must account for the
             # whole obligation. A figure that prices the whole of it must never

@@ -1,6 +1,6 @@
 {
   "description": "Scanned payloads. SPEC.md section 11.2.",
-  "count": 39,
+  "count": 41,
   "cases": [
     {
       "name": "encode_a_bill",
@@ -3698,6 +3698,16 @@
         "log": [],
         "invite": null
       }
+    },
+    {
+      "name": "a_body_holding_a_lone_surrogate",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOlt7ImRlc2NyaXB0aW9uIjoiXHVkODAwIn1dfQ",
+      "error": "payload_damaged"
+    },
+    {
+      "name": "a_body_holding_a_number_no_double_holds",
+      "payload": "splitz1:eyJ2IjoxLCJsb2ciOlt7InRpcCI6MWU0MDB9XX0",
+      "error": "payload_damaged"
     }
   ]
 }

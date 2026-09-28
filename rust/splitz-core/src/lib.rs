@@ -26,7 +26,10 @@ pub mod split;
 pub mod zip321;
 
 pub use allocation::{allocate, allocate_evenly};
-pub use authority::{resolve_identities, signing_message, Identities, ENTRY_SIGNING_DOMAIN};
+pub use authority::{
+    participant_id, resolve_identities, signing_message, Identities, ENTRY_SIGNING_DOMAIN,
+    PARTICIPANT_ID_DOMAIN,
+};
 pub use balances::{
     creditors, debtors, direct_debts, net_balances, residual_is_zero, DirectDebt, Position,
 };
@@ -51,7 +54,7 @@ pub use money::{
     MAX_ENTRY_AMOUNT, MIN_AMOUNT,
 };
 pub use obligation::{
-    render_obligation, withholdings, Awaiting, Contested, Obligation, Unpayable, Withholdings,
+    render_obligation, withholdings, Awaiting, Obligation, Unpayable, Withholdings,
 };
 pub use ordering::{compare_utf8, sorted_utf8, unique_sorted_utf8};
 pub use rate::{

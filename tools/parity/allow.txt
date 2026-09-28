@@ -18,6 +18,9 @@ dart::raise              # Dart has no `Result`, so a refusal is a throw and `ra
 dart::VerifySignature    # Dart names the host's verifier as a typedef; Rust takes it as a generic `impl Fn`, which has no name to export.
 dart::ConfirmationRule   # Dart names the §10.5 rule triple as a class; Rust returns it as a tuple from `confirmation_rule`, which both sides export.
 dart::checkScalarValues  # §2.3's lone-surrogate check. Rust's `String` cannot hold a lone surrogate at all, so the check has no subject there and `serde_json` refuses the input one layer earlier.
+dart::checkedBalance     # §5's symmetric balance bound, shared by `balances.dart` and `log.dart`. Hidden from the barrel; Rust's `checked_balance` is not re-exported from the crate root either.
+dart::renderFiat         # §8.4's fiat rendering, shared by `zip321.dart` and `obligation.dart`. Hidden from the barrel; Rust's `render_fiat` is not re-exported from the crate root either.
+dart::canonicalBytes     # §9.4's canonical base64url decode, shared by `authority.dart`, `serialization.dart` and `log.dart`. Hidden from the barrel; Rust's `unbase64url` is not re-exported from the crate root either.
 dart::hasLoneSurrogate   # The predicate behind `checkScalarValues`, unreachable in Rust for the same reason.
 
 # --- names Rust has and Dart does not ---------------------------------------

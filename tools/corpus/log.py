@@ -6,7 +6,7 @@ SPEC.md sections 9.4, 10 and 10.5.
 import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (MAX_ENTRY_AMOUNT, ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
-                   payment_digest,
+                   payment_digest, participant_id,
                    seal_log, merge, order, fold, balances,
                    canonical_json, b64url, Refused, stand_in,
                    non_canonical)
@@ -19,6 +19,9 @@ NONCE = b64url(b"n" * 16)
 SIG = "S" * 86
 KEY_B = b64url(b"b" * 32)
 KEY_RIVAL = b64url(b"r" * 32)
+# A participant who publishes a key is named by the id that key derives
+# (section 10.7).
+BEN_K = participant_id(KEY_B)
 
 
 def create(author="ana", name="Dinner", currency="EUR", nonce=NONCE):
@@ -591,20 +594,30 @@ FOLD_CASES = [
     ("a_create_whose_signature_fails_opens_no_bill",
      [C, J_ANA, J_BEN], C["id"], []),
     ("a_self_claim_that_verifies_binds_a_key",
-     [C, J_ANA, dict(J_BEN, participant={"id": "ben", "name": "Ben",
-                                         "identityKey": KEY_B})],
+     [C, J_ANA, dict(J_BEN, author=BEN_K,
+                     participant={"id": BEN_K, "name": "Ben",
+                                  "identityKey": KEY_B})],
      C["id"], [0, 1, 2]),
-    ("a_rival_claim_leaves_the_id_contested",
+    # §10.7. A key names the id it derives, so a second key's claim to a bound
+    # participant is set aside rather than contesting them.
+    ("a_rival_claim_binds_nothing",
      [C, J_ANA,
-      dict(J_BEN, participant={"id": "ben", "name": "Ben",
-                               "identityKey": KEY_B}),
-      {"v": 1, "id": "jr", "author": "ben", "kind": "joinBill", "at": AT(7),
-       "participant": {"id": "ben", "name": "Ben",
+      dict(J_BEN, author=BEN_K, participant={"id": BEN_K, "name": "Ben",
+                                             "identityKey": KEY_B}),
+      {"v": 1, "id": "jr", "author": BEN_K, "kind": "joinBill", "at": AT(7),
+       "participant": {"id": BEN_K, "name": "Ben",
                        "identityKey": KEY_RIVAL}}],
      C["id"], [0, 1, 2, 3]),
-    ("no_verifier_decides_nothing",
+    ("a_key_stated_under_an_id_it_does_not_derive_is_set_aside",
      [C, J_ANA, dict(J_BEN, participant={"id": "ben", "name": "Ben",
                                          "identityKey": KEY_B})], C["id"]),
+    ("the_creators_record_may_state_any_key",
+     [C, dict(J_ANA, participant={"id": "ana", "name": "Ana",
+                                  "identityKey": KEY_RIVAL})], C["id"]),
+    ("no_verifier_decides_nothing",
+     [C, J_ANA, dict(J_BEN, author=BEN_K,
+                     participant={"id": BEN_K, "name": "Ben",
+                                  "identityKey": KEY_B})], C["id"]),
 
     ("an_empty_log", [], None),
     ("a_log_with_no_create", [J_ANA, J_BEN], None),
@@ -703,6 +716,32 @@ ENTRY_CASES += [
      {"v": 1, "id": "s5", "author": "ana", "kind": "addExpense", "at": AT(6),
       "expense": {"id": "x9", "paidBy": "ana", "amount": 9000, "at": AT(6),
                   "split": {"type": "equal", "among": ["ana", 7, "ben"]}}}),
+
+    # §10.1. `v` is bounded as every other integer is: 2^63 is past it, and a
+    # reader whose parser holds it as a double must refuse it as one that
+    # holds it exactly does.
+    ("an_entry_whose_version_is_past_64_bits", dict(J_ANA, v=2**63)),
+
+    # §2.2 at ingress. A number past 64 bits is `amount_overflow` however it
+    # was written; any other non-integer is refused as §9.3's encoding
+    # refuses it.
+    ("a_payment_of_two_to_the_sixty_third",
+     {"v": 1, "id": "s6", "author": "ben", "kind": "recordPayment", "at": AT(6),
+      "payment": {"id": "y6", "from": "ben", "to": "ana", "amount": 2**63,
+                  "method": "cash", "at": AT(6)}}),
+    ("a_payment_whose_amount_is_a_fraction",
+     {"v": 1, "id": "s7", "author": "ben", "kind": "recordPayment", "at": AT(6),
+      "payment": {"id": "y7", "from": "ben", "to": "ana", "amount": 1.5,
+                  "method": "cash", "at": AT(6)}}),
+
+    # §10.1's checks run in the order it states, so an entry wrong in two
+    # ways is refused for the same one everywhere.
+    ("a_join_carrying_an_expense_and_no_participant",
+     {"v": 1, "id": "s8", "author": "ana", "kind": "joinBill", "at": AT(6),
+      "expense": 5}),
+    ("a_void_whose_target_is_null",
+     {"v": 1, "id": "s9", "author": "ana", "kind": "voidEntry", "at": AT(6),
+      "targetId": None}),
 ]
 
 # A non-string entry id is refused at ingress, and the refusal must carry an
@@ -718,9 +757,12 @@ MERGE_CASES_EXTRA = [
 # that verifies applies one whose signature checks against the author's key.
 SIG_A = "A" * 86
 SIG_Z = "z" * 86
-J_BEN_KEYED = dict(J_BEN, participant={"id": "ben", "name": "Ben",
-                                       "payTo": ADDRESSES[1],
-                                       "identityKey": KEY_B})
+J_BEN_KEYED = dict(J_BEN, author=BEN_K,
+                   participant={"id": BEN_K, "name": "Ben",
+                                "payTo": ADDRESSES[1],
+                                "identityKey": KEY_B})
+E1_K = dict(E1, expense=dict(E1["expense"], split={"type": "equal",
+                                                   "among": ["ana", BEN_K]}))
 CONFIRM_AS_ANA = {"v": 1, "id": "c1", "author": "ana",
                   "kind": "confirmPayment", "at": AT(5),
                   "confirmation": {"paymentId": "y1",
@@ -740,9 +782,9 @@ FOLD_CASES += [
     ("and_one_that_verifies_applies",
      [C, J_ANA, J_BEN, E1, P1, CONFIRM_AS_ANA], C["id"], [0, 1, 3, 5]),
     ("an_unsigned_join_written_as_a_bound_participant_is_set_aside",
-     [C, J_ANA, J_BEN_KEYED, E1,
-      {"v": 1, "id": "jf", "author": "ben", "kind": "joinBill", "at": AT(8),
-       "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[2]}}],
+     [C, J_ANA, J_BEN_KEYED, E1_K,
+      {"v": 1, "id": "jf", "author": BEN_K, "kind": "joinBill", "at": AT(8),
+       "participant": {"id": BEN_K, "name": "Ben", "payTo": ADDRESSES[2]}}],
      C["id"], [0, 1, 2, 3]),
     ("a_join_for_a_bound_creator_by_anyone_else_is_set_aside",
      [C, J_BEN,
@@ -751,9 +793,9 @@ FOLD_CASES += [
      C["id"], [0]),
     ("an_amendment_written_as_a_bound_participant_is_set_aside",
      [C, J_ANA, J_BEN_KEYED,
-      {"v": 1, "id": "am", "author": "ben", "kind": "amendEntry",
+      {"v": 1, "id": "am", "author": BEN_K, "kind": "amendEntry",
        "at": AT(8), "targetId": "j2",
-       "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[2],
+       "participant": {"id": BEN_K, "name": "Ben", "payTo": ADDRESSES[2],
                        "identityKey": KEY_B}}],
      C["id"], [0, 1, 2]),
     ("an_amendment_that_changes_an_address_is_reported",
@@ -762,13 +804,49 @@ FOLD_CASES += [
        "at": AT(8), "targetId": "j2",
        "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[2]}}],
      C["id"]),
-    ("a_swapped_signature_on_a_claim_does_not_lift_a_contest",
+    ("a_swapped_signature_on_a_claim_keeps_its_binding",
      [C, J_ANA, dict(J_BEN_KEYED, sig=SIG_A),
-      {"v": 1, "id": "jr", "author": "ben", "kind": "joinBill", "at": AT(7),
-       "participant": {"id": "ben", "name": "Ben",
+      {"v": 1, "id": "jr", "author": BEN_K, "kind": "joinBill", "at": AT(7),
+       "participant": {"id": BEN_K, "name": "Ben",
                        "identityKey": KEY_RIVAL}},
       dict(J_BEN_KEYED, sig=SIG_Z)],
      C["id"], [0, 1, ("copy", 2), 3]),
+
+    # §10.7. A rival claim to a bound participant takes nothing from them:
+    # an unsigned confirmation written in their name is still set aside, so
+    # the debt it would have cleared stands.
+    ("a_rival_claim_does_not_let_an_unsigned_entry_speak_for_a_participant",
+     [C, J_ANA, J_BEN_KEYED,
+      {"v": 1, "id": "jm", "author": "mal", "kind": "joinBill", "at": AT(2),
+       "participant": {"id": "mal", "name": "Mal"}},
+      {"v": 1, "id": "eb", "author": BEN_K, "kind": "addExpense", "at": AT(3),
+       "expense": {"id": "xb", "paidBy": BEN_K, "amount": 6000, "at": AT(3),
+                   "split": {"type": "equal", "among": [BEN_K, "mal"]}}},
+      {"v": 1, "id": "qm", "author": "mal", "kind": "recordPayment",
+       "at": AT(4),
+       "payment": {"id": "ym", "from": "mal", "to": BEN_K, "amount": 3000,
+                   "method": "cash", "at": AT(4)}},
+      {"v": 1, "id": "jr", "author": BEN_K, "kind": "joinBill", "at": AT(5),
+       "participant": {"id": BEN_K, "name": "Ben",
+                       "identityKey": KEY_RIVAL}},
+      conf("cf", BEN_K, "recipientConfirmed", 6, pid="ym")],
+     C["id"], [0, 1, 2, 3, 4, 5, 6]),
+
+    # §10.3. An entry by a bound participant applies only from a copy that
+    # verifies against their own key: here the expense verifies against the
+    # creator's key alone, which speaks for nobody else.
+    ("an_entry_verifies_against_its_own_authors_key",
+     [C, J_ANA, J_BEN_KEYED, E1_K,
+      {"v": 1, "id": "eb", "author": BEN_K, "kind": "addExpense", "at": AT(5),
+       "expense": {"id": "xb", "paidBy": BEN_K, "amount": 600, "at": AT(5),
+                   "split": {"type": "equal", "among": ["ana", BEN_K]}}}],
+     C["id"], [0, 1, ("key", 2, KEY_B), 3, ("key", 4, KEY_B)]),
+    ("and_one_verifying_only_against_another_key_is_set_aside",
+     [C, J_ANA, J_BEN_KEYED, E1_K,
+      {"v": 1, "id": "eb", "author": BEN_K, "kind": "addExpense", "at": AT(5),
+       "expense": {"id": "xb", "paidBy": BEN_K, "amount": 600, "at": AT(5),
+                   "split": {"type": "equal", "among": ["ana", BEN_K]}}}],
+     C["id"], [0, 1, ("key", 2, KEY_B), 3, ("key", 4, KEY)]),
 
     # §10.8. What a withdrawal names orders it after what it names, whatever
     # instant its author wrote.
@@ -862,6 +940,122 @@ FOLD_CASES += [
        "participant": {"id": "ben", "name": "Ben", "payouts": [
            {"type": "swap", "asset": "USDC", "chain": "base",
             "address": "0xmallory"}]}}], C["id"]),
+]
+
+
+def rate(eid, author, per, minute, at=None):
+    return {"v": 1, "id": eid, "author": author, "kind": "setRate",
+            "at": at or AT(minute),
+            "rate": {"currency": "EUR", "minorUnitsPerZec": per,
+                     "at": AT(minute)}}
+
+
+J_CY = {"v": 1, "id": "j5", "author": "cy", "kind": "joinBill", "at": AT(2),
+        "participant": {"id": "cy", "name": "Cy"}}
+
+FOLD_CASES += [
+    # §10.1 and §10.7. A fold that verifies takes the rate only from a
+    # participant whose key it has bound: an unsigned join puts anybody
+    # holding the invite on the bill.
+    ("a_rate_from_a_participant_with_no_bound_key_is_set_aside",
+     BASE + [J_DEE, rate("rd", "dee", 1, 9)], C["id"], [0, 1, 2, 3, 4, 5, 6]),
+    ("a_rate_from_a_bound_participant_applies",
+     [C, J_ANA, J_BEN_KEYED, E1_K, rate("rb", BEN_K, 1, 9)],
+     C["id"], [0, 1, 2, 3, 4]),
+
+    # §10.8. A rate dated far ahead outranks every later one, so the creator
+    # may withdraw it as they may an expense; its author still may.
+    ("the_creator_withdraws_a_rate_dated_ahead",
+     BASE + [rate("ra", "ana", 950000, 6),
+             rate("rf", "ben", 1, 7, at="2036-10-28T19:07:00.000Z"),
+             void("vr", "ana", "rf", 8)], C["id"]),
+    ("a_stranger_may_not_withdraw_a_rate",
+     BASE + [J_DEE, rate("ra", "ana", 950000, 6), void("vr", "dee", "ra", 8)],
+     C["id"]),
+
+    # §10.2. Entries are ordered by the instant `at` names, not its text: a
+    # lower-case `t` sorts after every upper-case one as bytes.
+    ("an_earlier_instant_written_in_lower_case_sorts_first",
+     BASE + [rate("rl", "ben", 1, 6, at="2026-10-28t19:06:00.000Z"),
+             rate("ru", "ana", 950000, 7)], C["id"]),
+    ("two_spellings_of_one_instant_are_ordered_by_their_text",
+     BASE + [rate("rl", "ben", 1, 6, at="2026-10-28t19:06:00.000z"),
+             rate("ru", "ana", 950000, 6)], C["id"]),
+
+    # §10.4. An amendment that cannot be applied is set aside and its target
+    # applies as written. Correcting a join into a record nobody can decode
+    # would otherwise take its author off the bill, and every expense naming
+    # them with it.
+    ("a_join_amended_into_a_record_that_cannot_be_decoded_stands",
+     BASE + [{"v": 1, "id": "am", "author": "ben", "kind": "amendEntry",
+              "at": AT(6), "targetId": "j2",
+              "participant": {"id": "ben", "name": 5}}], C["id"]),
+    ("an_expense_amended_into_one_that_cannot_be_applied_stands",
+     BASE + [{"v": 1, "id": "am", "author": "ana", "kind": "amendEntry",
+              "at": AT(6), "targetId": "e1",
+              "expense": {"id": "x1", "paidBy": "ana", "amount": "9000",
+                          "at": AT(3),
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    # The removal check reads both: an amendment dropping somebody from a
+    # split, which then cannot be applied, leaves them named by the entry it
+    # corrected.
+    ("a_failed_amendment_does_not_let_a_participant_go",
+     BASE + [void("vp", "ben", "p1", 5),
+             {"v": 1, "id": "am", "author": "ana", "kind": "amendEntry",
+              "at": AT(6), "targetId": "e1",
+              "expense": {"id": "x1", "paidBy": "ana", "amount": "9000",
+                          "at": AT(3),
+                          "split": {"type": "equal", "among": ["ana"]}}},
+             void("vj", "ana", "j2", 7)], C["id"]),
+
+    # §2.2. A balance is symmetric about zero: the most negative 64-bit value
+    # has no positive counterpart, so §5.1 and §6 could not form its
+    # magnitude. After E1 ben owes 4500; a payment to him he confirms himself
+    # that would leave him at exactly that value stays unconfirmed.
+    ("a_confirmation_that_would_leave_a_balance_at_the_most_negative_value",
+     [C, J_ANA, J_BEN, J_CY, E1,
+      {"v": 1, "id": "q1", "author": "ben", "kind": "recordPayment",
+       "at": AT(9),
+       "payment": {"id": "y2", "from": "cy", "to": "ben",
+                   "amount": I64_MAX - 4499, "method": "cash", "at": AT(9)}},
+      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+    ("and_one_leaving_it_one_above_applies",
+     [C, J_ANA, J_BEN, J_CY, E1,
+      {"v": 1, "id": "q1", "author": "ben", "kind": "recordPayment",
+       "at": AT(9),
+       "payment": {"id": "y2", "from": "cy", "to": "ben",
+                   "amount": I64_MAX - 4500, "method": "cash", "at": AT(9)}},
+      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+
+    # §10.8. A member the target leaves out names nobody. The record below was
+    # written with no `from` and amended to name ben; a withdrawal authored as
+    # the empty id must not be read as naming that absent member.
+    ("a_withdrawal_authored_as_nobody_takes_nothing_off",
+     BASE + [{"v": 1, "id": "pn", "author": "ben", "kind": "recordPayment",
+              "at": AT(5),
+              "payment": {"id": "y5", "to": "ana", "amount": 100,
+                          "method": "cash", "at": AT(5)}},
+             {"v": 1, "id": "an", "author": "ben", "kind": "amendEntry",
+              "at": AT(6), "targetId": "pn",
+              "payment": {"id": "y5", "from": "ben", "to": "ana", "amount": 100,
+                          "method": "cash", "at": AT(5)}},
+             conf("cn", "ana", "recipientConfirmed", 7, pid="y5",
+                  record=payment_digest(
+                      {"id": "y5", "from": "ben", "to": "ana", "amount": 100,
+                       "method": "cash", "at": AT(5)})),
+             void("vn", "", "pn", 8)], C["id"]),
+
+    # One id names one expense: an amendment or a withdrawal is written
+    # against the expense a reader shows, and two under one id leave it to
+    # guess which.
+    ("two_expenses_sharing_one_id",
+     BASE + [{"v": 1, "id": "e2", "author": "ben", "kind": "addExpense",
+              "at": AT(6),
+              "expense": {"id": "x1", "paidBy": "ben", "amount": 100,
+                          "at": AT(6),
+                          "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
 ]
 
 
@@ -979,7 +1173,11 @@ def main():
             # copy at i, by its signature.
             ok = set()
             for v in verifies:
-                if isinstance(v, tuple):
+                if isinstance(v, tuple) and v[0] == "key":
+                    # ("key", i, key): that entry verifies against that key
+                    # alone.
+                    ok.add(f"{entries[v[1]]['id']}@{v[2]}")
+                elif isinstance(v, tuple):
                     ok.add(f"{entries[v[1]]['id']}|{entries[v[1]]['sig']}")
                 else:
                     ok.add(entries[v]["id"])

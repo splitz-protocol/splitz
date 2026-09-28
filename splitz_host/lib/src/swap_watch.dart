@@ -125,7 +125,13 @@ class SwapWatchList {
   Future<List<SwapWatch>> held({String? billId}) async {
     final watches = <SwapWatch>[];
     for (final key in await _storage.keys(_prefix)) {
-      final raw = await _storage.read(key);
+      final String? raw;
+      try {
+        raw = await _storage.read(key);
+      } on BillStorageUnreadable {
+        // As a damaged entry below: it costs a follow-up, not a bill.
+        continue;
+      }
       if (raw == null) continue;
       final Object? decoded;
       try {

@@ -15,6 +15,9 @@ pub enum HostError {
     Malformed(String),
     /// The wallet's own store would not read, write or delete.
     Storage(String),
+    /// A value is stored under this name and does not decode. Not absent: a
+    /// merge that took it for an empty log would write over it.
+    Unreadable(String),
     /// A blob could not be sealed or opened (§11.3).
     Sealing(String),
     /// The relay could not be reached, refused, or answered with something
@@ -42,6 +45,7 @@ impl fmt::Display for HostError {
         match self {
             HostError::Malformed(why) => write!(f, "{why}"),
             HostError::Storage(why) => write!(f, "{why}"),
+            HostError::Unreadable(name) => write!(f, "{name} is stored and does not decode"),
             HostError::Sealing(why) => write!(f, "{why}"),
             HostError::Relay { message, .. } => write!(f, "{message}"),
             HostError::Sync(why) => write!(f, "{why}"),

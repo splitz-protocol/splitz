@@ -32,6 +32,11 @@ class SplitsSigner {
     return encode(key.bytes);
   }
 
+  /// The participant id a device signing with [seed] speaks as (§10.7): the
+  /// one its public key derives.
+  Future<String> participantIdFromSeed(List<int> seed) async =>
+      protocol.participantId(await publicKeyFromSeed(seed))!;
+
   /// The host's signer for [seed], in the shape `splitz` asks for.
   ///
   /// Ed25519 is deterministic, so re-signing an unchanged entry yields the same

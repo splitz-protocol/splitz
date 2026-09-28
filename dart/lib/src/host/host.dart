@@ -51,9 +51,7 @@ class Sent {
       : result = SendResult.sent,
         detail = null;
 
-  const Sent.pending({this.detail})
-      : result = SendResult.pending,
-        txid = null;
+  const Sent.pending({this.detail, this.txid}) : result = SendResult.pending;
 
   const Sent.failed({this.detail})
       : result = SendResult.failed,
@@ -61,9 +59,14 @@ class Sent {
 
   final SendResult result;
 
-  /// Present when and only when [result] is [SendResult.sent]. It becomes the
-  /// id of the payment entry, so the record of a payment and the transaction
-  /// that made it carry one identifier.
+  /// Present when [result] is [SendResult.sent]: it becomes the reference of
+  /// the payment entry, so the record of a payment and the transaction that
+  /// made it carry one identifier.
+  ///
+  /// When [result] is [SendResult.pending], the transaction the wallet built
+  /// and may still broadcast, when it knows it. Nothing is recorded from it:
+  /// it is what a person looks for in the wallet's history to learn which way
+  /// the send went.
   final String? txid;
 
   /// What to put in front of a person: why it failed, or what to check before
@@ -77,8 +80,8 @@ typedef Broadcast = Future<Sent> Function(String paymentRequestUri);
 /// The host's signature over an entry's signing message (§10.6).
 ///
 /// Optional: without it every participant is unauthenticated and the fold says
-/// so rather than claiming otherwise. With it, §10.7 binds a key to a
-/// participant and a contested identity is reported as contested.
+/// so rather than claiming otherwise. With it, §10.7 binds a key to the
+/// participant id it derives.
 typedef SignEntry = Future<String> Function(List<int> signingMessage);
 
 /// Verifies a signature the way §10.7 asks.
@@ -92,11 +95,6 @@ abstract class BillHost {
   /// The participant id this device speaks as. Every entry it writes is
   /// authored by this id, and §10.4 decides what that authorises.
   String get me;
-
-  /// The address this device is paid at, or null when it has none to offer.
-  /// A participant with no address is reported as unpayable rather than
-  /// silently dropped from a settlement.
-  String? get payToAddress;
 
   Clock get now;
   Randomness get randomBytes;

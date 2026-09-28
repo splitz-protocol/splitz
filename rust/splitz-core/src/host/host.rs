@@ -30,9 +30,14 @@ pub enum SendResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sent {
     pub result: SendResult,
-    /// Present when and only when `result` is [`SendResult::Sent`]. It becomes
-    /// the id of the payment entry, so the record of a payment and the
-    /// transaction that made it carry one identifier.
+    /// Present when `result` is [`SendResult::Sent`]: it becomes the reference
+    /// of the payment entry, so the record of a payment and the transaction
+    /// that made it carry one identifier.
+    ///
+    /// When `result` is [`SendResult::Pending`], the transaction the wallet
+    /// built and may still broadcast, when it knows it. Nothing is recorded
+    /// from it: it is what a person looks for in the wallet's history to learn
+    /// which way the send went.
     pub txid: Option<String>,
     /// What to put in front of a person: why it failed, or what to check
     /// before trying again.
@@ -52,10 +57,10 @@ impl Sent {
         }
     }
 
-    pub fn pending(detail: Option<String>) -> Self {
+    pub fn pending(detail: Option<String>, txid: Option<String>) -> Self {
         Self {
             result: SendResult::Pending,
-            txid: None,
+            txid,
             detail,
         }
     }
@@ -87,11 +92,6 @@ pub trait BillHost {
     /// authored by this id, and §10.4 decides what that authorises.
     fn me(&self) -> &str;
 
-    /// The address this device is paid at, or `None` when it has none to
-    /// offer. A participant with no address is reported as unpayable rather
-    /// than silently dropped from a settlement.
-    fn pay_to_address(&self) -> Option<&str>;
-
     /// A moment, as an RFC 3339 instant.
     ///
     /// Taken from the host rather than from a clock this crate reads, so a
@@ -121,8 +121,8 @@ pub trait BillHost {
     /// This wallet's signer, or `None` when it does not sign entries.
     ///
     /// Without it every participant is unauthenticated and the fold says so
-    /// rather than claiming otherwise. With it, §10.7 binds a key to a
-    /// participant and a contested identity is reported as contested.
+    /// rather than claiming otherwise. With it, §10.7 binds a key to the
+    /// participant that key derives.
     fn signer(&self) -> Option<SignEntry<'_>> {
         None
     }
@@ -131,8 +131,8 @@ pub trait BillHost {
     /// does not verify.
     ///
     /// `None` and "verifies nothing" are different claims: without a verifier
-    /// no self-claim is checked, so nothing is bound and nothing is contested,
-    /// which is not the same as every claim failing.
+    /// no self-claim is checked, so nothing is bound, which is not the same
+    /// as every claim failing.
     fn verifier(&self) -> Option<VerifyEntry<'_>> {
         None
     }

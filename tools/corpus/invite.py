@@ -47,6 +47,11 @@ DECODE = [
     ("no_key",                      f"splitz://join?v=1&b={T}"),
     ("an_empty_key",                f"splitz://join?v=1&b={T}&k="),
     ("a_key_in_the_standard_alphabet", f"splitz://join?v=1&b={T}&k=ab%2Bcd%2Fef%3D"),
+    # Section 11.1: `k` decodes as unpadded base64url, not merely draws from
+    # its alphabet. Five characters hold no whole number of bytes, and a last
+    # character with an unused bit set decodes to the same bytes as another.
+    ("a_key_whose_length_decodes_to_nothing", f"splitz://join?v=1&b={T}&k=kkkkk"),
+    ("a_key_that_is_not_its_bytes_encoding", f"splitz://join?v=1&b={T}&k={K[:-1]}l"),
     ("an_expiry_that_is_not_a_number", f"splitz://join?v=1&b={T}&k={K}&x=soon"),
     ("an_empty_expiry",              f"splitz://join?v=1&b={T}&k={K}&x="),
     # Section 11.1 bounds `x` and `v` at i64::MAX, which is 19 digits.
@@ -78,6 +83,7 @@ ENCODE = [
     ("encode_with_a_name",      T, K, "Zcon7", None),
     ("encode_escapes_the_name", T, K, "Zcon7 dîner ✨", None),
     ("encode_with_an_expiry",   T, K, "", 1793000000),
+    ("encode_refuses_a_key_that_does_not_decode", T, "kkkkk", "", None),
 ]
 
 

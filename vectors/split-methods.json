@@ -1,6 +1,6 @@
 {
   "description": "The five split methods. SPEC.md section 4.",
-  "count": 36,
+  "count": 40,
   "cases": [
     {
       "name": "equal_two_ways",
@@ -581,6 +581,59 @@
               "ana",
               7,
               "ben"
+            ]
+          }
+        ]
+      },
+      "error": "bill_type_error"
+    },
+    {
+      "name": "an_exact_share_that_is_null",
+      "total": 700,
+      "split": {
+        "type": "exact",
+        "amounts": {
+          "ana": 700,
+          "ben": null
+        }
+      },
+      "error": "bill_type_error"
+    },
+    {
+      "name": "a_basis_point_weight_that_is_a_string",
+      "total": 700,
+      "split": {
+        "type": "percentage",
+        "basisPoints": {
+          "ana": "5000",
+          "ben": 5000
+        }
+      },
+      "error": "bill_type_error"
+    },
+    {
+      "name": "a_share_count_that_is_a_fraction",
+      "total": 700,
+      "split": {
+        "type": "shares",
+        "shareCounts": {
+          "ana": 1,
+          "ben": 2.5
+        }
+      },
+      "error": "bill_type_error"
+    },
+    {
+      "name": "an_item_whose_amount_is_a_string",
+      "total": 700,
+      "split": {
+        "type": "itemized",
+        "items": [
+          {
+            "description": "tacos",
+            "minorUnits": "700",
+            "sharedBy": [
+              "ana"
             ]
           }
         ]

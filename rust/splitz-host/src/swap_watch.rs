@@ -70,6 +70,7 @@ impl SwapWatch {
     /// and a second copy here would be a second thing to keep right.
     pub fn as_quote(&self) -> SwapQuote {
         SwapQuote {
+            recipient: None,
             deposit_address: self.deposit_address.clone(),
             deposit_memo: self.deposit_memo.clone(),
             amount_in_zatoshi: 0,

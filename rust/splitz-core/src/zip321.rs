@@ -172,7 +172,8 @@ pub fn unbase64url(text: &str) -> Option<Vec<u8>> {
     (base64url(&out) == text).then_some(out)
 }
 
-fn render_fiat(price: &FiatPrice) -> Result<String> {
+/// Renders `price` as a `fiat` value (§8.4).
+pub fn render_fiat(price: &FiatPrice) -> Result<String> {
     if !is_currency(&price.currency) {
         return Err(SplitError::new(
             code::ZIP321_BAD_CURRENCY_CODE,

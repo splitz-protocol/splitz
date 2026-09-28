@@ -45,16 +45,31 @@ impl<'a> BillStore<'a> {
     ///
     /// Stored text that will not decode is returned as no entries rather than
     /// refused: a bill this device cannot read is a state to show, and failing
-    /// here would take down whatever listed the bills.
+    /// here would take down whatever listed the bills. [`Self::merge`] never
+    /// writes over it — see [`Self::held`].
     pub fn read(&self, bill_id: &str) -> Result<Vec<Value>> {
-        let Some(stored) = self.storage.read(&Self::name(bill_id))? else {
+        match self.held(bill_id) {
+            Err(HostError::Unreadable(_)) => Ok(Vec::new()),
+            other => other,
+        }
+    }
+
+    /// The entries held for `bill_id`, refusing with
+    /// [`HostError::Unreadable`] when a value is stored and will not decode.
+    ///
+    /// What [`Self::merge`] reads before it writes. Taking such a value as no
+    /// entries and writing the merge over it would destroy every entry only
+    /// this device held — a payment recorded and not yet pushed.
+    fn held(&self, bill_id: &str) -> Result<Vec<Value>> {
+        let name = Self::name(bill_id);
+        let Some(stored) = self.storage.read(&name)? else {
             return Ok(Vec::new());
         };
         if stored.is_empty() {
             return Ok(Vec::new());
         }
         let Ok(Value::Array(decoded)) = serde_json::from_str::<Value>(&stored) else {
-            return Ok(Vec::new());
+            return Err(HostError::Unreadable(name));
         };
         // Only what §10.1 admits. The store writes nothing else, so anything
         // else is a file damaged or written by something that is not this
@@ -75,7 +90,7 @@ impl<'a> BillStore<'a> {
     /// is returned with the log, because an entry that vanished silently is
     /// indistinguishable from one that was never sent.
     pub fn merge(&self, bill_id: &str, incoming: Vec<Value>) -> Result<MergedBill> {
-        let held = self.read(bill_id)?;
+        let held = self.held(bill_id)?;
         let merged = merge_logs(&[held, incoming])
             .map_err(|e| HostError::Storage(format!("The merge refused the log: {e}")))?;
         let text = serde_json::to_string(&merged.merged)

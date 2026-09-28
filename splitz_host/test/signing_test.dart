@@ -68,7 +68,9 @@ void main() {
     final benKey = await signer.publicKeyFromSeed(benSeed);
 
     final ana = WalletBillHost(wallet, sign: signer.signerFor(anaSeed));
-    final benWallet = FakeWallet(id: 'ben', payTo: 'u1ben');
+    // §10.7: a participant who publishes a key is named by the id it derives.
+    final benId = splitz.participantId(benKey)!;
+    final benWallet = FakeWallet(id: benId, payTo: 'u1ben');
     final ben = WalletBillHost(benWallet, sign: signer.signerFor(benSeed));
 
     final create = splitz.createBill(
@@ -117,8 +119,73 @@ void main() {
     );
     expect(folded.setAside, isEmpty);
     expect(folded.identities.bound['ana'], anaKey);
-    expect(folded.identities.bound['ben'], benKey);
-    expect(folded.identities.contested, isEmpty);
+    expect(folded.identities.bound[benId], benKey);
+  });
+
+  test('a host that signs speaks as the id its key derives, not its '
+      'account handle', () async {
+    final wallet = FakeWallet();
+    final anaSeed = seedFor('ana');
+    final benSeed = seedFor('ben');
+    final anaKey = await signer.publicKeyFromSeed(anaSeed);
+    final benKey = await signer.publicKeyFromSeed(benSeed);
+    final ana = WalletBillHost(wallet, sign: signer.signerFor(anaSeed));
+    final create = splitz.createBill(
+      host: ana,
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: anaKey,
+    );
+    final bill = create['id'] as String;
+    final signedCreate = await splitz.signEntry(
+      host: ana,
+      entry: create,
+      billId: bill,
+    );
+
+    // The same account, filed under a handle the wallet assigned.
+    final benWallet = FakeWallet(id: 'account-7', payTo: 'u1ben');
+    Future<Map<String, dynamic>> joinAs(WalletBillHost host) =>
+        splitz.signEntry(
+          host: host,
+          entry: splitz.joinBill(
+            host: host,
+            name: 'Ben',
+            payTo: 'u1ben',
+            identityKey: benKey,
+          ),
+          billId: bill,
+        );
+
+    final derived = await signer.participantIdFromSeed(benSeed);
+    expect(derived, splitz.participantId(benKey));
+    final speaking = WalletBillHost(
+      benWallet,
+      me: derived,
+      sign: signer.signerFor(benSeed),
+    );
+    benWallet.tick();
+    final bound = await foldVerified(
+      wallet,
+      [signedCreate, await joinAs(speaking)],
+      billId: bill,
+      signer: signer,
+    );
+    expect(bound.setAside, isEmpty);
+    expect(bound.identities.bound[derived], benKey);
+
+    final handle = WalletBillHost(benWallet, sign: signer.signerFor(benSeed));
+    benWallet.tick();
+    final refused = await foldVerified(
+      wallet,
+      [signedCreate, await joinAs(handle)],
+      billId: bill,
+      signer: signer,
+    );
+    expect(refused.setAside.map((a) => a.code), [
+      protocol.SplitCode.participantIdNotDerived,
+    ]);
+    expect(refused.bill.participant('account-7'), isNull);
   });
 
   test('a create signed by the wrong key opens no bill at all', () async {
@@ -184,7 +251,7 @@ void main() {
     expect(unchecked.identities.bound, isEmpty);
   });
 
-  test('two keys claiming one id leaves that id contested', () async {
+  test('a second key claiming a bound participant binds nothing', () async {
     final wallet = FakeWallet();
     final anaSeed = seedFor('ana');
     final benSeed = seedFor('ben');
@@ -194,9 +261,10 @@ void main() {
     final impostorKey = await signer.publicKeyFromSeed(impostorSeed);
 
     final ana = WalletBillHost(wallet, sign: signer.signerFor(anaSeed));
-    final benWallet = FakeWallet(id: 'ben', payTo: 'u1ben');
+    final benId = splitz.participantId(benKey)!;
+    final benWallet = FakeWallet(id: benId, payTo: 'u1ben');
     final ben = WalletBillHost(benWallet, sign: signer.signerFor(benSeed));
-    final impostorWallet = FakeWallet(id: 'ben', payTo: 'u1impostor');
+    final impostorWallet = FakeWallet(id: benId, payTo: 'u1impostor');
     final impostor = WalletBillHost(
       impostorWallet,
       sign: signer.signerFor(impostorSeed),
@@ -261,12 +329,12 @@ void main() {
       billId: billIdOf(entries),
       signer: signer,
     );
-    expect(folded.identities.contested, contains('ben'));
     expect(
-      folded.identities.bound.containsKey('ben'),
-      isFalse,
-      reason: 'nothing inside the log says which claim is the person',
+      folded.identities.bound[benId],
+      benKey,
+      reason: "a second key cannot derive ben's id, so ben stays bound",
     );
+    expect(folded.bill.participant(benId)!.payTo, 'u1ben');
   });
 
   test('an unsigned entry verifies against nothing', () async {

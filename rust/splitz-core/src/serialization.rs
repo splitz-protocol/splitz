@@ -168,9 +168,20 @@ pub fn decode_participant(raw: &Value) -> Result<Participant> {
             None => None,
             Some(v) => Some(string(v)?),
         },
+        // §10.7. A key a participant id is derived from, so it is one: 32
+        // bytes, canonical unpadded base64url.
         identity_key: match raw.get("identityKey") {
             None => None,
-            Some(v) => Some(string(v)?),
+            Some(v) => {
+                let key = string(v)?;
+                if crate::zip321::unbase64url(&key).is_none_or(|raw| raw.len() != 32) {
+                    return Err(SplitError::new(
+                        code::BILL_TYPE_ERROR,
+                        format!("An identity key is 32 bytes, got {key}"),
+                    ));
+                }
+                Some(key)
+            }
         },
         payouts,
     })

@@ -1,21 +1,24 @@
 //! The snippet INTEGRATING.md's "The wallet seam" section shows, compiled and
 //! run. A snippet that has never been through a compiler is a claim about the
 //! crate that nothing in the tree backs.
-
+// docs:begin
 use splitz_core::host::{
     base64url_no_pad, create_bill, join_bill, obligation_for, settle, BillHost, BillLog, Sent,
     CREATOR_KEY_BYTES,
 };
-use std::collections::BTreeSet;
 
 struct MyWallet;
+
+impl MyWallet {
+    /// The address this wallet is paid at, which its join states.
+    fn my_address(&self) -> Option<&str> {
+        Some("u1ana000000000000000000")
+    }
+}
 
 impl BillHost for MyWallet {
     fn me(&self) -> &str {
         "ana"
-    }
-    fn pay_to_address(&self) -> Option<&str> {
-        Some("u1ana000000000000000000")
     }
     // An RFC 3339 instant, not a date type: this crate depends on no calendar
     // library, and `canonical_instant` refuses anything that is not one.
@@ -41,13 +44,13 @@ fn main() -> splitz_core::Result<()> {
     log.add(vec![join_bill(
         &host,
         Some("Ana"),
-        host.pay_to_address(),
+        host.my_address(),
         None,
         None,
     )?])?;
 
     let folded = log.fold()?; // §10.3, plus what it set aside
-    let owed = obligation_for(&host, &folded, &BTreeSet::new())?;
+    let owed = obligation_for(&host, &folded)?;
     if let Some(owed) = &owed {
         settle(&host, &mut log, owed)?;
     }
@@ -61,10 +64,6 @@ fn main() -> splitz_core::Result<()> {
             .and_then(|o| o.uri().map(str::to_owned))
             .unwrap_or_else(|| "no rate yet".to_owned())
     );
-    println!(
-        "identities {} bound, {} contested",
-        folded.identities.bound.len(),
-        folded.identities.contested.len()
-    );
+    println!("identities {} bound", folded.identities.bound.len());
     Ok(())
 }

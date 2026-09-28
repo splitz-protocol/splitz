@@ -49,6 +49,12 @@ impl Signer {
         ))
     }
 
+    /// The participant id a device signing with `seed` speaks as (§10.7):
+    /// the one its public key derives.
+    pub fn participant_id_from_seed(&self, seed: &[u8]) -> Option<String> {
+        splitz_core::participant_id(&self.public_key_from_seed(seed)?)
+    }
+
     /// Signs `message` with `seed`, base64url encoded.
     ///
     /// Ed25519 is deterministic, so re-signing an unchanged entry yields the

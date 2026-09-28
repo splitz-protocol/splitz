@@ -58,6 +58,34 @@ void main() {
     );
   });
 
+  test(
+    'a request naming another host, or sent by a browser, gets no phrase',
+    () async {
+      // A web page whose name resolves to 127.0.0.1 (DNS rebinding) reaches the
+      // driver with its own name as the Host, and a browser sends an Origin.
+      // A local caller does neither.
+      final driver = await startDriver();
+      addTearDown(() async {
+        driver.process.kill();
+        await driver.dir.delete(recursive: true);
+      });
+      final client = HttpClient();
+      Future<int> status(Map<String, String> headers) async {
+        final request = await client.getUrl(
+          Uri.parse('http://127.0.0.1:${driver.port}/seed/0'),
+        );
+        headers.forEach(request.headers.set);
+        final response = await request.close();
+        await response.drain<void>();
+        return response.statusCode;
+      }
+
+      expect(await status({'Host': 'rebind.example:${driver.port}'}), 403);
+      expect(await status({'Origin': 'https://rebind.example'}), 403);
+      expect(await status(const {}), 200, reason: 'a local caller is served');
+    },
+  );
+
   test('the driver serves a phrase by index, and names the wallet', () async {
     final driver = await startDriver();
     addTearDown(() async {

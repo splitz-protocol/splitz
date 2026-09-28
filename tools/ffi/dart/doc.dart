@@ -12,9 +12,8 @@ import 'package:splitz_dart_consumer/splitz_ffi.dart';
 /// The facts §15.1 says a wallet owns, for one call. A §9.3 instant and
 /// sixteen unpredictable bytes are the wallet's to supply: this library reads
 /// no clock (§13) and owns no entropy.
-HostFacts facts(String me, String payTo, String at, int nonce) => HostFacts(
+HostFacts facts(String me, String at, int nonce) => HostFacts(
   me: me,
-  payTo: payTo,
   now: at,
   nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)),
 );
@@ -30,16 +29,22 @@ void main(List<String> args) {
 
   final anaSeed = seed(1);
   final benSeed = seed(90);
+  // A wallet that publishes a key speaks as the participant id that key
+  // derives (§10.7), or the key binds nothing.
+  final anaKey = identityKeyFromSeed(anaSeed);
+  final benKey = identityKeyFromSeed(benSeed);
+  final ana = participantIdForKey(anaKey);
+  final ben = participantIdForKey(benKey);
 
   // Ana's device writes four entries. Each comes back as the JSON §9.3
-  // canonicalises, with §9.5's id already derived; the wallet stores the
-  // string and never inspects it.
+  // canonicalises, with §9.5's id already derived and signed; the wallet
+  // stores the string and never inspects it.
   final create = createBillEntry(
-    facts('ana', 'u1ana', '2026-10-28T19:31:00.000Z', 1),
+    facts(ana, '2026-10-28T19:31:00.000Z', 1),
     'Dinner',
     'EUR',
     'equal',
-    identityKeyFromSeed(anaSeed),
+    anaKey,
     anaSeed,
   );
 
@@ -52,27 +57,31 @@ void main(List<String> args) {
   final anaLog = [
     create,
     joinBillEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:32:00.000Z', 2),
+      facts(ana, '2026-10-28T19:32:00.000Z', 2),
       billId,
       'Ana',
       'u1ana',
-      identityKeyFromSeed(anaSeed),
+      anaKey,
+      const [],
       anaSeed,
     ),
     addExpenseEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:33:00.000Z', 3),
+      facts(ana, '2026-10-28T19:33:00.000Z', 3),
       billId,
       'x1',
-      'ana',
+      ana,
       9000,
-      '{"type":"equal","among":["ana","ben"]}',
+      jsonEncode({
+        'type': 'equal',
+        'among': [ana, ben],
+      }),
       'dinner',
       anaSeed,
     ),
     // §7 snapshots one rate onto the bill, so six devices do not price one
     // dinner six ways. 300000 minor units per ZEC is €3000.00.
     setRateEntry(
-      facts('ana', 'u1ana', '2026-10-28T19:34:00.000Z', 4),
+      facts(ana, '2026-10-28T19:34:00.000Z', 4),
       billId,
       'EUR',
       300000,
@@ -85,11 +94,12 @@ void main(List<String> args) {
   // may say, and a participant joins for themselves.
   final benLog = [
     joinBillEntry(
-      facts('ben', 'u1ben', '2026-10-28T19:35:00.000Z', 5),
+      facts(ben, '2026-10-28T19:35:00.000Z', 5),
       billId,
       'Ben',
       'u1ben',
-      identityKeyFromSeed(benSeed),
+      benKey,
+      const [],
       benSeed,
     ),
   ];
@@ -98,28 +108,29 @@ void main(List<String> args) {
   // id, in either direction, any number of times.
   final log = mergeEntries(anaLog, benLog).entries;
 
-  final benFacts = facts('ben', 'u1ben', '2026-10-28T19:36:00.000Z', 6);
+  final benFacts = facts(ben, '2026-10-28T19:36:00.000Z', 6);
   final folded = foldEntries(benFacts, billId, log);
-  print('on the bill: ${folded.bill.participants.map((p) => p.id).join(', ')}');
+  print(
+    'on the bill: ${folded.bill.participants.map((p) => p.name).join(', ')}',
+  );
   // Render these. An entry the fold set aside is one a person cannot see
   // otherwise, and its §12 code is what a wallet turns into a sentence.
   print('set aside: ${folded.setAside}');
 
   // Null when the bill carries no rate: an unpriced bill is an ordinary bill,
-  // not a refusal. The third argument names the contested participants the
-  // payer has been shown and chosen to pay anyway (§10.7).
-  final owed = obligationOf(benFacts, billId, log, const []);
+  // not a refusal.
+  final owed = obligationOf(benFacts, billId, log);
   if (owed == null) throw StateError('a bill with a rate owes something');
 
   final settlement = owed.settlements.single;
-  print('ben pays ${settlement.amount} to ${settlement.to}');
+  print('ben pays ${settlement.amount} to ana');
   // The wallet broadcasts this; sending is not the library's (§13.3).
   print('request: ${owed.request.uri}');
   // Never dropped. A request that silently covers three debts of four is
   // indistinguishable, to the payer, from one that covers all of them.
   print('withheld: ${owed.request.withheldMinorUnits}');
 
-  if (settlement.to != 'ana' || settlement.amount != 4500) {
+  if (settlement.to != ana || settlement.amount != 4500) {
     throw StateError(
       'half of 9000 is 4500 to ana, saw '
       '${settlement.amount} to ${settlement.to}',

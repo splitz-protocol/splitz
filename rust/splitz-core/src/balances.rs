@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::error::{code, Result, SplitError};
 use crate::model::Bill;
-use crate::money::{checked_add, checked_sub};
+use crate::money::{checked_add, checked_balance, checked_sub};
 use crate::split::split_expense;
 
 /// Whether a set of balances sums to zero (§5.1), decided by cancellation.
@@ -93,10 +93,10 @@ pub fn net_balances(bill: &Bill) -> Result<BTreeMap<String, i64>> {
         let payer = net
             .get_mut(&expense.paid_by)
             .expect("the payer is on the bill");
-        *payer = checked_add(*payer, expense.amount, code::AMOUNT_OVERFLOW)?;
+        *payer = checked_balance(checked_add(*payer, expense.amount, code::AMOUNT_OVERFLOW)?)?;
         for (id, owed) in &shares {
             let entry = net.get_mut(id).expect("checked above");
-            *entry = checked_sub(*entry, *owed, code::AMOUNT_OVERFLOW)?;
+            *entry = checked_balance(checked_sub(*entry, *owed, code::AMOUNT_OVERFLOW)?)?;
         }
     }
 
@@ -107,9 +107,9 @@ pub fn net_balances(bill: &Bill) -> Result<BTreeMap<String, i64>> {
         let from = net
             .get_mut(&payment.from)
             .expect("the payer is on the bill");
-        *from = checked_add(*from, payment.amount, code::AMOUNT_OVERFLOW)?;
+        *from = checked_balance(checked_add(*from, payment.amount, code::AMOUNT_OVERFLOW)?)?;
         let to = net.get_mut(&payment.to).expect("the payee is on the bill");
-        *to = checked_sub(*to, payment.amount, code::AMOUNT_OVERFLOW)?;
+        *to = checked_balance(checked_sub(*to, payment.amount, code::AMOUNT_OVERFLOW)?)?;
     }
 
     // An expense moves this sum by zero because every split sums to its total,

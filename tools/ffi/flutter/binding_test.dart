@@ -19,14 +19,15 @@ const libraryPath = String.fromEnvironment('SPLITZ_LIBRARY');
 /// The facts §15.1 says a wallet owns, for one call.
 HostFacts facts(String me, String at, int nonce) => HostFacts(
   me: me,
-  payTo: 'u1$me',
   now: at,
   nonce: Uint8List.fromList(List.generate(16, (i) => (nonce + i) & 0xff)),
 );
 
 /// The Ed25519 seed a wallet keeps in the platform keychain: 32 bytes,
 /// unpadded base64url.
-const seed = 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA';
+String seedFrom(int first) => base64Url
+    .encode(List.generate(32, (i) => (first + i) & 0xff))
+    .replaceAll('=', '');
 
 void main() {
   setUpAll(() {
@@ -39,11 +40,14 @@ void main() {
   });
 
   test('the crate answers through the binding', () {
+    final seed = seedFrom(1);
     final key = identityKeyFromSeed(seed);
     expect(key.length, 43);
+    // A wallet that publishes a key speaks as the id that key derives (§10.7).
+    final ana = participantIdForKey(key);
 
     final create = createBillEntry(
-      facts('ana', '2026-10-28T19:31:00.000Z', 1),
+      facts(ana, '2026-10-28T19:31:00.000Z', 1),
       'Dinner',
       'EUR',
       'equal',
@@ -53,73 +57,80 @@ void main() {
     expect(create, contains('"kind":"createBill"'));
 
     final folded = foldEntries(
-      facts('ana', '2026-10-28T19:32:00.000Z', 2),
+      facts(ana, '2026-10-28T19:32:00.000Z', 2),
       (jsonDecode(create) as Map)['id'] as String,
       [create],
     );
     expect(folded.bill.name, 'Dinner');
     expect(folded.setAside, isEmpty);
-    expect(folded.identities.bound.keys, contains('ana'));
+    expect(folded.identities.bound.keys, contains(ana));
   });
 
   test('one payer owes half of a priced bill', () {
-    final key = identityKeyFromSeed(seed);
+    final anaSeed = seedFrom(1);
+    final benSeed = seedFrom(90);
+    final anaKey = identityKeyFromSeed(anaSeed);
+    final benKey = identityKeyFromSeed(benSeed);
+    final ana = participantIdForKey(anaKey);
+    final ben = participantIdForKey(benKey);
     final create = createBillEntry(
-      facts('ana', '2026-10-28T19:31:00.000Z', 1),
+      facts(ana, '2026-10-28T19:31:00.000Z', 1),
       'Dinner',
       'EUR',
       'equal',
-      key,
-      seed,
+      anaKey,
+      anaSeed,
     );
     // Every other entry is signed on the bill it belongs to (§10.6).
     final billId = (jsonDecode(create) as Map)['id'] as String;
     final log = [
       create,
       joinBillEntry(
-        facts('ana', '2026-10-28T19:32:00.000Z', 2),
+        facts(ana, '2026-10-28T19:32:00.000Z', 2),
         billId,
         'Ana',
         'u1ana',
-        key,
-        seed,
+        anaKey,
+        const [],
+        anaSeed,
       ),
       joinBillEntry(
-        facts('ben', '2026-10-28T19:33:00.000Z', 3),
+        facts(ben, '2026-10-28T19:33:00.000Z', 3),
         billId,
         'Ben',
         'u1ben',
-        key,
-        seed,
+        benKey,
+        const [],
+        benSeed,
       ),
       addExpenseEntry(
-        facts('ana', '2026-10-28T19:34:00.000Z', 4),
+        facts(ana, '2026-10-28T19:34:00.000Z', 4),
         billId,
         'x1',
-        'ana',
+        ana,
         9000,
-        '{"type":"equal","among":["ana","ben"]}',
+        '{"type":"equal","among":["$ana","$ben"]}',
         'dinner',
-        seed,
+        anaSeed,
       ),
       setRateEntry(
-        facts('ana', '2026-10-28T19:35:00.000Z', 5),
+        facts(ana, '2026-10-28T19:35:00.000Z', 5),
         billId,
         'EUR',
         300000,
         'a feed',
-        seed,
+        anaSeed,
       ),
     ];
     final merged = mergeEntries(const [], log).entries;
     final owed = obligationOf(
-      facts('ben', '2026-10-28T19:36:00.000Z', 6),
-      (jsonDecode(log.first) as Map)['id'] as String,
+      facts(ben, '2026-10-28T19:36:00.000Z', 6),
+      billId,
       merged,
-      const [],
     );
     expect(owed, isNotNull);
     expect(owed!.settlements.single.amount, 4500);
+    expect(owed.settlements.single.to, ana);
     expect(owed.request.uri, startsWith('zcash:u1ana'));
     expect(owed.request.withheldMinorUnits, 0);
   });

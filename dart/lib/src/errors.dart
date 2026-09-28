@@ -31,6 +31,7 @@ abstract final class SplitCode {
   static const unknownEntry = 'unknown_entry';
   static const duplicateParticipant = 'duplicate_participant';
   static const duplicatePayment = 'duplicate_payment';
+  static const duplicateExpense = 'duplicate_expense';
   static const selfPayment = 'self_payment';
   static const balancesNonzeroResidual = 'balances_nonzero_residual';
   static const exactLimitTooLarge = 'exact_limit_too_large';
@@ -74,6 +75,7 @@ abstract final class SplitCode {
   static const unknownPayment = 'unknown_payment';
   static const amendKindMismatch = 'amend_kind_mismatch';
   static const participantStillNamed = 'participant_still_named';
+  static const participantIdNotDerived = 'participant_id_not_derived';
 
   // §11 invites, payloads and sealing
   static const inviteNotAnInvite = 'invite_not_an_invite';

@@ -65,6 +65,11 @@ pub struct SwapQuote {
     /// The address the payer's ZEC goes to. **Not the recipient's address** —
     /// the provider's, for this one swap.
     pub deposit_address: String,
+    /// The payout address the provider delivers to: what this quote was
+    /// taken for. A deposit is refused once the payee's payout no longer names
+    /// it — otherwise the money goes to an address they replaced. `None` for
+    /// a quote rebuilt to follow a swap already sent.
+    pub recipient: Option<String>,
     /// Some chains need a memo alongside the address; sending without it loses
     /// the deposit.
     pub deposit_memo: Option<String>,
@@ -294,6 +299,10 @@ pub fn quote_from_response(
     }
     Ok(SwapQuote {
         deposit_address: required(quote, "depositAddress")?,
+        recipient: asked
+            .get("recipient")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         deposit_memo: optional(quote, "depositMemo"),
         amount_in_zatoshi,
         amount_out: required(quote, "amountOut")?,

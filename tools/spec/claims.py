@@ -358,7 +358,7 @@ def main() -> int:
         # sentence about the oracle is a count of something else.
         for m in re.finditer(
                 r"(\d[\d,]*)\s+(?:language-neutral\s+conformance\s+cases"
-                r"|cases\s+across\s+(\d+)\s+files)", body):
+                r"|cases\s+(?:across|in)\s+(\d+)\s+files)", body):
             counted += 1
             got = int(m.group(1).replace(",", ""))
             if got != total:
@@ -368,6 +368,18 @@ def main() -> int:
                 bad_counts.append(
                     f"{name} says {m.group(2)} files, `vectors/` holds {files}")
     check("corpus-size", counted, bad_counts)
+
+    # Every count of §12's codes quoted in a document is §12's own.
+    code_total = len(listed_codes(text))
+    code_counts = 0
+    bad_code_counts: list[str] = []
+    for name, body in cited.items():
+        for m in re.finditer(r"§12 lists (\d+) reasons", body):
+            code_counts += 1
+            if int(m.group(1)) != code_total:
+                bad_code_counts.append(
+                    f"{name} says §12 lists {m.group(1)}, it lists {code_total}")
+    check("code-count", code_counts, bad_code_counts)
 
     # Every interface §15 names is declared in the host package, with every
     # operation §15 names on it. A seam written down is a contract, and a

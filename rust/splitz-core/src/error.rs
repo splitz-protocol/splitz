@@ -31,6 +31,7 @@ pub mod code {
     pub const UNKNOWN_ENTRY: &str = "unknown_entry";
     pub const DUPLICATE_PARTICIPANT: &str = "duplicate_participant";
     pub const DUPLICATE_PAYMENT: &str = "duplicate_payment";
+    pub const DUPLICATE_EXPENSE: &str = "duplicate_expense";
     pub const SELF_PAYMENT: &str = "self_payment";
     pub const BALANCES_NONZERO_RESIDUAL: &str = "balances_nonzero_residual";
     pub const EXACT_LIMIT_TOO_LARGE: &str = "exact_limit_too_large";
@@ -73,6 +74,7 @@ pub mod code {
     pub const UNKNOWN_PAYMENT: &str = "unknown_payment";
     pub const AMEND_KIND_MISMATCH: &str = "amend_kind_mismatch";
     pub const PARTICIPANT_STILL_NAMED: &str = "participant_still_named";
+    pub const PARTICIPANT_ID_NOT_DERIVED: &str = "participant_id_not_derived";
 
     // §11 invites, payloads and sealing
     pub const INVITE_NOT_AN_INVITE: &str = "invite_not_an_invite";

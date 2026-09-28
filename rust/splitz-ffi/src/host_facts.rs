@@ -5,8 +5,7 @@
 //! runtime is the one thing every bindings generator gets wrong differently.
 //!
 //! So nothing here calls back. A wallet passes the facts it owns — who it
-//! speaks as, the address it is paid at, the moment, the nonce — and gets an
-//! answer. Storage, the keychain, the relay and the send stay in the wallet's
+//! speaks as, the moment, the nonce — and gets an answer. Storage, the keychain, the relay and the send stay in the wallet's
 //! own language, where they already are.
 
 use splitz_core::host::{BillHost, Sent, SignEntry, VerifyEntry};
@@ -15,11 +14,10 @@ use splitz_core::host::{BillHost, Sent, SignEntry, VerifyEntry};
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct HostFacts {
     /// The participant id every entry this device writes is authored by.
-    /// §10.4 decides what that id authorises.
+    /// §10.4 decides what that id authorises. For a wallet that publishes an
+    /// identity key it is the id that key derives (§10.7,
+    /// `participant_id_for_key`), or the key binds nothing.
     pub me: String,
-    /// The address this device is paid at, or none. A participant with no
-    /// address is reported under §8.4, never dropped.
-    pub pay_to: Option<String>,
     /// A §9.3 instant. Read when an entry is written and never while folding:
     /// §10.2 orders a log by instant, so a fold that consulted a clock would
     /// answer differently for one unchanged entry set.
@@ -43,10 +41,6 @@ pub(crate) struct FactHost<'a> {
 impl BillHost for FactHost<'_> {
     fn me(&self) -> &str {
         &self.facts.me
-    }
-
-    fn pay_to_address(&self) -> Option<&str> {
-        self.facts.pay_to.as_deref()
     }
 
     fn now(&self) -> String {

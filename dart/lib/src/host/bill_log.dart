@@ -26,6 +26,11 @@ class FoldedBill {
     required this.identities,
     this.paymentAuthors = const {},
     this.paymentDigests = const {},
+    this.expenseEntries = const {},
+    this.expenseAuthors = const {},
+    this.paymentEntries = const {},
+    this.rateEntry,
+    this.rateAuthor,
   });
 
   final splitz.Bill bill;
@@ -36,16 +41,10 @@ class FoldedBill {
   /// before settling.
   final List<splitz.ReplacedAddress> replacedAddresses;
 
-  /// Which keys §10.7 binds, and which ids two keys each claim.
+  /// Which keys §10.7 binds.
   ///
-  /// A contested id is not an error and its entries still apply — refusing
-  /// them would let anyone make a bill unopenable by minting a rival claim.
-  /// What a contest costs is the ability to be paid: §10.7 says a wallet MUST
-  /// NOT settle to a contested participant's address without putting it in
-  /// front of the payer first.
-  ///
-  /// Empty of contests when the host does not verify: without a verifier no
-  /// self-claim is checked, so nothing is bound and nothing is contested.
+  /// Empty when the host does not verify: without a verifier no self-claim
+  /// is checked, so nothing is bound.
   final splitz.Identities identities;
 
   /// Who wrote each payment record on the bill, by the payment's id (§14.4).
@@ -54,6 +53,23 @@ class FoldedBill {
   /// What each payment record says, by the payment's id: the digest a
   /// confirmation of it carries as `record` (§10.5).
   final Map<String, String> paymentDigests;
+
+  /// The entry that introduced each expense, by the expense's own id: what
+  /// an amendment or a withdrawal of it targets. The fold's answer, not the
+  /// log's, which also holds entries the fold set aside.
+  final Map<String, String> expenseEntries;
+
+  /// Who wrote each expense, by the expense's own id.
+  final Map<String, String> expenseAuthors;
+
+  /// The entry that recorded each payment, by the payment's id.
+  final Map<String, String> paymentEntries;
+
+  /// The `setRate` entry whose rate the bill carries.
+  final String? rateEntry;
+
+  /// Who wrote that `setRate`: the name §14.2 puts beside the rate.
+  final String? rateAuthor;
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -107,6 +123,11 @@ class BillLog {
       identities: result.identities,
       paymentAuthors: result.paymentAuthors,
       paymentDigests: result.paymentDigests,
+      expenseEntries: result.expenseEntries,
+      expenseAuthors: result.expenseAuthors,
+      paymentEntries: result.paymentEntries,
+      rateEntry: result.rateEntry,
+      rateAuthor: result.rateAuthor,
     );
   }
 

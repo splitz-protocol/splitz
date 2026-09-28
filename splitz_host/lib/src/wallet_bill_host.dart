@@ -16,20 +16,26 @@ import 'wallet.dart';
 class WalletBillHost extends splitz.BillHost {
   WalletBillHost(
     this._wallet, {
+    String? me,
     splitz.SignEntry? sign,
     splitz.VerifyEntry? verify,
-  }) : _sign = sign,
+  }) : _me = me,
+       _sign = sign,
        _verify = verify;
 
   final SplitsWallet _wallet;
+  final String? _me;
   final splitz.SignEntry? _sign;
   final splitz.VerifyEntry? _verify;
 
+  /// The participant id entries are written as: [me] when given, otherwise
+  /// the account's own id.
+  ///
+  /// A host that signs passes the id its identity key derives (§10.7), which
+  /// [SplitsSigner.participantIdFromSeed] computes. A join written under any
+  /// other id with that key is set aside with `participant_id_not_derived`.
   @override
-  String get me => _wallet.account.id;
-
-  @override
-  String? get payToAddress => _wallet.sender.payToAddress;
+  String get me => _me ?? _wallet.account.id;
 
   @override
   splitz.Clock get now => _wallet.now;
@@ -64,6 +70,7 @@ class WalletBillHost extends splitz.BillHost {
               outcome.statusMessage ??
               'The transaction was created but not broadcast yet. '
                   'Check its status before trying again.',
+          txid: outcome.txid,
         );
       case WalletSendPhase.failed:
       case WalletSendPhase.aborted:
@@ -77,8 +84,8 @@ class WalletBillHost extends splitz.BillHost {
   ///
   /// Absent them, §10.7 binds no key to any participant and a folded bill
   /// reports no identity binding — which is a different claim from reporting
-  /// that nothing is contested, and is the honest one for a wallet that cannot
-  /// check a signature.
+  /// that every key checked out, and is the honest one for a wallet that
+  /// cannot check a signature.
   @override
   splitz.SignEntry? get sign => _sign;
 

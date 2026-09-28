@@ -6,6 +6,7 @@
 /// vanished.
 library;
 
+import 'authority.dart';
 import 'errors.dart';
 import 'instant.dart';
 import 'model.dart';
@@ -141,8 +142,7 @@ Participant decodeParticipant(Object? raw) {
     id: id,
     name: p.containsKey('name') ? _string(p['name']) : '',
     payTo: p.containsKey('payTo') ? _string(p['payTo']) : null,
-    identityKey:
-        p.containsKey('identityKey') ? _string(p['identityKey']) : null,
+    identityKey: p.containsKey('identityKey') ? _key(p['identityKey']) : null,
     payouts: [
       for (final rawPayout in _list(p['payouts'])) _payout(rawPayout),
     ],
@@ -336,6 +336,16 @@ int _integer(Object? value) {
     raise(SplitCode.billTypeError, 'Expected an integer, got $value');
   }
   return value;
+}
+
+/// §10.7. A key a participant id is derived from, so it is one: 32 bytes,
+/// canonical unpadded base64url.
+String _key(Object? value) {
+  final text = _string(value);
+  if (canonicalBytes(text, 32) == null) {
+    raise(SplitCode.billTypeError, 'An identity key is 32 bytes, got $text');
+  }
+  return text;
 }
 
 // --- the encoder ------------------------------------------------------------

@@ -48,7 +48,7 @@ SplitsRelay _relayClient(Uri origin) {
 
 /// One participant's phone: its own log, its own keys, its own clock.
 class Device implements splitz.BillHost {
-  Device(this.me, Uri relayOrigin)
+  Device._(this.name, this.me, Uri relayOrigin)
     : store = BillStore(InMemoryBillStorage()),
       keys = SplitsKeys(store: InMemorySecretStore()) {
     sync = SplitsSync(
@@ -58,6 +58,18 @@ class Device implements splitz.BillHost {
     );
   }
 
+  /// A phone for [name], speaking as the participant id its key derives
+  /// (§10.7): a participant who publishes a key is named by it.
+  static Future<Device> named(String name, Uri relayOrigin) async {
+    final key = await SplitsSigner().publicKeyFromSeed(_seedFor(name));
+    return Device._(name, splitz.participantId(key)!, relayOrigin);
+  }
+
+  static List<int> _seedFor(String name) =>
+      List<int>.generate(32, (i) => i + name.codeUnitAt(0));
+
+  /// What a person calls them; [me] is what the bill calls them.
+  final String name;
   @override
   final String me;
   final BillStore store;
@@ -65,15 +77,14 @@ class Device implements splitz.BillHost {
   late final SplitsSync sync;
   int _tick = 0;
 
-  @override
-  String? get payToAddress => 'u1$me';
+  String? get payToAddress => 'u1$name';
   @override
   splitz.Clock get now =>
       () => DateTime.utc(2026, 10, 28, 19, 0).add(Duration(minutes: _tick++));
   @override
   splitz.Randomness get randomBytes =>
       (n) => Uint8List.fromList(
-        List<int>.generate(n, (i) => i + me.codeUnitAt(0)),
+        List<int>.generate(n, (i) => i + name.codeUnitAt(0)),
       );
   @override
   splitz.Broadcast get broadcast =>
@@ -81,10 +92,7 @@ class Device implements splitz.BillHost {
 
   /// The Ed25519 seed this device signs with. A real one lives in a keychain;
   /// what matters here is that no other device has it.
-  late final List<int> seed = List<int>.generate(
-    32,
-    (i) => i + me.codeUnitAt(0),
-  );
+  late final List<int> seed = _seedFor(name);
 
   Future<String> get identityKey => _signer.publicKeyFromSeed(seed);
 
@@ -135,13 +143,13 @@ void main() {
 
   /// An intruder who has the bill key can push whatever it likes to the
   /// channel — the relay checks nothing and is not asked to. What it cannot do
-  /// is be somebody: §10.7 binds a participant to the key that signed for it,
-  /// and a second key claiming the same id contests it rather than replacing
-  /// it, so the payer is asked before a penny moves.
+  /// is be somebody: §10.7 names a participant who publishes a key by the id
+  /// that key derives, so a second key's claim to them is refused and the
+  /// payer pays the address the participant published.
   test('an intruder with the bill key cannot take a payee\'s payout', () async {
-    final ana = Device('ana', origin);
-    final ben = Device('ben', origin);
-    final mallory = Device('mallory', origin);
+    final ana = await Device.named('ana', origin);
+    final ben = await Device.named('ben', origin);
+    final mallory = await Device.named('mallory', origin);
 
     final create = splitz.createBill(
       host: ana,
@@ -161,7 +169,7 @@ void main() {
       ),
     );
     final billKey = await ana.keys.ensureBillKey(billId);
-    await ana.sync.sync(billId, signerSeed: ana.seed, authorId: ana.me);
+    await ana.sync.sync(billId);
 
     await ben.keys.storeBillKey(billId, billKey);
     await ben.sync.pull(billId);
@@ -179,28 +187,27 @@ void main() {
       splitz.addExpense(
         host: ben,
         expenseId: 'x-ben',
-        paidBy: 'ben',
+        paidBy: ben.me,
         amount: 60,
-        split: const {
+        split: {
           'type': 'equal',
-          'among': ['ana', 'ben'],
+          'among': [ana.me, ben.me]..sort(),
         },
       ),
     );
-    await ben.sync.sync(billId, signerSeed: ben.seed, authorId: ben.me);
+    await ben.sync.sync(billId);
     await ana.sync.pull(billId);
     await ana.write(
       billId,
       splitz.setRate(host: ana, currency: 'USD', minorUnitsPerZec: 100000),
     );
-    await ana.sync.sync(billId, signerSeed: ana.seed, authorId: ana.me);
+    await ana.sync.sync(billId);
 
     // Ana owes Ben thirty, to Ben's address.
     final honest = await ana.fold(billId);
     final before = splitz.obligationFor(ana, honest)!;
-    expect(before.settlements.single.to, 'ben');
-    expect(honest.bill.participant('ben')!.payTo, 'u1ben');
-    expect(before.contested, isEmpty);
+    expect(before.settlements.single.to, ben.me);
+    expect(honest.bill.participant(ben.me)!.payTo, 'u1ben');
 
     // Mallory has the key — leaked, shared, or from a device that was lent
     // out — and claims to be Ben, at Mallory's own address.
@@ -209,7 +216,7 @@ void main() {
     final forged = await splitz.signEntry(
       host: mallory,
       entry: splitz.joinBill(
-        host: _Claiming(mallory, 'ben'),
+        host: _Claiming(mallory, ben.me),
         name: 'ben',
         payTo: 'u1mallory',
         identityKey: await mallory.identityKey,
@@ -222,61 +229,36 @@ void main() {
     await ana.sync.pull(billId);
     final after = await ana.fold(billId);
 
-    // Ben is contested, not replaced: nothing inside the log says which key is
-    // the person, and resolving by time would hand the identity to whoever
-    // backdates furthest.
-    expect(after.identities.contested, contains('ben'));
-    expect(after.identities.bound.containsKey('ben'), isFalse);
-
-    final owed = splitz.obligationFor(ana, after);
+    // Ben stays bound to Ben's key: Mallory's key does not derive Ben's id,
+    // and an entry written as Ben is applied only from a copy Ben's key signed.
+    expect(after.identities.bound[ben.me], await ben.identityKey);
     expect(
-      owed?.settlements ?? noSettlements,
+      after.setAside.map((a) => a.id),
+      contains(forged['id']),
+      reason: 'the forged claim is refused and reported',
+    );
+    expect(after.bill.participant(ben.me)!.payTo, 'u1ben');
+    expect(
+      after.replacedAddresses,
       isEmpty,
-      reason: 'a contested payee is held back until the payer is asked',
-    );
-    expect(owed!.contested.map((c) => c.to), contains('ben'));
-
-    // What the payer is shown before deciding: the contest carries the address
-    // standing on the bill, and §13's report names the change. The forged
-    // address can win §10.2's ordering — `at` is whatever its author wrote —
-    // so the defence is not that the honest address survives. It is that the
-    // money stops, and that a person sees whose address it is now.
-    expect(
-      owed.contested.single.address,
-      'u1mallory',
-      reason: 'the payer is shown the address they would actually pay',
-    );
-    expect(
-      after.replacedAddresses.map((r) => '${r.id}:${r.from}->${r.to}'),
-      contains('ben:u1ben->u1mallory'),
-      reason:
-          '§13: a wallet MUST put a changed pay-to address in front of '
-          'the payer before settling to it',
+      reason: 'no address changed, so there is none to put in front of Ana',
     );
 
-    // Overriding is the payer's to make, and it pays what the bill shows —
-    // which is why the two reports above have to be right.
-    const shownAndAccepted = {'ben'};
-    final anyway = splitz.obligationFor(
-      ana,
-      after,
-      payAnyway: shownAndAccepted,
-    )!;
-    expect(anyway.settlements.single.to, 'ben');
+    final owed = splitz.obligationFor(ana, after)!;
+    expect(owed.settlements.single.to, ben.me);
     expect(
-      anyway.request.uri,
-      contains('u1mallory'),
-      reason:
-          'a payer who overrides pays the address on the bill; nothing '
-          'here silently substitutes a different one',
+      owed.request.uri,
+      before.request.uri,
+      reason: "Ana's request pays the address Ben published",
     );
+    expect(owed.request.uri, isNot(contains('u1mallory')));
   });
 
   test('four devices, different subsets, one bill and one plan', () async {
-    final ana = Device('ana', origin);
-    final ben = Device('ben', origin);
-    final cai = Device('cai', origin);
-    final dee = Device('dee', origin);
+    final ana = await Device.named('ana', origin);
+    final ben = await Device.named('ben', origin);
+    final cai = await Device.named('cai', origin);
+    final dee = await Device.named('dee', origin);
 
     // --- create: Ana opens the bill and is the only one who has it ---------
     final create = splitz.createBill(
@@ -301,7 +283,7 @@ void main() {
 
     // The key travels with the invite, not over the relay.
     final billKey = await ana.keys.ensureBillKey(billId);
-    await ana.sync.sync(billId, signerSeed: ana.seed, authorId: ana.me);
+    await ana.sync.sync(billId);
 
     expect(
       (await ben.store.read(billId)),
@@ -314,17 +296,21 @@ void main() {
       await who.keys.storeBillKey(billId, billKey);
       await who.sync.pull(billId);
       final seen = await who.store.read(billId);
-      expect(seen, isNotEmpty, reason: '${who.me} pulled the bill Ana pushed');
+      expect(
+        seen,
+        isNotEmpty,
+        reason: '${who.name} pulled the bill Ana pushed',
+      );
       await who.write(
         billId,
         splitz.joinBill(
           host: who,
-          name: who.me,
-          payTo: 'u1${who.me}',
+          name: who.name,
+          payTo: 'u1${who.name}',
           identityKey: await who.identityKey,
         ),
       );
-      await who.sync.sync(billId, signerSeed: who.seed, authorId: who.me);
+      await who.sync.sync(billId);
     }
 
     // Ana has not synced since, so she has not seen any of them yet.
@@ -343,22 +329,22 @@ void main() {
         billId,
         splitz.addExpense(
           host: who,
-          expenseId: 'x-${who.me}',
+          expenseId: 'x-${who.name}',
           paidBy: who.me,
           amount: 60,
           split: {
             'type': 'equal',
-            'among': ['ana', who.me]..sort(),
+            'among': [ana.me, who.me]..sort(),
           },
         ),
       );
-      await who.sync.sync(billId, signerSeed: who.seed, authorId: who.me);
+      await who.sync.sync(billId);
     }
     await ana.write(
       billId,
       splitz.setRate(host: ana, currency: 'USD', minorUnitsPerZec: 100000),
     );
-    await ana.sync.sync(billId, signerSeed: ana.seed, authorId: ana.me);
+    await ana.sync.sync(billId);
     for (final who in [ben, cai, dee]) {
       await who.sync.pull(billId);
     }
@@ -366,7 +352,7 @@ void main() {
     // --- convergence: §10.2's claim, over four logs that arrived differently
     final folds = <String, splitz.FoldedBill>{};
     for (final who in [ana, ben, cai, dee]) {
-      folds[who.me] = await who.fold(billId);
+      folds[who.name] = await who.fold(billId);
     }
     final reference = canonicalJson(billToJson(folds['ana']!.bill));
     for (final who in ['ben', 'cai', 'dee']) {
@@ -379,14 +365,13 @@ void main() {
     for (final f in folds.values) {
       expect(f.setAside, isEmpty);
       // §10.7 over a log every device assembled differently: each participant
-      // signed its own entries, so each key is bound and none is contested.
-      const everyone = {'ana', 'ben', 'cai', 'dee'};
+      // signed its own entries, so each key is bound.
+      final everyone = {ana.me, ben.me, cai.me, dee.me};
       expect(
         f.identities.bound.keys.toSet(),
         everyone,
         reason: 'every participant signed for the key its join named',
       );
-      expect(f.identities.contested, isEmpty);
     }
 
     // --- the money: every device agrees who owes whom ---------------------
@@ -394,11 +379,11 @@ void main() {
     expect(owed.settlements.length, 3, reason: 'Ana owes each of the three');
     expect(owed.settlements.every((s) => s.amount == 30), isTrue);
     for (final who in [ben, cai, dee]) {
-      final theirs = splitz.obligationFor(who, folds[who.me]!);
+      final theirs = splitz.obligationFor(who, folds[who.name]!);
       expect(
         theirs?.settlements ?? noSettlements,
         isEmpty,
-        reason: '${who.me} is owed, so ${who.me} pays nobody',
+        reason: '${who.name} is owed, so ${who.name} pays nobody',
       );
     }
   });
@@ -415,7 +400,6 @@ class _Claiming implements splitz.BillHost {
   @override
   final String me;
 
-  @override
   String? get payToAddress => _device.payToAddress;
   @override
   splitz.Clock get now => _device.now;

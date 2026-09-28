@@ -95,6 +95,22 @@ bool _isB64Url(String value) {
   return true;
 }
 
+/// §11.1. [value] decodes as unpadded base64url: the alphabet, a length that
+/// is not one more than a multiple of four, and no unused bit set in its last
+/// character, so it is the canonical encoding of its bytes.
+bool _decodesAsB64Url(String value) {
+  if (value.isEmpty || !_isB64Url(value) || value.length % 4 == 1) {
+    return false;
+  }
+  try {
+    final raw = base64Url.decode(value.padRight((value.length + 3) & ~3, '='));
+    return base64UrlEncode(raw).replaceAll('=', '') == value;
+  } on FormatException {
+    // Dart's decoder refuses an unused bit set, where others decode it.
+    return false;
+  }
+}
+
 /// Parses an invite.
 Invite parseInvite(String text) {
   final s = stripScanPadding(text);
@@ -158,7 +174,7 @@ Invite parseInvite(String text) {
   }
 
   final key = fields['k'] ?? '';
-  if (key.isEmpty || !_isB64Url(key)) {
+  if (key.isEmpty || !_decodesAsB64Url(key)) {
     raise(SplitCode.inviteMissingKey, 'An invite carries a base64url key');
   }
 
@@ -213,7 +229,7 @@ String renderInvite(Invite invite) {
       !_isB64Url(invite.billId)) {
     raise(SplitCode.inviteBadBillId, 'Not a bill id: "${invite.billId}"');
   }
-  if (invite.key.isEmpty || !_isB64Url(invite.key)) {
+  if (invite.key.isEmpty || !_decodesAsB64Url(invite.key)) {
     raise(SplitCode.inviteMissingKey, 'An invite carries a base64url key');
   }
   final parts = <String>[

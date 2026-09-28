@@ -83,11 +83,18 @@ class SwapQuote {
     this.depositMemo,
     this.reference,
     this.minAmountOut,
+    this.recipient,
   });
 
   /// The address the payer's ZEC goes to. **Not the recipient's address** —
   /// the provider's, for this one swap.
   final String depositAddress;
+
+  /// The payout address the provider delivers to: what this quote was taken
+  /// for. A deposit is refused once the payee's payout no longer names it —
+  /// otherwise the money goes to an address they replaced. Null for a quote
+  /// rebuilt to follow a swap already sent.
+  final String? recipient;
 
   /// Some chains need a memo alongside the address; sending without it loses
   /// the deposit.
@@ -392,6 +399,7 @@ class OneClickSwaps implements SwapProvider {
       // one of ours would quote a price it has stopped holding.
       deadline: _instant(quote['deadline']) ?? deadline,
       reference: _optional(body, 'correlationId'),
+      recipient: recipient,
     );
   }
 

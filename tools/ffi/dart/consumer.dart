@@ -14,12 +14,16 @@ void check(String name, bool ok, String saw) {
   if (!ok) failures += 1;
 }
 
-/// One device: its log, its clock, its randomness.
+/// One device: its log, its clock, its randomness, and the key it signs with.
 class Device {
-  Device(this.me, this.payTo, this.seedByte);
-  final String me;
-  final String? payTo;
+  Device(this.seedByte);
   final int seedByte;
+
+  /// The key this account publishes, and the participant id it derives
+  /// (§10.7): a wallet that publishes a key writes every entry under the id
+  /// that key derives, or the key binds nothing.
+  late final String key = identityKeyFromSeed(signingSeed());
+  late final String me = participantIdForKey(key);
   final List<String> entries = [];
   int minute = 0;
 
@@ -37,8 +41,7 @@ class Device {
     List.generate(16, (i) => (seedByte + minute + i) & 0xff),
   );
 
-  HostFacts facts() =>
-      HostFacts(me: me, payTo: payTo, now: now(), nonce: nonce());
+  HostFacts facts() => HostFacts(me: me, now: now(), nonce: nonce());
 
   /// The Ed25519 seed this account signs with, as §9.4 writes a key: unpadded
   /// base64url, which is what a keychain holds.
@@ -57,11 +60,11 @@ class Device {
 void main(List<String> args) {
   configureDefaultBindings(libraryPath: args[0]);
 
-  final ana = Device('ana', 'u1ana', 1);
-  final ben = Device('ben', 'u1ben', 90);
+  final ana = Device(1);
+  final ben = Device(90);
 
   print('ana opens a bill and joins it');
-  final anaKey = identityKeyFromSeed(ana.signingSeed());
+  final anaKey = ana.key;
   final create = createBillEntry(
     ana.facts(),
     'Dinner',
@@ -81,12 +84,13 @@ void main(List<String> args) {
       'Ana',
       'u1ana',
       anaKey,
+      const [],
       ana.signingSeed(),
     ),
   );
 
   print('ben joins, and the two logs merge');
-  final benKey = identityKeyFromSeed(ben.signingSeed());
+  final benKey = ben.key;
   ben.entries.addAll(ana.entries);
   ben.add(
     joinBillEntry(
@@ -95,6 +99,7 @@ void main(List<String> args) {
       'Ben',
       'u1ben',
       benKey,
+      const [],
       ben.signingSeed(),
     ),
   );
@@ -108,9 +113,12 @@ void main(List<String> args) {
       ana.facts(),
       billId,
       'x1',
-      'ana',
+      ana.me,
       9000,
-      '{"type":"equal","among":["ana","ben"]}',
+      jsonEncode({
+        'type': 'equal',
+        'among': [ana.me, ben.me],
+      }),
       'dinner',
       ana.signingSeed(),
     ),
@@ -135,13 +143,9 @@ void main(List<String> args) {
   check('nothing was set aside', folded.setAside.isEmpty, '${folded.setAside}');
   check(
     'both keys are bound under §10.7',
-    folded.identities.bound.length == 2,
+    folded.identities.bound[ana.me] == anaKey &&
+        folded.identities.bound[ben.me] == benKey,
     '${folded.identities.bound.keys}',
-  );
-  check(
-    'no identity is contested',
-    folded.identities.contested.isEmpty,
-    '${folded.identities.contested}',
   );
   check(
     'the expense is nine thousand minor units',
@@ -153,12 +157,12 @@ void main(List<String> args) {
   ben.entries
     ..clear()
     ..addAll(mergeEntries(ben.entries, ana.entries).entries);
-  final owed = obligationOf(ben.facts(), billId, ben.entries, const []);
+  final owed = obligationOf(ben.facts(), billId, ben.entries);
   check('ben has an obligation', owed != null, owed?.request.uri ?? 'none');
   final settlement = owed!.settlements.single;
   check(
     'it is four and a half thousand to ana',
-    settlement.to == 'ana' && settlement.amount == 4500,
+    settlement.to == ana.me && settlement.amount == 4500,
     '${settlement.to} ${settlement.amount}',
   );
   check(
@@ -177,13 +181,14 @@ void main(List<String> args) {
     recordPaymentEntry(
       ben.facts(),
       billId,
-      const PaymentDraft(
+      PaymentDraft(
         paymentId: 'tx-ben-1',
-        to: 'ana',
+        to: ana.me,
         amount: 4500,
         method: 'shieldedZec',
         reference: null,
         zatoshi: null,
+        paidAtRate: null,
         note: null,
       ),
       ben.signingSeed(),
@@ -203,7 +208,7 @@ void main(List<String> args) {
     afterPayment.bill.confirmedPayments.isEmpty,
     '${afterPayment.bill.confirmedPayments}',
   );
-  final stillOwed = obligationOf(ben.facts(), billId, ben.entries, const [])!;
+  final stillOwed = obligationOf(ben.facts(), billId, ben.entries)!;
   check(
     'so ben is asked for nothing twice',
     stillOwed.settlements.isEmpty,
@@ -233,7 +238,7 @@ void main(List<String> args) {
   ben.entries
     ..clear()
     ..addAll(mergeEntries(ben.entries, ana.entries).entries);
-  final settled = obligationOf(ben.facts(), billId, ben.entries, const [])!;
+  final settled = obligationOf(ben.facts(), billId, ben.entries)!;
   check(
     'once confirmed, the debt is gone',
     settled.settlements.isEmpty && settled.awaiting.isEmpty,

@@ -33,22 +33,26 @@ pub struct FoldedBill {
     /// Every pay-to address that changed, which §13 says a wallet MUST show
     /// before settling.
     pub replaced_addresses: Vec<ReplacedAddress>,
-    /// Which keys §10.7 binds, and which ids two keys each claim.
-    ///
-    /// A contested id is not an error and its entries still apply — refusing
-    /// them would let anyone make a bill unopenable by minting a rival claim.
-    /// What a contest costs is the ability to be paid: §10.7 says a wallet
-    /// MUST NOT settle to a contested participant's address without putting it
-    /// in front of the payer first.
-    ///
-    /// Empty of contests when the host does not verify: without a verifier no
-    /// self-claim is checked, so nothing is bound and nothing is contested.
+    /// Which keys §10.7 binds. Empty when the host does not verify: without a
+    /// verifier no self-claim is checked, so nothing is bound.
     pub identities: Identities,
     /// Who wrote each payment record on the bill, by the payment's id (§14.4).
     pub payment_authors: BTreeMap<String, String>,
     /// What each payment record says, by the payment's id: the digest a
     /// confirmation of it carries as `record` (§10.5).
     pub payment_digests: BTreeMap<String, String>,
+    /// The entry that introduced each expense, by the expense's own id: what
+    /// an amendment or a withdrawal of it targets. The fold's answer, not the
+    /// log's, which also holds entries the fold set aside.
+    pub expense_entries: BTreeMap<String, String>,
+    /// Who wrote each expense, by the expense's own id.
+    pub expense_authors: BTreeMap<String, String>,
+    /// The entry that recorded each payment, by the payment's id.
+    pub payment_entries: BTreeMap<String, String>,
+    /// The `setRate` entry whose rate the bill carries.
+    pub rate_entry: Option<String>,
+    /// Who wrote that `setRate`: the name §14.2 puts beside the rate.
+    pub rate_author: Option<String>,
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -135,6 +139,11 @@ impl<'h> BillLog<'h> {
             identities: result.identities,
             payment_authors: result.payment_authors,
             payment_digests: result.payment_digests,
+            expense_entries: result.expense_entries,
+            expense_authors: result.expense_authors,
+            payment_entries: result.payment_entries,
+            rate_entry: result.rate_entry,
+            rate_author: result.rate_author,
         })
     }
 

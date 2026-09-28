@@ -94,7 +94,21 @@ class Driver(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _from_this_machine(self) -> bool:
+        """Whether the request names this driver as a local caller does.
+
+        Every caller reaches it as 127.0.0.1 — an emulator through
+        `adb reverse` — so any other Host is a name some other server's page
+        resolved here (DNS rebinding), and any Origin is a browser.
+        """
+        port = self.server.server_address[1]
+        allowed = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        return self.headers.get("Host") in allowed and self.headers.get("Origin") is None
+
     def do_GET(self) -> None:  # noqa: N802 — the base class names it
+        if not self._from_this_machine():
+            self._json(403, {"error": "this driver answers local callers only"})
+            return
         if self.path == "/health":
             self._json(
                 200,

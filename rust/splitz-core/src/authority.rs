@@ -1,10 +1,12 @@
 //! What a signature covers, and who a participant is (SPEC.md §10.6, §10.7).
 
 use serde_json::{Map, Value};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::canonical_json::canonical_json;
 use crate::error::Result;
+use crate::sha256::sha256;
+use crate::zip321::{base64url, unbase64url};
 
 /// The domain separator an entry's signature covers.
 pub const ENTRY_SIGNING_DOMAIN: &str = "splitz-entry-v2";
@@ -40,15 +42,27 @@ pub fn signing_message(entry: &Value, bill_id: &str) -> Result<String> {
     ))
 }
 
+/// The domain separator a participant id's digest covers (§10.7).
+pub const PARTICIPANT_ID_DOMAIN: &str = "splitz-participant-v1";
+
+/// The participant id a key speaks as (§10.7), or `None` for a text that is
+/// not a canonical 32-byte key:
+/// `base64url( SHA-256( "splitz-participant-v1" || key bytes )[0..16] )`.
+///
+/// Two keys cannot derive one id, so no second key can claim a participant
+/// this binds.
+pub fn participant_id(key: &str) -> Option<String> {
+    let raw = unbase64url(key).filter(|raw| raw.len() == 32)?;
+    let mut message = PARTICIPANT_ID_DOMAIN.as_bytes().to_vec();
+    message.extend_from_slice(&raw);
+    Some(base64url(&sha256(&message)[..16]))
+}
+
 /// Which key, if any, speaks for each participant (§10.7).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Identities {
     /// Participant id to the key bound to it.
     pub bound: BTreeMap<String, String>,
-    /// Ids two keys each claim. Neither is bound: nothing inside the log says
-    /// which is the person, and `at` is whatever its author wrote, so
-    /// resolving by time hands the identity to whoever backdates furthest.
-    pub contested: BTreeSet<String>,
 }
 
 /// Resolves identities from the entry set alone.
@@ -82,9 +96,10 @@ pub fn resolve_identities(
     }
 
     // A key is bound by a self-claim: a join whose author is the participant
-    // it carries, stating a key, whose signature verifies against that key. An
-    // entry naming somebody else proves nothing about them, whoever signed it.
-    let mut claims: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    // it carries, whose id is the one that participant's key derives, and
+    // whose signature verifies against that key. An entry naming somebody
+    // else proves nothing about them, and a key cannot claim an id it does not
+    // derive, so no second key can claim a bound participant.
     for entry in entries {
         if entry.get("kind").and_then(Value::as_str) != Some("joinBill") {
             continue;
@@ -98,31 +113,14 @@ pub fn resolve_identities(
         ) else {
             continue;
         };
-        if entry.get("author").and_then(Value::as_str) != Some(id) {
+        if entry.get("author").and_then(Value::as_str) != Some(id) || id == creator {
             continue;
         }
-        if !verify(entry, key) {
+        if participant_id(key).as_deref() != Some(id) || !verify(entry, key) {
             continue;
         }
-        claims
-            .entry(id.to_owned())
-            .or_default()
-            .insert(key.to_owned());
+        bound.insert(id.to_owned(), key.to_owned());
     }
 
-    let mut contested: BTreeSet<String> = BTreeSet::new();
-    for (id, keys) in &claims {
-        // A join claiming the creator's id is not a rival claim; §10.7 refuses
-        // it rather than contesting the one identity the invite proves.
-        if *id == creator {
-            continue;
-        }
-        if keys.len() > 1 {
-            contested.insert(id.clone());
-        } else if let Some(key) = keys.iter().next() {
-            bound.insert(id.clone(), key.clone());
-        }
-    }
-
-    Identities { bound, contested }
+    Identities { bound }
 }

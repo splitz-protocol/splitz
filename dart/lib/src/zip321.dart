@@ -127,7 +127,8 @@ String boundedLabel(String name) {
 /// Unpadded base64url, as everywhere in this protocol.
 String _b64(List<int> raw) => base64UrlEncode(raw).replaceAll('=', '');
 
-String _renderFiat(FiatPrice price) {
+/// Renders [price] as a `fiat` value (§8.4).
+String renderFiat(FiatPrice price) {
   if (!isCurrency(price.currency)) {
     raise(SplitCode.zip321BadCurrencyCode,
         'A fiat code is three upper-case letters, got "${price.currency}"');
@@ -175,7 +176,7 @@ String renderUri(List<Zip321Payment> payments, {bool includeFiat = false}) {
     }
     parts.add('amount$sfx=${renderAmount(p.zatoshi)}');
     if (includeFiat && p.fiat != null) {
-      parts.add('fiat$sfx=${_renderFiat(p.fiat!)}');
+      parts.add('fiat$sfx=${renderFiat(p.fiat!)}');
     }
     if (p.memo != null) {
       if (p.memo!.length > maxMemoBytes) {

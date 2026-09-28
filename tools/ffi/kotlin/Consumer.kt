@@ -13,8 +13,8 @@ fun check(name: String, ok: Boolean, saw: String) {
     else { failures += 1; println("  FAIL  $name — $saw") }
 }
 
-/// One device: its log, its clock, its randomness.
-class Device(val me: String, val payTo: String?, private val seedByte: Int) {
+/// One device: its log, its clock, its randomness, and the key it signs with.
+class Device(private val seedByte: Int) {
     var entries: List<String> = emptyList()
     private var minute = 0
 
@@ -31,12 +31,18 @@ class Device(val me: String, val payTo: String?, private val seedByte: Int) {
     /// are one bill if it can be guessed.
     fun nonce(): ByteArray = ByteArray(16) { (seedByte + minute + it).toByte() }
 
-    fun facts() = HostFacts(me, payTo, now(), nonce())
-
     /// The Ed25519 seed this account signs with, as §9.4 writes a key. A
     /// shipped wallet keeps this in the platform keychain.
     val seed: String = java.util.Base64.getUrlEncoder().withoutPadding()
         .encodeToString(ByteArray(32) { (seedByte + it).toByte() })
+
+    /// The key this account publishes, and the participant id it derives
+    /// (§10.7): a wallet that publishes a key writes every entry under the id
+    /// that key derives, or the key binds nothing.
+    val key: String = identityKeyFromSeed(seed)
+    val me: String = participantIdForKey(key)
+
+    fun facts() = HostFacts(me, now(), nonce())
 
     fun add(entry: String) {
         entries = mergeEntries(entries, listOf(entry)).entries
@@ -60,10 +66,10 @@ class Relay {
 
 fun main() {
     val relay = Relay()
-    val ana = Device("ana", "u1ana", 1)
-    val ben = Device("ben", "u1ben", 90)
-    val anaKey = identityKeyFromSeed(ana.seed)
-    val benKey = identityKeyFromSeed(ben.seed)
+    val ana = Device(1)
+    val ben = Device(90)
+    val anaKey = ana.key
+    val benKey = ben.key
 
     println("a wallet passes facts, not callbacks")
     check("an identity key is 43 unpadded base64url characters",
@@ -84,7 +90,7 @@ fun main() {
     val create = createBillEntry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed)
     ana.add(create)
     val billId = Regex("\"id\":\"([^\"]+)\"").find(create)!!.groupValues[1]
-    ana.add(joinBillEntry(ana.facts(), billId, "Ana", "u1ana", anaKey, ana.seed))
+    ana.add(joinBillEntry(ana.facts(), billId, "Ana", "u1ana", anaKey, listOf(), ana.seed))
 
     println("ana shares it, and ben takes it from the code")
     // The bill key is the wallet's to mint and to keep; §9.4's id is public.
@@ -96,38 +102,38 @@ fun main() {
     check("the scan names the same bill", scanned.billId == billId, "${scanned.billId}")
     check("and carries the key", scanned.billKey == billKey, "${scanned.billKey}")
     ben.entries = mergeEntries(ben.entries, scanned.entries).entries
-    ben.add(joinBillEntry(ben.facts(), billId, "Ben", "u1ben", benKey, ben.seed))
+    ben.add(joinBillEntry(ben.facts(), billId, "Ben", "u1ben", benKey, listOf(), ben.seed))
 
     println("the two logs move through a relay that holds only ciphertext")
     val channel = channelForBill(billId)
     check("the channel is the bill id's hash, never the id",
           channel != billId && channel.length == 64, channel.take(16) + "…")
-    relay.push(channel, blobsToPush(billId, ben.entries, billKey, ben.seed, "ben"))
+    // Pushed as they are held: each was signed when it was written.
+    relay.push(channel, blobsToPush(ben.entries, billKey))
     val opened = openBlobs(relay.fetch(channel), billKey)
     check("every blob opened", opened.unopenable == 0u, "unopenable=${opened.unopenable}")
     ana.entries = mergeEntries(ana.entries, opened.entries).entries
 
     println("ana adds an expense they share, and prices it")
-    ana.add(addExpenseEntry(ana.facts(), billId, "x1", "ana", 9000,
-        """{"type":"equal","among":["ana","ben"]}""", "dinner", ana.seed))
+    ana.add(addExpenseEntry(ana.facts(), billId, "x1", ana.me, 9000,
+        """{"type":"equal","among":["${ana.me}","${ben.me}"]}""", "dinner", ana.seed))
     ana.add(setRateEntry(ana.facts(), billId, "EUR", 300000, "a fixed feed", ana.seed))
 
     val folded = foldEntries(ana.facts(), billId, ana.entries)
     check("both people are on the bill", folded.bill.participants.size == 2,
           folded.bill.participants.joinToString { it.id })
     check("nothing was set aside", folded.setAside.isEmpty(), "${folded.setAside}")
-    check("both keys are bound under §10.7", folded.identities.bound.size == 2,
+    check("both keys are bound under §10.7",
+          folded.identities.bound == mapOf(ana.me to anaKey, ben.me to benKey),
           "${folded.identities.bound.keys}")
-    check("no identity is contested", folded.identities.contested.isEmpty(),
-          "${folded.identities.contested}")
 
     println("ben owes half of it")
     ben.take(ana)
-    val owed = obligationOf(ben.facts(), billId, ben.entries, listOf())
+    val owed = obligationOf(ben.facts(), billId, ben.entries)
     check("ben has an obligation", owed != null, owed?.request?.uri ?: "none")
     val settlement = owed!!.settlements.single()
     check("it is four and a half thousand to ana",
-          settlement.to == "ana" && settlement.amount == 4500L,
+          settlement.to == ana.me && settlement.amount == 4500L,
           "${settlement.to} ${settlement.amount}")
     check("the request is a ZIP 321 URI naming ana's address",
           owed.request.uri!!.startsWith("zcash:u1ana"), owed.request.uri!!)
@@ -140,6 +146,10 @@ fun main() {
     val records = paymentEntriesForSend(ben.facts(), billId, owed, "tx-ben-1", ben.seed)
     check("one record, for what the request carried", records.size == 1,
           "${records.size} record(s)")
+    check("and it states the ZEC it sent and the rate it was priced at",
+          records.single().contains("\"zatoshi\":${owed.request.payments.single().zatoshi}") &&
+              records.single().contains("\"paidAtRate\""),
+          records.single())
     for (record in records) ben.add(record)
 
     ana.take(ben)
@@ -148,7 +158,7 @@ fun main() {
           "${afterPayment.bill.payments.map { it.id }}")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty(),
           "${afterPayment.bill.confirmedPayments}")
-    val stillOwed = obligationOf(ben.facts(), billId, ben.entries, listOf())!!
+    val stillOwed = obligationOf(ben.facts(), billId, ben.entries)!!
     check("so ben is asked for nothing twice", stillOwed.settlements.isEmpty(),
           "${stillOwed.settlements}")
     check("and is told what is in flight", stillOwed.awaiting.single().paid == 4500L,
@@ -161,7 +171,7 @@ fun main() {
     ana.add(confirmPaymentEntry(ana.facts(), billId, toConfirm, "recipientConfirmed", null,
         afterPayment.paymentDigests[toConfirm]!!, ana.seed))
     ben.take(ana)
-    val settled = obligationOf(ben.facts(), billId, ben.entries, listOf())!!
+    val settled = obligationOf(ben.facts(), billId, ben.entries)!!
     check("once confirmed, the debt is gone",
           settled.settlements.isEmpty() && settled.awaiting.isEmpty(),
           "settlements=${settled.settlements.size} awaiting=${settled.awaiting.size}")

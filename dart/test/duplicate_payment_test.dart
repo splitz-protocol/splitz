@@ -17,7 +17,6 @@ class _Host extends splitz.BillHost {
   int _n = 0;
   @override
   String get me => _me;
-  @override
   String? get payToAddress => 'u1$_me';
   @override
   splitz.Clock get now => () => DateTime.utc(2026, 10, 28, 19, 30 + (_n++));

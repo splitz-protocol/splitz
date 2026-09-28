@@ -260,6 +260,7 @@ fn a_transport_failure_is_reported_as_retryable() {
 fn a_quote(memo: Option<&str>) -> SwapQuote {
     SwapQuote {
         deposit_address: "u1provider".to_owned(),
+        recipient: None,
         deposit_memo: memo.map(str::to_owned),
         amount_in_zatoshi: 1,
         amount_out: "1".to_owned(),

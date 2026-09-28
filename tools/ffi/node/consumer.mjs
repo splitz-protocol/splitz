@@ -17,9 +17,7 @@ const check = (name, ok, saw) => {
 
 /// One device: its log, its clock, its randomness.
 class Device {
-  constructor(me, payTo, seedByte) {
-    this.me = me;
-    this.payTo = payTo;
+  constructor(seedByte) {
     this.entries = [];
     this.minute = 0;
     // The Ed25519 seed this account signs with, as §9.4 writes a key. A
@@ -28,6 +26,11 @@ class Device {
       Array.from({ length: 32 }, (_, i) => (seedByte + i) & 0xff),
     ).toString("base64url");
     this.seedByte = seedByte;
+    // The key this account publishes, and the participant id it derives
+    // (§10.7): a wallet that publishes a key writes every entry under the id
+    // that key derives, or the key binds nothing.
+    this.key = splitz.identity_key_from_seed(this.seed);
+    this.me = splitz.participant_id_for_key(this.key);
   }
 
   /// A §9.3 instant: UTC, exactly three fractional digits, fixed width.
@@ -49,7 +52,7 @@ class Device {
   }
 
   facts() {
-    return { me: this.me, pay_to: this.payTo, now: this.now(), nonce: this.nonce() };
+    return { me: this.me, now: this.now(), nonce: this.nonce() };
   }
 
   add(entry) {
@@ -73,10 +76,10 @@ class Relay {
 }
 
 const relay = new Relay();
-const ana = new Device("ana", "u1ana", 1);
-const ben = new Device("ben", "u1ben", 90);
-const anaKey = splitz.identity_key_from_seed(ana.seed);
-const benKey = splitz.identity_key_from_seed(ben.seed);
+const ana = new Device(1);
+const ben = new Device(90);
+const anaKey = ana.key;
+const benKey = ben.key;
 
 console.log("a wallet passes facts, not callbacks");
 check("an identity key is 43 unpadded base64url characters", anaKey.length === 43, anaKey);
@@ -89,7 +92,7 @@ console.log("ana opens a bill and joins it");
 const create = splitz.create_bill_entry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed);
 ana.add(create);
 const billId = JSON.parse(create).id;
-ana.add(splitz.join_bill_entry(ana.facts(), billId, "Ana", "u1ana", anaKey, ana.seed));
+ana.add(splitz.join_bill_entry(ana.facts(), billId, "Ana", "u1ana", anaKey, [], ana.seed));
 
 console.log("ana shares it, and ben takes it from the code");
 const billKey = "-_" + "A".repeat(41);
@@ -99,20 +102,21 @@ check("the whole bill fits in one code", typeof payload === "string",
 const scanned = splitz.read_scanned(payload);
 check("the scan names the same bill", scanned.bill_id === billId, `${scanned.bill_id}`);
 ben.entries = splitz.merge_entries(ben.entries, scanned.entries).entries;
-ben.add(splitz.join_bill_entry(ben.facts(), billId, "Ben", "u1ben", benKey, ben.seed));
+ben.add(splitz.join_bill_entry(ben.facts(), billId, "Ben", "u1ben", benKey, [], ben.seed));
 
 console.log("the two logs move through a relay that holds only ciphertext");
 const channel = splitz.channel_for_bill(billId);
 check("the channel is the bill id's hash, never the id",
       channel !== billId && channel.length === 64, channel.slice(0, 16) + "…");
-relay.push(channel, splitz.blobs_to_push(billId, ben.entries, billKey, ben.seed, "ben"));
+// Pushed as they are held: each was signed when it was written.
+relay.push(channel, splitz.blobs_to_push(ben.entries, billKey));
 const opened = splitz.open_blobs(relay.fetch(channel), billKey);
 check("every blob opened", Number(opened.unopenable) === 0, `unopenable=${opened.unopenable}`);
 ana.entries = splitz.merge_entries(ana.entries, opened.entries).entries;
 
 console.log("ana adds an expense they share, and prices it");
-ana.add(splitz.add_expense_entry(ana.facts(), billId, "x1", "ana", 9000,
-    '{"type":"equal","among":["ana","ben"]}', "dinner", ana.seed));
+ana.add(splitz.add_expense_entry(ana.facts(), billId, "x1", ana.me, 9000,
+    JSON.stringify({ type: "equal", among: [ana.me, ben.me] }), "dinner", ana.seed));
 ana.add(splitz.set_rate_entry(ana.facts(), billId, "EUR", 300000, "a fixed feed", ana.seed));
 
 const folded = splitz.fold_entries(ana.facts(), billId, ana.entries);
@@ -122,10 +126,10 @@ check("nothing was set aside", folded.set_aside.length === 0, JSON.stringify(fol
 
 console.log("ben owes half of it");
 ben.take(ana);
-const owed = splitz.obligation_of(ben.facts(), billId, ben.entries, []);
+const owed = splitz.obligation_of(ben.facts(), billId, ben.entries);
 check("ben has an obligation", owed !== undefined, owed?.request?.uri ?? "none");
 check("it is four and a half thousand to ana",
-      owed.settlements[0].to === "ana" && Number(owed.settlements[0].amount) === 4500,
+      owed.settlements[0].to === ana.me && Number(owed.settlements[0].amount) === 4500,
       `${owed.settlements[0].to} ${owed.settlements[0].amount}`);
 check("the request is a ZIP 321 URI naming ana's address",
       owed.request.uri.startsWith("zcash:u1ana"), owed.request.uri);
@@ -143,8 +147,8 @@ check("ana sees the payment", afterPayment.bill.payments.length === 1,
 check("and it is not confirmed", afterPayment.bill.confirmed_payments.length === 0,
       JSON.stringify(afterPayment.bill.confirmed_payments));
 check("so ben is asked for nothing twice",
-      splitz.obligation_of(ben.facts(), billId, ben.entries, []).settlements.length === 0,
-      JSON.stringify(splitz.obligation_of(ben.facts(), billId, ben.entries, []).settlements));
+      splitz.obligation_of(ben.facts(), billId, ben.entries).settlements.length === 0,
+      JSON.stringify(splitz.obligation_of(ben.facts(), billId, ben.entries).settlements));
 
 // A payee confirms a payment they can see, by the id the bill carries. One
 // transaction paying several people writes one record each, so the id is not
@@ -153,7 +157,7 @@ const toConfirm = afterPayment.bill.payments[0].id;
 ana.add(splitz.confirm_payment_entry(ana.facts(), billId, toConfirm, "recipientConfirmed",
     undefined, afterPayment.payment_digests.get(toConfirm), ana.seed));
 ben.take(ana);
-const settled = splitz.obligation_of(ben.facts(), billId, ben.entries, []);
+const settled = splitz.obligation_of(ben.facts(), billId, ben.entries);
 check("once confirmed, the debt is gone",
       settled.settlements.length === 0 && settled.awaiting.length === 0,
       `settlements=${settled.settlements.length} awaiting=${settled.awaiting.length}`);

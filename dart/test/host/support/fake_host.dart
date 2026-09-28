@@ -20,7 +20,8 @@ class FakeHost implements BillHost {
 
   @override
   final String me;
-  @override
+
+  /// The address this fake is paid at, for a test that writes it into a join.
   final String? payToAddress;
   @override
   final SignEntry? sign;

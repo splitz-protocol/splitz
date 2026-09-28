@@ -103,20 +103,32 @@ String _deriveId(String domain, Map<String, dynamic> entry) {
   return base64UrlEncode(digest.sublist(0, 16)).replaceAll('=', '');
 }
 
-bool _isB64UrlOfLength(Object? value, int bytes) {
-  if (value is! String || value.isEmpty) return false;
-  const alphabet =
-      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
-  for (final unit in value.codeUnits) {
-    if (!alphabet.contains(String.fromCharCode(unit))) return false;
-  }
-  try {
-    final raw = base64Url.decode(value.padRight((value.length + 3) & ~3, '='));
-    // §9.4: canonical, so re-encoding reproduces it exactly.
-    return raw.length == bytes &&
-        base64UrlEncode(raw).replaceAll('=', '') == value;
-  } on FormatException {
-    return false;
+/// §9.4: canonical, so re-encoding reproduces it exactly.
+bool _isB64UrlOfLength(Object? value, int bytes) =>
+    canonicalBytes(value, bytes) != null;
+
+/// §2.2 and §9.3. Every number in an entry is an integer a signed 64-bit
+/// value holds.
+///
+/// A JSON reader holds a large integer as a double, so `9223372036854775808`
+/// and `9.223372036854775808e18` arrive here as one value: one outside the
+/// 64-bit range is `amount_overflow` however it was written, and the code
+/// follows from the value alone. Any other non-integer is
+/// `canonical_json_float`, which is what §9.3's encoding refuses.
+void _checkNumbers(Object? value) {
+  if (value is double) {
+    if (!value.isFinite || value.abs() >= 9223372036854775808.0) {
+      raise(SplitCode.amountOverflow, 'A number past 64 bits: $value');
+    }
+    raise(SplitCode.canonicalJsonFloat, 'A number that is not an integer');
+  } else if (value is Map) {
+    for (final v in value.values) {
+      _checkNumbers(v);
+    }
+  } else if (value is List) {
+    for (final v in value) {
+      _checkNumbers(v);
+    }
   }
 }
 
@@ -185,10 +197,20 @@ List<Object?> _listOf(Object? value) => value is List ? value : const [];
 /// encoding sort higher than the same entry with it, so the merge would keep
 /// the stripped copy.
 Map<String, dynamic> checkEntry(Object? raw) {
+  // §10.1's checks run in the order it states, so an entry wrong in two ways
+  // is refused for the same one by every reader.
   if (raw is! Map) {
     raise(SplitCode.billTypeError, 'An entry is an object, got $raw');
   }
   final entry = raw.cast<String, dynamic>();
+
+  // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
+  // and every pass below walks it — deriving its id encodes it. A depth
+  // nobody bounded is a stack the peer chose.
+  if (!withinDepth(entry, maxDocumentDepth)) {
+    raise(SplitCode.billTypeError,
+        'An entry nests deeper than $maxDocumentDepth');
+  }
 
   final kind = entry['kind'];
   if (kind is! String || !entryKinds.contains(kind)) {
@@ -204,14 +226,21 @@ Map<String, dynamic> checkEntry(Object? raw) {
 
   // §10.1. `v` sits outside the id (§9.5), so a copy with any value keeps the
   // honest id; one that is not an integer would reach the canonical encoding
-  // the merge and the order compare, and stop there.
+  // the merge and the order compare, and stop there. A Dart `int` holds at
+  // most 2^63-1, and a larger one arrives as a double.
   if (entry.containsKey('v')) {
     final v = entry['v'];
     if (v is! int || v < 1) {
       raise(SplitCode.billTypeError,
-          'An entry version is an integer of 1 or more');
+          'An entry version is an integer from 1 to 2^63-1');
     }
   }
+
+  // §2.3, at entry ingress: a lone surrogate anywhere in the entry breaks the
+  // §10.2 order the merge and the fold both depend on.
+  checkScalarValues(entry);
+  // §2.2 and §9.3, at entry ingress, before any member is read.
+  _checkNumbers(entry);
 
   final carried = [
     for (final p in _payloadNames)
@@ -220,30 +249,6 @@ Map<String, dynamic> checkEntry(Object? raw) {
   if (carried.length > 1) {
     raise(SplitCode.billAmbiguousEntry,
         'An entry carries ${carried.join(" and ")}');
-  }
-
-  // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
-  // and every pass below walks it — deriving its id encodes it. A depth
-  // nobody bounded is a stack the peer chose.
-  if (!withinDepth(entry, maxDocumentDepth)) {
-    raise(SplitCode.billTypeError,
-        'An entry nests deeper than $maxDocumentDepth');
-  }
-
-  // §2.3, at entry ingress: a lone surrogate anywhere in the entry breaks the
-  // §10.2 order the merge and the fold both depend on.
-  checkScalarValues(entry);
-
-  final wanted = payloadForKind[kind];
-  if (wanted != null && !entry.containsKey(wanted)) {
-    raise(SplitCode.billMissingEntryPayload, 'A $kind carries a $wanted');
-  }
-  if ((kind == 'voidEntry' || kind == 'amendEntry') &&
-      (entry['targetId'] == null || entry['targetId'] == '')) {
-    raise(SplitCode.billMissingEntryPayload, 'A $kind names a target');
-  }
-  if (entry.containsKey('targetId') && entry['targetId'] is! String) {
-    raise(SplitCode.billTypeError, 'A targetId is a string');
   }
 
   // §10.1. Every pass after this one indexes the payload without re-checking
@@ -259,8 +264,20 @@ Map<String, dynamic> checkEntry(Object? raw) {
           SplitCode.billTypeError, 'A $name is an object, got ${entry[name]}');
     }
   }
+  if (entry.containsKey('targetId') && entry['targetId'] is! String) {
+    raise(SplitCode.billTypeError, 'A targetId is a string');
+  }
+
+  final wanted = payloadForKind[kind];
+  if (wanted != null && !entry.containsKey(wanted)) {
+    raise(SplitCode.billMissingEntryPayload, 'A $kind carries a $wanted');
+  }
   if (wanted != null) {
     _checkPayloadIds((entry[wanted] as Map).cast<String, dynamic>(), wanted);
+  }
+  if ((kind == 'voidEntry' || kind == 'amendEntry') &&
+      (entry['targetId'] == null || entry['targetId'] == '')) {
+    raise(SplitCode.billMissingEntryPayload, 'A $kind names a target');
   }
 
   canonicalInstant(entry['at']);
@@ -308,12 +325,22 @@ Map<String, dynamic> checkEntry(Object? raw) {
   return entry;
 }
 
-/// The total order: `at`, then `author`, then `id`, all ascending.
+/// The total order (§10.2): the instant `at` names, then `at` as written,
+/// then `author`, then `id`, all ascending.
 ///
-/// It never depends on arrival order or on local state.
+/// By the instant rather than the text: §9.3 admits `t` and `z` and any
+/// number of fractional digits, and the text of an earlier instant can sort
+/// after a later one. The text then breaks ties between spellings of one
+/// instant. It never depends on arrival order or on local state.
 List<Map<String, dynamic>> orderEntries(List<Map<String, dynamic>> entries) {
-  final sorted = [...entries];
-  sorted.sort((a, b) {
+  final keyed = [
+    for (final e in entries) (_instantKey(e['at'] as String), e),
+  ];
+  keyed.sort((x, y) {
+    final (ka, a) = x;
+    final (kb, b) = y;
+    final byInstant = compareUtf8(ka, kb);
+    if (byInstant != 0) return byInstant;
     final byAt = compareUtf8(a['at'] as String, b['at'] as String);
     if (byAt != 0) return byAt;
     final byAuthor = compareUtf8(a['author'] as String, b['author'] as String);
@@ -324,7 +351,18 @@ List<Map<String, dynamic>> orderEntries(List<Map<String, dynamic>> entries) {
     // equal leaves them to the host's sort, and Dart's is not stable.
     return compareUtf8(canonicalJson(a), canonicalJson(b));
   });
-  return sorted;
+  return [for (final (_, e) in keyed) e];
+}
+
+/// The canonical instant [at] names, or [at] itself when it names none: an
+/// entry that reached here unchecked still sorts, and every checked one sorts
+/// by its instant.
+String _instantKey(String at) {
+  try {
+    return canonicalInstant(at);
+  } on SplitError {
+    return at;
+  }
 }
 
 /// Merges logs by set union, keyed by entry id and signature (§10.2).
@@ -422,6 +460,11 @@ class FoldResult {
     required this.identities,
     required this.paymentAuthors,
     required this.paymentDigests,
+    required this.expenseEntries,
+    required this.expenseAuthors,
+    required this.paymentEntries,
+    required this.rateEntry,
+    required this.rateAuthor,
   });
 
   /// The materialised bill, as a wire-form map.
@@ -438,12 +481,11 @@ class FoldResult {
 
   final List<SetAside> setAside;
 
-  /// Which key speaks for each participant, and which ids two keys claim
-  /// (§10.7).
+  /// Which key speaks for each participant (§10.7).
   ///
   /// Empty when [foldLog] is given no verifier: §13 makes the curve operation
   /// the host's, so a fold that cannot check a signature reports no binding
-  /// and no contest rather than claiming there are none.
+  /// rather than claiming there is none.
   final Identities identities;
 
   /// Who wrote each payment record on the bill, by the payment's id.
@@ -455,6 +497,25 @@ class FoldResult {
   /// What each payment record on the bill says, by the payment's id: the
   /// [paymentDigest] a confirmation of it carries as `record` (§10.5).
   final Map<String, String> paymentDigests;
+
+  /// The entry that introduced each expense on the bill, by the expense's own
+  /// id: what an amendment or a withdrawal of it targets (§10.3).
+  ///
+  /// Taken from the fold rather than from the log, which holds entries the
+  /// fold set aside under the same expense id.
+  final Map<String, String> expenseEntries;
+
+  /// Who wrote each expense on the bill, by the expense's own id.
+  final Map<String, String> expenseAuthors;
+
+  /// The entry that recorded each payment on the bill, by the payment's id.
+  final Map<String, String> paymentEntries;
+
+  /// The `setRate` entry whose rate the bill carries, or null with no rate.
+  final String? rateEntry;
+
+  /// Who wrote that `setRate` (§14.2: a payer is shown who set the rate).
+  final String? rateAuthor;
 }
 
 /// Where a participant is paid (§10.3 step 4): the address of their first
@@ -548,7 +609,7 @@ FoldResult foldLog(List<Object?> rawEntries,
   // nobody applies is still evidence that was made. Without a verifier
   // nothing can be decided, and nothing is claimed.
   final identities = verify == null
-      ? const Identities({}, {})
+      ? const Identities({})
       : resolveIdentities(copies, create, verify);
 
   // §10.3. One id names one entry: a re-sent entry would otherwise be applied
@@ -670,6 +731,11 @@ FoldResult foldLog(List<Object?> rawEntries,
         final p =
             (target['participant'] as Map?)?.cast<String, dynamic>() ?? {};
         allowed = {creator, p['id'] as String?};
+      case 'setRate':
+        // A rate prices every request on the bill, and the latest by `at`
+        // decides, so one dated far ahead outranks every later correction its
+        // author does not withdraw.
+        allowed = {target['author'] as String, creator};
       default:
         allowed = {target['author'] as String};
     }
@@ -749,27 +815,32 @@ FoldResult foldLog(List<Object?> rawEntries,
       if (voided.contains(other['id']) || other['kind'] == 'voidEntry') {
         continue;
       }
-      final eff = effective(other);
-      if (other['kind'] == 'addExpense') {
-        // Total accessors, not casts: this pass runs before the expense is
-        // decoded, so `split` and everything under it is whatever a peer
-        // wrote. §10.1 types the payload itself; it does not type inside it.
-        final ex = _mapOf(eff['expense']);
-        final split = _mapOf(ex['split']);
-        final pool = <Object?>{
-          ..._listOf(split['among']),
-          ..._mapOf(split['amounts']).keys,
-          ..._mapOf(split['basisPoints']).keys,
-          ..._mapOf(split['shareCounts']).keys,
-          for (final item in _listOf(split['items']))
-            ..._listOf(_mapOf(item)['sharedBy']),
-        };
-        if (ex['paidBy'] == gone || pool.contains(gone)) named = true;
-      } else if (other['kind'] == 'recordPayment') {
-        final pay = _mapOf(eff['payment']);
-        if (pay['from'] == gone || pay['to'] == gone) named = true;
-      } else if (other['kind'] == 'confirmPayment' && other['author'] == gone) {
-        named = true;
+      // The amendment and the entry it corrects are both read: the amendment
+      // may yet be set aside when it is applied, and the entry then applies
+      // as written.
+      for (final eff in [effective(other), other]) {
+        if (other['kind'] == 'addExpense') {
+          // Total accessors, not casts: this pass runs before the expense is
+          // decoded, so `split` and everything under it is whatever a peer
+          // wrote. §10.1 types the payload itself; it does not type inside it.
+          final ex = _mapOf(eff['expense']);
+          final split = _mapOf(ex['split']);
+          final pool = <Object?>{
+            ..._listOf(split['among']),
+            ..._mapOf(split['amounts']).keys,
+            ..._mapOf(split['basisPoints']).keys,
+            ..._mapOf(split['shareCounts']).keys,
+            for (final item in _listOf(split['items']))
+              ..._listOf(_mapOf(item)['sharedBy']),
+          };
+          if (ex['paidBy'] == gone || pool.contains(gone)) named = true;
+        } else if (other['kind'] == 'recordPayment') {
+          final pay = _mapOf(eff['payment']);
+          if (pay['from'] == gone || pay['to'] == gone) named = true;
+        } else if (other['kind'] == 'confirmPayment' &&
+            other['author'] == gone) {
+          named = true;
+        }
       }
       if (named) break;
     }
@@ -787,50 +858,80 @@ FoldResult foldLog(List<Object?> rawEntries,
       if (!voided.contains(e['id']) && e['kind'] != 'voidEntry') e,
   ];
 
+  /// §10.4. [attempt] applied to [e] as amended, then as written. An
+  /// amendment that cannot be applied is set aside and the entry it corrects
+  /// applies as written: correcting an entry into one that cannot be applied
+  /// does not take the entry off the bill.
+  ///
+  /// Returns the result and the version applied, or null when neither
+  /// applies.
+  (T, Map<String, dynamic>)? applied<T>(
+    Map<String, dynamic> e,
+    T Function(Map<String, dynamic> version) attempt,
+  ) {
+    final amendment = amendments[e['id']];
+    if (amendment != null) {
+      try {
+        return (attempt(amendment), amendment);
+      } on SplitError catch (err) {
+        aside(amendment, err.code);
+      }
+    }
+    try {
+      return (attempt(e), e);
+    } on SplitError catch (err) {
+      aside(e, err.code);
+      return null;
+    }
+  }
+
   // Participants in a pass of their own, before anything that references them.
   final participants = <String, Map<String, dynamic>>{};
   final replaced = <ReplacedAddress>[];
   for (final e in live) {
     if (e['kind'] != 'joinBill') continue;
-    final p =
-        (effective(e)['participant'] as Map?)?.cast<String, dynamic>() ?? {};
-    final id = p['id'];
-    // §9.1. An empty id is not a name anyone can be settled to: two readers
-    // disagreeing about it fold different bills from one log.
-    if (id is! String || id.isEmpty) {
-      aside(e, SplitCode.billMissingEntryPayload);
-      continue;
-    }
-    if (identities.bound.containsKey(id) && e['author'] != id) {
-      // §10.7. A bound participant's record is theirs to create as well as to
-      // change, so a payout cannot be redirected to somebody who never
-      // joined by an entry of their own.
-      aside(e, SplitCode.unauthorizedEntry);
-      continue;
-    }
-    if (participants.containsKey(id) && e['author'] != id) {
-      // Without this, one join naming another participant's id and carrying
-      // your own address redirects every later settlement to that person.
-      aside(e, SplitCode.unauthorizedEntry);
-      continue;
-    }
-    // The decoder decides what a participant is, here rather than once the
-    // document is assembled: a member it would refuse sets this entry aside
-    // (§10.3) instead of making the whole bill undecodable.
-    try {
-      decodeParticipant(p);
-    } on SplitError catch (err) {
-      aside(e, err.code);
-      continue;
-    }
+    final result = applied(e, (version) {
+      final p = _mapOf(version['participant']);
+      final id = p['id'];
+      // §9.1. An empty id is not a name anyone can be settled to: two readers
+      // disagreeing about it fold different bills from one log.
+      if (id is! String || id.isEmpty) {
+        raise(SplitCode.billMissingEntryPayload, 'A join names no participant');
+      }
+      if (identities.bound.containsKey(id) && e['author'] != id) {
+        // §10.7. A bound participant's record is theirs to create as well as
+        // to change, so a payout cannot be redirected to somebody who never
+        // joined by an entry of their own.
+        raise(SplitCode.unauthorizedEntry, 'Writes a bound participant');
+      }
+      if (participants.containsKey(id) && e['author'] != id) {
+        // Without this, one join naming another participant's id and carrying
+        // your own address redirects every later settlement to that person.
+        raise(SplitCode.unauthorizedEntry, 'Changes a record it does not own');
+      }
+      // The decoder decides what a participant is, here rather than once the
+      // document is assembled: a member it would refuse sets this entry aside
+      // (§10.3) instead of making the whole bill undecodable.
+      final decoded = decodeParticipant(p);
+      // §10.7. A record stating a key names the participant that key derives.
+      // Any other id would let a second key speak for somebody a first one
+      // already binds.
+      final key = decoded.identityKey;
+      if (key != null && id != creator && participantId(key) != id) {
+        raise(SplitCode.participantIdNotDerived,
+            'A key speaks for the id it derives, not $id');
+      }
+      return p;
+    });
+    if (result == null) continue;
+    final (p, _) = result;
+    final id = p['id'] as String;
     // §10.3 step 4. The destination this record replaces: the one held for
     // the participant, or, for the first record, the one the join was written
     // with before an amendment changed it.
     final before = participants.containsKey(id)
         ? _destination(participants[id]!)
-        : amendments.containsKey(e['id'])
-            ? _destination(_mapOf(e['participant']))
-            : _destination(p);
+        : _destination(_mapOf(e['participant']));
     final after = _destination(p);
     if (before != after) {
       replaced.add(ReplacedAddress(id, before, after));
@@ -842,26 +943,40 @@ FoldResult foldLog(List<Object?> rawEntries,
   // order, so the answer is a function of the log and not of which device last
   // spoke. Decided after the participants, because only they may set it.
   Map<String, dynamic>? rate;
+  String? rateEntry;
+  String? rateAuthor;
   for (final e in live) {
     if (e['kind'] != 'setRate') continue;
-    if (!participants.containsKey(e['author'])) {
-      aside(e, SplitCode.unknownParticipant);
-      continue;
-    }
-    final payload = effective(e)['rate'];
-    try {
+    final result = applied(e, (version) {
+      if (!participants.containsKey(e['author'])) {
+        raise(
+            SplitCode.unknownParticipant, 'Sets a rate on a bill it is not on');
+      }
+      // §10.7. A rate prices every request on the bill, so a fold that
+      // verifies takes it only from a participant whose key it has bound: an
+      // unsigned join is enough to put anybody holding the invite on the bill.
+      if (verify != null && !identities.bound.containsKey(e['author'])) {
+        raise(SplitCode.unauthorizedEntry, 'Sets a rate with no bound key');
+      }
+      final payload = version['rate'];
       decodeRate(payload);
-    } on SplitError catch (err) {
-      aside(e, err.code);
-      continue;
-    }
-    rate = (payload as Map).cast<String, dynamic>();
+      return (payload as Map).cast<String, dynamic>();
+    });
+    if (result == null) continue;
+    rate = result.$1;
+    rateEntry = e['id'] as String;
+    rateAuthor = e['author'] as String;
   }
 
   final expenses = <Map<String, dynamic>>[];
   final payments = <Map<String, dynamic>>[];
   final paymentAuthors = <String, String>{};
   final paymentDigests = <String, String>{};
+  // The entry that introduced each applied expense and payment, and who wrote
+  // it: what an amendment or a withdrawal targets, and whose entry it is.
+  final expenseEntries = <String, String>{};
+  final expenseAuthors = <String, String>{};
+  final paymentEntries = <String, String>{};
   // §5.1's balances, formed as this pass applies each entry and in the order
   // §5.1 forms them, so a bill this fold returns always has balances §2.2 can
   // hold. An entry whose effect would carry one out of range is set aside,
@@ -872,30 +987,34 @@ FoldResult foldLog(List<Object?> rawEntries,
   // joins two of them into one string without collisions.
   final pairTotal = <(String, String), int>{};
   for (final e in live) {
-    final eff = effective(e);
     if (e['kind'] == 'addExpense') {
-      final ex = {...(eff['expense'] as Map).cast<String, dynamic>()};
-      // An amount that states no currency is denominated by the fold. One
-      // that states another is set aside, never restamped: that would keep
-      // the count and change the unit. §9.1 falls back only when the member
-      // is absent, so a present value that is not a currency is an entry that
-      // cannot be applied, and §10.3 sets those aside rather than raising.
-      if (!ex.containsKey('currency')) {
-        ex['currency'] = billCurrency;
-      } else if (!isCurrency(ex['currency'])) {
-        aside(e, SplitCode.billBadCurrency);
-        continue;
-      } else if (ex['currency'] != billCurrency) {
-        aside(e, SplitCode.currencyMismatch);
-        continue;
-      }
-      if (!participants.containsKey(ex['paidBy'])) {
-        aside(e, SplitCode.unknownParticipant);
-        continue;
-      }
-      try {
+      final result = applied(e, (version) {
+        final ex = {..._mapOf(version['expense'])};
+        // An amount that states no currency is denominated by the fold. One
+        // that states another is set aside, never restamped: that would keep
+        // the count and change the unit. §9.1 falls back only when the member
+        // is absent, so a present value that is not a currency is an entry
+        // that cannot be applied, and §10.3 sets those aside rather than
+        // raising.
+        if (!ex.containsKey('currency')) {
+          ex['currency'] = billCurrency;
+        } else if (!isCurrency(ex['currency'])) {
+          raise(SplitCode.billBadCurrency, 'States no currency');
+        } else if (ex['currency'] != billCurrency) {
+          raise(SplitCode.currencyMismatch, 'States another currency');
+        }
+        if (!participants.containsKey(ex['paidBy'])) {
+          raise(
+              SplitCode.unknownParticipant, 'Paid by somebody not on the bill');
+        }
         final decoded =
             decodeExpense(ex, billCurrency, participants.keys.toSet());
+        // One id names one expense. An amendment or a withdrawal is written
+        // against the expense a reader shows, and two under one id leave it to
+        // guess which.
+        if (expenseEntries.containsKey(decoded.id)) {
+          raise(SplitCode.duplicateExpense, 'Two expenses share ${decoded.id}');
+        }
         // §4 is what turns an expense into what each person owes, and §5 runs
         // it downstream of this fold. An expense whose split §4 refuses cannot
         // be applied, so it is set aside here rather than raising out of
@@ -903,73 +1022,65 @@ FoldResult foldLog(List<Object?> rawEntries,
         final shares = splitExpense(decoded.amount, decoded.split);
         final moved = {...running};
         moved[decoded.paidBy] =
-            checkedAdd(moved[decoded.paidBy]!, decoded.amount);
+            checkedBalance(checkedAdd(moved[decoded.paidBy]!, decoded.amount));
         shares.forEach((id, owed) {
-          moved[id] = checkedSubtract(moved[id]!, owed);
+          moved[id] = checkedBalance(checkedSubtract(moved[id]!, owed));
         });
-        running = moved;
-      } on SplitError catch (err) {
-        aside(e, err.code);
-        continue;
-      }
+        return (ex, moved);
+      });
+      if (result == null) continue;
+      final ((ex, moved), _) = result;
+      running = moved;
       expenses.add(ex);
+      expenseEntries[ex['id'] as String] = e['id'] as String;
+      expenseAuthors[ex['id'] as String] = e['author'] as String;
     } else if (e['kind'] == 'recordPayment') {
-      final pay = {...(eff['payment'] as Map).cast<String, dynamic>()};
-      // A payment moves both parties' balances, so without this any holder of
-      // the invite could clear a debt neither of them had settled.
-      if (e['author'] != pay['from'] && e['author'] != pay['to']) {
-        aside(e, SplitCode.unauthorizedPayment);
-        continue;
-      }
-      if (!participants.containsKey(pay['from']) ||
-          !participants.containsKey(pay['to'])) {
-        aside(e, SplitCode.unknownParticipant);
-        continue;
-      }
-      if (pay['from'] == pay['to']) {
-        aside(e, SplitCode.selfPayment);
-        continue;
-      }
-      if (!pay.containsKey('currency')) {
-        pay['currency'] = billCurrency;
-      } else if (!isCurrency(pay['currency'])) {
-        aside(e, SplitCode.billBadCurrency);
-        continue;
-      } else if (pay['currency'] != billCurrency) {
-        aside(e, SplitCode.currencyMismatch);
-        continue;
-      }
-      try {
+      final result = applied(e, (version) {
+        final pay = {..._mapOf(version['payment'])};
+        // A payment moves both parties' balances, so without this any holder
+        // of the invite could clear a debt neither of them had settled.
+        if (e['author'] != pay['from'] && e['author'] != pay['to']) {
+          raise(SplitCode.unauthorizedPayment, 'Written by neither party');
+        }
+        if (!participants.containsKey(pay['from']) ||
+            !participants.containsKey(pay['to'])) {
+          raise(SplitCode.unknownParticipant, 'Names somebody not on the bill');
+        }
+        if (pay['from'] == pay['to']) {
+          raise(SplitCode.selfPayment, 'Pays its own author');
+        }
+        if (!pay.containsKey('currency')) {
+          pay['currency'] = billCurrency;
+        } else if (!isCurrency(pay['currency'])) {
+          raise(SplitCode.billBadCurrency, 'States no currency');
+        } else if (pay['currency'] != billCurrency) {
+          raise(SplitCode.currencyMismatch, 'States another currency');
+        }
         decodePayment(pay, billCurrency, participants.keys.toSet());
-      } on SplitError catch (err) {
-        aside(e, err.code);
-        continue;
-      }
-      // §10.5: a confirmation names one record, and a method that speaks for
-      // the payment's `to` is checked against that record's `to`. Two records
-      // under one id name a payee ambiguously, so one recipient's
-      // confirmation would settle a debt another never vouched for. The first
-      // record stands and the second is refused; one transaction paying
-      // several people carries the transaction in `reference`, not in the id.
-      if (payments.any((p) => p['id'] == pay['id'])) {
-        aside(e, SplitCode.duplicatePayment);
-        continue;
-      }
-      // What one participant has recorded paying another, confirmed or not,
-      // stays in range: §14.4 sums the unconfirmed part of it.
-      final pair = (pay['from'] as String, pay['to'] as String);
-      try {
-        pairTotal[pair] =
-            checkedAdd(pairTotal[pair] ?? 0, pay['amount'] as int);
-      } on SplitError catch (err) {
-        aside(e, err.code);
-        continue;
-      }
+        // §10.5: a confirmation names one record, and a method that speaks for
+        // the payment's `to` is checked against that record's `to`. Two
+        // records under one id name a payee ambiguously, so one recipient's
+        // confirmation would settle a debt another never vouched for. The
+        // first record stands and the second is refused; one transaction
+        // paying several people carries the transaction in `reference`, not
+        // in the id.
+        if (payments.any((p) => p['id'] == pay['id'])) {
+          raise(SplitCode.duplicatePayment, 'Two payments share an id');
+        }
+        // What one participant has recorded paying another, confirmed or not,
+        // stays in range: §14.4 sums the unconfirmed part of it.
+        final pair = (pay['from'] as String, pay['to'] as String);
+        final total = checkedAdd(pairTotal[pair] ?? 0, pay['amount'] as int);
+        return (pay, pair, total);
+      });
+      if (result == null) continue;
+      final ((pay, pair, total), version) = result;
+      pairTotal[pair] = total;
       payments.add(pay);
       paymentAuthors[pay['id'] as String] = e['author'] as String;
-      paymentDigests[pay['id'] as String] = paymentDigest(
-        (eff['payment'] as Map).cast<String, dynamic>(),
-      );
+      paymentEntries[pay['id'] as String] = e['id'] as String;
+      paymentDigests[pay['id'] as String] =
+          paymentDigest(_mapOf(version['payment']));
     }
   }
 
@@ -981,45 +1092,44 @@ FoldResult foldLog(List<Object?> rawEntries,
   final confirmedBy = <String, List<Map<String, dynamic>>>{};
   for (final e in live) {
     if (e['kind'] != 'confirmPayment') continue;
-    final c =
-        (effective(e)['confirmation'] as Map?)?.cast<String, dynamic>() ?? {};
-    final rule = confirmationMethods[c['method']];
-    if (rule == null) {
-      aside(e, SplitCode.billUnknownConfirmationMethod);
-      continue;
-    }
-    if (!known.contains(c['paymentId'])) {
-      aside(e, SplitCode.unknownPayment);
-      continue;
-    }
-    // §10.5. A confirmation binds what the record said when it was given.
-    if (c['record'] != paymentDigests[c['paymentId']]) {
-      aside(e, SplitCode.unknownPayment);
-      continue;
-    }
-    if (!participants.containsKey(e['author'])) {
-      aside(e, SplitCode.unknownParticipant);
-      continue;
-    }
-    final pay = payments.firstWhere((p) => p['id'] == c['paymentId']);
-    if (rule.speaksFor != null && e['author'] != pay[rule.speaksFor]) {
-      // A confirmation's whole weight is in who gave it, so a method anyone
-      // may claim is a method that says nothing.
-      aside(e, SplitCode.unauthorizedConfirmation);
-      continue;
-    }
-    final reference = c['reference'];
-    if (rule.needsReference && !(reference is String && reference.isNotEmpty)) {
-      // One that says a payment is on a chain without saying where contains no
-      // chain. A number or a list is not a transaction id either, and reading
-      // "present" three different ways settles a debt on one device and
-      // leaves it open on another.
-      aside(e, SplitCode.confirmationMissingReference);
-      continue;
-    }
-    if (rule.settles) {
-      confirmed.add(c['paymentId'] as String);
-      confirmedBy.putIfAbsent(c['paymentId'] as String, () => []).add(e);
+    final result = applied(e, (version) {
+      final c = _mapOf(version['confirmation']);
+      final rule = confirmationMethods[c['method']];
+      if (rule == null) {
+        raise(SplitCode.billUnknownConfirmationMethod, 'No such method');
+      }
+      if (!known.contains(c['paymentId'])) {
+        raise(SplitCode.unknownPayment, 'Vouches for no payment on the bill');
+      }
+      // §10.5. A confirmation binds what the record said when it was given.
+      if (c['record'] != paymentDigests[c['paymentId']]) {
+        raise(SplitCode.unknownPayment, 'Vouches for a record since changed');
+      }
+      if (!participants.containsKey(e['author'])) {
+        raise(SplitCode.unknownParticipant, 'Written by somebody not on it');
+      }
+      final pay = payments.firstWhere((p) => p['id'] == c['paymentId']);
+      if (rule.speaksFor != null && e['author'] != pay[rule.speaksFor]) {
+        // A confirmation's whole weight is in who gave it, so a method anyone
+        // may claim is a method that says nothing.
+        raise(SplitCode.unauthorizedConfirmation, 'Speaks for somebody else');
+      }
+      final reference = c['reference'];
+      if (rule.needsReference &&
+          !(reference is String && reference.isNotEmpty)) {
+        // One that says a payment is on a chain without saying where contains
+        // no chain. A number or a list is not a transaction id either, and
+        // reading "present" three different ways settles a debt on one device
+        // and leaves it open on another.
+        raise(SplitCode.confirmationMissingReference, 'Names no transaction');
+      }
+      return (c['paymentId'] as String, rule.settles);
+    });
+    if (result == null) continue;
+    final ((paid, settles), version) = result;
+    if (settles) {
+      confirmed.add(paid);
+      confirmedBy.putIfAbsent(paid, () => []).add(version);
     }
   }
 
@@ -1030,8 +1140,8 @@ FoldResult foldLog(List<Object?> rawEntries,
     if (!confirmed.contains(pay['id'])) continue;
     final amount = pay['amount'] as int;
     try {
-      final from = checkedAdd(running[pay['from']]!, amount);
-      final to = checkedSubtract(running[pay['to']]!, amount);
+      final from = checkedBalance(checkedAdd(running[pay['from']]!, amount));
+      final to = checkedBalance(checkedSubtract(running[pay['to']]!, amount));
       running[pay['from'] as String] = from;
       running[pay['to'] as String] = to;
     } on SplitError catch (err) {
@@ -1046,6 +1156,9 @@ FoldResult foldLog(List<Object?> rawEntries,
     final byId = compareUtf8(a.id, b.id);
     return byId != 0 ? byId : compareUtf8(a.code, b.code);
   });
+
+  Map<String, String> sorted(Map<String, String> m) =>
+      {for (final id in sortedUtf8(m.keys)) id: m[id]!};
 
   return FoldResult(
     bill: {
@@ -1067,11 +1180,12 @@ FoldResult foldLog(List<Object?> rawEntries,
     withdrawn: sortedUtf8(voided),
     setAside: setAside,
     identities: identities,
-    paymentAuthors: {
-      for (final id in sortedUtf8(paymentAuthors.keys)) id: paymentAuthors[id]!,
-    },
-    paymentDigests: {
-      for (final id in sortedUtf8(paymentDigests.keys)) id: paymentDigests[id]!,
-    },
+    paymentAuthors: sorted(paymentAuthors),
+    paymentDigests: sorted(paymentDigests),
+    expenseEntries: sorted(expenseEntries),
+    expenseAuthors: sorted(expenseAuthors),
+    paymentEntries: sorted(paymentEntries),
+    rateEntry: rateEntry,
+    rateAuthor: rateAuthor,
   );
 }

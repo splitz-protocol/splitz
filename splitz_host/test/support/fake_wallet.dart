@@ -87,7 +87,6 @@ class FakeHost implements splitz.BillHost {
 
   @override
   final String me;
-  @override
   final String? payToAddress;
   @override
   final splitz.SignEntry? sign;

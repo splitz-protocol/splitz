@@ -18,7 +18,9 @@ use splitz_core::host::{
     settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
     SignEntry, VerifyEntry,
 };
-use splitz_core::{check_entry, net_balances, sha256_hex, signing_message, Delta, Invite};
+use splitz_core::{
+    check_entry, net_balances, participant_id, sha256_hex, signing_message, Delta, Invite,
+};
 
 // --- a wallet that does nothing ---------------------------------------------
 
@@ -62,13 +64,16 @@ impl FakeHost {
     }
 }
 
+impl FakeHost {
+    /// The address this fake is paid at, for a test that writes it into a join.
+    fn pay_to_address(&self) -> Option<&str> {
+        self.pay_to.as_deref()
+    }
+}
+
 impl BillHost for FakeHost {
     fn me(&self) -> &str {
         &self.me
-    }
-
-    fn pay_to_address(&self) -> Option<&str> {
-        self.pay_to.as_deref()
     }
 
     fn now(&self) -> String {
@@ -285,13 +290,15 @@ fn dinner(ana: &FakeHost, ben: &FakeHost) -> Vec<Value> {
 fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
     // Everyone signs, so everyone is bound, and §10.3 then applies an entry
     // authored by any of them only from a copy that verifies.
+    // §10.7: a participant who publishes a key is named by the id it derives.
+    let ben_id = participant_id(&fake_key("ben")).unwrap();
     let bill = |ben_signs: bool| {
         let ana = signing_host("ana", &fake_key("ana"), Some("u1ana"));
-        let signer = signing_host("ben", &fake_key("ben"), Some("u1ben"));
+        let signer = signing_host(&ben_id, &fake_key("ben"), Some("u1ben"));
         let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
         let bill_id = create["id"].as_str().unwrap().to_owned();
         // Ben's device verifies on this bill, as a real one folding it would.
-        let mut ben = signing_host_on("ben", &fake_key("ben"), Some("u1ben"), &bill_id);
+        let mut ben = signing_host_on(&ben_id, &fake_key("ben"), Some("u1ben"), &bill_id);
         if !ben_signs {
             ben.sign = None;
         }
@@ -311,8 +318,15 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
         .unwrap();
         entries.push(sign_entry(&signer, &join_ben, &bill_id).unwrap());
         ana.tick();
-        let expense =
-            add_expense(&ana, "x1", "ana", 9000, equal_split(&["ana", "ben"]), None).unwrap();
+        let expense = add_expense(
+            &ana,
+            "x1",
+            "ana",
+            9000,
+            equal_split(&["ana", &ben_id]),
+            None,
+        )
+        .unwrap();
         entries.push(sign_entry(&ana, &expense, &bill_id).unwrap());
         ana.tick();
         let rate = set_rate(&ana, "EUR", 51234, None).unwrap();
@@ -327,10 +341,8 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
     let mut log = BillLog::with_entries(&ben, entries).for_bill(bill_id);
     let folded = log.fold().unwrap();
     assert!(folded.identities.bound.contains_key("ana"));
-    assert!(folded.identities.bound.contains_key("ben"));
-    let owed = obligation_for(&ben, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    assert!(folded.identities.bound.contains_key(&ben_id));
+    let owed = obligation_for(&ben, &folded).unwrap().unwrap();
     let settled = settle(&ben, &mut log, &owed).unwrap();
     assert!(settled.records[0]["sig"].as_str().is_some());
     let after = log.fold().unwrap();
@@ -341,9 +353,7 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
     // bound payer speaking, and a verifying fold sets it aside.
     let (ben, bill_id, entries) = bill(false);
     let mut log = BillLog::with_entries(&ben, entries).for_bill(bill_id);
-    let owed = obligation_for(&ben, &log.fold().unwrap(), &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ben, &log.fold().unwrap()).unwrap().unwrap();
     let unsigned = settle(&ben, &mut log, &owed).unwrap();
     assert!(unsigned.records[0].get("sig").is_none());
     let refused = log.fold().unwrap();
@@ -380,13 +390,12 @@ fn a_whole_bill_from_nothing_to_a_payment_request() {
     assert_eq!(owed.get("ana"), Some(&4500));
     assert_eq!(owed.get("ben"), Some(&-4500));
 
-    let none = BTreeSet::new();
     // ana is owed, so ana has nothing to pay.
-    let ana_owes = obligation_for(&ana, &folded, &none).unwrap().unwrap();
+    let ana_owes = obligation_for(&ana, &folded).unwrap().unwrap();
     assert!(ana_owes.settlements.is_empty());
 
     // ben owes, and ana can be paid, so one request carries the whole debt.
-    let ben_owes = obligation_for(&ben, &folded, &none).unwrap().unwrap();
+    let ben_owes = obligation_for(&ben, &folded).unwrap().unwrap();
     assert_eq!(ben_owes.settlements.len(), 1);
     assert_eq!(ben_owes.settlements[0].to, "ana");
     assert_eq!(ben_owes.settlements[0].amount, 4500);
@@ -403,8 +412,7 @@ fn a_recipient_with_no_address_is_reported_never_dropped() {
     log.add(dinner(&ana, &ben)).unwrap();
     let folded = log.fold().unwrap();
 
-    let none = BTreeSet::new();
-    let ben_owes = obligation_for(&ben, &folded, &none).unwrap().unwrap();
+    let ben_owes = obligation_for(&ben, &folded).unwrap().unwrap();
 
     // The debt exists and cannot be carried. Both facts survive.
     assert_eq!(ben_owes.settlements.len(), 1);
@@ -431,9 +439,7 @@ fn an_unpriced_bill_is_an_ordinary_bill_not_a_refusal() {
 
     assert!(folded.bill.rate.is_none());
     assert!(
-        obligation_for(&ana, &folded, &BTreeSet::new())
-            .unwrap()
-            .is_none(),
+        obligation_for(&ana, &folded).unwrap().is_none(),
         "there is no §12 code for unpriced, so there is none here"
     );
 }
@@ -447,9 +453,7 @@ fn a_sent_request_records_what_was_owed_when_it_was_made() {
     let mut log = BillLog::new(&ben);
     log.add(dinner(&ana, &ben)).unwrap();
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ben, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ben, &folded).unwrap().unwrap();
 
     let settled = settle(&ben, &mut log, &owed).unwrap();
     assert_eq!(settled.result, SendResult::Sent);
@@ -473,9 +477,6 @@ impl BillHost for PendingHost {
     fn me(&self) -> &str {
         self.0.me()
     }
-    fn pay_to_address(&self) -> Option<&str> {
-        self.0.pay_to_address()
-    }
     fn now(&self) -> String {
         self.0.now()
     }
@@ -483,7 +484,7 @@ impl BillHost for PendingHost {
         self.0.random_bytes(n)
     }
     fn broadcast(&self, _uri: &str) -> Sent {
-        Sent::pending(Some("created, not broadcast".to_owned()))
+        Sent::pending(Some("created, not broadcast".to_owned()), None)
     }
 }
 
@@ -496,9 +497,7 @@ fn a_send_that_was_built_but_not_broadcast_records_nothing() {
     let mut log = BillLog::new(&pending);
     log.add(entries).unwrap();
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&pending, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&pending, &folded).unwrap().unwrap();
 
     let settled = settle(&pending, &mut log, &owed).unwrap();
     assert_eq!(settled.result, SendResult::Pending);
@@ -518,9 +517,7 @@ fn a_confirmation_is_what_clears_the_debt() {
     let mut log = BillLog::new(&ben);
     log.add(dinner(&ana, &ben)).unwrap();
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ben, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ben, &folded).unwrap().unwrap();
     let settled = settle(&ben, &mut log, &owed).unwrap();
     let txid = settled.txid.unwrap();
     let payment_id = format!("{txid}:ana");
@@ -566,14 +563,10 @@ fn a_debt_already_paid_and_not_yet_confirmed_is_not_requested_again() {
     let mut log = BillLog::new(&ben);
     log.add(dinner(&ana, &ben)).unwrap();
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ben, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ben, &folded).unwrap().unwrap();
     settle(&ben, &mut log, &owed).unwrap();
 
-    let again = obligation_for(&ben, &log.fold().unwrap(), &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let again = obligation_for(&ben, &log.fold().unwrap()).unwrap().unwrap();
     assert!(
         again.settlements.is_empty(),
         "asking again would send the same money twice"
@@ -585,57 +578,80 @@ fn a_debt_already_paid_and_not_yet_confirmed_is_not_requested_again() {
 
 // --- identity ---------------------------------------------------------------
 
-#[test]
-fn two_keys_claiming_one_id_leaves_that_id_contested() {
-    let ana_key = fake_key("ana");
-    let ben_key = fake_key("ben");
-    let impostor_key = fake_key("zzz");
-
-    let ana = signing_host("ana", &ana_key, Some("u1ana"));
-    let ben = signing_host("ben", &ben_key, Some("u1ben"));
-
-    let mut entries = Vec::new();
+/// ana's signed create, her signed join, ben's signed self-claim under the id
+/// his key derives, ben's expense splitting 90.00 with ana, and ana's rate.
+fn a_dinner_ben_paid(ana: &FakeHost, ben: &FakeHost, ana_key: &str, ben_key: &str) -> Vec<Value> {
+    let ben_id = participant_id(ben_key).unwrap();
+    let mut entries = vec![sign_entry(
+        ana,
+        &create_bill(ana, "Dinner", "EUR", "equal", ana_key).unwrap(),
+        TEST_BILL,
+    )
+    .unwrap()];
+    ana.tick();
     entries.push(
         sign_entry(
-            &ana,
-            &create_bill(&ana, "Dinner", "EUR", "equal", &ana_key).unwrap(),
+            ana,
+            &join_bill(ana, Some("Ana"), Some("u1ana"), Some(ana_key), None).unwrap(),
+            TEST_BILL,
+        )
+        .unwrap(),
+    );
+    ben.tick();
+    ben.tick();
+    entries.push(
+        sign_entry(
+            ben,
+            &join_bill(ben, Some("Ben"), Some("u1ben"), Some(ben_key), None).unwrap(),
+            TEST_BILL,
+        )
+        .unwrap(),
+    );
+    ben.tick();
+    entries.push(
+        sign_entry(
+            ben,
+            &add_expense(
+                ben,
+                "x1",
+                &ben_id,
+                9000,
+                equal_split(&["ana", &ben_id]),
+                None,
+            )
+            .unwrap(),
             TEST_BILL,
         )
         .unwrap(),
     );
     ana.tick();
-    entries.push(
-        sign_entry(
-            &ana,
-            &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap(),
-            TEST_BILL,
-        )
-        .unwrap(),
-    );
-    ben.tick();
-    ben.tick();
-    entries.push(
-        sign_entry(
-            &ben,
-            &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap(),
-            TEST_BILL,
-        )
-        .unwrap(),
-    );
+    entries.push(sign_entry(ana, &set_rate(ana, "EUR", 51234, None).unwrap(), TEST_BILL).unwrap());
+    entries
+}
+
+#[test]
+fn a_rival_key_cannot_claim_a_bound_participant() {
+    // §10.7. A participant who publishes a key is named by the id that key
+    // derives, so no second key can claim them.
+    let ana_key = fake_key("ana");
+    let ben_key = fake_key("ben");
+    let impostor_key = fake_key("zzz");
+    let ben_id = participant_id(&ben_key).unwrap();
+    let ana = signing_host("ana", &ana_key, Some("u1ana"));
+    let ben = signing_host(&ben_id, &ben_key, Some("u1ben"));
+    let impostor = signing_host(&ben_id, &impostor_key, Some("u1impostor"));
 
     let mut log = BillLog::new(&ana);
-    log.add(entries).unwrap();
-    let clean = log.fold().unwrap();
-    assert!(clean.identities.contested.is_empty());
-    assert_eq!(clean.identities.bound.get("ben"), Some(&ben_key));
+    log.add(a_dinner_ben_paid(&ana, &ben, &ana_key, &ben_key))
+        .unwrap();
+    assert_eq!(
+        log.fold().unwrap().identities.bound.get(&ben_id),
+        Some(&ben_key)
+    );
 
-    // An impostor mints a rival self-claim for ben's id, with their own payout
-    // address. Both claims verify against the key each carries, so §10.7 binds
-    // neither.
-    let impostor = signing_host("ben", &impostor_key, Some("u1impostor"));
-    impostor.tick();
-    impostor.tick();
-    impostor.tick();
+    for _ in 0..5 {
+        impostor.tick();
+    }
     let rival = sign_entry(
         &impostor,
         &join_bill(
@@ -649,76 +665,42 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
         TEST_BILL,
     )
     .unwrap();
+    let rival_id = rival["id"].as_str().unwrap().to_owned();
     log.add(vec![rival]).unwrap();
 
-    let contested = log.fold().unwrap();
-    assert!(contested.identities.contested.contains("ben"));
-    assert!(!contested.identities.bound.contains_key("ben"));
+    let after = log.fold().unwrap();
+    assert_eq!(
+        after.identities.bound.get(&ben_id),
+        Some(&ben_key),
+        "the rival claim leaves ben's binding as it was"
+    );
+    // Written as ben and signed with another key, it is refused before its
+    // record is read: an entry by a bound participant verifies against their
+    // key (§10.3).
+    assert!(after
+        .set_aside
+        .iter()
+        .any(|a| a.id == rival_id && a.code == splitz_core::code::UNAUTHORIZED_ENTRY));
+    assert_eq!(
+        after.bill.participant(&ben_id).unwrap().pay_to.as_deref(),
+        Some("u1ben")
+    );
 }
 
 #[test]
-fn a_contested_payee_is_not_settled_to_silently() {
+fn a_rival_claim_does_not_change_who_a_payer_pays() {
     let ana_key = fake_key("ana");
     let ben_key = fake_key("ben");
     let impostor_key = fake_key("zzz");
+    let ben_id = participant_id(&ben_key).unwrap();
     let ana = signing_host("ana", &ana_key, Some("u1ana"));
-    let ben = signing_host("ben", &ben_key, Some("u1ben"));
-    // The impostor claims ben's id, with their own payout address.
-    let impostor = signing_host("ben", &impostor_key, Some("u1impostor"));
-
-    let mut entries = vec![sign_entry(
-        &ana,
-        &create_bill(&ana, "Dinner", "EUR", "equal", &ana_key).unwrap(),
-        TEST_BILL,
-    )
-    .unwrap()];
-    ana.tick();
-    entries.push(
-        sign_entry(
-            &ana,
-            &join_bill(&ana, Some("Ana"), Some("u1ana"), Some(&ana_key), None).unwrap(),
-            TEST_BILL,
-        )
-        .unwrap(),
-    );
-    ben.tick();
-    ben.tick();
-    entries.push(
-        sign_entry(
-            &ben,
-            &join_bill(&ben, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap(),
-            TEST_BILL,
-        )
-        .unwrap(),
-    );
-    // Ben paid, so ana owes ben.
-    ben.tick();
-    entries.push(
-        sign_entry(
-            &ben,
-            &add_expense(&ben, "x1", "ben", 9000, equal_split(&["ana", "ben"]), None).unwrap(),
-            TEST_BILL,
-        )
-        .unwrap(),
-    );
-    ana.tick();
-    entries.push(
-        sign_entry(
-            &ana,
-            &set_rate(&ana, "EUR", 51234, None).unwrap(),
-            TEST_BILL,
-        )
-        .unwrap(),
-    );
+    let ben = signing_host(&ben_id, &ben_key, Some("u1ben"));
+    let impostor = signing_host(&ben_id, &impostor_key, Some("u1impostor"));
 
     let mut log = BillLog::new(&ana);
-    log.add(entries).unwrap();
-
-    // Before the contest, ana pays ben at ben's own address.
-    let none = BTreeSet::new();
-    let before = obligation_for(&ana, &log.fold().unwrap(), &none)
-        .unwrap()
+    log.add(a_dinner_ben_paid(&ana, &ben, &ana_key, &ben_key))
         .unwrap();
+    let before = obligation_for(&ana, &log.fold().unwrap()).unwrap().unwrap();
     assert!(before.uri().unwrap().starts_with("zcash:u1ben"));
 
     for _ in 0..5 {
@@ -739,33 +721,15 @@ fn a_contested_payee_is_not_settled_to_silently() {
     .unwrap();
     log.add(vec![rival]).unwrap();
 
-    let folded = log.fold().unwrap();
-    assert!(folded.identities.contested.contains("ben"));
-
-    let after = obligation_for(&ana, &folded, &none).unwrap().unwrap();
+    let after = obligation_for(&ana, &log.fold().unwrap()).unwrap().unwrap();
     assert_eq!(
         after.uri(),
-        None,
-        "§10.7: a wallet MUST NOT settle to a contested participant's address \
-         without putting it in front of the payer"
+        before.uri(),
+        "the request pays the address ben published, not the rival"
     );
-    assert_eq!(after.contested.len(), 1);
-    assert_eq!(after.contested[0].to, "ben");
-    assert_eq!(after.contested[0].amount, 4500);
-    assert_eq!(
-        after.contested[0].address.as_deref(),
-        Some("u1impostor"),
-        "the payer is shown the address they would have paid"
-    );
-    assert!(after.settlements.is_empty());
-
-    // A contest is also a denial of payment: anyone may mint a rival claim.
-    // §10.7 asks that the payer be shown it, not that paying be impossible.
-    let mut anyway = BTreeSet::new();
-    anyway.insert("ben".to_owned());
-    let accepted = obligation_for(&ana, &folded, &anyway).unwrap().unwrap();
-    assert_eq!(accepted.settlements.len(), 1);
-    assert!(accepted.uri().is_some());
+    assert_eq!(after.settlements.len(), 1);
+    assert_eq!(after.settlements[0].to, ben_id);
+    assert_eq!(after.settlements[0].amount, 4500);
 }
 
 // --- sharing ----------------------------------------------------------------
@@ -934,9 +898,7 @@ fn one_transaction_paying_two_people_is_two_records_each_confirmable() {
     assert!(refused.is_empty(), "{refused:?}");
 
     let folded = log.fold().unwrap();
-    let owed = obligation_for(&ana, &folded, &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ana, &folded).unwrap().unwrap();
     assert_eq!(
         owed.settlements
             .iter()
@@ -1027,9 +989,7 @@ fn a_pending_send_found_on_chain_later_records_what_a_sent_one_would() {
 
     let mut now = BillLog::new(&ana);
     now.add(entries.clone()).unwrap();
-    let owed = obligation_for(&ana, &now.fold().unwrap(), &BTreeSet::new())
-        .unwrap()
-        .unwrap();
+    let owed = obligation_for(&ana, &now.fold().unwrap()).unwrap().unwrap();
     let sent = settle(&ana, &mut now, &owed).unwrap();
     assert_eq!(sent.result, SendResult::Sent);
     let txid = sent.txid.clone().unwrap();
@@ -1037,7 +997,7 @@ fn a_pending_send_found_on_chain_later_records_what_a_sent_one_would() {
     let pending = PendingHost(FakeHost::paid_at("ana", "u1ana"));
     let mut later = BillLog::new(&pending);
     later.add(entries).unwrap();
-    let owed = obligation_for(&pending, &later.fold().unwrap(), &BTreeSet::new())
+    let owed = obligation_for(&pending, &later.fold().unwrap())
         .unwrap()
         .unwrap();
     assert!(settle(&pending, &mut later, &owed)
@@ -1053,7 +1013,15 @@ fn a_pending_send_found_on_chain_later_records_what_a_sent_one_would() {
         vec![("ben", 3000), ("cat", 3000)]
     );
 
-    let records = record_send(&pending, &mut later, &carried, &txid).unwrap();
+    let records = record_send(
+        &pending,
+        &mut later,
+        &carried,
+        &txid,
+        &owed.carried_zatoshi(),
+        Some(&owed.rate),
+    )
+    .unwrap();
     // `at` is when the record was written, which is later for a recovery.
     let payments = |rs: &[Value]| {
         rs.iter()

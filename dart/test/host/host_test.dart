@@ -7,7 +7,6 @@ import 'package:splitz_core/host.dart';
 class BareHost extends BillHost {
   @override
   String get me => 'ana';
-  @override
   String? get payToAddress => null;
   @override
   Clock get now => () => DateTime.utc(2026, 10, 28, 19, 30);

@@ -14,18 +14,22 @@ func check(_ name: String, _ ok: Bool, _ saw: String) {
     else { failures += 1; print("  FAIL  \(name) — \(saw)") }
 }
 
-/// One device: its log, its clock, its randomness.
+/// One device: its log, its clock, its randomness, and the key it signs with.
 final class Device {
-    let me: String
-    let payTo: String?
     private let seedByte: Int
     private var minute = 0
     var entries: [String] = []
+    /// The key this account publishes, and the participant id it derives
+    /// (§10.7): a wallet that publishes a key writes every entry under the id
+    /// that key derives, or the key binds nothing.
+    let key: String
+    let me: String
 
-    init(_ me: String, _ payTo: String?, _ seedByte: Int) {
-        self.me = me
-        self.payTo = payTo
+    init(_ seedByte: Int) throws {
         self.seedByte = seedByte
+        let seed = Device.seed(seedByte)
+        key = try identityKeyFromSeed(seed: seed)
+        me = try participantIdForKey(key: key)
     }
 
     /// A §9.3 instant: UTC, exactly three fractional digits, fixed width, so a
@@ -44,13 +48,15 @@ final class Device {
     }
 
     func facts() -> HostFacts {
-        HostFacts(me: me, payTo: payTo, now: now(), nonce: nonce())
+        HostFacts(me: me, now: now(), nonce: nonce())
     }
 
     /// The Ed25519 seed this account signs with, as §9.4 writes a key. A
     /// shipped wallet keeps this in the platform keychain.
-    var seed: String {
-        Data((0..<32).map { UInt8(truncatingIfNeeded: seedByte + $0) })
+    var seed: String { Device.seed(seedByte) }
+
+    static func seed(_ first: Int) -> String {
+        Data((0..<32).map { UInt8(truncatingIfNeeded: first + $0) })
             .base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
@@ -67,10 +73,10 @@ final class Device {
 }
 
 func run() throws {
-    let ana = Device("ana", "u1ana", 1)
-    let ben = Device("ben", "u1ben", 90)
-    let anaKey = try identityKeyFromSeed(seed: ana.seed)
-    let benKey = try identityKeyFromSeed(seed: ben.seed)
+    let ana = try Device(1)
+    let ben = try Device(90)
+    let anaKey = ana.key
+    let benKey = ben.key
 
     print("a wallet passes facts, not callbacks")
     check("an identity key is 43 unpadded base64url characters",
@@ -89,17 +95,17 @@ func run() throws {
         as! [String: Any])["id"] as! String
     try ana.add(try joinBillEntry(facts: ana.facts(), billId: billId, name: "Ana",
                                   payTo: "u1ana", identityKey: anaKey,
-                                  seed: ana.seed))
+                                  payouts: [], seed: ana.seed))
     try ben.add(try joinBillEntry(facts: ben.facts(), billId: billId, name: "Ben",
                                   payTo: "u1ben", identityKey: benKey,
-                                  seed: ben.seed))
+                                  payouts: [], seed: ben.seed))
     try ben.take(ana)
     try ana.take(ben)
 
     print("ana adds an expense they share, and prices it")
     try ana.add(try addExpenseEntry(
-        facts: ana.facts(), billId: billId, expenseId: "x1", paidBy: "ana", amount: 9000,
-        splitJson: #"{"type":"equal","among":["ana","ben"]}"#,
+        facts: ana.facts(), billId: billId, expenseId: "x1", paidBy: ana.me, amount: 9000,
+        splitJson: #"{"type":"equal","among":[""# + ana.me + #"",""# + ben.me + #""]}"#,
         description: "dinner", seed: ana.seed))
     try ana.add(try setRateEntry(facts: ana.facts(), billId: billId, currency: "EUR",
                                  minorUnitsPerZec: 300000,
@@ -107,17 +113,19 @@ func run() throws {
 
     let folded = try foldEntries(facts: ana.facts(), billId: billId, entries: ana.entries)
     check("both people are on the bill", folded.bill.participants.count == 2,
-          folded.bill.participants.map(\.id).joined(separator: ", "))
+          folded.bill.participants.map(\.name).joined(separator: ", "))
     check("nothing was set aside", folded.setAside.isEmpty, "\(folded.setAside)")
+    check("both keys are bound under §10.7",
+          folded.identities.bound == [ana.me: anaKey, ben.me: benKey],
+          "\(folded.identities.bound.keys)")
 
     print("ben owes half of it")
     try ben.take(ana)
-    let owed = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries,
-                                payAnyway: [])
+    let owed = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries)
     check("ben has an obligation", owed != nil, owed?.request.uri ?? "none")
     let settlement = owed!.settlements[0]
     check("it is four and a half thousand to ana",
-          settlement.to == "ana" && settlement.amount == 4500,
+          settlement.to == ana.me && settlement.amount == 4500,
           "\(settlement.to) \(settlement.amount)")
     check("the request is a ZIP 321 URI naming ana's address",
           owed!.request.uri!.hasPrefix("zcash:u1ana"), owed!.request.uri!)
@@ -128,6 +136,10 @@ func run() throws {
                                             txid: "tx-ben-1", seed: ben.seed)
     check("one record, for what the request carried", records.count == 1,
           "\(records.count) record(s)")
+    check("and it states the ZEC it sent and the rate it was priced at",
+          records[0].contains("\"zatoshi\":\(owed!.request.payments[0].zatoshi)")
+            && records[0].contains("\"paidAtRate\""),
+          records[0])
     for record in records { try ben.add(record) }
 
     try ana.take(ben)
@@ -145,8 +157,7 @@ func run() throws {
                                         record: afterPayment.paymentDigests[toConfirm]!,
                                         seed: ana.seed))
     try ben.take(ana)
-    let settled = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries,
-                                   payAnyway: [])!
+    let settled = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries)!
     check("once confirmed, the debt is gone",
           settled.settlements.isEmpty && settled.awaiting.isEmpty,
           "settlements=\(settled.settlements.count) awaiting=\(settled.awaiting.count)")

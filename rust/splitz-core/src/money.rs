@@ -65,6 +65,21 @@ pub fn checked_sub(a: i64, b: i64, refusal: &'static str) -> Result<i64> {
     })
 }
 
+/// `balance`, refused with `amount_overflow` when it is `i64::MIN` (§2.2).
+///
+/// A balance has a magnitude, so its range is symmetric: the most negative
+/// 64-bit value has no positive counterpart, and §5.1's residual and §6's
+/// matching could not form one for it.
+pub fn checked_balance(balance: i64) -> Result<i64> {
+    if balance == MIN_AMOUNT {
+        return Err(SplitError::new(
+            code::AMOUNT_OVERFLOW,
+            format!("A balance of {balance} has no magnitude"),
+        ));
+    }
+    Ok(balance)
+}
+
 /// `a * b`, refused rather than wrapped (SPEC.md §2.2).
 pub fn checked_mul(a: i64, b: i64, refusal: &'static str) -> Result<i64> {
     a.checked_mul(b).ok_or_else(|| {

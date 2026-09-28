@@ -65,6 +65,9 @@ pub struct PaymentRecord {
     pub method: String,
     pub at: String,
     pub zatoshi: Option<i64>,
+    /// The rate the payment was priced at, when its record states one: what a
+    /// payee compares with what arrived before confirming (§9.2).
+    pub paid_at_rate: Option<ExchangeRate>,
     pub reference: Option<String>,
     pub note: Option<String>,
 }
@@ -106,9 +109,6 @@ pub struct ReplacedAddress {
 pub struct Identities {
     /// Participant id to the key §10.7 binds to it.
     pub bound: HashMap<String, String>,
-    /// Ids two keys each claim. Neither is bound, and a wallet MUST NOT settle
-    /// to one without putting it in front of the payer first.
-    pub contested: Vec<String>,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
@@ -121,6 +121,20 @@ pub struct FoldedBill {
     /// What each payment record says, by the payment's id: the `record` a
     /// confirmation of it carries (§10.5).
     pub payment_digests: std::collections::HashMap<String, String>,
+    /// Who wrote each payment record, by the payment's id (§14.4).
+    pub payment_authors: std::collections::HashMap<String, String>,
+    /// The entry that introduced each expense, by the expense's own id: what
+    /// an amendment or a withdrawal of it targets. The fold's answer, not the
+    /// log's, which also holds entries the fold set aside.
+    pub expense_entries: std::collections::HashMap<String, String>,
+    /// Who wrote each expense, by the expense's own id.
+    pub expense_authors: std::collections::HashMap<String, String>,
+    /// The entry that recorded each payment, by the payment's id.
+    pub payment_entries: std::collections::HashMap<String, String>,
+    /// The `setRate` entry whose rate the bill carries.
+    pub rate_entry: Option<String>,
+    /// Who wrote that `setRate`: the name §14.2 puts beside the rate.
+    pub rate_author: Option<String>,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
@@ -143,8 +157,9 @@ pub struct Settlement {
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Unpayable {
     pub id: String,
-    /// `no_address`, `bad_address` or `payout_not_zec`. Each needs a different
-    /// remedy.
+    /// `no_address`, `bad_address`, `payout_not_zec` or `unpriceable` (a debt
+    /// past what one request can price at the bill's rate). Each needs a
+    /// different remedy.
     pub reason: String,
     pub minor_units: i64,
 }
@@ -159,21 +174,24 @@ pub struct Awaiting {
     /// What this payer has already sent. Less than `owed` on a part payment,
     /// and presenting one as the other states something untrue.
     pub paid: i64,
+    /// Who that unconfirmed money went to. Not `to` when netting rerouted the
+    /// debt (§6.3): the payment to confirm, or to take back, is theirs.
+    pub paid_to: Vec<String>,
 }
 
-/// A debt held back because two keys claim that participant's id (§10.7).
+/// One output of a payment request: who it pays and what it sends.
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
-pub struct Contested {
+pub struct RequestPayment {
     pub to: String,
-    pub amount: i64,
-    /// The address standing on the bill, which may be an impostor's.
-    pub address: Option<String>,
+    pub zatoshi: i64,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Obligation {
     /// None when nothing could be carried.
     pub uri: Option<String>,
+    /// What the request sends each recipient, in the order it carries them.
+    pub payments: Vec<RequestPayment>,
     pub unpayable: Vec<Unpayable>,
     /// What the URI sends. Never present a figure pricing the whole obligation
     /// as this.
@@ -185,8 +203,10 @@ pub struct Obligation {
 pub struct PayerObligation {
     pub settlements: Vec<Settlement>,
     pub awaiting: Vec<Awaiting>,
-    pub contested: Vec<Contested>,
     pub request: Obligation,
+    /// The rate `request` was priced at: what a record of the send states as
+    /// `paidAtRate` (§9.2).
+    pub rate: ExchangeRate,
 }
 
 /// What one entry did (the log, read as a history).
@@ -234,6 +254,10 @@ pub struct TradableAsset {
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct SwapQuote {
     pub deposit_address: String,
+    /// The payout address the provider delivers to: what this quote was
+    /// taken for. Compare it with the payee's payout before sending the
+    /// deposit — a payout replaced since means a new quote.
+    pub recipient: Option<String>,
     pub deposit_memo: Option<String>,
     pub amount_in_zatoshi: i64,
     pub amount_out: String,

@@ -1,6 +1,6 @@
 {
   "description": "Which key binds to which participant. SPEC.md section 10.7.",
-  "count": 17,
+  "count": 19,
   "cases": [
     {
       "name": "a_self_claim_binds_a_key",
@@ -20,11 +20,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -37,10 +37,9 @@
       ],
       "expect": {
         "bound": {
-          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "ben": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
-        },
-        "contested": []
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
+          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
       }
     },
     {
@@ -61,11 +60,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -78,8 +77,86 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
+      }
+    },
+    {
+      "name": "a_self_claim_verifies_against_the_key_it_states",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "EHgROT9-7W6TVY4snQxl_A"
         },
-        "contested": []
+        {
+          "v": 1,
+          "id": "j1",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
+            "name": "Ben",
+            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          }
+        }
+      ],
+      "billId": "EHgROT9-7W6TVY4snQxl_A",
+      "verifies": [
+        "EHgROT9-7W6TVY4snQxl_A@YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
+        "j1@YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+      ],
+      "expect": {
+        "bound": {
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
+          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
+      }
+    },
+    {
+      "name": "a_self_claim_signed_by_another_key_binds_nothing",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "EHgROT9-7W6TVY4snQxl_A"
+        },
+        {
+          "v": 1,
+          "id": "j1",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
+            "name": "Ben",
+            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          }
+        }
+      ],
+      "billId": "EHgROT9-7W6TVY4snQxl_A",
+      "verifies": [
+        "EHgROT9-7W6TVY4snQxl_A",
+        "j1@cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
+      ],
+      "expect": {
+        "bound": {
+          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
       }
     },
     {
@@ -104,7 +181,7 @@
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -118,8 +195,7 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": []
+        }
       }
     },
     {
@@ -157,8 +233,46 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
+      }
+    },
+    {
+      "name": "a_key_binds_only_the_id_it_derives",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "EHgROT9-7W6TVY4snQxl_A"
         },
-        "contested": []
+        {
+          "v": 1,
+          "id": "j1",
+          "author": "ben",
+          "kind": "joinBill",
+          "at": "2026-10-28T19:01:00.000Z",
+          "participant": {
+            "id": "ben",
+            "name": "Ben",
+            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
+          }
+        }
+      ],
+      "billId": "EHgROT9-7W6TVY4snQxl_A",
+      "verifies": [
+        "EHgROT9-7W6TVY4snQxl_A",
+        "j1"
+      ],
+      "expect": {
+        "bound": {
+          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
       }
     },
     {
@@ -184,8 +298,33 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": []
+        }
+      }
+    },
+    {
+      "name": "the_creator_is_bound_by_the_key_the_create_states",
+      "log": [
+        {
+          "v": 1,
+          "author": "ana",
+          "kind": "createBill",
+          "at": "2026-10-28T19:00:00.000Z",
+          "name": "Dinner",
+          "currency": "EUR",
+          "splitMode": "equal",
+          "creatorKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
+          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
+          "id": "EHgROT9-7W6TVY4snQxl_A"
+        }
+      ],
+      "billId": "EHgROT9-7W6TVY4snQxl_A",
+      "verifies": [
+        "EHgROT9-7W6TVY4snQxl_A@YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+      ],
+      "expect": {
+        "bound": {
+          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
       }
     },
     {
@@ -207,12 +346,11 @@
       "billId": "EHgROT9-7W6TVY4snQxl_A",
       "verifies": [],
       "expect": {
-        "bound": {},
-        "contested": []
+        "bound": {}
       }
     },
     {
-      "name": "a_join_claiming_the_creators_id_is_not_a_rival_claim",
+      "name": "a_join_claiming_the_creators_id_binds_nothing",
       "log": [
         {
           "v": 1,
@@ -247,12 +385,11 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": []
+        }
       }
     },
     {
-      "name": "two_keys_claiming_one_id_leaves_it_contested",
+      "name": "a_rival_key_cannot_claim_a_bound_id",
       "log": [
         {
           "v": 1,
@@ -269,11 +406,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -281,11 +418,11 @@
         {
           "v": 1,
           "id": "j2",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:02:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
           }
@@ -299,68 +436,13 @@
       ],
       "expect": {
         "bound": {
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": [
-          "ben"
-        ]
-      }
-    },
-    {
-      "name": "a_rival_claim_that_does_not_verify_does_not_contest",
-      "log": [
-        {
-          "v": 1,
-          "author": "ana",
-          "kind": "createBill",
-          "at": "2026-10-28T19:00:00.000Z",
-          "name": "Dinner",
-          "currency": "EUR",
-          "splitMode": "equal",
-          "creatorKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
-          "id": "EHgROT9-7W6TVY4snQxl_A"
-        },
-        {
-          "v": 1,
-          "id": "j1",
-          "author": "ben",
-          "kind": "joinBill",
-          "at": "2026-10-28T19:01:00.000Z",
-          "participant": {
-            "id": "ben",
-            "name": "Ben",
-            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
-          }
-        },
-        {
-          "v": 1,
-          "id": "j2",
-          "author": "ben",
-          "kind": "joinBill",
-          "at": "2026-10-28T19:02:00.000Z",
-          "participant": {
-            "id": "ben",
-            "name": "Ben",
-            "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
-          }
         }
-      ],
-      "billId": "EHgROT9-7W6TVY4snQxl_A",
-      "verifies": [
-        "EHgROT9-7W6TVY4snQxl_A",
-        "j1"
-      ],
-      "expect": {
-        "bound": {
-          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "ben": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
-        },
-        "contested": []
       }
     },
     {
-      "name": "backdating_does_not_decide_a_contest",
+      "name": "backdating_a_rival_claim_changes_nothing",
       "log": [
         {
           "v": 1,
@@ -377,11 +459,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:00:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
           }
@@ -389,11 +471,11 @@
         {
           "v": 1,
           "id": "j2",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:09:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -407,15 +489,13 @@
       ],
       "expect": {
         "bound": {
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": [
-          "ben"
-        ]
+        }
       }
     },
     {
-      "name": "one_binding_and_one_contest_side_by_side",
+      "name": "two_participants_bound_side_by_side",
       "log": [
         {
           "v": 1,
@@ -432,11 +512,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -444,11 +524,11 @@
         {
           "v": 1,
           "id": "j2",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:02:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
           }
@@ -456,13 +536,13 @@
         {
           "v": 1,
           "id": "j3",
-          "author": "cai",
+          "author": "sW6I_WtEp5WHndiGDQOGqQ",
           "kind": "joinBill",
           "at": "2026-10-28T19:03:00.000Z",
           "participant": {
-            "id": "cai",
+            "id": "sW6I_WtEp5WHndiGDQOGqQ",
             "name": "Cai",
-            "identityKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+            "identityKey": "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M"
           }
         }
       ],
@@ -475,12 +555,10 @@
       ],
       "expect": {
         "bound": {
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "cai": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": [
-          "ben"
-        ]
+          "sW6I_WtEp5WHndiGDQOGqQ": "Y2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2M"
+        }
       }
     },
     {
@@ -528,12 +606,11 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": []
+        }
       }
     },
     {
-      "name": "a_participant_rejoining_with_the_same_key_is_not_a_contest",
+      "name": "a_participant_rejoining_with_the_same_key_stays_bound",
       "log": [
         {
           "v": 1,
@@ -550,11 +627,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -562,11 +639,11 @@
         {
           "v": 1,
           "id": "j2",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:02:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -580,10 +657,9 @@
       ],
       "expect": {
         "bound": {
-          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "ben": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
-        },
-        "contested": []
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
+          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
+        }
       }
     },
     {
@@ -608,7 +684,7 @@
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -621,8 +697,7 @@
       "expect": {
         "bound": {
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": []
+        }
       }
     },
     {
@@ -643,11 +718,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -655,7 +730,7 @@
         {
           "v": 1,
           "id": "v1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "voidEntry",
           "at": "2026-10-28T19:05:00.000Z",
           "targetId": "j1"
@@ -668,77 +743,13 @@
       ],
       "expect": {
         "bound": {
-          "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "ben": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
-        },
-        "contested": []
-      }
-    },
-    {
-      "name": "withdrawing_a_rival_claim_does_not_clear_the_contest",
-      "log": [
-        {
-          "v": 1,
-          "author": "ana",
-          "kind": "createBill",
-          "at": "2026-10-28T19:00:00.000Z",
-          "name": "Dinner",
-          "currency": "EUR",
-          "splitMode": "equal",
-          "creatorKey": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE",
-          "nonce": "bm5ubm5ubm5ubm5ubm5ubg",
-          "id": "EHgROT9-7W6TVY4snQxl_A"
-        },
-        {
-          "v": 1,
-          "id": "j1",
-          "author": "ben",
-          "kind": "joinBill",
-          "at": "2026-10-28T19:01:00.000Z",
-          "participant": {
-            "id": "ben",
-            "name": "Ben",
-            "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
-          }
-        },
-        {
-          "v": 1,
-          "id": "j2",
-          "author": "ben",
-          "kind": "joinBill",
-          "at": "2026-10-28T19:02:00.000Z",
-          "participant": {
-            "id": "ben",
-            "name": "Ben",
-            "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
-          }
-        },
-        {
-          "v": 1,
-          "id": "v1",
-          "author": "ben",
-          "kind": "voidEntry",
-          "at": "2026-10-28T19:05:00.000Z",
-          "targetId": "j2"
-        }
-      ],
-      "billId": "EHgROT9-7W6TVY4snQxl_A",
-      "verifies": [
-        "EHgROT9-7W6TVY4snQxl_A",
-        "j1",
-        "j2"
-      ],
-      "expect": {
-        "bound": {
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": [
-          "ben"
-        ]
+        }
       }
     },
     {
-      "name": "an_impostor_withdrawing_the_genuine_claim_binds_nothing",
+      "name": "a_rival_withdrawing_the_genuine_claim_binds_nothing_for_them",
       "log": [
         {
           "v": 1,
@@ -755,11 +766,11 @@
         {
           "v": 1,
           "id": "j1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:01:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI"
           }
@@ -767,11 +778,11 @@
         {
           "v": 1,
           "id": "j2",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "joinBill",
           "at": "2026-10-28T19:02:00.000Z",
           "participant": {
-            "id": "ben",
+            "id": "ApZHVpWh2dPamJ4mU-Yrpg",
             "name": "Ben",
             "identityKey": "cnJycnJycnJycnJycnJycnJycnJycnJycnJycnJycnI"
           }
@@ -779,7 +790,7 @@
         {
           "v": 1,
           "id": "v1",
-          "author": "ben",
+          "author": "ApZHVpWh2dPamJ4mU-Yrpg",
           "kind": "voidEntry",
           "at": "2026-10-28T19:05:00.000Z",
           "targetId": "j1"
@@ -793,11 +804,9 @@
       ],
       "expect": {
         "bound": {
+          "ApZHVpWh2dPamJ4mU-Yrpg": "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI",
           "ana": "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE"
-        },
-        "contested": [
-          "ben"
-        ]
+        }
       }
     }
   ]

@@ -1,8 +1,11 @@
 /// What a signature covers, and who a participant is (SPEC.md §10.6, §10.7).
 library;
 
+import 'dart:convert';
+
 import 'canonical_json.dart';
 import 'ordering.dart';
+import 'sha256.dart';
 
 /// The domain separator an entry's signature covers.
 const String entrySigningDomain = 'splitz-entry-v2';
@@ -35,17 +38,51 @@ String signingMessage(Map<String, dynamic> entry, String billId) {
 /// everything around the answer, never the answer itself.
 typedef VerifySignature = bool Function(Map<String, dynamic> entry, String key);
 
+/// The domain separator a participant id's digest covers (§10.7).
+const String participantIdDomain = 'splitz-participant-v1';
+
+/// The bytes [value] encodes when it is the canonical unpadded base64url of
+/// exactly [length] bytes, or null.
+List<int>? canonicalBytes(Object? value, int length) {
+  if (value is! String || value.isEmpty) return null;
+  const alphabet =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  for (final unit in value.codeUnits) {
+    if (!alphabet.contains(String.fromCharCode(unit))) return null;
+  }
+  try {
+    final raw = base64Url.decode(value.padRight((value.length + 3) & ~3, '='));
+    // Canonical, so re-encoding reproduces it exactly: a last character with
+    // an unused bit set decodes to the same bytes as another spelling.
+    if (raw.length != length ||
+        base64UrlEncode(raw).replaceAll('=', '') != value) {
+      return null;
+    }
+    return raw;
+  } on FormatException {
+    return null;
+  }
+}
+
+/// The participant id a key speaks as (§10.7), or null for a text that is
+/// not a canonical 32-byte key:
+/// `base64url( SHA-256( "splitz-participant-v1" || key bytes )[0..16] )`.
+///
+/// Two keys cannot derive one id, so no second key can claim a participant
+/// this binds.
+String? participantId(String key) {
+  final raw = canonicalBytes(key, 32);
+  if (raw == null) return null;
+  final digest = sha256([...utf8.encode(participantIdDomain), ...raw]);
+  return base64UrlEncode(digest.sublist(0, 16)).replaceAll('=', '');
+}
+
 /// Which key, if any, speaks for each participant (§10.7).
 class Identities {
-  const Identities(this.bound, this.contested);
+  const Identities(this.bound);
 
   /// Participant id to the key bound to it.
   final Map<String, String> bound;
-
-  /// Ids two keys each claim. Neither is bound: nothing inside the log says
-  /// which is the person, and `at` is whatever its author wrote, so resolving
-  /// by time hands the identity to whoever backdates furthest.
-  final Set<String> contested;
 }
 
 /// Resolves identities from the entry set alone.
@@ -70,30 +107,21 @@ Identities resolveIdentities(
   }
 
   // A key is bound by a self-claim: a join whose author is the participant it
-  // carries, stating a key, whose signature verifies against that key. An
-  // entry naming somebody else proves nothing about them, whoever signed it.
-  final claims = <String, Set<String>>{};
+  // carries, whose id is the one that participant's key derives, and whose
+  // signature verifies against that key. An entry naming somebody else proves
+  // nothing about them, and a key cannot claim an id it does not derive, so
+  // no second key can claim a bound participant.
   for (final e in entries) {
     if (e['kind'] != 'joinBill') continue;
-    final p = (e['participant'] as Map?)?.cast<String, dynamic>() ?? {};
-    final id = p['id'];
-    final key = p['identityKey'];
-    if (id is! String || key is! String || e['author'] != id) continue;
-    if (!verify(e, key)) continue;
-    claims.putIfAbsent(id, () => <String>{}).add(key);
-  }
-
-  final contested = <String>{};
-  for (final id in sortedUtf8(claims.keys)) {
-    // A join claiming the creator's id is not a rival claim; §10.7 refuses it
-    // rather than contesting the one identity the invite proves.
-    if (id == creator) continue;
-    if (claims[id]!.length > 1) {
-      contested.add(id);
-    } else {
-      bound[id] = claims[id]!.first;
+    final p = e['participant'];
+    final id = p is Map ? p['id'] : null;
+    final key = p is Map ? p['identityKey'] : null;
+    if (id is! String || e['author'] != id || id == creator) continue;
+    if (key is! String || participantId(key) != id || !verify(e, key)) {
+      continue;
     }
+    bound[id] = key;
   }
 
-  return Identities(bound, contested);
+  return Identities({for (final id in sortedUtf8(bound.keys)) id: bound[id]!});
 }

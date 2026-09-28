@@ -1,6 +1,6 @@
 {
   "description": "Invite URIs. SPEC.md section 11.1.",
-  "count": 52,
+  "count": 55,
   "cases": [
     {
       "name": "a_plain_invite",
@@ -235,6 +235,16 @@
       "error": "invite_missing_key"
     },
     {
+      "name": "a_key_whose_length_decodes_to_nothing",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkk",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "a_key_that_is_not_its_bytes_encoding",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkl",
+      "error": "invite_missing_key"
+    },
+    {
       "name": "an_expiry_that_is_not_a_number",
       "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&x=soon",
       "error": "invite_bad_expiry"
@@ -361,6 +371,15 @@
         "expiry": 1793000000
       },
       "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&x=1793000000"
+    },
+    {
+      "name": "encode_refuses_a_key_that_does_not_decode",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkk",
+        "name": ""
+      },
+      "error": "invite_missing_key"
     }
   ]
 }

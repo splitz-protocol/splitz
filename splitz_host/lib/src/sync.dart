@@ -1,13 +1,11 @@
 /// Moving a bill between devices through a relay that holds only ciphertext.
 library;
 
-import 'package:splitz_core/host.dart' as splitz;
 import 'package:splitz_core/splitz_core.dart' as protocol;
 
 import 'keys.dart';
 import 'relay.dart';
 import 'sealing.dart';
-import 'signing.dart';
 import 'store.dart';
 
 /// Syncs one bill through a relay.
@@ -23,65 +21,43 @@ class SplitsSync {
     required SplitsKeys keys,
     required SplitsRelay relay,
     SplitsSealing? sealing,
-    SplitsSigner? signer,
   }) : _store = store,
        _keys = keys,
        _relay = relay,
-       _sealing = sealing ?? SplitsSealing(),
-       _signer = signer ?? SplitsSigner();
+       _sealing = sealing ?? SplitsSealing();
 
   final BillStore _store;
   final SplitsKeys _keys;
   final SplitsRelay _relay;
   final SplitsSealing _sealing;
-  final SplitsSigner _signer;
 
   /// Pushes what this device holds, then pulls what it does not.
   ///
   /// Push first, so a participant syncing right after us sees our entries; then
   /// pull, so we see theirs. Both directions merge by entry id, so running this
   /// twice, or on two devices at once, converges.
-  Future<SyncResult> sync(
-    String billId, {
-    List<int>? signerSeed,
-    String? authorId,
-  }) async {
-    await push(billId, signerSeed: signerSeed, authorId: authorId);
+  Future<SyncResult> sync(String billId) async {
+    await push(billId);
     return pull(billId);
   }
 
-  /// Seals every entry this device holds and pushes it to the bill's channel.
+  /// Seals every entry this device holds, as it holds it, and pushes it to
+  /// the bill's channel.
   ///
-  /// Entries this device authored are signed first, so participants who receive
-  /// them can confirm they came from this identity. A signature is
-  /// deterministic and a blob is keyed by its content, so pushing the whole log
-  /// every time is safe: the relay stores each entry once however often it is
-  /// sent.
-  Future<List<Map<String, dynamic>>> push(
-    String billId, {
-    List<int>? signerSeed,
-    String? authorId,
-  }) async {
+  /// **Nothing is signed here.** An entry is signed by the device that writes
+  /// it, when it writes it. The store also holds what peers pushed, and an
+  /// unsigned entry a peer wrote in this device's name would otherwise be
+  /// signed with this device's key on the next push — a forged confirmation
+  /// becoming a genuine one. A blob is keyed by its content, so pushing the
+  /// whole log every time is safe: the relay stores each entry once however
+  /// often it is sent.
+  Future<List<Map<String, dynamic>>> push(String billId) async {
     final entries = await _store.read(billId);
     if (entries.isEmpty) return entries;
     final key = await _requireKey(billId);
-
-    final sign = signerSeed == null ? null : _signer.signerFor(signerSeed);
-    final blobs = <String>[];
-    for (final entry in entries) {
-      final toSeal =
-          (sign != null &&
-              authorId != null &&
-              entry['author'] == authorId &&
-              entry['sig'] == null)
-          ? await splitz.signEntry(
-              host: _SigningOnly(sign),
-              entry: entry,
-              billId: billId,
-            )
-          : entry;
-      blobs.add(await _sealing.seal(toSeal, key));
-    }
+    final blobs = [
+      for (final entry in entries) await _sealing.seal(entry, key),
+    ];
     await _relay.push(SplitsChannel.forBill(billId), blobs);
     return entries;
   }
@@ -181,38 +157,4 @@ class SplitsSyncException implements Exception {
 
   @override
   String toString() => 'SplitsSyncException: $message';
-}
-
-/// A host that can do nothing but sign.
-///
-/// `signEntry` needs a `BillHost`, and signing reads none of the rest of it.
-/// Rather than require a whole wallet to seal an entry that already exists,
-/// this supplies the one member that is used and refuses the others loudly, so
-/// a later change that starts reading them fails here instead of silently
-/// signing with a placeholder identity.
-class _SigningOnly extends splitz.BillHost {
-  _SigningOnly(this._sign);
-
-  final splitz.SignEntry _sign;
-
-  @override
-  splitz.SignEntry? get sign => _sign;
-
-  @override
-  String get me => throw UnimplementedError('signing reads no author');
-
-  @override
-  String? get payToAddress =>
-      throw UnimplementedError('signing reads no address');
-
-  @override
-  splitz.Clock get now => throw UnimplementedError('signing reads no clock');
-
-  @override
-  splitz.Randomness get randomBytes =>
-      throw UnimplementedError('signing reads no randomness');
-
-  @override
-  splitz.Broadcast get broadcast =>
-      throw UnimplementedError('signing sends nothing');
 }

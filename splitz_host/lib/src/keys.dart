@@ -89,6 +89,22 @@ class SplitsKeys {
     await _store.write(_billKeyName(billId), key);
   }
 
+  /// Replaces the key held for [billId] with [key], whatever was held.
+  ///
+  /// For a person who has decided which of two invites is genuine — the one
+  /// held may itself have come from a forged link. Never called on the
+  /// strength of an invite alone: [storeBillKey] refuses that.
+  Future<void> replaceBillKey(String billId, String key) async {
+    if (!isWellFormedKey(key)) {
+      throw ArgumentError.value(
+        key,
+        'key',
+        'a bill key is $keyLengthBytes bytes of base64url',
+      );
+    }
+    await _store.write(_billKeyName(billId), key);
+  }
+
   /// Forgets a bill's key, so the keychain does not accumulate secrets for
   /// bills that no longer exist.
   Future<void> forgetBill(String billId) => _store.delete(_billKeyName(billId));

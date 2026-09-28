@@ -213,18 +213,12 @@ String tamper(String sig) => (sig[0] == 'A' ? 'B' : 'A') + sig.substring(1);
 /// and no signing. The instant is supplied per entry so both implementations
 /// write the same `at` without either deriving one.
 class DiffHost implements seam.BillHost {
-  DiffHost({
-    required this.me,
-    required this.payToAddress,
-    required String at,
-    required String txid,
-  }) : _at = DateTime.parse(at).toUtc(),
-       _txid = txid;
+  DiffHost({required this.me, required String at, required String txid})
+    : _at = DateTime.parse(at).toUtc(),
+      _txid = txid;
 
   @override
   final String me;
-  @override
-  final String? payToAddress;
   final DateTime _at;
   final String _txid;
 
@@ -261,14 +255,14 @@ Future<Map<String, Object?>> settleRecords(Map<String, dynamic> op) async {
   final txid = op['txid'] as String;
   final rate = op['rate'] as int?;
 
-  DiffHost at(int step, String who, String? payTo) =>
-      DiffHost(me: who, payToAddress: payTo, at: instants[step], txid: txid);
+  DiffHost at(int step, String who) =>
+      DiffHost(me: who, at: instants[step], txid: txid);
 
   final first = people.first;
   var step = 0;
   final entries = <Map<String, dynamic>>[
     seam.createBill(
-      host: at(step++, first['id'] as String, first['payTo'] as String?),
+      host: at(step++, first['id'] as String),
       name: 'Dinner',
       currency: 'EUR',
       creatorKey: op['creatorKey'] as String,
@@ -278,7 +272,7 @@ Future<Map<String, Object?>> settleRecords(Map<String, dynamic> op) async {
     final payouts = p['payouts'] as List?;
     entries.add(
       seam.joinBill(
-        host: at(step++, p['id'] as String, p['payTo'] as String?),
+        host: at(step++, p['id'] as String),
         name: p['id'] as String,
         payTo: p['payTo'] as String?,
         payouts: payouts == null
@@ -290,7 +284,7 @@ Future<Map<String, Object?>> settleRecords(Map<String, dynamic> op) async {
   for (final e in expenses) {
     entries.add(
       seam.addExpense(
-        host: at(step++, e['paidBy'] as String, null),
+        host: at(step++, e['paidBy'] as String),
         expenseId: e['id'] as String,
         paidBy: e['paidBy'] as String,
         amount: e['amount'] as int,
@@ -301,15 +295,14 @@ Future<Map<String, Object?>> settleRecords(Map<String, dynamic> op) async {
   if (rate != null) {
     entries.add(
       seam.setRate(
-        host: at(step++, first['id'] as String, first['payTo'] as String?),
+        host: at(step++, first['id'] as String),
         currency: 'EUR',
         minorUnitsPerZec: rate,
       ),
     );
   }
 
-  final mine = people.firstWhere((p) => p['id'] == me);
-  final host = at(step, me, mine['payTo'] as String?);
+  final host = at(step, me);
   final log = seam.BillLog(host);
   final refused = log.add(entries);
   final seam.FoldedBill folded;

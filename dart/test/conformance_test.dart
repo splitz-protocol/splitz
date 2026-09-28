@@ -110,11 +110,10 @@ void main() {
     final verified = (c['verifies'] as List).cast<String>().toSet();
     final create = entries.firstWhere((e) => e['kind'] == 'createBill');
     // The curve operation is the host's; the case says what it decided.
-    final r =
-        resolveIdentities(entries, create, (e, key) => _standIn(verified, e));
+    final r = resolveIdentities(
+        entries, create, (e, key) => _standIn(verified, e, key));
     produce({
       'bound': {for (final k in sortedUtf8(r.bound.keys)) k: r.bound[k]},
-      'contested': sortedUtf8(r.contested),
     });
   });
 
@@ -162,12 +161,6 @@ void main() {
       plan,
       bill,
       c['payer'] as String,
-      contestedIds: {
-        for (final id in (c['contested'] as List?) ?? const []) id as String,
-      },
-      payAnyway: {
-        for (final id in (c['payAnyway'] as List?) ?? const []) id as String,
-      },
       recordedBy: (c['recordedBy'] as Map?)?.cast<String, String>(),
     );
     produce({
@@ -186,11 +179,7 @@ void main() {
       ],
       'awaiting': [
         for (final a in w.awaiting)
-          {'to': a.to, 'owed': a.owed, 'paid': a.paid},
-      ],
-      'contested': [
-        for (final x in w.contested)
-          {'to': x.to, 'amount': x.amount, 'address': x.address},
+          {'to': a.to, 'owed': a.owed, 'paid': a.paid, 'paidTo': a.paidTo},
       ],
     });
   });
@@ -284,8 +273,9 @@ void main() {
     final r = foldLog(
       c['log'] as List,
       billId: c['billId'] as String?,
-      verify:
-          verifies == null ? null : (entry, key) => _standIn(verifies, entry),
+      verify: verifies == null
+          ? null
+          : (entry, key) => _standIn(verifies, entry, key),
     );
     // §9.1: the decoder carries confirmedPayments through, so the fold's
     // answer survives the round trip with no fixup here.
@@ -296,7 +286,6 @@ void main() {
           for (final id in sortedUtf8(r.identities.bound.keys))
             id: r.identities.bound[id],
         },
-        'contested': sortedUtf8(r.identities.contested),
       },
       'bill': r.bill,
       'creator': r.creator,
@@ -306,6 +295,11 @@ void main() {
       ],
       'paymentAuthors': r.paymentAuthors,
       'paymentDigests': r.paymentDigests,
+      'expenseEntries': r.expenseEntries,
+      'expenseAuthors': r.expenseAuthors,
+      'paymentEntries': r.paymentEntries,
+      'rateEntry': r.rateEntry,
+      'rateAuthor': r.rateAuthor,
       'withdrawn': r.withdrawn,
       'setAside': [
         // The reason is prose (SPEC.md §12); only the code is compared.
@@ -586,10 +580,13 @@ void loneSurrogateTests() {
 /// The vectors' stand-in for the host's curve operation.
 ///
 /// An item names an entry id, and every copy of that entry verifies; or an id
-/// and a signature joined by `|`, and only that copy does. The key is not
-/// consulted: a case states which copies verify against the key the fold asks
-/// about.
-bool _standIn(Set<String> verifies, Map<String, dynamic> entry) =>
-    verifies.contains(entry['id']) ||
-    (entry['sig'] is String &&
-        verifies.contains('${entry['id']}|${entry['sig']}'));
+/// and a signature joined by `|`, and only that copy does. Either may end in
+/// `@` and a key, and then verifies against that key alone — which is what
+/// lets a case require the fold to ask about the author's own key.
+bool _standIn(Set<String> verifies, Map<String, dynamic> entry, String key) {
+  final names = [
+    entry['id'],
+    if (entry['sig'] is String) '${entry['id']}|${entry['sig']}',
+  ];
+  return names.any((n) => verifies.contains(n) || verifies.contains('$n@$key'));
+}

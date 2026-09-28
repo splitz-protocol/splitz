@@ -29,9 +29,13 @@ pub enum WalletSendPhase {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WalletSendOutcome {
     pub phase: WalletSendPhase,
-    /// Present when and only when `phase` is `Succeeded`. It becomes the id of
-    /// the payment entry, so the record of a payment and the transaction that
-    /// made it carry one identifier.
+    /// Present when `phase` is `Succeeded`: it becomes the reference of the
+    /// payment entry, so the record of a payment and the transaction that made
+    /// it carry one identifier.
+    ///
+    /// When `phase` is `PendingBroadcast`, the transaction the wallet built and
+    /// may still broadcast, when it knows it. Nothing is recorded from it; a
+    /// person looks it up to learn which way the send went.
     pub txid: Option<String>,
     /// What to put in front of a person while the send is unresolved.
     pub status_message: Option<String>,

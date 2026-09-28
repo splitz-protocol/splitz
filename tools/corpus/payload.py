@@ -179,6 +179,14 @@ def payload_cases():
          non_canonical("splitz1:" + b64url(b'{"v":1,"log":[]}'))),
         ("a_delta_carries_no_invite",
          "splitzd1:" + b64url(b'{"v":1,"log":[],"invite":{"b":"Ab3","k":"Kk","v":1}}')),
+        # Sections 2.3 and 11.2. A body holding a string with no UTF-8
+        # encoding, or a number no double holds, is damaged as a whole, as a
+        # strict JSON reader finds it: one reader must not open a bill from a
+        # code another refuses.
+        ("a_body_holding_a_lone_surrogate",
+         "splitz1:" + b64url(b'{"v":1,"log":[{"description":"\\ud800"}]}')),
+        ("a_body_holding_a_number_no_double_holds",
+         "splitz1:" + b64url(b'{"v":1,"log":[{"tip":1e400}]}')),
     ]:
         case = {"name": name, "payload": text}
         try:

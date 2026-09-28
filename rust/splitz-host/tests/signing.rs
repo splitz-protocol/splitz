@@ -71,8 +71,10 @@ fn a_real_signature_binds_a_key_to_a_participant_under_10_7() {
     let ben_seed = seed_for("ben");
     let ana_key = Signer.public_key_from_seed(&ana_seed).unwrap();
     let ben_key = Signer.public_key_from_seed(&ben_seed).unwrap();
+    // §10.7: a participant who publishes a key is named by the id it derives.
+    let ben_id = splitz_core::participant_id(&ben_key).unwrap();
 
-    let ben_wallet = FakeWallet::new("ben", Some("u1ben"));
+    let ben_wallet = FakeWallet::new(&ben_id, Some("u1ben"));
 
     let mut entries = vec![signed(&wallet, &ana_seed, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
@@ -91,8 +93,47 @@ fn a_real_signature_binds_a_key_to_a_participant_under_10_7() {
     let folded = fold_verified(&wallet, bill_id(&entries), &entries, None).expect("the log folds");
     assert!(folded.set_aside.is_empty());
     assert_eq!(folded.identities.bound.get("ana"), Some(&ana_key));
-    assert_eq!(folded.identities.bound.get("ben"), Some(&ben_key));
-    assert!(folded.identities.contested.is_empty());
+    assert_eq!(folded.identities.bound.get(&ben_id), Some(&ben_key));
+}
+
+#[test]
+fn a_host_that_signs_speaks_as_the_id_its_key_derives_not_its_account_handle() {
+    let wallet = FakeWallet::ana();
+    let ana_seed = seed_for("ana");
+    let ben_seed = seed_for("ben");
+    let ana_key = Signer.public_key_from_seed(&ana_seed).unwrap();
+    let ben_key = Signer.public_key_from_seed(&ben_seed).unwrap();
+    let create = signed(&wallet, &ana_seed, None, |host| {
+        create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
+    });
+    let bill = create["id"].as_str().unwrap().to_owned();
+
+    // The same account, filed under a handle the wallet assigned.
+    let ben_wallet = FakeWallet::new("account-7", Some("u1ben"));
+    let sign = |message: &[u8]| Signer.sign(&ben_seed, message).unwrap();
+    let join_as = |host: &WalletBillHost| {
+        let entry = join_bill(host, Some("Ben"), Some("u1ben"), Some(&ben_key), None).unwrap();
+        sign_entry(host, &entry, &bill).unwrap()
+    };
+
+    let derived = Signer.participant_id_from_seed(&ben_seed).unwrap();
+    assert_eq!(Some(derived.clone()), splitz_core::participant_id(&ben_key));
+    let speaking = WalletBillHost::new(&ben_wallet)
+        .signing_with(&sign)
+        .speaking_as(derived.clone());
+    ben_wallet.tick();
+    let entries = vec![create.clone(), join_as(&speaking)];
+    let bound = fold_verified(&wallet, &bill, &entries, None).expect("the log folds");
+    assert!(bound.set_aside.is_empty());
+    assert_eq!(bound.identities.bound.get(&derived), Some(&ben_key));
+
+    let handle = WalletBillHost::new(&ben_wallet).signing_with(&sign);
+    ben_wallet.tick();
+    let entries = vec![create, join_as(&handle)];
+    let refused = fold_verified(&wallet, &bill, &entries, None).expect("the log folds");
+    let codes: Vec<&str> = refused.set_aside.iter().map(|a| a.code).collect();
+    assert_eq!(codes, [code::PARTICIPANT_ID_NOT_DERIVED]);
+    assert!(refused.bill.participant("account-7").is_none());
 }
 
 #[test]
@@ -131,7 +172,7 @@ fn a_create_signed_by_the_wrong_key_opens_no_bill_at_all() {
 }
 
 #[test]
-fn two_keys_claiming_one_id_leaves_that_id_contested() {
+fn a_second_key_claiming_a_bound_participant_binds_nothing() {
     let wallet = FakeWallet::ana();
     let ana_seed = seed_for("ana");
     let ben_seed = seed_for("ben");
@@ -139,9 +180,10 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
     let ana_key = Signer.public_key_from_seed(&ana_seed).unwrap();
     let ben_key = Signer.public_key_from_seed(&ben_seed).unwrap();
     let impostor_key = Signer.public_key_from_seed(&impostor_seed).unwrap();
+    let ben_id = splitz_core::participant_id(&ben_key).unwrap();
 
-    let ben_wallet = FakeWallet::new("ben", Some("u1ben"));
-    let impostor_wallet = FakeWallet::new("ben", Some("u1impostor"));
+    let ben_wallet = FakeWallet::new(&ben_id, Some("u1ben"));
+    let impostor_wallet = FakeWallet::new(&ben_id, Some("u1impostor"));
 
     let mut entries = vec![signed(&wallet, &ana_seed, None, |host| {
         create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
@@ -176,10 +218,14 @@ fn two_keys_claiming_one_id_leaves_that_id_contested() {
     ));
 
     let folded = fold_verified(&wallet, bill_id(&entries), &entries, None).expect("the log folds");
-    assert!(folded.identities.contested.contains("ben"));
-    assert!(
-        !folded.identities.bound.contains_key("ben"),
-        "nothing inside the log says which claim is the person"
+    assert_eq!(
+        folded.identities.bound.get(&ben_id),
+        Some(&ben_key),
+        "a second key cannot derive ben's id, so ben stays bound"
+    );
+    assert_eq!(
+        folded.bill.participant(&ben_id).unwrap().pay_to.as_deref(),
+        Some("u1ben")
     );
 }
 

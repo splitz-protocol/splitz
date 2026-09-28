@@ -33,6 +33,8 @@ ROOT = Path(__file__).resolve().parents[2]
 # Names one language spells differently for reasons that carry no meaning.
 RENAMES = {
     "splitExpense": "split_expense",
+    "participantId": "participant_id",
+    "participantIdDomain": "PARTICIPANT_ID_DOMAIN",
     "splitParticipants": "split_participants",
     "withholdings": "withholdings",
     "deltaFor": "delta_for",

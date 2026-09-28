@@ -169,10 +169,10 @@ fn authority() {
             .find(|e| e["kind"] == "createBill")
             .expect("a create entry");
         // The curve operation is the host's; the case says what it decided.
-        let r = splitz_core::resolve_identities(&entries, create, |e, _key| stand_in(&verified, e));
+        let r =
+            splitz_core::resolve_identities(&entries, create, |e, key| stand_in(&verified, e, key));
         Ok(json!({
             "bound": r.bound,
-            "contested": r.contested.iter().cloned().collect::<Vec<_>>(),
         }))
     });
 }
@@ -236,17 +236,6 @@ fn withholdings() {
                     .collect()
             })
             .unwrap_or_default();
-        let ids = |key: &str| -> std::collections::BTreeSet<String> {
-            c[key]
-                .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str())
-                        .map(str::to_owned)
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
         let recorded_by: Option<std::collections::BTreeMap<String, String>> =
             c.get("recordedBy").and_then(Value::as_object).map(|m| {
                 m.iter()
@@ -257,8 +246,6 @@ fn withholdings() {
             &plan,
             &bill,
             c["payer"].as_str().unwrap_or_default(),
-            &ids("contested"),
-            &ids("payAnyway"),
             recorded_by.as_ref(),
         )?;
         Ok(json!({
@@ -272,10 +259,7 @@ fn withholdings() {
                 row
             }).collect::<Vec<_>>(),
             "awaiting": w.awaiting.iter().map(|a| json!({
-                "to": a.to, "owed": a.owed, "paid": a.paid,
-            })).collect::<Vec<_>>(),
-            "contested": w.contested.iter().map(|x| json!({
-                "to": x.to, "amount": x.amount, "address": x.address,
+                "to": a.to, "owed": a.owed, "paid": a.paid, "paidTo": a.paid_to,
             })).collect::<Vec<_>>(),
         }))
     });
@@ -364,7 +348,7 @@ fn log() {
         let r = splitz_core::log::fold_log_verified(
             &entries,
             c["billId"].as_str(),
-            verifies.map(|ok| move |e: &Value, _k: &str| stand_in(&ok, e)),
+            verifies.map(|ok| move |e: &Value, k: &str| stand_in(&ok, e, k)),
         )?;
 
         // §9.1: the decoder carries confirmedPayments through, so the
@@ -374,7 +358,6 @@ fn log() {
         Ok(json!({
             "identities": {
                 "bound": r.identities.bound,
-                "contested": r.identities.contested.iter().collect::<Vec<_>>(),
             },
             "bill": r.bill,
             "creator": r.creator,
@@ -383,6 +366,11 @@ fn log() {
             })).collect::<Vec<_>>(),
             "paymentAuthors": r.payment_authors,
             "paymentDigests": r.payment_digests,
+            "expenseEntries": r.expense_entries,
+            "expenseAuthors": r.expense_authors,
+            "paymentEntries": r.payment_entries,
+            "rateEntry": r.rate_entry,
+            "rateAuthor": r.rate_author,
             "withdrawn": r.withdrawn,
             // The reason is prose (SPEC.md §12); only the code is compared.
             "setAside": r.set_aside.iter().map(|a| json!({
@@ -610,13 +598,16 @@ fn allocation() {
 /// The vectors' stand-in for the host's curve operation.
 ///
 /// An item names an entry id, and every copy of that entry verifies; or an id
-/// and a signature joined by `|`, and only that copy does. The key is not
-/// consulted: a case states which copies verify against the key the fold asks
-/// about.
-fn stand_in(verifies: &std::collections::BTreeSet<String>, e: &Value) -> bool {
+/// and a signature joined by `|`, and only that copy does. Either may end in
+/// `@` and a key, and then verifies against that key alone — which is what
+/// lets a case require the fold to ask about the author's own key.
+fn stand_in(verifies: &std::collections::BTreeSet<String>, e: &Value, key: &str) -> bool {
     let id = e["id"].as_str().unwrap_or("");
-    verifies.contains(id)
-        || e["sig"]
-            .as_str()
-            .is_some_and(|sig| verifies.contains(&format!("{id}|{sig}")))
+    let mut names = vec![id.to_owned()];
+    if let Some(sig) = e["sig"].as_str() {
+        names.push(format!("{id}|{sig}"));
+    }
+    names
+        .iter()
+        .any(|n| verifies.contains(n) || verifies.contains(&format!("{n}@{key}")))
 }

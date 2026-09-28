@@ -28,18 +28,16 @@ class _Person {
       splitz.signEntry(host: host, entry: e, billId: bill);
 }
 
-Future<_Person> _person(String id, {int nudge = 0}) async {
-  final w = FakeWallet(id: id, payTo: 'u1$id${'0' * 20}');
+/// [name]'s phone, speaking as the id its key derives (§10.7).
+Future<_Person> _person(String name, {int nudge = 0}) async {
+  final seed = _seed(name);
+  final key = await _signer.publicKeyFromSeed(seed);
+  final id = splitz.participantId(key)!;
+  final w = FakeWallet(id: id, payTo: 'u1$name${'0' * 20}');
   for (var i = 0; i < nudge; i++) {
     w.tick();
   }
-  final seed = _seed(id);
-  return _Person(
-    id,
-    w,
-    WalletBillHost(w, sign: _signer.signerFor(seed)),
-    await _signer.publicKeyFromSeed(seed),
-  );
+  return _Person(id, w, WalletBillHost(w, sign: _signer.signerFor(seed)), key);
 }
 
 /// A bill [creator] opens and [other] joins, each signed on its own id.
@@ -63,7 +61,7 @@ Future<(String, List<Map<String, dynamic>>)> _bill(
         splitz.joinBill(
           host: p.host,
           name: p.id,
-          payTo: p.host.payToAddress,
+          payTo: p.wallet.sender.payToAddress,
           identityKey: p.key,
         ),
         id,
@@ -100,7 +98,7 @@ void main() {
       splitz.recordPayment(
         host: mal.host,
         paymentId: 'P',
-        to: 'ana',
+        to: ana.id,
         amount: 1,
         reference: 'aa' * 32,
       ),
@@ -134,11 +132,11 @@ void main() {
         splitz.addExpense(
           host: ana.host,
           expenseId: 'dinner',
-          paidBy: 'ana',
+          paidBy: ana.id,
           amount: 10000,
-          split: const {
+          split: {
             'type': 'equal',
-            'among': ['ana', 'mal'],
+            'among': [ana.id, mal.id],
           },
         ),
         idB,
@@ -167,7 +165,7 @@ void main() {
       splitz.recordPayment(
         host: mal.host,
         paymentId: 'P',
-        to: 'ana',
+        to: ana.id,
         amount: 5000,
         reference: 'bb' * 32,
       ),

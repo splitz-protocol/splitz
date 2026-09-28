@@ -241,7 +241,6 @@ fn tamper_blob(blob: &str, how: i64) -> String {
 /// write the same `at` without either deriving one.
 struct DiffHost {
     me: String,
-    pay_to: Option<String>,
     at: String,
     txid: String,
 }
@@ -249,9 +248,6 @@ struct DiffHost {
 impl splitz_core::host::BillHost for DiffHost {
     fn me(&self) -> &str {
         &self.me
-    }
-    fn pay_to_address(&self) -> Option<&str> {
-        self.pay_to.as_deref()
     }
     fn now(&self) -> String {
         self.at.clone()
@@ -291,17 +287,16 @@ fn settle_records(op: &Value) -> Value {
     let me = op["me"].as_str().unwrap();
     let txid = op["txid"].as_str().unwrap_or("");
 
-    let host_at = |step: usize, who: &str, pay_to: Option<&str>| DiffHost {
+    let host_at = |step: usize, who: &str| DiffHost {
         me: who.to_owned(),
-        pay_to: pay_to.map(str::to_owned),
         at: instants[step].clone(),
         txid: txid.to_owned(),
     };
 
     let mut step = 0usize;
-    let (first_id, first_pay, _) = people[0].clone();
+    let (first_id, _, _) = people[0].clone();
     let mut entries = Vec::new();
-    let creator = host_at(step, &first_id, first_pay.as_deref());
+    let creator = host_at(step, &first_id);
     step += 1;
     match create_bill(
         &creator,
@@ -314,7 +309,7 @@ fn settle_records(op: &Value) -> Value {
         Err(e) => return json!({ "folded": false, "error": e.code }),
     }
     for (id, pay_to, payouts) in &people {
-        let h = host_at(step, id, pay_to.as_deref());
+        let h = host_at(step, id);
         step += 1;
         match join_bill(
             &h,
@@ -329,7 +324,7 @@ fn settle_records(op: &Value) -> Value {
     }
     for expense in op["expenses"].as_array().unwrap() {
         let paid_by = expense["paidBy"].as_str().unwrap();
-        let h = host_at(step, paid_by, None);
+        let h = host_at(step, paid_by);
         step += 1;
         match add_expense(
             &h,
@@ -344,7 +339,7 @@ fn settle_records(op: &Value) -> Value {
         }
     }
     if let Some(rate) = op["rate"].as_i64() {
-        let h = host_at(step, &first_id, first_pay.as_deref());
+        let h = host_at(step, &first_id);
         step += 1;
         match set_rate(&h, "EUR", rate, None) {
             Ok(entry) => entries.push(entry),
@@ -352,8 +347,7 @@ fn settle_records(op: &Value) -> Value {
         }
     }
 
-    let mine = people.iter().find(|(id, ..)| id == me).unwrap();
-    let host = host_at(step, me, mine.1.as_deref());
+    let host = host_at(step, me);
     let mut log = BillLog::new(&host);
     let refused = match log.add(entries) {
         Ok(refused) => refused,
@@ -365,7 +359,7 @@ fn settle_records(op: &Value) -> Value {
     };
     let refused_codes: Vec<&str> = refused.iter().map(|r| r.code).collect();
     let set_aside_codes: Vec<&str> = folded.set_aside.iter().map(|s| s.code).collect();
-    let owed = match obligation_for(&host, &folded, &std::collections::BTreeSet::new()) {
+    let owed = match obligation_for(&host, &folded) {
         Ok(Some(owed)) => owed,
         Ok(None) => {
             return json!({
@@ -512,6 +506,7 @@ fn answer(op: &Value) -> Value {
             .unwrap();
             let mut quote = SwapQuote {
                 deposit_address: "u1provider".to_owned(),
+                recipient: None,
                 deposit_memo: op["memo"].as_str().map(str::to_owned),
                 amount_in_zatoshi: 1,
                 amount_out: "1".to_owned(),

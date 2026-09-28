@@ -4,8 +4,8 @@
 What a payer is asked for, and what is held back before a request is built.
 Section 14 is addressed to a host, so none of it is reachable from the wire
 format alone: an implementation can keep every rule in sections 1 to 12, ask
-a payer for a debt they have already paid, and send the balance of a bill to
-whoever minted the second claim on an id. These cases are that surface.
+a payer for a debt they have already paid, or name the wrong person as the
+one whose confirmation it waits on. These cases are that surface.
 """
 import json
 import pathlib
@@ -56,18 +56,14 @@ THREE = [ANA, BEN, CAI]
 def cases():
     out = []
 
-    def case(name, plan, b, payer, contested=(), pay_anyway=(),
-             recorded_by=None):
+    def case(name, plan, b, payer, recorded_by=None):
         out.append({
             "name": name,
             "plan": plan,
             "bill": b,
             "payer": payer,
-            **({"contested": list(contested)} if contested else {}),
-            **({"payAnyway": list(pay_anyway)} if pay_anyway else {}),
             **({"recordedBy": recorded_by} if recorded_by is not None else {}),
-            "expect": withholdings(plan, b, payer, contested, pay_anyway,
-                                   recorded_by),
+            "expect": withholdings(plan, b, payer, recorded_by),
         })
 
     # Section 14.4 with section 6.3's coverage. Ana owed ben and has paid
@@ -77,6 +73,11 @@ def cases():
                     covers=[{"from": "ana", "to": "ben", "amount": 1000}])
     case("a_rerouted_debt_already_paid_is_not_asked_for_again",
          [rerouted], bill(THREE, [pay("p1", "ana", "ben", 1000)]), "ana")
+    # The debt held back is cai's; the payment it waits on went to ben, and
+    # ben is the one who can confirm it or who it can be taken back from.
+    case("a_held_debt_names_who_the_unconfirmed_money_went_to",
+         [rerouted], bill(THREE, [pay("p1", "ana", "ben", 1000),
+                                  pay("p2", "ana", "cai", 300)]), "ana")
     case("and_one_covering_a_debt_nobody_paid_is_carried",
          [rerouted], bill(THREE, [pay("p1", "ana", "cai", 5)],
                           confirmed=["p1"]), "ana")
@@ -128,27 +129,6 @@ def cases():
          [settle("cai", "ana", 4500)],
          bill(THREE, payments=[pay("p1", "ben", "ana", 4500)]), "cai")
 
-    # Section 10.7 and 14.2. Neither key is bound, so the payout record on the
-    # bill may be the impostor's.
-    case("a_contested_recipient_is_held_back",
-         [settle("cai", "ana", 4500)], bill(THREE), "cai", contested=["ana"])
-
-    # The way through. Anyone may mint a rival claim, so a refusal with no
-    # exit is a denial of payment.
-    case("a_payer_who_accepted_the_contest_carries_it",
-         [settle("cai", "ana", 4500)], bill(THREE), "cai",
-         contested=["ana"], pay_anyway=["ana"])
-
-    case("a_contest_on_somebody_else_holds_nothing_back",
-         [settle("cai", "ana", 4500)], bill(THREE), "cai", contested=["ben"])
-
-    # A pending payment outranks a contest: the money is already in flight,
-    # so accepting the contest changes nothing about this debt.
-    case("a_pending_payment_outranks_a_contest",
-         [settle("cai", "ana", 4500)],
-         bill(THREE, payments=[pay("p1", "cai", "ana", 4500)]), "cai",
-         contested=["ana"], pay_anyway=["ana"])
-
     # Section 8.4 still applies downstream: a carried settlement may name a
     # participant with no address.
     case("a_carried_settlement_may_still_be_unpayable",
@@ -157,14 +137,13 @@ def cases():
 
     case("every_debt_held_back_carries_nothing",
          [settle("cai", "ana", 4500), settle("cai", "ben", 1000)],
-         bill(THREE, payments=[pay("p1", "cai", "ana", 4500)]), "cai",
-         contested=["ben"])
+         bill(THREE, payments=[pay("p1", "cai", "ana", 4500),
+                               pay("p2", "cai", "ben", 1000)]), "cai")
 
     case("one_of_each",
          [settle("cai", "ana", 4500), settle("cai", "ben", 1000),
           settle("cai", "cai", 0)],
-         bill(THREE, payments=[pay("p1", "cai", "ana", 100)]), "cai",
-         contested=["ben"])
+         bill(THREE, payments=[pay("p1", "cai", "ana", 100)]), "cai")
 
     return out
 
@@ -177,7 +156,7 @@ def main():
            "count": len(cs), "cases": cs}
     (root / "withholdings.json").write_text(json.dumps(doc, indent=2) + "\n")
     print(f"{len(cs):3} cases -> withholdings.json")
-    buckets = {"carried": 0, "awaiting": 0, "contested": 0}
+    buckets = {"carried": 0, "awaiting": 0}
     for c in cs:
         for k in buckets:
             buckets[k] += len(c["expect"][k])

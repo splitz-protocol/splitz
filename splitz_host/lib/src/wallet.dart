@@ -34,9 +34,13 @@ class WalletSendOutcome {
 
   final WalletSendPhase phase;
 
-  /// Present when and only when [phase] is [WalletSendPhase.succeeded]. It
-  /// becomes the id of the payment entry, so the record of a payment and the
+  /// Present when [phase] is [WalletSendPhase.succeeded]: it becomes the
+  /// reference of the payment entry, so the record of a payment and the
   /// transaction that made it carry one identifier.
+  ///
+  /// When [phase] is [WalletSendPhase.pendingBroadcast], the transaction the
+  /// wallet built and may still broadcast, when it knows it. Nothing is
+  /// recorded from it; a person looks it up to learn which way the send went.
   final String? txid;
 
   /// What to put in front of a person while the send is unresolved.

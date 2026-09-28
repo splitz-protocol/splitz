@@ -13,6 +13,11 @@ import 'package:splitz_core/splitz_core.dart' as protocol;
 ///
 /// Specified in SPEC.md §15.4.
 abstract interface class BillStorage {
+  /// The value stored under [key], or null when nothing is.
+  ///
+  /// Throws [BillStorageUnreadable] when a value is there and cannot be read.
+  /// That is not absence: a caller that took it as absence would write over
+  /// entries it never saw.
   Future<String?> read(String key);
   Future<void> write(String key, String value);
   Future<void> delete(String key);
@@ -21,9 +26,21 @@ abstract interface class BillStorage {
   /// Removes whatever a write that did not finish left behind, and returns
   /// how many. Zero for a store that cannot leave anything.
   ///
-  /// Called once when the feature loads. A leftover is already invisible to
-  /// [keys]; this stops them accumulating across the crashes of a year.
+  /// Removes only what an earlier process left: a write this process has in
+  /// flight is not a leftover. A leftover is already invisible to [keys];
+  /// this stops them accumulating across the crashes of a year.
   Future<int> sweepUnfinishedWrites();
+}
+
+/// A value [BillStorage] holds and cannot read.
+class BillStorageUnreadable implements Exception {
+  const BillStorageUnreadable(this.key, this.cause);
+
+  final String key;
+  final Object cause;
+
+  @override
+  String toString() => 'BillStorageUnreadable($key): $cause';
 }
 
 /// Storage that does not outlive the process. For tests.
@@ -74,19 +91,37 @@ class BillStore {
   /// The entries held for [billId], in the order §10.2 puts them, or an empty
   /// list when none are held.
   ///
-  /// Stored text that will not decode is returned as no entries rather than
-  /// raised: a bill this device cannot read is a state to show, and raising
-  /// here would take down whatever listed the bills.
+  /// Stored text that cannot be read or will not decode is returned as no
+  /// entries rather than raised: a bill this device cannot read is a state to
+  /// show, and raising here would take down whatever listed the bills. A
+  /// [merge] never writes over it — see [_held].
   Future<List<Map<String, dynamic>>> read(String billId) async {
-    final stored = await _storage.read(_name(billId));
+    try {
+      return await _held(billId);
+    } on BillStorageUnreadable {
+      return const [];
+    }
+  }
+
+  /// The entries held for [billId], raising [BillStorageUnreadable] when a
+  /// value is stored and cannot be read or decoded.
+  ///
+  /// What [merge] reads before it writes. Taking such a value as no entries
+  /// and writing the merge over it would destroy every entry only this device
+  /// held — a payment recorded and not yet pushed.
+  Future<List<Map<String, dynamic>>> _held(String billId) async {
+    final name = _name(billId);
+    final stored = await _storage.read(name);
     if (stored == null || stored.isEmpty) return const [];
     final Object? decoded;
     try {
       decoded = jsonDecode(stored);
-    } on FormatException {
-      return const [];
+    } on FormatException catch (e) {
+      throw BillStorageUnreadable(name, e);
     }
-    if (decoded is! List) return const [];
+    if (decoded is! List) {
+      throw BillStorageUnreadable(name, 'a stored log is a list');
+    }
     // Only what §10.1 admits. The store writes nothing else, so anything else
     // is a file damaged or written by something that is not this store — and
     // ordering it would raise on the first entry with no `at`.
@@ -126,7 +161,7 @@ class BillStore {
     if (onlyIf != null && !await onlyIf()) {
       return const MergedBill(entries: [], refused: [], applied: false);
     }
-    final held = await read(billId);
+    final held = await _held(billId);
     final merged = protocol.mergeLogs([held, incoming.toList()]);
     await _storage.write(_name(billId), jsonEncode(merged.merged));
     return MergedBill(entries: merged.merged, refused: merged.refused);

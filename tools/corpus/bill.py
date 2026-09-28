@@ -146,6 +146,40 @@ BILL_CASES = [
           "paidAtRate": {"currency": "EUR", "minorUnitsPerZec": 51234,
                          "at": AT, "source": "a named feed"}}]))),
 
+    # §9. A list member that is not a list is refused, not read as empty: an
+    # empty string, an object and `false` would each otherwise stand for "no
+    # participants" on one reader and fail on another.
+    ("participants_that_are_a_string",
+     mutate(lambda d: d.__setitem__("participants", ""))),
+    ("expenses_that_are_an_object",
+     mutate(lambda d: d.__setitem__("expenses", {}))),
+    ("payments_that_are_false",
+     mutate(lambda d: d.__setitem__("payments", False))),
+    # §7. A rate on a bill, and one a payment was paid at, is decoded as a
+    # rate: every member checked, not only its currency.
+    ("a_bill_rate_that_is_not_positive",
+     mutate(lambda d: d.__setitem__("rate",
+         {"currency": "EUR", "minorUnitsPerZec": 0, "at": AT}))),
+    ("a_bill_rate_that_states_no_instant",
+     mutate(lambda d: d.__setitem__("rate",
+         {"currency": "EUR", "minorUnitsPerZec": 51234}))),
+    ("a_paid_at_rate_that_is_not_positive",
+     mutate(lambda d: d.__setitem__("payments", [
+         {"id": "p1", "from": "ben", "to": "ana", "amount": 100,
+          "currency": "EUR", "method": "shieldedZec", "at": AT2,
+          "paidAtRate": {"currency": "EUR", "minorUnitsPerZec": -1,
+                         "at": AT}}]))),
+    ("a_paid_at_rate_whose_instant_is_a_number",
+     mutate(lambda d: d.__setitem__("payments", [
+         {"id": "p1", "from": "ben", "to": "ana", "amount": 100,
+          "currency": "EUR", "method": "shieldedZec", "at": AT2,
+          "paidAtRate": {"currency": "EUR", "minorUnitsPerZec": 51234,
+                         "at": 7}}]))),
+    # §10.7. An identity key is what a participant id is derived from, so it
+    # is a 32-byte key in canonical unpadded base64url.
+    ("an_identity_key_that_is_not_a_key",
+     mutate(lambda d: d["participants"][1].__setitem__("identityKey", "abc"))),
+
     # §9.1's payout preferences, in their order: the order IS the preference,
     # and a reader that reordered them settles to a different address.
     ("participants_declaring_every_payout_type",

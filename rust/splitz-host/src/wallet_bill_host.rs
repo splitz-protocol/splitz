@@ -12,13 +12,7 @@ use crate::wallet::{SplitsWallet, WalletSendPhase};
 /// either can change without the other's callers noticing.
 pub struct WalletBillHost<'a> {
     wallet: &'a dyn SplitsWallet,
-    /// Read once, when the host is made.
-    ///
-    /// `BillHost` borrows the address and the seam answers with an owned one,
-    /// so something has to hold it. Holding it here also means one fold sees
-    /// one address: a fold that re-read it could answer differently for one
-    /// unchanged entry set, which is the property §10.2 rests on.
-    pay_to: Option<String>,
+    me: Option<String>,
     sign: Option<SignEntry<'a>>,
     verify: Option<VerifyEntry<'a>>,
 }
@@ -26,11 +20,22 @@ pub struct WalletBillHost<'a> {
 impl<'a> WalletBillHost<'a> {
     pub fn new(wallet: &'a dyn SplitsWallet) -> Self {
         Self {
-            pay_to: wallet.sender().pay_to_address(),
             wallet,
+            me: None,
             sign: None,
             verify: None,
         }
+    }
+
+    /// Writes entries as `me` rather than as the account's own id.
+    ///
+    /// A host that signs passes the id its identity key derives (§10.7),
+    /// which [`Signer::participant_id_from_seed`](crate::Signer::participant_id_from_seed)
+    /// computes. A join written under any other id with that key is set aside
+    /// with `participant_id_not_derived`.
+    pub fn speaking_as(mut self, me: String) -> Self {
+        self.me = Some(me);
+        self
     }
 
     /// Signs the entries this device writes. Without it every participant is
@@ -41,7 +46,7 @@ impl<'a> WalletBillHost<'a> {
     }
 
     /// Answers §10.7's signature questions. Absent one, no key is bound to any
-    /// participant, which is a different claim from nothing being contested.
+    /// participant, which is a different claim from every key checking out.
     pub fn verifying_with(mut self, verify: VerifyEntry<'a>) -> Self {
         self.verify = Some(verify);
         self
@@ -50,11 +55,7 @@ impl<'a> WalletBillHost<'a> {
 
 impl BillHost for WalletBillHost<'_> {
     fn me(&self) -> &str {
-        &self.wallet.account().id
-    }
-
-    fn pay_to_address(&self) -> Option<&str> {
-        self.pay_to.as_deref()
+        self.me.as_deref().unwrap_or(&self.wallet.account().id)
     }
 
     fn now(&self) -> String {
@@ -78,17 +79,19 @@ impl BillHost for WalletBillHost<'_> {
                 Some(txid) => Sent::sent(txid),
                 // Pending, not failed: the wallet says money left, and a
                 // retry could pay it twice.
-                None => Sent::pending(Some(
-                    "the wallet reported a send with no transaction id".to_owned(),
-                )),
+                None => Sent::pending(
+                    Some("the wallet reported a send with no transaction id".to_owned()),
+                    None,
+                ),
             },
-            WalletSendPhase::PendingBroadcast => {
-                Sent::pending(Some(outcome.status_message.unwrap_or_else(|| {
+            WalletSendPhase::PendingBroadcast => Sent::pending(
+                Some(outcome.status_message.unwrap_or_else(|| {
                     "The transaction was created but not broadcast yet. \
                      Check its status before trying again."
                         .to_owned()
-                })))
-            }
+                })),
+                outcome.txid,
+            ),
             WalletSendPhase::Failed | WalletSendPhase::Aborted => Sent::failed(Some(
                 outcome
                     .error

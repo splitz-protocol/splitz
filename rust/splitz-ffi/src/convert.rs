@@ -56,6 +56,7 @@ pub(crate) fn payment(p: &splitz_core::PaymentRecord) -> ffi::PaymentRecord {
         method: p.method.clone(),
         at: p.at.clone(),
         zatoshi: p.zatoshi,
+        paid_at_rate: p.paid_at_rate.as_ref().map(rate),
         reference: p.reference.clone(),
         note: p.note.clone(),
     }
@@ -98,9 +99,14 @@ pub(crate) fn folded(f: &splitz_core::host::FoldedBill) -> ffi::FoldedBill {
             .collect(),
         identities: ffi::Identities {
             bound: f.identities.bound.clone().into_iter().collect(),
-            contested: f.identities.contested.iter().cloned().collect(),
         },
         payment_digests: f.payment_digests.clone().into_iter().collect(),
+        payment_authors: f.payment_authors.clone().into_iter().collect(),
+        expense_entries: f.expense_entries.clone().into_iter().collect(),
+        expense_authors: f.expense_authors.clone().into_iter().collect(),
+        payment_entries: f.payment_entries.clone().into_iter().collect(),
+        rate_entry: f.rate_entry.clone(),
+        rate_author: f.rate_author.clone(),
     }
 }
 
@@ -131,19 +137,22 @@ pub(crate) fn obligation(o: &splitz_core::host::PayerObligation) -> ffi::PayerOb
                 to: a.to.clone(),
                 owed: a.owed,
                 paid: a.paid,
+                paid_to: a.paid_to.clone(),
             })
             .collect(),
-        contested: o
-            .contested
-            .iter()
-            .map(|c| ffi::Contested {
-                to: c.to.clone(),
-                amount: c.amount,
-                address: c.address.clone(),
-            })
-            .collect(),
+        rate: rate(&o.rate),
         request: ffi::Obligation {
             uri: o.request.uri.clone(),
+            payments: o
+                .request
+                .payments
+                .iter()
+                .zip(&o.request.recipients)
+                .map(|(p, to)| ffi::RequestPayment {
+                    to: to.clone(),
+                    zatoshi: p.zatoshi,
+                })
+                .collect(),
             unpayable: o
                 .request
                 .unpayable
@@ -202,6 +211,7 @@ pub(crate) fn asset(a: &splitz_host::TradableAsset) -> ffi::TradableAsset {
 pub(crate) fn quote(q: &splitz_host::SwapQuote) -> ffi::SwapQuote {
     ffi::SwapQuote {
         deposit_address: q.deposit_address.clone(),
+        recipient: q.recipient.clone(),
         deposit_memo: q.deposit_memo.clone(),
         amount_in_zatoshi: q.amount_in_zatoshi,
         amount_out: q.amount_out.clone(),

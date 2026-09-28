@@ -10,7 +10,8 @@ use splitz_core::host::{
     add_expense, amend_entry, confirm_payment, create_bill, invite_for, join_bill, obligation_for,
     read_scan, record_payment, set_rate, shareable_bill, sign_entry, void_entry, BillLog, Scanned,
 };
-use splitz_core::{merge_logs, order_entries};
+use splitz_core::money::checked_add;
+use splitz_core::{code, merge_logs, order_entries};
 use splitz_host::{activity_of, Sealing, Signer};
 
 use crate::convert;
@@ -122,6 +123,17 @@ pub fn create_bill_entry(
     creator_key: String,
     seed: String,
 ) -> Result<String> {
+    // §9.4's nonce is 16 bytes nobody can predict. Fewer is refused rather
+    // than padded: two bills opened with one short nonce would be one bill.
+    if facts.nonce.len() < 16 {
+        return Err(SplitzError::Host {
+            detail: format!(
+                "a bill's nonce is 16 random bytes, got {}",
+                facts.nonce.len()
+            ),
+            transient: false,
+        });
+    }
     build(&facts, &seed, None, |host| {
         create_bill(host, &name, &currency, &split_mode, &creator_key)
     })
@@ -134,17 +146,52 @@ pub fn join_bill_entry(
     name: Option<String>,
     pay_to: Option<String>,
     identity_key: Option<String>,
+    payouts: Vec<ffi::Payout>,
     seed: String,
 ) -> Result<String> {
+    // §9.1: how this participant is paid, most preferred first. None declared
+    // leaves `payTo` to speak for them.
+    let payouts = (!payouts.is_empty()).then(|| payouts.iter().map(payout_json).collect());
     build(&facts, &seed, Some(&bill_id), |host| {
         join_bill(
             host,
             name.as_deref(),
             pay_to.as_deref(),
             identity_key.as_deref(),
-            None,
+            payouts.clone(),
         )
     })
+}
+
+/// One §9.1 payout as the join carries it.
+fn payout_json(p: &ffi::Payout) -> Value {
+    let mut out = serde_json::Map::new();
+    out.insert("type".to_owned(), Value::from(p.kind.clone()));
+    for (member, value) in [
+        ("address", &p.address),
+        ("asset", &p.asset),
+        ("chain", &p.chain),
+    ] {
+        if let Some(value) = value {
+            out.insert(member.to_owned(), Value::from(value.clone()));
+        }
+    }
+    Value::Object(out)
+}
+
+/// A §7 rate as a record carries it in `paidAtRate`.
+fn rate_json(r: &ffi::ExchangeRate) -> Value {
+    let mut out = serde_json::Map::new();
+    out.insert("currency".to_owned(), Value::from(r.currency.clone()));
+    out.insert(
+        "minorUnitsPerZec".to_owned(),
+        Value::from(r.minor_units_per_zec),
+    );
+    out.insert("at".to_owned(), Value::from(r.at.clone()));
+    if let Some(source) = &r.source {
+        out.insert("source".to_owned(), Value::from(source.clone()));
+    }
+    Value::Object(out)
 }
 
 // A binding exports flat parameters, and each one is a member the entry needs.
@@ -190,6 +237,9 @@ pub struct PaymentDraft {
     /// What left the payer's wallet. Advisory: the fiat `amount` settles the
     /// debt and this takes no part in §5 or §6.
     pub zatoshi: Option<i64>,
+    /// The rate the payment was priced at (§9.2), so the payee confirms
+    /// against a figure they can compare with what arrived.
+    pub paid_at_rate: Option<ffi::ExchangeRate>,
     pub note: Option<String>,
 }
 
@@ -211,7 +261,7 @@ pub fn record_payment_entry(
             &payment.method,
             payment.reference.as_deref(),
             payment.zatoshi,
-            None,
+            payment.paid_at_rate.as_ref().map(rate_json),
             payment.note.as_deref(),
         )
     })
@@ -311,8 +361,8 @@ pub fn merge_entries(held: Vec<String>, incoming: Vec<String>) -> Result<MergeOu
     })
 }
 
-/// The bill as `entries` stands, with what the fold refused and who §10.7
-/// leaves contested.
+/// The bill as `entries` stands, with what the fold refused and which keys
+/// §10.7 binds.
 ///
 /// `bill_id` names the bill the entries belong to, so a create for another
 /// bill pushed into its channel cannot make it unopenable (§10.3).
@@ -380,8 +430,7 @@ pub fn history_of(
 /// What this device owes, and the §8 request that carries it.
 ///
 /// `None` when the bill carries no rate: an unpriced bill is an ordinary bill
-/// and nothing invents a price to avoid showing that. `pay_anyway` names the
-/// contested participants the payer has been shown and chosen to pay (§10.7).
+/// and nothing invents a price to avoid showing that.
 ///
 /// `bill_id` names the bill the entries belong to, so a create for another
 /// bill pushed into its channel cannot make it unopenable (§10.3).
@@ -390,7 +439,6 @@ pub fn obligation_of(
     facts: HostFacts,
     bill_id: String,
     entries: Vec<String>,
-    pay_anyway: Vec<String>,
 ) -> Result<Option<ffi::PayerObligation>> {
     let parsed = parse_entries(&entries)?;
     let verified = Signer.prepare(parsed.iter(), &bill_id);
@@ -403,11 +451,21 @@ pub fn obligation_of(
     let folded = BillLog::with_entries(&host, parsed)
         .for_bill(bill_id)
         .fold()?;
-    let chosen = pay_anyway.into_iter().collect();
-    Ok(obligation_for(&host, &folded, &chosen)?.map(|o| convert::obligation(&o)))
+    Ok(obligation_for(&host, &folded)?.map(|o| convert::obligation(&o)))
 }
 
 // --- keys a wallet keeps ----------------------------------------------------
+
+/// The participant id `key` speaks as (§10.7): the id a wallet that
+/// publishes this identity key writes every entry under. A key binds only the
+/// id it derives, so a wallet speaking under any other id is unbound.
+#[uniffi::export]
+pub fn participant_id_for_key(key: String) -> Result<String> {
+    splitz_core::participant_id(&key).ok_or_else(|| SplitzError::Host {
+        detail: "an identity key is 32 bytes, canonical unpadded base64url".to_owned(),
+        transient: false,
+    })
+}
 
 /// The public half other participants pin under §10.7, from the seed a wallet
 /// holds.
@@ -477,48 +535,21 @@ pub fn channel_for_bill(bill_id: String) -> String {
     splitz_host::channel_for_bill(&bill_id)
 }
 
-/// Every entry this device holds, signed where it is this device's own and
-/// sealed under the bill key — the blobs to push.
+/// Every entry this device holds, sealed under the bill key as it is held —
+/// the blobs to push.
 ///
-/// A signature is deterministic and a blob is keyed by its content, so pushing
-/// the whole log every time is safe: a relay stores each entry once however
-/// often it is sent.
+/// **Nothing is signed here.** An entry is signed when it is written, by the
+/// builder that writes it. The log also holds what peers pushed, and an
+/// unsigned entry a peer wrote in this device's name would otherwise be signed
+/// with this device's key on the next push. A blob is keyed by its content,
+/// so pushing the whole log every time is safe: a relay stores each entry
+/// once however often it is sent.
 #[uniffi::export]
-pub fn blobs_to_push(
-    bill_id: String,
-    entries: Vec<String>,
-    bill_key: String,
-    seed: String,
-    author_id: String,
-) -> Result<Vec<String>> {
+pub fn blobs_to_push(entries: Vec<String>, bill_key: String) -> Result<Vec<String>> {
     let entries = parse_entries(&entries)?;
-    let seed = seed_bytes(&seed)?;
-    let facts = HostFacts {
-        me: author_id.clone(),
-        pay_to: None,
-        now: String::new(),
-        nonce: Vec::new(),
-    };
-    let sign = |message: &[u8]| {
-        Signer
-            .sign(&seed, message)
-            .expect("seed_bytes checked the length")
-    };
-    let host = FactHost {
-        facts: &facts,
-        sign: Some(&sign),
-        verify: None,
-    };
     let mut blobs = Vec::with_capacity(entries.len());
     for entry in &entries {
-        let mine = entry.get("author").and_then(Value::as_str) == Some(author_id.as_str())
-            && entry.get("sig").is_none();
-        let to_seal = if mine {
-            sign_entry(&host, entry, &bill_id)?
-        } else {
-            entry.clone()
-        };
-        blobs.push(Sealing.seal(&to_seal, &bill_key)?);
+        blobs.push(Sealing.seal(entry, &bill_key)?);
     }
     Ok(blobs)
 }
@@ -569,9 +600,15 @@ pub fn invite_for_bill(
     entries: Vec<String>,
     bill_key: String,
     name: Option<String>,
+    expiry: Option<i64>,
 ) -> Result<String> {
     let folded = folded_bill(&facts, &bill_id, &entries)?;
-    Ok(invite_for(&folded.bill, &bill_key, name.as_deref(), None)?)
+    Ok(invite_for(
+        &folded.bill,
+        &bill_key,
+        name.as_deref(),
+        expiry,
+    )?)
 }
 
 /// The whole bill as one scanned payload (§11.2), or `None` when it will not
@@ -607,6 +644,10 @@ pub struct ScanOutcome {
     pub bill_key: Option<String>,
     /// Entries it carried, for a payload rather than a bare invite.
     pub entries: Vec<String>,
+    /// The invite's expiry, a Unix time in seconds, when it states one
+    /// (§11.1). A freshness hint for the wallet to show and honour; this
+    /// protocol does not compare it with a clock.
+    pub expiry: Option<i64>,
     /// The §12 code, when it is neither. §1 leaves the wording to the wallet.
     pub refused_code: Option<String>,
 }
@@ -619,18 +660,21 @@ pub fn read_scanned(text: String) -> ScanOutcome {
             bill_id: None,
             bill_key: None,
             entries: Vec::new(),
+            expiry: None,
             refused_code: Some(code.to_owned()),
         },
         Scanned::Invite(invite) => ScanOutcome {
             bill_id: Some(invite.bill_id),
             bill_key: Some(invite.key),
             entries: Vec::new(),
+            expiry: invite.expiry,
             refused_code: None,
         },
         Scanned::Bill(scan) => ScanOutcome {
             bill_id: scan.invite.as_ref().map(|i| i.bill_id.clone()),
             bill_key: scan.invite.as_ref().map(|i| i.key.clone()),
             entries: scan.entries.iter().map(Value::to_string).collect(),
+            expiry: scan.invite.as_ref().and_then(|i| i.expiry),
             refused_code: None,
         },
     }
@@ -669,7 +713,7 @@ fn folded_bill(
 ///
 /// **What the request carried, not what the payer owes.** A recipient §8.5
 /// left out is not paid by this transaction, and recording one would claim a
-/// debt was settled that the payee must then contest.
+/// debt was settled that the payee must then dispute.
 #[uniffi::export]
 pub fn payment_entries_for_send(
     facts: HostFacts,
@@ -690,13 +734,28 @@ pub fn payment_entries_for_send(
         .iter()
         .map(|u| u.id.as_str())
         .collect();
+    // Summed with §2.2's checked arithmetic: the obligation is the caller's
+    // record, and a sum that wrapped would record a payment nobody made.
+    let overflow = |_| SplitzError::Host {
+        detail: "the amounts this obligation carries overflow 64 bits".to_owned(),
+        transient: false,
+    };
     let mut owed: std::collections::BTreeMap<&str, i64> = std::collections::BTreeMap::new();
     for settlement in &obligation.settlements {
         if unpayable.contains(settlement.to.as_str()) {
             continue;
         }
-        *owed.entry(settlement.to.as_str()).or_insert(0) += settlement.amount;
+        let held = owed.entry(settlement.to.as_str()).or_insert(0);
+        *held = checked_add(*held, settlement.amount, code::AMOUNT_OVERFLOW).map_err(overflow)?;
     }
+    // Each record states what it sent in ZEC and the rate it was priced at
+    // (§9.2), from the request the send carried.
+    let mut sent: std::collections::BTreeMap<&str, i64> = std::collections::BTreeMap::new();
+    for payment in &obligation.request.payments {
+        let held = sent.entry(payment.to.as_str()).or_insert(0);
+        *held = checked_add(*held, payment.zatoshi, code::AMOUNT_OVERFLOW).map_err(overflow)?;
+    }
+    let paid_at_rate = rate_json(&obligation.rate);
     let mut records = Vec::with_capacity(owed.len());
     for (to, amount) in owed {
         let payment_id = splitz_core::host::payment_id_for_send(&txid, to);
@@ -708,8 +767,8 @@ pub fn payment_entries_for_send(
                 amount,
                 "shieldedZec",
                 Some(&txid),
-                None,
-                None,
+                sent.get(to).copied(),
+                Some(paid_at_rate.clone()),
                 None,
             )
         })?);

@@ -5,13 +5,12 @@ mod support;
 use std::cell::Cell;
 
 use serde_json::{json, Value};
-use splitz_core::host::{add_expense, create_bill, join_bill};
+use splitz_core::host::{add_expense, confirm_payment, create_bill, join_bill};
 use splitz_host::{
     channel_for_bill, BillStore, HostError, InMemoryBillStorage, InMemorySecretStore,
-    InMemorySplitsRelay, Randomness, Sealing, Signer, SplitsKeys, SplitsRelay, SplitsSync,
-    WalletBillHost,
+    InMemorySplitsRelay, Randomness, Sealing, SplitsKeys, SplitsRelay, SplitsSync, WalletBillHost,
 };
-use support::{seed_for, FakeWallet};
+use support::FakeWallet;
 
 struct Counter(Cell<u8>);
 
@@ -97,9 +96,9 @@ fn two_devices_that_sync_the_same_bill_hold_the_same_entries() {
 
     let ana_sync = SplitsSync::new(&ana_store, &ana_keys, &relay);
     let ben_sync = SplitsSync::new(&ben_store, &ben_keys, &relay);
-    ana_sync.sync(&bill_id, None, None).unwrap();
-    ben_sync.sync(&bill_id, None, None).unwrap();
-    let back = ana_sync.sync(&bill_id, None, None).unwrap();
+    ana_sync.sync(&bill_id).unwrap();
+    ben_sync.sync(&bill_id).unwrap();
+    let back = ana_sync.sync(&bill_id).unwrap();
 
     assert_eq!(back.unopenable, 0);
     assert_eq!(ids(&ana_store.read(&bill_id).unwrap()).len(), 3);
@@ -121,8 +120,8 @@ fn syncing_twice_changes_nothing() {
     store.merge(&bill_id, vec![create]).unwrap();
 
     let sync = SplitsSync::new(&store, &keys, &relay);
-    let once = sync.sync(&bill_id, None, None).unwrap();
-    let twice = sync.sync(&bill_id, None, None).unwrap();
+    let once = sync.sync(&bill_id).unwrap();
+    let twice = sync.sync(&bill_id).unwrap();
     assert_eq!(ids(&once.entries), ids(&twice.entries));
     assert_eq!(relay.fetch(&channel_for_bill(&bill_id)).unwrap().len(), 1);
 }
@@ -149,7 +148,7 @@ fn a_blob_from_another_bill_is_skipped_not_fatal() {
     relay.push(&channel_for_bill(&bill_id), &[foreign]).unwrap();
 
     let result = SplitsSync::new(&store, &keys, &relay)
-        .sync(&bill_id, None, None)
+        .sync(&bill_id)
         .unwrap();
     assert_eq!(result.unopenable, 1);
     assert_eq!(result.entries.len(), 1);
@@ -175,42 +174,35 @@ fn a_bill_with_no_key_cannot_be_synced_and_says_so() {
 }
 
 #[test]
-fn pushing_signs_this_devices_own_unsigned_entries() {
+fn pushing_signs_nothing_so_a_peer_cannot_borrow_this_devices_key() {
+    // A peer pushes an unsigned entry written in ana's name — a confirmation
+    // of a payment she never received. Pull stores what opens, as it must;
+    // §10.7 sets the entry aside at fold time because ana's key did not sign
+    // it. A push that signed every unsigned entry authored as ana would sign
+    // it here, with ana's key, and the next fold would apply it.
     let relay = InMemorySplitsRelay::default();
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     let key = keys.ensure_bill_key("placeholder").unwrap();
-    let seed = seed_for("ana");
-    let public_key = Signer.public_key_from_seed(&seed).unwrap();
-
-    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &public_key).unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     keys.store_bill_key(&bill_id, &key).unwrap();
-    ana.wallet.tick();
-    let join = join_bill(
-        &ana.host(),
-        Some("Ana"),
-        Some("u1ana"),
-        Some(&public_key),
-        None,
-    )
-    .unwrap();
-    store.merge(&bill_id, vec![create, join]).unwrap();
+    let forged = confirm_payment(&ana.host(), "y1", "recipientConfirmed", None, "r").unwrap();
+    assert!(forged.get("sig").is_none());
+    store.merge(&bill_id, vec![create, forged]).unwrap();
 
     SplitsSync::new(&store, &keys, &relay)
-        .push(&bill_id, Some(&seed), Some("ana"))
+        .push(&bill_id)
         .unwrap();
 
     let blobs = relay.fetch(&channel_for_bill(&bill_id)).unwrap();
     assert_eq!(blobs.len(), 2);
     for blob in &blobs {
         let entry = Sealing.open(blob, &key).unwrap();
-        assert!(entry.get("sig").is_some(), "unsigned: {entry}");
-        assert!(Signer.verify_entry(&entry, &public_key, &bill_id));
-    }
-    // The stored log is untouched: signing happens on the way out.
-    for entry in store.read(&bill_id).unwrap() {
-        assert!(entry.get("sig").is_none());
+        assert!(
+            entry.get("sig").is_none(),
+            "push sends what the store holds, and signs none of it: {entry}"
+        );
     }
 }
 
@@ -286,7 +278,7 @@ fn a_bill_forgotten_while_a_sync_fetches_is_not_written_back() {
         bill_id: bill_id.clone(),
     };
     let sync = SplitsSync::new(&store, &keys, &relay);
-    sync.push(&bill_id, None, None).unwrap();
+    sync.push(&bill_id).unwrap();
     match sync.pull(&bill_id) {
         Err(HostError::Sync(why)) => assert!(why.contains("forgotten"), "{why}"),
         other => panic!("expected a sync refusal, got {other:?}"),

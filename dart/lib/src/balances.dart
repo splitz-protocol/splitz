@@ -69,16 +69,16 @@ Map<String, int> netBalances(Bill bill) {
             'An expense splits to $id, who is not on this bill');
       }
     }
-    net[e.paidBy] = checkedAdd(net[e.paidBy]!, e.amount);
+    net[e.paidBy] = checkedBalance(checkedAdd(net[e.paidBy]!, e.amount));
     shares.forEach((id, owed) {
-      net[id] = checkedSubtract(net[id]!, owed);
+      net[id] = checkedBalance(checkedSubtract(net[id]!, owed));
     });
   }
 
   for (final p in bill.payments) {
     if (!bill.confirmedPayments.contains(p.id)) continue;
-    net[p.from] = checkedAdd(net[p.from]!, p.amount);
-    net[p.to] = checkedSubtract(net[p.to]!, p.amount);
+    net[p.from] = checkedBalance(checkedAdd(net[p.from]!, p.amount));
+    net[p.to] = checkedBalance(checkedSubtract(net[p.to]!, p.amount));
   }
 
   // An expense moves this sum by zero because every split sums to its total,

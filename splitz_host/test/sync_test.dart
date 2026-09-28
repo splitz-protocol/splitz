@@ -168,47 +168,49 @@ void main() {
     },
   );
 
-  test('pushing signs this device\'s own unsigned entries', () async {
-    final relay = InMemorySplitsRelay();
-    final signer = SplitsSigner();
-    final ana = Device(FakeWallet(), relay);
-    final seed = await ana.keys.ensureIdentitySeed(
-      const WalletAccount(id: 'ana', identitySecret: [9]),
-    );
-    final identityKey = await signer.publicKeyFromSeed(seed);
+  test(
+    'pushing signs nothing, so a peer cannot borrow this device\'s key',
+    () async {
+      // A peer pushes an unsigned entry written in ana's name — a confirmation
+      // of a payment she never received. Pull stores what opens, as it must;
+      // §10.7 sets the entry aside at fold time because ana's key did not sign
+      // it. A push that signed every unsigned entry authored as ana would sign
+      // it here, with ana's key, and the next fold would apply it.
+      final relay = InMemorySplitsRelay();
+      final ana = Device(FakeWallet(), relay);
+      final create = splitz.createBill(
+        host: ana.host,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: 'A' * 43,
+      );
+      final billId = create['id'] as String;
+      await ana.keys.storeBillKey(billId, ana.keys.generateKey());
+      final forged = splitz.confirmPayment(
+        host: ana.host,
+        paymentId: 'y1',
+        method: 'recipientConfirmed',
+        record: 'r',
+      );
+      expect(forged.containsKey('sig'), isFalse);
+      await ana.store.merge(billId, [create, forged]);
 
-    final create = splitz.createBill(
-      host: ana.host,
-      name: 'Dinner',
-      currency: 'EUR',
-      creatorKey: identityKey,
-    );
-    final billId = create['id'] as String;
-    await ana.keys.storeBillKey(billId, ana.keys.generateKey());
-    await ana.store.merge(billId, [create]);
+      await ana.sync.push(billId);
 
-    await ana.sync.push(billId, signerSeed: seed, authorId: 'ana');
-
-    // Read it back off the relay the way a peer would.
-    final key = (await ana.keys.readBillKey(billId))!;
-    final sealing = SplitsSealing();
-    final blobs = await relay.fetch(SplitsChannel.forBill(billId));
-    final onTheWire = await sealing.open(blobs.single, key);
-
-    expect(onTheWire['sig'], isNotNull);
-    expect(
-      onTheWire['id'],
-      create['id'],
-      reason: '§9.5 excludes sig, so signing cannot move the id',
-    );
-    expect(
-      await signer.verifyEntry(onTheWire, identityKey, billId: billId),
-      isTrue,
-    );
-
-    // The local copy is untouched: signing happens on the way out.
-    expect((await ana.store.read(billId)).single['sig'], isNull);
-  });
+      final key = (await ana.keys.readBillKey(billId))!;
+      final sealing = SplitsSealing();
+      final onTheWire = [
+        for (final blob in await relay.fetch(SplitsChannel.forBill(billId)))
+          await sealing.open(blob, key),
+      ];
+      expect(onTheWire, hasLength(2));
+      expect(
+        onTheWire.where((e) => e['sig'] != null),
+        isEmpty,
+        reason: 'push sends what the store holds, and signs none of it',
+      );
+    },
+  );
 
   test('a peer\'s entry is merged without judging who wrote it', () async {
     // Authorship at arrival would make the stored log depend on network order.

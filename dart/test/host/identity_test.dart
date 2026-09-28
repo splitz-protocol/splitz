@@ -46,13 +46,16 @@ Future<Map<String, dynamic>> signed(Map<String, dynamic> entry, String key) =>
         billId: _bill);
 
 void main() {
-  test('two keys claiming one id leaves that id contested', () async {
+  // §10.7. A participant who publishes a key is named by the id that key
+  // derives, so no second key can claim them.
+  test('a rival key cannot claim a bound participant', () async {
     final anaKey = fakeKey('ana');
     final benKey = fakeKey('ben');
     final impostorKey = fakeKey('zzz');
+    final benId = splitz.participantId(benKey)!;
 
     final ana = signing('ana', anaKey, payTo: 'u1ana');
-    final ben = signing('ben', benKey, payTo: 'u1ben');
+    final ben = signing(benId, benKey, payTo: 'u1ben');
 
     final log = BillLog(ana);
     log.add([
@@ -73,41 +76,44 @@ void main() {
           benKey),
     ]);
 
-    // Ben's own key is bound, nothing is contested.
     final clean = log.fold();
-    expect(clean.identities.contested, isEmpty);
-    expect(clean.identities.bound['ben'], benKey);
+    expect(clean.identities.bound[benId], benKey);
 
-    // An impostor mints a rival self-claim for ben's id, with their own
-    // payout address. Both claims verify against the key each carries, so
-    // §10.7 binds neither.
-    final impostor = signing('ben', impostorKey, payTo: 'u1impostor');
-    impostor.tick();
-    impostor.tick();
-    impostor.tick();
-    log.add([
-      await signed(
-          joinBill(
-              host: impostor,
-              name: 'Ben',
-              payTo: 'u1impostor',
-              identityKey: impostorKey),
-          impostorKey),
-    ]);
+    // An impostor writes a self-claim for ben's id under their own key, with
+    // their own payout address. Their key does not derive that id.
+    final impostor = signing(benId, impostorKey, payTo: 'u1impostor');
+    for (var i = 0; i < 3; i++) {
+      impostor.tick();
+    }
+    final rival = await signed(
+        joinBill(
+            host: impostor,
+            name: 'Ben',
+            payTo: 'u1impostor',
+            identityKey: impostorKey),
+        impostorKey);
+    log.add([rival]);
 
-    final contested = log.fold();
-    expect(contested.identities.contested, contains('ben'));
-    expect(contested.identities.bound.containsKey('ben'), isFalse);
+    final after = log.fold();
+    expect(after.identities.bound[benId], benKey,
+        reason: "the rival claim leaves ben's binding as it was");
+    // Written as ben and signed with another key, it is refused before its
+    // record is read: an entry by a bound participant verifies against their
+    // key (§10.3).
+    expect(after.setAside.map((a) => (a.id, a.code)),
+        contains((rival['id'], splitz.SplitCode.unauthorizedEntry)));
+    expect(after.bill.participant(benId)!.payTo, 'u1ben');
   });
 
-  test('a contested payee is not settled to silently', () async {
+  test('a rival claim does not change who a payer pays', () async {
     final anaKey = fakeKey('ana');
     final benKey = fakeKey('ben');
     final impostorKey = fakeKey('zzz');
+    final benId = splitz.participantId(benKey)!;
 
     final ana = signing('ana', anaKey, payTo: 'u1ana');
-    final ben = signing('ben', benKey, payTo: 'u1ben');
-    final impostor = signing('ben', impostorKey, payTo: 'u1impostor');
+    final ben = signing(benId, benKey, payTo: 'u1ben');
+    final impostor = signing(benId, impostorKey, payTo: 'u1impostor');
 
     final log = BillLog(ana);
     log.add([
@@ -134,11 +140,11 @@ void main() {
           addExpense(
             host: ben,
             expenseId: 'x1',
-            paidBy: 'ben',
+            paidBy: benId,
             amount: 9000,
-            split: const {
+            split: {
               'type': 'equal',
-              'among': ['ana', 'ben'],
+              'among': ['ana', benId],
             },
           ),
           benKey),
@@ -149,90 +155,9 @@ void main() {
           setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234), anaKey),
     ]);
 
-    // Before the contest, ana pays ben at ben's own address.
     final before = obligationFor(ana, log.fold())!;
     expect(before.uri, startsWith('zcash:u1ben'));
 
-    impostor.tick();
-    impostor.tick();
-    impostor.tick();
-    impostor.tick();
-    impostor.tick();
-    log.add([
-      await signed(
-          joinBill(
-              host: impostor,
-              name: 'Ben',
-              payTo: 'u1impostor',
-              identityKey: impostorKey),
-          impostorKey),
-    ]);
-
-    final folded = log.fold();
-    expect(folded.identities.contested, contains('ben'));
-
-    final after = obligationFor(ana, folded)!;
-    expect(after.uri, isNull,
-        reason: 'section 10.7: a wallet MUST NOT settle to a contested '
-            "participant's address without putting it in front of the payer");
-    expect(after.contested.single.to, 'ben');
-    expect(after.contested.single.amount, 4500);
-    expect(after.contested.single.address, 'u1impostor',
-        reason: 'the payer is shown the address they would have paid');
-    expect(after.settlements, isEmpty);
-  });
-
-  test('a payer who has been shown the contest can still pay', () async {
-    // A contest is also a denial of payment: anyone may mint a rival claim for
-    // an id. §10.7 asks that the payer be shown it, not that paying be
-    // impossible, so a refusal with no way through would hand an attacker a
-    // way to stop a bill being settled at all.
-    final anaKey = fakeKey('ana');
-    final benKey = fakeKey('ben');
-    final impostorKey = fakeKey('zzz');
-
-    final ana = signing('ana', anaKey, payTo: 'u1ana');
-    final ben = signing('ben', benKey, payTo: 'u1ben');
-    final impostor = signing('ben', impostorKey, payTo: 'u1impostor');
-
-    final log = BillLog(ana);
-    log.add([
-      await signed(
-          createBill(
-              host: ana, name: 'Dinner', currency: 'EUR', creatorKey: anaKey),
-          anaKey),
-    ]);
-    ana.tick();
-    log.add([
-      await signed(joinBill(host: ana, name: 'Ana', payTo: 'u1ana'), anaKey),
-    ]);
-    ben.tick();
-    ben.tick();
-    log.add([
-      await signed(
-          joinBill(host: ben, name: 'Ben', payTo: 'u1ben', identityKey: benKey),
-          benKey),
-    ]);
-    ben.tick();
-    log.add([
-      await signed(
-          addExpense(
-            host: ben,
-            expenseId: 'x1',
-            paidBy: 'ben',
-            amount: 9000,
-            split: const {
-              'type': 'equal',
-              'among': ['ana', 'ben'],
-            },
-          ),
-          benKey),
-    ]);
-    ana.tick();
-    log.add([
-      await signed(
-          setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234), anaKey),
-    ]);
     for (var i = 0; i < 5; i++) {
       impostor.tick();
     }
@@ -246,17 +171,11 @@ void main() {
           impostorKey),
     ]);
 
-    final folded = log.fold();
-    final shown = obligationFor(ana, folded)!;
-    expect(shown.uri, isNull);
-    expect(shown.contested.single.address, 'u1impostor');
-
-    // Having seen which address it is, the payer decides.
-    final accepted = obligationFor(ana, folded, payAnyway: const {'ben'})!;
-    expect(accepted.contested, isEmpty);
-    expect(accepted.settlements.single.to, 'ben');
-    expect(accepted.uri, startsWith('zcash:u1impostor'),
-        reason: 'the payer accepted this address, having been shown it');
+    final after = obligationFor(ana, log.fold())!;
+    expect(after.uri, before.uri,
+        reason: 'the request pays the address ben published, not the rival');
+    expect(after.settlements.single.to, benId);
+    expect(after.settlements.single.amount, 4500);
   });
 
   test('a signature made on one bill does not verify on another', () async {

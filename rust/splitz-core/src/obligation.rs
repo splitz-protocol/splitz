@@ -7,7 +7,7 @@ use crate::model::Bill;
 use crate::money::{checked_add, checked_sum};
 use crate::rate::{fiat_to_zatoshi, ExchangeRate, RateRounding};
 use crate::settle::Settlement;
-use crate::zip321::{render_uri, FiatPrice, Zip321Payment};
+use crate::zip321::{render_amount, render_fiat, render_uri, FiatPrice, Zip321Payment};
 
 /// A recipient the request cannot carry, and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +15,8 @@ pub struct Unpayable {
     pub id: String,
     /// `no_address` when nothing is published, `bad_address` when what is
     /// published is not an address §8.3 admits, `payout_not_zec` when the
-    /// preferred payout is a swap or cash. Each needs a different remedy.
+    /// preferred payout is a swap or cash, `unpriceable` when the debt is past
+    /// what one request can price at this rate. Each needs a different remedy.
     pub reason: &'static str,
     pub minor_units: i64,
 }
@@ -30,6 +31,8 @@ pub struct Obligation {
     /// None when nothing could be carried.
     pub uri: Option<String>,
     pub payments: Vec<Zip321Payment>,
+    /// The participant each of `payments` pays, in the same order.
+    pub recipients: Vec<String>,
     pub unpayable: Vec<Unpayable>,
     /// What the URI sends. Never present a figure pricing the whole obligation
     /// as this.
@@ -42,6 +45,13 @@ impl Obligation {
         self.unpayable.is_empty()
     }
 }
+
+/// The refusals one output's size produces (§7.1, §8.1, §8.4).
+const UNPRICEABLE: [&str; 3] = [
+    code::RATE_AMOUNT_TOO_LARGE,
+    code::ZIP321_AMOUNT_TOO_LARGE,
+    code::ZIP321_FIAT_TOO_MANY_DIGITS,
+];
 
 /// Renders one payer's settlements as a payment request.
 ///
@@ -56,6 +66,7 @@ pub fn render_obligation(
     include_fiat: bool,
 ) -> Result<Obligation> {
     let mut payments = Vec::new();
+    let mut recipients = Vec::new();
     let mut unpayable = Vec::new();
     let mut carried: i64 = 0;
     let mut withheld: i64 = 0;
@@ -103,21 +114,49 @@ pub fn render_obligation(
                 withheld = checked_add(withheld, settlement.amount, code::AMOUNT_OVERFLOW)?;
             }
             Some(address) => {
+                let fiat = FiatPrice {
+                    currency: bill.currency.clone(),
+                    minor_units: settlement.amount,
+                };
+                // Each output is priced, and checked against what §8 renders,
+                // on its own: one debt past what a request can carry is that
+                // debt's to report, not a reason to carry none of the others.
+                let priced = fiat_to_zatoshi(
+                    settlement.amount,
+                    rate,
+                    Some(&bill.currency),
+                    RateRounding::Up,
+                )
+                .and_then(|zatoshi| {
+                    render_amount(zatoshi)?;
+                    if include_fiat {
+                        render_fiat(&fiat)?;
+                    }
+                    Ok(zatoshi)
+                });
+                let zatoshi = match priced {
+                    Ok(zatoshi) => zatoshi,
+                    // Only the refusals one output's size produces. One about
+                    // the rate itself refuses every output alike and is raised.
+                    Err(e) if skip_unpayable && UNPRICEABLE.contains(&e.code) => {
+                        unpayable.push(Unpayable {
+                            id: settlement.to.clone(),
+                            reason: "unpriceable",
+                            minor_units: settlement.amount,
+                        });
+                        withheld = checked_add(withheld, settlement.amount, code::AMOUNT_OVERFLOW)?;
+                        continue;
+                    }
+                    Err(e) => return Err(e),
+                };
                 payments.push(Zip321Payment {
                     address: address.to_owned(),
-                    zatoshi: fiat_to_zatoshi(
-                        settlement.amount,
-                        rate,
-                        Some(&bill.currency),
-                        RateRounding::Up,
-                    )?,
-                    fiat: Some(FiatPrice {
-                        currency: bill.currency.clone(),
-                        minor_units: settlement.amount,
-                    }),
+                    zatoshi,
+                    fiat: Some(fiat),
                     label: Some(who.name.clone()),
                     ..Default::default()
                 });
+                recipients.push(settlement.to.clone());
                 carried = checked_add(carried, settlement.amount, code::AMOUNT_OVERFLOW)?;
             }
         }
@@ -132,6 +171,7 @@ pub fn render_obligation(
     Ok(Obligation {
         uri,
         payments,
+        recipients,
         unpayable,
         carried_minor_units: carried,
         withheld_minor_units: withheld,
@@ -142,6 +182,7 @@ pub fn render_obligation(
 /// (section 14.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Awaiting {
+    /// Who the plan says is owed.
     pub to: String,
     /// What the plan still says is owed. An unconfirmed payment does not
     /// reduce it (section 10.5).
@@ -149,16 +190,10 @@ pub struct Awaiting {
     /// What this payer has already sent and is waiting to have confirmed.
     /// Less than `owed` when the payment was partial.
     pub paid: i64,
-}
-
-/// A debt held back because two keys each claim that participant's id
-/// (section 10.7).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Contested {
-    pub to: String,
-    pub amount: i64,
-    /// The payout address standing on the bill, which may be an impostor's.
-    pub address: Option<String>,
+    /// Who that unconfirmed money went to, in ascending id order. Not `to`
+    /// when netting rerouted the debt (§6.3): the payment to confirm, or to
+    /// take back, is theirs.
+    pub paid_to: Vec<String>,
 }
 
 /// One payer's settlements, split into what a request may carry and what
@@ -169,22 +204,18 @@ pub struct Withholdings {
     /// have no payout address, which `render_obligation` reports as unpayable.
     pub carried: Vec<Settlement>,
     pub awaiting: Vec<Awaiting>,
-    pub contested: Vec<Contested>,
 }
 
-/// Splits `payer`'s settlements into what may be requested and what may not.
+/// Splits `payer`'s settlements into what may be requested and what section
+/// 14.4 holds back.
 ///
-/// Pure: it reads the bill and the identities the fold resolved, and decides
-/// nothing a wallet is entitled to decide. `pay_anyway` names the contested
-/// ids a payer has accepted after being shown them, which section 10.7
-/// permits and which is the only way through a contest — anyone may mint a
-/// rival claim, so a refusal with no exit is a denial of payment.
+/// Pure: it reads the bill, and decides nothing a wallet is entitled to
+/// decide. Given `recorded_by` — the fold's author of each payment record —
+/// only a record the payer wrote withholds anything.
 pub fn withholdings(
     plan: &[Settlement],
     bill: &Bill,
     payer: &str,
-    contested_ids: &BTreeSet<String>,
-    pay_anyway: &BTreeSet<String>,
     recorded_by: Option<&BTreeMap<String, String>>,
 ) -> Result<Withholdings> {
     // Section 10.5: only a confirmed payment moves a balance, so a debt this
@@ -203,48 +234,29 @@ pub fn withholdings(
         *held = checked_add(*held, p.amount, code::AMOUNT_OVERFLOW)?;
     }
 
-    let pay_to: BTreeMap<&str, Option<&str>> = bill
-        .participants
-        .iter()
-        .map(|p| (p.id.as_str(), p.pay_to.as_deref()))
-        .collect();
-
     let mut carried = Vec::new();
     let mut awaiting = Vec::new();
-    let mut contested = Vec::new();
     for s in plan.iter().filter(|s| s.from == payer) {
         // The payee, and every creditor whose debt this settlement covers
         // (§6.3): netting can reroute a debt already paid onto somebody else.
         let mut owed_to: BTreeSet<&str> = BTreeSet::new();
         owed_to.insert(s.to.as_str());
         owed_to.extend(s.covers.iter().map(|c| c.to.as_str()));
-        let in_flight: Vec<i64> = owed_to
+        let paid_to: Vec<&str> = owed_to
             .iter()
-            .filter_map(|t| pending.get(t).copied())
+            .copied()
+            .filter(|t| pending.contains_key(t))
             .collect();
-        if !in_flight.is_empty() {
+        if !paid_to.is_empty() {
             awaiting.push(Awaiting {
                 to: s.to.clone(),
                 owed: s.amount,
-                paid: checked_sum(in_flight, code::AMOUNT_OVERFLOW)?,
-            });
-        } else if contested_ids.contains(&s.to) && !pay_anyway.contains(&s.to) {
-            contested.push(Contested {
-                to: s.to.clone(),
-                amount: s.amount,
-                address: pay_to
-                    .get(s.to.as_str())
-                    .copied()
-                    .flatten()
-                    .map(str::to_owned),
+                paid: checked_sum(paid_to.iter().map(|t| pending[t]), code::AMOUNT_OVERFLOW)?,
+                paid_to: paid_to.iter().map(|t| (*t).to_owned()).collect(),
             });
         } else {
             carried.push(s.clone());
         }
     }
-    Ok(Withholdings {
-        carried,
-        awaiting,
-        contested,
-    })
+    Ok(Withholdings { carried, awaiting })
 }

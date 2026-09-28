@@ -3,6 +3,7 @@ library;
 
 import 'errors.dart';
 import 'model.dart';
+import 'ordering.dart';
 import 'money.dart';
 import 'rate.dart';
 import 'settle.dart';
@@ -15,7 +16,8 @@ class Unpayable {
 
   /// `no_address` when nothing is published, `bad_address` when what is
   /// published is not an address §8.3 admits, `payout_not_zec` when the
-  /// preferred payout is a swap or cash. Each needs a different remedy.
+  /// preferred payout is a swap or cash, `unpriceable` when the debt is past
+  /// what one request can price at this rate. Each needs a different remedy.
   final String reason;
   final int minorUnits;
 }
@@ -29,6 +31,7 @@ class Obligation {
   const Obligation({
     required this.uri,
     required this.payments,
+    required this.recipients,
     required this.unpayable,
     required this.carriedMinorUnits,
     required this.withheldMinorUnits,
@@ -37,6 +40,9 @@ class Obligation {
   /// Null when nothing could be carried.
   final String? uri;
   final List<Zip321Payment> payments;
+
+  /// The participant each of [payments] pays, in the same order.
+  final List<String> recipients;
   final List<Unpayable> unpayable;
 
   /// What the URI sends. Never present a figure pricing the whole obligation
@@ -46,6 +52,13 @@ class Obligation {
 
   bool get isComplete => unpayable.isEmpty;
 }
+
+/// The refusals one output's size produces (§7.1, §8.1, §8.4).
+const Set<String> _unpriceable = {
+  SplitCode.rateAmountTooLarge,
+  SplitCode.zip321AmountTooLarge,
+  SplitCode.zip321FiatTooManyDigits,
+};
 
 /// Renders one payer's settlements as a payment request.
 ///
@@ -60,6 +73,7 @@ Obligation renderObligation(
   bool includeFiat = false,
 }) {
   final payments = <Zip321Payment>[];
+  final recipients = <String>[];
   final unpayable = <Unpayable>[];
   var carried = 0;
   var withheld = 0;
@@ -89,12 +103,29 @@ Obligation renderObligation(
       withheld = checkedAdd(withheld, s.amount);
       continue;
     }
+    // Each output is priced, and checked against what §8 renders, on its own:
+    // one debt past what a request can carry is that debt's to report, not a
+    // reason to carry none of the others.
+    final int zatoshi;
+    try {
+      zatoshi = fiatToZatoshi(s.amount, rate, amountCurrency: bill.currency);
+      renderAmount(zatoshi);
+      if (includeFiat) renderFiat(FiatPrice(bill.currency, s.amount));
+    } on SplitError catch (err) {
+      // Only the refusals one output's size produces. One about the rate
+      // itself refuses every output alike and is raised.
+      if (!skipUnpayable || !_unpriceable.contains(err.code)) rethrow;
+      unpayable.add(Unpayable(s.to, 'unpriceable', s.amount));
+      withheld = checkedAdd(withheld, s.amount);
+      continue;
+    }
     payments.add(Zip321Payment(
       address: address,
-      zatoshi: fiatToZatoshi(s.amount, rate, amountCurrency: bill.currency),
+      zatoshi: zatoshi,
       fiat: FiatPrice(bill.currency, s.amount),
       label: who.name,
     ));
+    recipients.add(s.to);
     carried = checkedAdd(carried, s.amount);
   }
 
@@ -102,6 +133,7 @@ Obligation renderObligation(
     uri:
         payments.isEmpty ? null : renderUri(payments, includeFiat: includeFiat),
     payments: payments,
+    recipients: recipients,
     unpayable: unpayable,
     carriedMinorUnits: carried,
     withheldMinorUnits: withheld,
@@ -111,8 +143,9 @@ Obligation renderObligation(
 /// A debt held back because a payment to that participant is unconfirmed
 /// (§14.4).
 class Awaiting {
-  const Awaiting(this.to, this.owed, this.paid);
+  const Awaiting(this.to, this.owed, this.paid, this.paidTo);
 
+  /// Who the plan says is owed.
   final String to;
 
   /// What the plan still says is owed. An unconfirmed payment does not reduce
@@ -122,18 +155,11 @@ class Awaiting {
   /// What this payer has already sent and is waiting to have confirmed. Less
   /// than [owed] when the payment was partial.
   final int paid;
-}
 
-/// A debt held back because two keys each claim that participant's id
-/// (§10.7).
-class Contested {
-  const Contested(this.to, this.amount, this.address);
-
-  final String to;
-  final int amount;
-
-  /// The payout address standing on the bill, which may be an impostor's.
-  final String? address;
+  /// Who that unconfirmed money went to, in ascending id order. Not [to] when
+  /// netting rerouted the debt (§6.3): the payment to confirm, or to take
+  /// back, is theirs.
+  final List<String> paidTo;
 }
 
 /// One payer's settlements, split into what a request may carry and what
@@ -142,29 +168,24 @@ class Withholdings {
   const Withholdings({
     required this.carried,
     required this.awaiting,
-    required this.contested,
   });
 
   /// Safe to render. Still subject to §8.4: a participant here may have no
   /// payout address, which `renderObligation` reports as unpayable.
   final List<Settlement> carried;
   final List<Awaiting> awaiting;
-  final List<Contested> contested;
 }
 
-/// Splits [payer]'s settlements into what may be requested and what may not.
+/// Splits [payer]'s settlements into what may be requested and what §14.4
+/// holds back.
 ///
-/// Pure: it reads the bill and the identities the fold resolved, and decides
-/// nothing a wallet is entitled to decide. [payAnyway] names the contested
-/// ids a payer has accepted after being shown them, which §10.7 permits and
-/// which is the only way through a contest — anyone may mint a rival claim,
-/// so a refusal with no exit is a denial of payment.
+/// Pure: it reads the bill, and decides nothing a wallet is entitled to
+/// decide. Given [recordedBy] — the fold's author of each payment record —
+/// only a record the payer wrote withholds anything.
 Withholdings withholdings(
   List<Settlement> plan,
   Bill bill,
   String payer, {
-  Set<String> contestedIds = const {},
-  Set<String> payAnyway = const {},
   Map<String, String>? recordedBy,
 }) {
   final mine = plan.where((s) => s.from == payer);
@@ -181,29 +202,22 @@ Withholdings withholdings(
     pending[p.to] = checkedAdd(pending[p.to] ?? 0, p.amount);
   }
 
-  final payTo = <String, String?>{
-    for (final p in bill.participants) p.id: p.payTo,
-  };
-
   final carried = <Settlement>[];
   final awaiting = <Awaiting>[];
-  final contested = <Contested>[];
   for (final s in mine) {
     // The payee, and every creditor whose debt this settlement covers (§6.3):
     // netting can reroute a debt already paid onto somebody else.
     final owedTo = {s.to, for (final c in s.covers) c.to};
-    final inFlight = [
+    final paidTo = sortedUtf8([
       for (final t in owedTo)
-        if (pending.containsKey(t)) pending[t]!
-    ];
-    if (inFlight.isNotEmpty) {
-      awaiting.add(Awaiting(s.to, s.amount, checkedSum(inFlight)));
-    } else if (contestedIds.contains(s.to) && !payAnyway.contains(s.to)) {
-      contested.add(Contested(s.to, s.amount, payTo[s.to]));
+        if (pending.containsKey(t)) t
+    ]);
+    if (paidTo.isNotEmpty) {
+      awaiting.add(Awaiting(s.to, s.amount,
+          checkedSum([for (final t in paidTo) pending[t]!]), paidTo));
     } else {
       carried.add(s);
     }
   }
-  return Withholdings(
-      carried: carried, awaiting: awaiting, contested: contested);
+  return Withholdings(carried: carried, awaiting: awaiting);
 }

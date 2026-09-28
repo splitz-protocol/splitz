@@ -156,6 +156,68 @@ void main() {
     expect(await storage.read('splitz_bill_b1'), 'x');
   });
 
+  test('a bill file that cannot be read is never written over', () async {
+    // Unreadable is not absent. A merge that took it for an empty log would
+    // write the relay's copy over it and lose every entry only this device
+    // held — a payment recorded and not yet pushed.
+    final storage = FileBillStorage(dir);
+    final store = BillStore(storage);
+    final wallet = FakeWallet();
+    final create = splitz.createBill(
+      host: WalletBillHost(wallet),
+      name: 'Dinner',
+      currency: 'EUR',
+      creatorKey: 'A' * 43,
+    );
+    final id = create['id'] as String;
+    await store.merge(id, [create]);
+    final file = File('${dir.path}/splitz_bill_$id');
+    final before = await file.readAsString();
+
+    await Process.run('chmod', ['000', file.path]);
+    try {
+      expect(await store.read(id), isEmpty, reason: 'shown as no entries');
+      wallet.tick();
+      await expectLater(
+        store.merge(id, [
+          splitz.joinBill(host: WalletBillHost(wallet), name: 'Ana'),
+        ]),
+        throwsA(isA<BillStorageUnreadable>()),
+      );
+    } finally {
+      await Process.run('chmod', ['600', file.path]);
+    }
+    expect(await file.readAsString(), before, reason: 'not written over');
+  });
+
+  test('a sweep during a write leaves that write to finish', () async {
+    // The sweep runs on every load, not only the first, so it meets writes in
+    // flight. Deleting their temporary file fails the rename and loses the
+    // entry: a payment sent and its record gone.
+    final storage = FileBillStorage(dir);
+    // What an earlier process left: its temporary names another process.
+    await File(
+      '${dir.path}/splitz_bill_b0~1-2~3-4.writing',
+    ).writeAsString('left by a process that died');
+    var failed = 0;
+    for (var i = 0; i < 40; i++) {
+      final writing = storage.write('splitz_bill_b$i', 'x' * 200000);
+      await storage.sweepUnfinishedWrites();
+      try {
+        await writing;
+      } on FileSystemException {
+        failed++;
+      }
+    }
+    expect(failed, 0, reason: 'no write lost its temporary file to a sweep');
+    expect(
+      await File('${dir.path}/splitz_bill_b0~1-2~3-4.writing').exists(),
+      isFalse,
+      reason: "another process's leftover is still swept",
+    );
+    expect((await storage.keys('splitz_bill_')).length, 40);
+  });
+
   test('deleting a bill takes its file with it', () async {
     final storage = FileBillStorage(dir);
     await storage.write('splitz_bill_b1', 'x');

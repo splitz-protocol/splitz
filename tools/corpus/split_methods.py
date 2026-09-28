@@ -83,6 +83,18 @@ CASES = [
         {"description": "tacos", "minorUnits": 9000,
          "sharedBy": ["ana", 7, "ben"]}]}),
 
+    # §4. Every share, weight and item is an integer, checked before any is
+    # compared: a null or a string there is refused, not read as a number.
+    ("an_exact_share_that_is_null", 700,
+     {"type": "exact", "amounts": {"ana": 700, "ben": None}}),
+    ("a_basis_point_weight_that_is_a_string", 700,
+     {"type": "percentage", "basisPoints": {"ana": "5000", "ben": 5000}}),
+    ("a_share_count_that_is_a_fraction", 700,
+     {"type": "shares", "shareCounts": {"ana": 1, "ben": 2.5}}),
+    ("an_item_whose_amount_is_a_string", 700,
+     {"type": "itemized", "items": [
+        {"description": "tacos", "minorUnits": "700", "sharedBy": ["ana"]}]}),
+
     # unknown type
     ("an_unknown_split_type",    1000,  {"type": "byHeight", "among": ["ana"]}),
 ]

@@ -21,8 +21,8 @@ class PayerObligation {
   const PayerObligation({
     required this.settlements,
     required this.request,
+    required this.rate,
     this.awaiting = const <splitz.Awaiting>[],
-    this.contested = const <splitz.Contested>[],
   });
 
   /// The settlements this device is the payer of and the request carries.
@@ -39,16 +39,12 @@ class PayerObligation {
   /// this path until its record is voided.
   final List<splitz.Awaiting> awaiting;
 
-  /// Debts to a participant whose identity two keys claim.
-  ///
-  /// Left out of [settlements] and out of the request. The payer decides,
-  /// having been shown the contest — nothing here decides for them by paying
-  /// whichever record happens to be on the bill.
-  final List<splitz.Contested> contested;
-
   /// The protocol's answer: the request, what it carries, and who it could
   /// not carry with the reason for each.
   final splitz.Obligation request;
+
+  /// The rate [request] was priced at: the bill's, when this was read.
+  final splitz.ExchangeRate rate;
 
   String? get uri => request.uri;
   List<splitz.Unpayable> get unpayable => request.unpayable;
@@ -78,6 +74,17 @@ class PayerObligation {
     }
     return owed;
   }
+
+  /// What the request sends each recipient, in zatoshi: the ZEC side of
+  /// [carriedTo], summed per recipient as the request carries it.
+  Map<String, int> get carriedZatoshi {
+    final sent = <String, int>{};
+    for (var i = 0; i < request.payments.length; i++) {
+      final to = request.recipients[i];
+      sent[to] = (sent[to] ?? 0) + request.payments[i].zatoshi;
+    }
+    return sent;
+  }
 }
 
 /// What a settlement attempt produced.
@@ -95,7 +102,9 @@ class Settled {
 
   final SendResult result;
 
-  /// The transaction id, present when [result] is [SendResult.sent].
+  /// The transaction id, present when [result] is [SendResult.sent], and
+  /// when it is [SendResult.pending] and the wallet named the transaction it
+  /// built. A pending one records nothing.
   final String? txid;
 
   /// What to put in front of a person when nothing was recorded.
@@ -111,36 +120,29 @@ class Settled {
 ///
 /// Returns null when the bill carries no rate: an unpriced bill is an ordinary
 /// bill, not an error, and there is no refusal code to catch.
-PayerObligation? obligationFor(
-  BillHost host,
-  FoldedBill folded, {
-  Set<String> payAnyway = const {},
-}) {
+PayerObligation? obligationFor(BillHost host, FoldedBill folded) {
   final rate = folded.bill.rate;
   if (rate == null) return null;
 
   // §14 decides this, not this layer: which debts a request may carry, and
-  // which wait on a confirmation or on a contest, is a function of the bill
-  // and the identities the fold resolved. A second implementation here is a
-  // second place for the rule to drift.
+  // which wait on a confirmation, is a function of the bill and the records
+  // the fold applied. A second implementation here is a second place for the
+  // rule to drift.
   final plan = splitz.settleBill(folded.bill);
   final split = splitz.withholdings(
     plan.settlements,
     folded.bill,
     host.me,
-    contestedIds: folded.identities.contested,
-    payAnyway: payAnyway,
     recordedBy: folded.paymentAuthors,
   );
   final mine = split.carried;
   final awaiting = split.awaiting;
-  final contested = split.contested;
 
   if (mine.isEmpty) {
     return PayerObligation(
       settlements: const [],
       awaiting: awaiting,
-      contested: contested,
+      rate: rate,
       request: splitz.renderObligation(const [], folded.bill,
           rate: rate, skipUnpayable: true),
     );
@@ -157,10 +159,7 @@ PayerObligation? obligationFor(
   );
 
   return PayerObligation(
-      settlements: mine,
-      awaiting: awaiting,
-      contested: contested,
-      request: rendered);
+      settlements: mine, awaiting: awaiting, rate: rate, request: rendered);
 }
 
 /// The id of the payment record for [to]'s share of the transaction [txid].
@@ -212,7 +211,7 @@ Future<Settled> settle(
   // nothing and letting a retry through would pay it twice. Neither is chosen
   // here — the caller is told, and the debt stays exactly as it was.
   if (sent.result != SendResult.sent) {
-    return Settled(result: sent.result, detail: sent.detail);
+    return Settled(result: sent.result, detail: sent.detail, txid: sent.txid);
   }
 
   final txid = sent.txid;
@@ -225,12 +224,18 @@ Future<Settled> settle(
     );
   }
 
-  final records = await recordSend(host, log, owed, txid);
+  final records = await recordSend(host, log, owed, txid,
+      zatoshi: obligation.carriedZatoshi, rate: obligation.rate);
   return Settled(result: SendResult.sent, txid: txid, records: records);
 }
 
 /// Records that the transaction [txid] paid [carried]: one signed payment
 /// record per recipient, appended to [log] and returned.
+///
+/// Each record states what it sent in ZEC, from [zatoshi], and the rate it
+/// was priced at, from [rate] (§9.2): the payee confirms against a figure
+/// they can compare with what arrived, not a fiat amount alone, so a rate a
+/// payer lowered before paying shows on the record they confirm.
 ///
 /// What [settle] writes after a send that succeeded, and what a wallet writes
 /// when a send it could not resolve at the time is later found on chain. The
@@ -245,8 +250,10 @@ Future<List<Map<String, dynamic>>> recordSend(
   BillHost host,
   BillLog log,
   Map<String, int> carried,
-  String txid,
-) async {
+  String txid, {
+  Map<String, int> zatoshi = const {},
+  splitz.ExchangeRate? rate,
+}) async {
   // The bill the records are signed for (§10.6): the one the log was opened
   // for, or the one its entries create.
   final billId = log.billId ?? log.fold().bill.id;
@@ -261,6 +268,8 @@ Future<List<Map<String, dynamic>>> recordSend(
         to: entry.key,
         amount: entry.value,
         reference: txid,
+        zatoshi: zatoshi[entry.key],
+        paidAtRate: rate == null ? null : splitz.rateToJson(rate),
       ),
     );
     log.add([record]);

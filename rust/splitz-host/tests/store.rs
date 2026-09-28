@@ -141,3 +141,24 @@ fn a_send_reporting_success_with_no_transaction_id_is_pending() {
     assert_eq!(sent.result, SendResult::Pending);
     assert!(sent.detail.unwrap().contains("no transaction id"));
 }
+
+#[test]
+fn a_stored_log_that_does_not_decode_is_never_written_over() {
+    // Not absent: a merge that took it for an empty log would write the
+    // relay's copy over it and lose every entry only this device held.
+    let wallet = FakeWallet::ana();
+    let storage = InMemoryBillStorage::default();
+    let store = BillStore::new(&storage);
+    storage.write("splitz_bill_b1", "{ damaged").unwrap();
+
+    assert!(store.read("b1").unwrap().is_empty(), "shown as no entries");
+    match store.merge("b1", a_log(&wallet)) {
+        Err(splitz_host::HostError::Unreadable(name)) => assert_eq!(name, "splitz_bill_b1"),
+        other => panic!("expected a refusal, got {other:?}"),
+    }
+    assert_eq!(
+        storage.read("splitz_bill_b1").unwrap().as_deref(),
+        Some("{ damaged"),
+        "not written over"
+    );
+}

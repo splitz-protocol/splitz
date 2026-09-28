@@ -21,6 +21,23 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 dart_bin="${DART:-dart}"
 
 shopt -s nullglob
+
+# The examples INTEGRATING.md quotes, named as well as globbed below, so
+# tools/docs/blocks.py can see that a lane runs each one. A quoted sample that
+# has gone missing fails here rather than leaving the document quoting nothing.
+quoted=(
+  dart/example/integrating.dart
+  dart/example/seam.dart
+  rust/splitz-core/examples/integrating.rs
+  rust/splitz-core/examples/seam.rs
+)
+for sample in "${quoted[@]}"; do
+  if [ ! -f "$root/$sample" ]; then
+    echo "  FAILED  $sample is quoted by INTEGRATING.md and does not exist"
+    exit 1
+  fi
+done
+
 examples=("$root"/dart/example/*.dart)
 if [ "${#examples[@]}" -eq 0 ]; then
   echo "no examples under dart/example/ — this lane is checking nothing"
@@ -46,7 +63,7 @@ done
 # The Rust side has one too. `differential` is left out deliberately: it reads
 # an operation list on stdin and is the differential lane's, not a sample.
 cargo_bin="${CARGO:-cargo}"
-for name in seam; do
+for name in seam integrating; do
   out="$(cd "$root/rust" && "$cargo_bin" run --quiet --example "$name" 2>&1)"
   code=$?
   if [ "$code" -eq 0 ]; then

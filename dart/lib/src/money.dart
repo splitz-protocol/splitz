@@ -83,6 +83,18 @@ int checkedMultiply(int a, int b, [String code = SplitCode.amountOverflow]) {
   return product;
 }
 
+/// [balance], refused with `amount_overflow` when it is [minAmount] (§2.2).
+///
+/// A balance has a magnitude, so its range is symmetric: the most negative
+/// 64-bit value has no positive counterpart, and §5.1's residual and §6's
+/// matching could not form one for it.
+int checkedBalance(int balance) {
+  if (balance == minAmount) {
+    raise(SplitCode.amountOverflow, 'A balance of $balance has no magnitude');
+  }
+  return balance;
+}
+
 /// The sum of [values], refused with [code] rather than wrapped.
 int checkedSum(Iterable<int> values, [String code = SplitCode.amountOverflow]) {
   var total = 0;

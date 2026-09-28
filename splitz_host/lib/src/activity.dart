@@ -69,8 +69,11 @@ class BillEvent {
   /// `shieldedZec`, `swap` or `cash` for a payment (§9.2).
   final String? method;
 
-  /// A swap's own identifier. **Not a Zcash txid** — a screen that renders it
-  /// as one is wrong for every swap (§9.2).
+  /// What a payment or a confirmation names as its evidence (§9.2): the
+  /// Zcash transaction id for `shieldedZec`, and the provider's own
+  /// identifier for `swap`, which is **not a Zcash txid**. Read with
+  /// [method]; a screen that renders one as the other is wrong for every
+  /// payment of the other kind.
   final String? reference;
 
   /// Whether §10.8 withdrew this entry. It stays in the history: removing it

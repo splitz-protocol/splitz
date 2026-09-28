@@ -102,6 +102,14 @@ expenses can still exceed what one request prices, which §7.1 refuses with
 `rate_amount_too_large`. Payments carry no cap of their own: a payment
 settles a debt, and a debt is a sum of expenses.
 
+**A balance MUST lie within ±(2^63 − 1)**, refused with `amount_overflow`.
+The range of a signed 64-bit integer is one wider below zero than above, and
+a balance of −2^63 has no magnitude that type can hold: §5.1's residual and
+§6's matching both form one. A payment a participant records to themselves
+and confirms as its recipient reaches that value with no other party's
+agreement, so the fold (§10.3) sets aside the entry whose effect would leave
+any balance there, and §5 refuses a document whose balances reach it.
+
 The bound is stated as a number rather than left to whichever integer type an
 implementation happens to have, so that every implementation accepts and
 refuses the same inputs. A wrapped total satisfies every check downstream of
@@ -647,6 +655,16 @@ Anyone may publish any string as their own address, so without this one
 participant's malformed `payTo` refuses every other output of every payer's
 request.
 
+**A debt past what one request can price is excluded the same way**, reported
+with the reason `unpriceable`. A debt is a sum of expenses, so it can exceed
+what §7.1 converts (`rate_amount_too_large`), or convert at a low rate to more
+than one §8.1 output carries (`zip321_amount_too_large`), or, with `fiat`
+included, to more digits than §8.4 writes (`zip321_fiat_too_many_digits`).
+Each of those is about one output's size, so it excludes that recipient and
+not the others; an implementation that refuses rather than reports refuses
+with that code. A refusal about the rate itself — its currency, its sign — is
+the same for every output and refuses the whole request.
+
 The same holds for a recipient whose preferred payout is not a Zcash address at
 all. A `swap` or `cash` payout (§9) cannot become an output of this URI, so
 such a recipient is excluded for a reason that has nothing to do with a missing
@@ -667,7 +685,7 @@ NOT be presented as what the URI sends.**
 
 ```json
 {
-  "v": 2,
+  "v": 1,
   "id": "weekend",
   "name": "Zcon7 weekend",
   "currency": "MXN",
@@ -708,15 +726,18 @@ as absent. `payTo` is the address money is sent to, and an `extraMinorUnits`
 silently defaulted to zero makes the §4.5.2 total check pass on a bill whose tax
 has vanished.
 
-**`currency`** MUST be non-empty (`bill_missing_currency`) and MUST be an
-ISO 4217 alpha-3 code in upper case (`bill_bad_currency`, §2.1). This applies to
-the bill's `currency`, to an expense's or payment's own, to an entry's own
-field, and to a rate's.
+**The bill's `currency`** MUST be present and non-empty
+(`bill_missing_currency`). **Every `currency`** — the bill's, an expense's or
+payment's own, an entry's own field, and a rate's — MUST be an ISO 4217
+alpha-3 code in upper case (`bill_bad_currency`, §2.1). An empty one other
+than the bill's is not a code, and is refused as `bill_bad_currency`.
 
 **Participant ids** MUST be unique within a document (`duplicate_participant`).
 
 **`identityKey`** on a participant is the Ed25519 public key that alone may
-write as them (§10.7). Optional; absent means the identity is unclaimed.
+write as them (§10.7): 32 bytes, canonical unpadded base64url, refused with
+`bill_type_error` otherwise, because a participant's id is derived from it.
+Optional; absent means the identity is unclaimed.
 
 **`payouts`** on a participant is how they want to be paid, most preferred
 first: a list of `{"type": "zec", "address": …}`, `{"type": "swap", "asset": …,
@@ -764,7 +785,10 @@ two the same way lets one wrong-typed member redenominate an amount silently.
 
 **An optional member that is a list reads `null` as absent**, because both
 denote none and the fallback is the empty list rather than a value standing in
-for something. **An optional member that is a scalar does not**: there `null`
+for something. Any other value that is not a list — an empty string, an
+object, `false` — is refused with `bill_type_error`, never read as empty: one
+reader taking `""` for "no participants" and another refusing it open two
+different documents from one text. **An optional member that is a scalar does not**: there `null`
 is refused like any other wrong type, because the fallback would stand in for
 a value nobody stated.
 
@@ -789,10 +813,14 @@ records.
 
 A payment MAY carry **`zatoshi`** and **`paidAtRate`**, recording what it sent
 and the rate it was converted at. **Both are advisory:** the fiat `amount` is
-what settles the debt, and neither takes any part in §5 or §6.
+what settles the debt, and neither takes any part in §5 or §6. A record of a
+Zcash send SHOULD carry both. The payee confirms the record (§10.5), and a
+fiat amount alone hides a rate lowered before paying: the record says the
+debt was paid in full while the ZEC that arrived covers a fraction of it.
 
 `zatoshi` MUST be an integer (`bill_type_error`) and greater than zero
-(`negative_amount`). `paidAtRate` MUST be an object (`bill_type_error`) and MUST
+(`negative_amount`). `paidAtRate` MUST be an object (`bill_type_error`),
+decoded as the rate §7 describes with each member checked, and MUST
 price the same currency the payment is in (`rate_currency_mismatch`): a rate in
 another currency restates the debt at an unrelated number rather than pricing
 it, and both halves can be individually valid while the product is wrong by a
@@ -876,6 +904,15 @@ refuses what it writes.
 number anywhere in a document with `canonical_json_float`, rather than
 truncating it or aborting: §2 puts every amount in minor units as an integer,
 and a document carrying a float was not built by a conforming writer.
+
+**A number's code follows from its value, not its spelling.** A JSON reader may
+hold an integer too large for 64 bits as a double, and then cannot tell
+`9223372036854775808` from `9.223372036854775808e18`. So wherever this protocol
+refuses a number that is not an integer a signed 64-bit value holds, one whose
+magnitude reaches 2^63 — or that no double holds, such as `1e400` — is
+`amount_overflow` however it was written, and any other non-integer is
+`canonical_json_float`. `-0` is the integer 0: a reader whose parser keeps it
+as a negative float reads it as zero, as every other reader does.
 
 ### 9.4 The bill id
 
@@ -1013,8 +1050,8 @@ the invite can re-push a copy of an entry with one member removed and take the
 expense, payment or withdrawal it carried off the bill, on every device, with
 nothing set aside to show for it.
 
-**An entry's `v`, when present, MUST be an integer of at least 1**, refused
-with `bill_type_error`. §9.5 leaves `v` out of the id, so a copy carrying any
+**An entry's `v`, when present, MUST be an integer from 1 to 2^63 − 1**,
+refused with `bill_type_error`. §9.5 leaves `v` out of the id, so a copy carrying any
 value keeps the honest entry's id, and one whose `v` is not an integer would
 reach the canonical encoding that §10.2's merge and order compare — which
 refuses it — and take every batch it travels in down with it.
@@ -1063,25 +1100,46 @@ are unavailable rather than guessed at.
 not is set aside with `unknown_participant`. The rate decides how much ZEC
 every request carries, so a rate written by somebody who owes nothing and is
 owed nothing turns every payer's request into whatever figure they chose.
-Participants may still set it, and a wallet MUST show a payer the rate a
-request was priced at and who set it (§14.2).
+**A fold given a verifier MUST also require that participant's key to be
+bound (§10.7)**, and sets aside a `setRate` from any other with
+`unauthorized_entry`: anybody holding the invite can put themselves on the
+bill with an unsigned join, so "a participant" alone admits them. A wallet
+MUST show a payer the rate a request was priced at and who set it (§14.2), and
+the bill's creator may withdraw any `setRate` (§10.8): the latest by `at`
+decides, and one dated far ahead outranks every later correction its author
+does not take back.
 
 **`sig`** carries the author's signature when the transport provides one.
 When present it MUST be a string, and an entry whose `sig` is anything else is
-refused with `bill_type_error`. Unsigned entries MUST be accepted: a bill among people at one table is consensus
-by agreement, not by cryptography, and refusing them would claim a guarantee
-this protocol does not make. Nothing in this version verifies a signature;
-§10.4 says what that costs.
+refused with `bill_type_error`. An unsigned entry is admitted at ingress: a
+bill among people at one table is consensus by agreement, not by
+cryptography, and a reader that verifies nothing folds every entry as its
+author wrote it, which §10.4 says the cost of.
 
 A host that does verify signatures MUST do so over the bytes §10.6 fixes, and
 MUST verify a `createBill` entry's `sig` against the `creatorKey` in that same
 entry, refusing the entry when it does not verify. That key is not taken on
 trust from elsewhere: §9.4 binds it to the id, so it is the one key on a bill
-that needs no prior acquaintance to check. Verifying any other entry needs a
-key bound by §10.7, which this version does not provide.
+that needs no prior acquaintance to check. Every other entry is checked
+against the key §10.7 binds to its author: an entry by a participant whose key
+is bound applies only from a copy that verifies against it, and an unsigned
+copy never speaks for them. An entry by a participant whose key is not bound
+is admitted as written.
 
 A `createBill` entry additionally carries `creatorKey` and `nonce`, and its `id`
 MUST be their derivation (§9.4).
+
+**The checks of this section run in this order**, so that an entry wrong in
+two ways is refused for the same reason by every reader: the entry is an
+object; it nests no deeper than §11.2 allows; its kind is one of the eight;
+its `sig`, when present, is a string; its `v`, when present, is in range;
+every string is Unicode scalar values (§2.3); every number is an integer a
+signed 64-bit value holds (§9.3); it carries at most one of `rate`, `expense`,
+`payment` and `confirmation`; every payload member it carries is an object;
+`targetId`, when present, is a string; the payload its kind uses is present;
+every id inside that payload is a string; a `voidEntry` or `amendEntry` names
+a non-empty target; `at`, `id` and `author` are well formed; and last, the
+`createBill` members and the id's derivation (§9.4, §9.5).
 
 **An entry naming a target the log does not hold is set aside with
 `unknown_entry`.** This applies to `amendEntry` and `voidEntry` alike: a
@@ -1160,8 +1218,16 @@ both, has both. Only commutativity
 distinguishes the rule above from resolving by arrival, and it is the only one
 of the three a conformance case can falsify.
 
-**The total order is `at`, then `author`, then `id`, all ascending.** It never
-depends on arrival order or on local state.
+**The total order is the instant `at` names, then `at` as written, then
+`author`, then `id`, all ascending.** It never depends on arrival order or on
+local state.
+
+By the instant, normalised as §9.3 normalises one, rather than by the text:
+§9.3 admits `t` and `z` and any number of fractional digits, and as bytes a
+lower-case `t` sorts after every upper-case one, so the text of an instant
+can sort after a later one. A `setRate` written with a lower-case `t` would
+then outrank a correction made hours later. The text breaks ties between two
+spellings of one instant.
 
 ### 10.3 Folding
 
@@ -1181,7 +1247,9 @@ depends on arrival order or on local state.
    only create entry was refused at ingress folds to.
 
 3. Collect amendments per target — later ones win under the total order — and
-   the set of voided targets.
+   the set of voided targets. Each entry below is applied as amended; **an
+   amendment that cannot be applied is set aside with the code that refuses
+   it, and the entry it corrects is applied as written** (§10.4).
 
 4. Apply every non-voided `joinBill`, replaced by its amendment if any, subject
    to §10.4. **A participant who rejoins replaces their earlier record** rather
@@ -1190,39 +1258,49 @@ depends on arrival order or on local state.
    recorded and reported to the caller.
 
 5. Apply every non-voided `addExpense` and `recordPayment`, replaced by their
-   amendments if any.
+   amendments if any. **An expense id MUST be unique among the expenses
+   applied** (`duplicate_expense`): an amendment or a withdrawal is written
+   against the expense a reader shows, and two under one id leave the reader
+   to guess which. The first stands.
 
 6. Apply every non-voided `confirmPayment` (§10.5), in a pass of its own once
    every payment is on the bill.
 
-**The fold reaches four answers beyond the bill itself, and an implementation
+**The fold reaches these answers beyond the bill itself, and an implementation
 MUST report them rather than discard them.** A consumer that re-derives one has
 a second place for it to come from:
 
 - the **creator's id**, which the withdrawal rules of §10.8 name;
-- the **identities bound and contested** under §10.7, which say why a payout is
-  missing rather than leaving it looking undeclared;
+- the **identities bound** under §10.7, which say whose entries are checked
+  against a key;
 - the ids of the **entries a void withdrew**, because a withdrawal is absent
   from the fold by design and is otherwise indistinguishable from an entry that
   was never written;
-- the **entries set aside**, each with its code and the reason.
+- the **entries set aside**, each with its code and the reason;
+- for each expense and payment on the bill, **the entry that introduced it
+  and its author**, and for the rate, **the `setRate` that set it and its
+  author**. An amendment or a withdrawal targets that entry, §10.8 decides
+  who may write one by that author, and §14.2 names who set the rate. A
+  reader taking these from the log instead finds entries the fold set aside
+  under the same ids.
 
-**The fold takes the host's verifier, and the fourth answer is empty without
-one.** §13 makes the curve operation the host's, so a fold given no verifier
-cannot decide a contest and reports none — which is the honest answer, not a
-claim that none exists. A caller that hands one in gets `bound` and `contested`
-computed over the same entry set the bill was materialised from, which is what
-§10.7's rule depends on: a wallet MUST NOT settle to a contested participant's
-address without putting it in front of the payer first, and it can only obey
-that if the fold tells it.
+**The fold takes the host's verifier, and binds nothing without one.** §13
+makes the curve operation the host's, so a fold given no verifier cannot bind
+a key and reports none bound — which is the honest answer, not a claim that
+none exists. A caller that hands one in gets `bound` computed over the same
+entry set the bill was materialised from, which is what §10.7's rule depends
+on.
 
 **A verifier also decides which entries are applied at all.** §10.1 requires a
 host that verifies to check a `createBill` entry's `sig` against the
 `creatorKey` in that same entry. When a verifier is supplied, a `createBill`
 whose signature does not verify is set aside with `unauthorized_entry` and
-opens no bill. Unsigned entries are still accepted — §10.1 says so and says why
-— and a fold with no verifier behaves exactly as one that is given a verifier
-accepting everything.
+opens no bill, an entry by a bound participant applies only from a copy that
+verifies (§10.7), and a `setRate` applies only from a bound participant
+(§10.1). Unsigned entries are still admitted at ingress — §10.1 says so and
+says why — and a fold with no verifier binds no key: it applies every entry
+as its author wrote it and takes a rate from any participant, which is what
+a bill among people who checked nothing is.
 
 **An amount that states no currency is denominated by the fold, not by the
 reader.** A reader MUST record which of the two an amount did — stated its own
@@ -1304,6 +1382,13 @@ differing as evidence that their bills differ.
   correction that renames its subject is a different entry: a join renamed
   out from under an expense takes its author off the bill and the debt with
   them, and the §10.8 checks that read the target never see it.
+- **An amendment that cannot be applied is set aside, and its target applies
+  as written.** Whatever refuses the amended version — a member the decoder
+  refuses, a split §4 refuses, a balance §2.2 refuses — refuses the
+  amendment, not the entry it corrects. Setting the target aside instead lets
+  a participant correct their own join into a record nobody can decode and
+  leave the bill, with every expense naming them, where §10.8 would have
+  refused to take them off.
 
 **A refund is an expense with a negative total**, and §3 step 7 negates every
 share to divide one. It carries **no special authorship**: anybody holding the
@@ -1348,7 +1433,7 @@ entry carries the second kind.
 
 ```json
 {
-  "v": 2, "id": "c1", "author": "ana", "kind": "confirmPayment",
+  "v": 1, "id": "c1", "author": "ana", "kind": "confirmPayment",
   "at": "2026-10-28T19:34:00.000Z",
   "confirmation": {
     "paymentId": "p1", "method": "recipientConfirmed",
@@ -1452,9 +1537,9 @@ back, and nobody else may take it back for them.
 
 ### 10.6 What a signature covers
 
-`sig` is optional (§10.1) and this version verifies nothing. But an
-implementation that does verify, and a wallet that signs so another wallet can,
-need the same answer to one question: **which bytes?**
+`sig` is optional (§10.1), and a host that verifies checks it against the key
+§10.7 binds. An implementation that verifies, and a wallet that signs so
+another wallet can, need the same answer to one question: **which bytes?**
 
 Left unstated, each signs whatever its own encoder emitted and no two agree — a
 divergence neither can detect alone, because each verifies its own signatures
@@ -1516,52 +1601,61 @@ device resolving this differently from its neighbour folds a different bill
 from the same entries, which is the one outcome this protocol exists to
 prevent.
 
-A participant publishes their key in their own join:
+A participant publishes their key in their own join, under the participant id
+that key derives:
 
 ```json
-{"id": "ben", "name": "Ben", "payTo": "u1…", "identityKey": "<32 bytes, base64url>"}
+{"id": "<participant id>", "name": "Ben", "payTo": "u1…", "identityKey": "<32 bytes, base64url>"}
 ```
 
+```
+participant id = base64url( SHA-256( "splitz-participant-v1" || key )[0..16] )
+```
+
+where `key` is the 32 bytes the `identityKey` decodes to and `base64url` is
+unpadded. **A key names its participant.** A wallet whose account publishes a
+key writes every entry under the id that key derives.
+
 **Binding.** A key is bound to a participant by a **self-claim**: a `joinBill`
-whose `author` equals the `id` of the participant it carries, whose participant
-states an `identityKey`, and whose `sig` verifies against that key. An entry
-naming somebody else's id proves nothing about them, whoever signed it.
+whose `author` equals the `id` of the participant it carries, whose
+participant states an `identityKey` deriving that id, and whose `sig` verifies
+against that key. An entry naming somebody else's id proves nothing about
+them, whoever signed it.
+
+**A record stating a key under any other id is set aside** with
+`participant_id_not_derived`, whoever wrote it and whether or not a verifier is
+supplied — it is a structural check of the record, not of a signature. The
+creator's own record is the one exception, below.
+
+**Why the id is the key's.** An id anybody may choose is one a second key may
+claim. Were a participant's id free and their key merely stated beside it, a
+second self-claim for the same id under another key would verify as well as
+the first, and nothing in the log could say which is the person: `at` is
+whatever its author wrote, so resolving by time hands the identity to whoever
+backdates furthest, and admitting both lets the impostor write as them —
+confirming a payment to them that never arrived, withdrawing their expenses.
+With the id derived from the key, a second key derives a different id: it is
+a different participant, and the first one's entries still verify only
+against the first key. Finding a second key for a given id is a preimage of a
+128-bit digest.
 
 **The creator is bound by the invite, not by a join.** The bill's id is the
 digest of the entry that opened it (§9.4), and that entry states `creatorKey`.
 A reader MUST bind the creator's participant id to that key when the entry's
-own `sig` verifies against it, MUST NOT treat a join claiming the creator's id
-as a rival claim, and MUST refuse such a join under the rule below.
+own `sig` verifies against it, whatever that id is, and MUST NOT bind any
+other key to it: a join claiming the creator's id is refused under the rule
+below. The derivation rule does not apply to the creator's record, whose key
+the invite already fixes.
 
-Without this, the one identity a bill can prove would be contestable by anyone
-who photographed the invite. The signature requirement is not ornamental:
-absent it, `creatorKey` is a number the bill's author typed, and anyone could
-open a bill naming somebody else's public key and be taken for them on it.
-
-**Contest.** Where two different keys each carry a validly signed self-claim
-for one id, neither is bound and the id is **contested**.
-
-Nothing internal to the log says which is the person: `at` is whatever its
-author wrote, so resolving by time hands the identity to whoever backdates
-furthest. A reader MUST NOT break the tie with anything outside the log. A host
-MAY remember keys it has seen and use that memory to **warn** a person; it MUST
-NOT use it to change which entries apply.
+The signature requirement is not ornamental: absent it, `creatorKey` is a
+number the bill's author typed, and anyone could open a bill naming somebody
+else's public key and be taken for them on it.
 
 **A withdrawal does not undo a claim.** Identity is resolved over every entry
 in the set, including ones §10.8 withdrew. A signed self-claim is evidence that
-was made; taking the entry off the bill does not unmake it.
-
-This is not a convenience. §10.8 lets a `joinBill` be withdrawn by "that
-participant", and a rival claim names the same participant id as the genuine
-one, so **either author qualifies to withdraw either entry**. Were a withdrawal
-to clear a claim, an impostor who minted a rival claim could then withdraw the
-genuine one, leave only their own standing, and bind their key to that
-participant — silently replacing the person money is sent to. A contest
-therefore stands until it is settled between the people involved, which is what
-this section says it costs.
-
-A reader MUST resolve identity over the whole entry set and MUST NOT resolve it
-over the live set §10.3 folds.
+was made; taking the entry off the bill does not unmake it. A reader MUST
+resolve identity over the whole entry set and MUST NOT resolve it over the
+live set §10.3 folds.
 
 **What follows from a binding.** For a participant whose key is bound:
 
@@ -1575,19 +1669,11 @@ over the live set §10.3 folds.
   so an unsigned copy, or one signed with any other key, never speaks for
   them.
 
-**An unbound or contested identity is admitted unverified**, exactly as if this
-section did not exist. Refusing its entries would let anyone make a bill
-unopenable by minting a rival claim for its creator: every entry that creator
-wrote would stop applying, the `createBill` included.
-
-What a contest costs instead is **the ability to be paid**. A wallet MUST NOT
-settle to a contested participant's address without putting it in front of the
-payer first (§10.4).
-
-**What this does not give.** A participant who joins after the bill was made
-has no key in the invite, so nothing settles a rival claim against them: they
-can be contested, and a contest is a denial of payment until the people
-involved sort it out in person. Only the creator is beyond that.
+**An unbound identity is admitted unverified**, exactly as if this section did
+not exist: a participant somebody else added, who has no key, or one who has
+published none. §10.4's rules then bind the honest and inconvenience nobody
+else, and a wallet that wants them to mean something has every participant
+publish a key on joining.
 
 ### 10.8 Who may withdraw an entry
 
@@ -1616,6 +1702,7 @@ back is the figure the bill shows.
 | `addExpense` | its author, **or the bill's creator** |
 | `recordPayment` | its author, **or either participant the payment names** |
 | `joinBill` | the creator, **or that participant themselves** — and only under the rule below |
+| `setRate` | its author, **or the bill's creator** |
 | `createBill`, `confirmPayment`, `amendEntry`, `voidEntry` | its author |
 
 Anything else is set aside with `unauthorized_entry`.
@@ -1626,6 +1713,12 @@ The creator is the one role every reader can verify without acquaintance: the
 bill's id is the digest of the entry that states their key (§9.4, §10.7). A
 withdrawal is visible in the log and the expense is re-addable, so the cost of
 a wrong one is low — which is not true of the next two.
+
+**Why the creator, for a rate.** The latest `setRate` by §10.2's order
+decides, and `at` is whatever its author wrote: one dated a year ahead
+outranks every correction until its author takes it back. The creator is the
+one participant every reader can verify, and a rate taken back is visible and
+set again in one entry.
 
 **Why not the creator, for a payment.** Withdrawing a payment reopens a debt
 somebody believed was settled. The person who recorded it may take the claim
@@ -1665,7 +1758,9 @@ so the entry it removed never comes back and §10.8's own table is unenforceable
 **Taking somebody off the bill.** A `voidEntry` targeting a `joinBill` MUST be
 refused with `participant_still_named` when any surviving entry names that
 participant — as an expense's `paidBy` or in its split, as a payment's `from`
-or `to`, or as a confirmation's author.
+or `to`, or as a confirmation's author. An amended entry names them if either
+the amendment or the entry it corrects does: the amendment may yet be set
+aside when it is applied (§10.4), and the entry then applies as written.
 
 The fold cannot apply an entry naming somebody who is not on the bill, so
 without this rule removing the person who spent the most silently drops every
@@ -1691,9 +1786,10 @@ the thing it meant to remove is still on the bill.
 **What all of this rests on.** These rules name participant **ids**, and an id
 is unauthenticated until §10.7 binds a key to it. For a participant who has
 published no key, an entry authored as them is admitted unverified, so the
-rules above bind the honest and inconvenience nobody else. Only the creator is
-bound with no prior acquaintance. A wallet that wants these rules to mean
-something must have every participant publish a key on joining.
+rules above bind the honest and inconvenience nobody else. The creator is
+bound by the invite, and every participant who joins with a key is bound by
+the id that key derives. A wallet that wants these rules to mean something
+must have every participant publish a key on joining.
 
 ## 11. Invites
 
@@ -1893,7 +1989,11 @@ Note the floor is not a licence: a cap between the floor and the ceiling
 refuses no bill at all in the first row and every bill in the fourth.
 
 A body that is not this prefix is `payload_not_a_payload`; one whose base64url
-does not decode is `payload_damaged`; one that decodes to an object carrying no
+does not decode is `payload_damaged`; one that decodes to anything but RFC 8259
+JSON — a `NaN` or `Infinity` literal, a number no double holds such as
+`1e400`, a string carrying a lone surrogate — is `payload_damaged` too,
+because a reader that took `1e400` as infinity and one that refused it hold
+different logs from one scan; one that decodes to an object carrying no
 log is `payload_missing_body`; a version above the reader's is
 `payload_future_version`.
 
@@ -1976,7 +2076,7 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `exact_total_mismatch`, `percentage_not_full_scale`, `itemized_no_items`,
 `itemized_unassigned_item`, `itemized_total_mismatch`, `currency_mismatch`,
 `unknown_participant`, `unknown_entry`, `duplicate_participant`,
-`duplicate_payment`,
+`duplicate_payment`, `duplicate_expense`, `participant_id_not_derived`,
 `self_payment`, `bill_bad_participant_id`,
 `unknown_payment`, `unauthorized_confirmation`,
 `confirmation_missing_reference`, `unauthorized_payment`,
@@ -2081,7 +2181,7 @@ breaks these sends money to the wrong place or sends it twice.
 - **The participant id it speaks as.** Every entry it writes is authored by
   that id, and §10.4 decides what the id authorises.
 - **The address it is paid at, or none.** A participant with no address is
-  reported under §8.4 and MUST NOT be dropped from a request.
+  reported under §8.5 and MUST NOT be dropped from a request.
 - **A clock** producing §9.3 instants. It is read when an entry is written and
   never while folding: §10.2 orders a log by instant, so a fold that consulted
   a clock would return different bills for one entry set.
@@ -2100,14 +2200,18 @@ Each of these is an answer the protocol produces and discards nowhere. A
 request that omits them looks, to the person paying, exactly like one that has
 nothing to omit.
 
-- Every recipient the request cannot carry, with the reason for each (§8.4).
+- Every recipient the request cannot carry, with the reason for each (§8.5).
 - Every pay-to address the fold recorded as replaced (§10.3).
 - Every debt with a payment recorded and not yet confirmed (§10.5).
-- Every contested identity among the recipients (§10.7).
 - The rate the request was priced at, who set it, and the ZEC amount and
   address of every output. A participant owed money can set the rate, and a
   request stated only in the bill's currency hides what that rate did to the
   ZEC it asks for.
+
+A payee MUST be shown the same before confirming a payment: the ZEC the
+record says was sent, the rate it was priced at, and its reference. A
+confirmation settles the debt in the bill's currency, so a payee who confirms
+a record without reading its ZEC accepts whatever the payer's rate made of it.
 
 ### 14.3 A send has three outcomes, not two
 
@@ -2144,6 +2248,9 @@ paid is still in the plan §6 produces.
   payment they differ, and presenting the debt as the amount in flight states
   something untrue. The pending amount is the sum over the payee and every
   creditor the settlement covers.
+- Each withheld debt names the recipients its pending records were paid to.
+  Under §6.3 that can be somebody other than the payee, and a payer told only
+  "pending to Ana" looks for a payment to Ana that was sent to Ben.
 
 A payment that never lands is withheld by the same rule, and §10.8's
 withdrawal of its record is what releases the debt.
@@ -2184,16 +2291,19 @@ difference is money.
 
 The device itself: who it speaks as, what it can spend, where its secrets go.
 
-- `account` carries the participant id every entry this device writes is
-  authored by, and §10.4 decides what that id authorises. It MUST be stable for
-  the life of an installed wallet; an id that changes between runs makes this
-  device a new participant on every bill it has already touched.
+- `account` carries an id the account's identity is filed under. A device
+  that signs speaks as the participant id its identity key derives (§10.7),
+  and every entry it writes is authored by that id; a device that holds no
+  identity speaks as the account's id. §10.4 decides what either authorises.
+  Both MUST be stable for the life of an installed wallet; an id that changes
+  between runs makes this device a new participant on every bill it has
+  already touched.
 - `account` MAY carry an identity secret and MAY carry none. When it carries
   one it MUST be derived from what only the account's owner holds — for a
   software wallet, its mnemonic and passphrase — so that reinstalling from the
   same mnemonic yields the same signing identity. It MUST NOT be anything the
   wallet shows or shares, such as a viewing key: whoever holds it can sign as
-  this participant, bind uncontested (§10.7), and redirect what they are paid.
+  this participant (§10.7), and redirect what they are paid.
   An identifier the wallet's own database assigns MUST NOT be supplied in its
   place either: it is handed out at import time, so an identity filed under it
   is a stranger to every bill naming it after a restore. No secret — a
@@ -2219,11 +2329,14 @@ The device itself: who it speaks as, what it can spend, where its secrets go.
   returning a transaction id or raising. Where an implementation distinguishes
   a refusal it chose from one the network gave, both are §14.3's second
   outcome — nothing was spent — and they differ only in what a person is told.
-- A transaction id MUST be present when and only when the send succeeded. It
-  becomes the id of the payment entry §10.5 records, so the record of a payment
-  and the transaction that made it carry one identifier.
+- A transaction id MUST be present when the send succeeded, and MAY be present
+  for the third outcome when the wallet knows the transaction it built. On
+  success it becomes the reference of the payment entry §10.5 records, so the
+  record of a payment and the transaction that made it carry one identifier.
+  On the third it is recorded nowhere; it is what a person looks up to learn
+  which way the send went.
 - `payToAddress` MAY be absent. A participant with no address is reported under
-  §8.4 and MUST NOT be dropped from a request, so absence is a state to show
+  §8.5 and MUST NOT be dropped from a request, so absence is a state to show
   and not an error.
 
 ### 15.3 `SecretStore`
@@ -2248,13 +2361,18 @@ Durable storage for this device's bills, **as raw entries**.
 - Entries, not folded bills. §10.2 merges by set union, so a device holds
   entries and derives everything else; a stored summary is a second source of
   truth that goes stale without announcing it.
+- `read` MUST answer empty for a key never written and MUST raise for a value
+  that is there and cannot be read. A caller that took an unreadable log for
+  an empty one would write its next entry over every entry the file held.
 - `keys` MUST answer with every key currently stored under the given prefix,
   and MUST NOT include one whose write did not finish.
 - `sweepUnfinishedWrites` MUST remove whatever an unfinished write left behind
   and MUST report how many it removed. A store that cannot leave anything
   behind reports zero. It is called once when the feature loads: a leftover is
   already invisible to `keys`, and this is what stops them accumulating across
-  a year of crashes.
+  a year of crashes. It MUST NOT remove a write still in flight in the process
+  that calls it: a sweep that raced a write would delete the entry being
+  saved.
 
 ### 15.5 `SplitsRelay`
 

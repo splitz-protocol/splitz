@@ -1,14 +1,12 @@
 //! Moving a bill between devices through a relay that holds only ciphertext.
 
 use serde_json::Value;
-use splitz_core::host::{sign_entry, BillHost, Sent, SignEntry};
 use splitz_core::SetAside;
 
 use crate::error::{HostError, Result};
 use crate::keys::SplitsKeys;
 use crate::relay::channel_for_bill;
 use crate::sealing::Sealing;
-use crate::signing::{Signer, SEED_BYTES};
 use crate::store::BillStore;
 use crate::wallet::SplitsRelay;
 
@@ -54,67 +52,31 @@ impl<'a> SplitsSync<'a> {
     /// Push first, so a participant syncing right after us sees our entries;
     /// then pull, so we see theirs. Both directions merge by entry id, so
     /// running this twice, or on two devices at once, converges.
-    pub fn sync(
-        &self,
-        bill_id: &str,
-        signer_seed: Option<&[u8]>,
-        author_id: Option<&str>,
-    ) -> Result<SyncResult> {
-        self.push(bill_id, signer_seed, author_id)?;
+    pub fn sync(&self, bill_id: &str) -> Result<SyncResult> {
+        self.push(bill_id)?;
         self.pull(bill_id)
     }
 
-    /// Seals every entry this device holds and pushes it to the bill's
-    /// channel.
+    /// Seals every entry this device holds, as it holds it, and pushes it to
+    /// the bill's channel.
     ///
-    /// Entries this device authored are signed first, so participants who
-    /// receive them can confirm they came from this identity. A signature is
-    /// deterministic and a blob is keyed by its content, so pushing the whole
-    /// log every time is safe: the relay stores each entry once however often
-    /// it is sent.
-    pub fn push(
-        &self,
-        bill_id: &str,
-        signer_seed: Option<&[u8]>,
-        author_id: Option<&str>,
-    ) -> Result<Vec<Value>> {
-        // Checked here, where the seed enters: the signing closure below
-        // cannot return an error.
-        if let Some(seed) = signer_seed {
-            if seed.len() != SEED_BYTES {
-                return Err(HostError::Malformed(format!(
-                    "an identity seed is {SEED_BYTES} bytes, not {}",
-                    seed.len()
-                )));
-            }
-        }
+    /// **Nothing is signed here.** An entry is signed by the device that
+    /// writes it, when it writes it. The store also holds what peers pushed,
+    /// and an unsigned entry a peer wrote in this device's name would
+    /// otherwise be signed with this device's key on the next push — a forged
+    /// confirmation becoming a genuine one. A blob is keyed by its content, so
+    /// pushing the whole log every time is safe: the relay stores each entry
+    /// once however often it is sent.
+    pub fn push(&self, bill_id: &str) -> Result<Vec<Value>> {
         let entries = self.store.read(bill_id)?;
         if entries.is_empty() {
             return Ok(entries);
         }
         let key = self.require_key(bill_id)?;
-
-        let seed = signer_seed.map(<[u8]>::to_vec);
-        let sign_closure = move |message: &[u8]| {
-            Signer
-                .sign(seed.as_deref().unwrap_or_default(), message)
-                .expect("the seed's length was checked on entry")
-        };
-
-        let mut blobs = Vec::with_capacity(entries.len());
-        for entry in &entries {
-            let mine = signer_seed.is_some()
-                && author_id.is_some()
-                && entry.get("author").and_then(Value::as_str) == author_id
-                && entry.get("sig").is_none();
-            let to_seal = if mine {
-                sign_entry(&SigningOnly(&sign_closure), entry, bill_id)
-                    .map_err(|e| HostError::Sync(format!("An entry would not sign: {e}")))?
-            } else {
-                entry.clone()
-            };
-            blobs.push(Sealing.seal(&to_seal, &key)?);
-        }
+        let blobs = entries
+            .iter()
+            .map(|entry| Sealing.seal(entry, &key))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         self.relay.push(&channel_for_bill(bill_id), &blobs)?;
         Ok(entries)
     }
@@ -178,40 +140,5 @@ impl<'a> SplitsSync<'a> {
                 "No key for {bill_id}; it cannot be synced"
             ))),
         }
-    }
-}
-
-/// A host that can do nothing but sign.
-///
-/// `sign_entry` takes a `BillHost`, and signing reads none of the rest of it.
-/// Rather than require a whole wallet to seal an entry that already exists,
-/// this supplies the one member that is used and panics on the others, so a
-/// later change that starts reading them fails here instead of silently
-/// signing with a placeholder identity.
-struct SigningOnly<'a>(SignEntry<'a>);
-
-impl BillHost for SigningOnly<'_> {
-    fn signer(&self) -> Option<SignEntry<'_>> {
-        Some(self.0)
-    }
-
-    fn me(&self) -> &str {
-        unimplemented!("signing reads no author")
-    }
-
-    fn pay_to_address(&self) -> Option<&str> {
-        unimplemented!("signing reads no address")
-    }
-
-    fn now(&self) -> String {
-        unimplemented!("signing reads no clock")
-    }
-
-    fn random_bytes(&self, _byte_count: usize) -> Vec<u8> {
-        unimplemented!("signing reads no randomness")
-    }
-
-    fn broadcast(&self, _payment_request_uri: &str) -> Sent {
-        unimplemented!("signing sends nothing")
     }
 }
