@@ -191,7 +191,7 @@ def dart_surface(source: Path, recurse: bool = False) -> set[str]:
         for match in re.finditer(r"^const\s+(?:\w[\w<>,? ]*\s+)?(\w+)\s*=", text, re.M):
             names.add(match.group(1))
         for match in re.finditer(
-            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*\(", text, re.M
+            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*(?:<[^()]*?>)?\s*\(", text, re.M
         ):
             name = match.group(1)
             if not name.startswith("_") and name not in {"if", "for", "while", "switch"}:
@@ -267,7 +267,7 @@ def dart_signatures(source: Path, recurse: bool = False) -> dict[str, list[str]]
     for path in sorted(source.rglob("*.dart") if recurse else source.glob("*.dart")):
         text = path.read_text(encoding="utf-8")
         for match in re.finditer(
-            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*\(", text, re.M
+            r"^(?!\s)(?:[A-Za-z_][\w<>,?\[\]. ]*\s+)(\w+)\s*(?:<[^()]*?>)?\s*\(", text, re.M
         ):
             name = match.group(1)
             if name.startswith("_") or name in {"if", "for", "while", "switch"}:

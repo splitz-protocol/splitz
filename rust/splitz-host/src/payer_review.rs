@@ -41,7 +41,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use splitz_core::host::{FoldedBill, PayerObligation};
-use splitz_core::{render_amount, ExchangeRate};
+use splitz_core::{render_amount, ExchangeRate, PaymentRecord};
 
 use crate::currencies::currency_exponent;
 
@@ -61,6 +61,12 @@ pub enum ReviewRule {
     Rate,
     /// The ZEC amount and address of every output.
     Output,
+    /// The ZEC a payment record says was sent, shown to its payee.
+    PayeeZec,
+    /// The rate a payment record was priced at, shown to its payee.
+    PayeeRate,
+    /// A payment record's reference, shown to its payee.
+    PayeeReference,
 }
 
 /// One fact §14.2 requires that the review screen's text does not show.
@@ -236,6 +242,69 @@ pub fn check_payer_review(
             shows_address(&text, &payment.address),
         );
     }
+    Ok(out)
+}
+
+/// §14.2's payee facts for `payment`, against the text of the screen its payee
+/// confirms it on.
+///
+/// Each of the record's ZEC, rate and reference that it carries must be shown:
+/// the ZEC as [`render_amount`] writes it, the rate as [`rate_figure`] writes
+/// it, the reference whole or by a prefix of at least 10 characters, under
+/// the same matching as [`check_payer_review`]. A `shieldedZec` or `swap`
+/// record missing one must show `absent_words`, the wallet's words for a
+/// figure the record does not carry; empty words are then a finding. A `cash`
+/// record carries none of them and needs nothing shown. Findings come in that
+/// order. Refused only for a ZEC figure §8.1 cannot render.
+pub fn check_payee_review(
+    payment: &PaymentRecord,
+    visible_text: &[String],
+    absent_words: &str,
+) -> splitz_core::Result<Vec<ReviewFinding>> {
+    let text = visible_text.join("\n");
+    let over_zec = payment.method != "cash";
+    let mut out = Vec::new();
+    let mut need = |rule: ReviewRule, fact: &str, shown: Option<(String, bool)>| {
+        let (expected, seen) = match shown {
+            Some(found) => found,
+            None if !over_zec => return,
+            None if absent_words.is_empty() => ("absent".to_owned(), false),
+            None => (absent_words.to_owned(), text.contains(absent_words)),
+        };
+        if !seen {
+            out.push(ReviewFinding {
+                rule,
+                fact: fact.to_owned(),
+                expected,
+            });
+        }
+    };
+
+    let zec = match payment.zatoshi {
+        Some(z) => {
+            let amount = render_amount(z)?;
+            let seen = shows_number(&text, &amount);
+            Some((amount, seen))
+        }
+        None => None,
+    };
+    need(
+        ReviewRule::PayeeZec,
+        "the ZEC the record says was sent",
+        zec,
+    );
+    let rate = payment.paid_at_rate.as_ref().map(|r| {
+        let figure = rate_figure(r);
+        let seen = shows_number(&text, &figure);
+        (figure, seen)
+    });
+    need(ReviewRule::PayeeRate, "the rate it was priced at", rate);
+    let reference = payment
+        .reference
+        .as_ref()
+        .filter(|r| !r.is_empty())
+        .map(|r| (r.clone(), shows_address(&text, r)));
+    need(ReviewRule::PayeeReference, "its reference", reference);
     Ok(out)
 }
 

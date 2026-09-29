@@ -22,6 +22,7 @@ pub mod pricing;
 pub mod relay;
 pub mod sealing;
 pub mod seam_contracts;
+pub mod send_request;
 pub mod signing;
 pub mod split_draft;
 pub mod store;
@@ -40,7 +41,9 @@ pub use keys::{
     identity_seed_from, is_well_formed_key, Randomness, SplitsKeys, SystemRandomness,
     IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
 };
-pub use payer_review::{check_payer_review, rate_figure, ReviewFinding, ReviewRule};
+pub use payer_review::{
+    check_payee_review, check_payer_review, rate_figure, ReviewFinding, ReviewRule,
+};
 pub use pending_sends::{PendingSend, PendingSends, SendEnded, Unrecordable};
 pub use pricing::{
     binance_price_url, coinbase_price_url, coingecko_price_url, price_from_binance,
@@ -53,12 +56,13 @@ pub use sealing::{Sealing, BLOB_VERSION};
 pub use seam_contracts::{
     check_bill_storage, check_secret_store, check_splits_relay, check_zec_prices, SeamFinding,
 };
+pub use send_request::{proposal_problem, send_payment_request};
 pub use signing::{base64url_decode, base64url_encode, Signer, VerifiedLog, SEED_BYTES};
 pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
 pub use swap_watch::{SwapWatch, SwapWatchList};
 pub use swaps::{
-    assets_from_tokens, quote_from_response, quote_request_body, status_from_response,
+    assets_from_tokens, quote_from_response, quote_request_body, status_from_response, swap_answer,
     OneClickSwaps, SwapQuote, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
 };
 pub use sync::{SplitsSync, SyncResult};

@@ -474,6 +474,31 @@ pub fn obligation_via(
     Ok(splitz_core::host::obligation_via(&host, &folded, &via)?.map(|o| convert::obligation(&o)))
 }
 
+/// Why the payments a wallet read from `uri` are not the ones it asks for, in
+/// words for the payer, or `None` when they are (§14.6): [`check_proposal`]'s
+/// answer as the sentence to show. A wallet builds nothing unless this is
+/// `None`, and a refusal here is a failed send — nothing was built, so nothing
+/// can land (§14.3).
+#[uniffi::export]
+pub fn proposal_problem(uri: String, outputs: Vec<ffi::ProposedOutput>) -> Option<String> {
+    let outputs: Vec<splitz_core::host::ProposedOutput> = outputs
+        .into_iter()
+        .map(|o| splitz_core::host::ProposedOutput {
+            address: o.address,
+            zatoshi: o.zatoshi,
+        })
+        .collect();
+    splitz_host::proposal_problem(&uri, &outputs)
+}
+
+/// The body of a swap provider's answer with HTTP `status`, refused when the
+/// status says no: a 4xx or 5xx body is never read as a quote. The refusal
+/// carries the provider's own `message`; a 5xx is transient.
+#[uniffi::export]
+pub fn swap_answer(status: u16, body: String) -> Result<String> {
+    Ok(splitz_host::swap_answer(status, body.as_bytes())?)
+}
+
 /// Compares the payments a wallet is about to sign with the request `uri` it
 /// was handed (§14.6).
 ///
@@ -643,6 +668,42 @@ pub fn zec_price_from_response(body: String, currency: String) -> Result<Option<
     Ok(splitz_host::price_from_coingecko(&body, &currency)?)
 }
 
+/// The Binance request for ZEC's USD price, the ZECUSDC ticker, under the
+/// host `origin` a wallet chose (such as `https://data-api.binance.vision`).
+///
+/// Binance prices USD alone, reading USDC as USD. A wallet asks it first for
+/// USD and [`coinbase_price_request`] for every other currency, or for USD
+/// when Binance cannot answer.
+#[uniffi::export]
+pub fn binance_price_request(origin: String) -> String {
+    splitz_host::binance_price_url(&origin)
+}
+
+/// Minor units of `currency` one ZEC costs, read from the answer to
+/// [`binance_price_request`]: `None` for any currency but USD; refused when
+/// the answer is not the ZECUSDC ticker or its price is not a decimal string.
+#[uniffi::export]
+pub fn zec_price_from_binance(body: String, currency: String) -> Result<Option<i64>> {
+    Ok(splitz_host::price_from_binance(&body, &currency)?)
+}
+
+/// The Coinbase request for ZEC's rates against every currency, under the
+/// host `origin` a wallet chose (such as `https://api.coinbase.com`). One
+/// answer prices every currency it lists.
+#[uniffi::export]
+pub fn coinbase_price_request(origin: String) -> String {
+    splitz_host::coinbase_price_url(&origin)
+}
+
+/// Minor units of `currency` one ZEC costs, read from the answer to
+/// [`coinbase_price_request`] exactly, rounding halves up. `None` when the
+/// answer does not price it; refused when it is not a ZEC rates answer or the
+/// rate is not a decimal string.
+#[uniffi::export]
+pub fn zec_price_from_coinbase(body: String, currency: String) -> Result<Option<i64>> {
+    Ok(splitz_host::price_from_coinbase(&body, &currency)?)
+}
+
 // --- keys a wallet keeps ----------------------------------------------------
 
 /// The participant id `key` speaks as (§10.7): the id a wallet that
@@ -710,6 +771,28 @@ pub fn bill_key_problem(key: String) -> Option<String> {
         }
         Some(_) => None,
     }
+}
+
+/// A new bill key from `entropy`, whose bytes MUST be exactly 32 from the
+/// platform's cryptographically secure generator: base64url, no padding, the
+/// form an invite carries and [`bill_key_problem`] accepts.
+///
+/// The binding takes the bytes rather than drawing them because it has no
+/// source of randomness of its own. Refused for any other length.
+#[uniffi::export]
+pub fn new_bill_key(entropy: ffi::RandomBytes) -> Result<String> {
+    let random_bytes = entropy.bytes;
+    if random_bytes.len() != splitz_host::KEY_LENGTH_BYTES {
+        return Err(SplitzError::Host {
+            detail: format!(
+                "a bill key is {} random bytes, got {}",
+                splitz_host::KEY_LENGTH_BYTES,
+                random_bytes.len()
+            ),
+            transient: false,
+        });
+    }
+    Ok(splitz_host::base64url_encode(&random_bytes))
 }
 
 // --- what crosses a transport ----------------------------------------------
@@ -860,6 +943,67 @@ pub fn shareable_bill_payload(
     let log = BillLog::with_entries(&host, parsed).for_bill(bill_id);
     let folded = log.fold()?;
     Ok(shareable_bill(&log, &bill_key, &folded.bill))
+}
+
+/// The entries a peer holding `they_have` lacks, as one scanned payload
+/// (§14.5): `missing` 0 when it lacks none, `too_big_code` when they will not
+/// fit one square and a relay is needed. A delta carries no key; its reader
+/// already holds one.
+///
+/// `they_have` is the entry ids the peer reports holding.
+#[uniffi::export]
+pub fn delta_for_peer(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    they_have: Vec<String>,
+) -> Result<ffi::Delta> {
+    let parsed = parse_entries(&entries)?;
+    let host = FactHost {
+        facts: &facts,
+        sign: None,
+        verify: None,
+    };
+    let log = BillLog::with_entries(&host, parsed).for_bill(bill_id);
+    let have: std::collections::BTreeSet<String> = they_have.into_iter().collect();
+    Ok(match splitz_core::host::delta_for(&log, &have) {
+        splitz_core::Delta::NothingMissing => ffi::Delta {
+            missing: 0,
+            uri: None,
+            too_big_code: None,
+        },
+        splitz_core::Delta::Square { uri, entry_count } => ffi::Delta {
+            missing: entry_count as u64,
+            uri: Some(uri),
+            too_big_code: None,
+        },
+        splitz_core::Delta::TooBig { entry_count, code } => ffi::Delta {
+            missing: entry_count as u64,
+            uri: None,
+            too_big_code: Some(code.to_owned()),
+        },
+    })
+}
+
+/// `invite` as an https link under `base` (§11.1), such as
+/// `https://example.org/join`: the invite whole in the fragment, which a
+/// browser never sends to `base`'s host. [`read_scanned`] reads it back.
+#[uniffi::export]
+pub fn render_invite_link(invite: String, base: String) -> Result<String> {
+    let parsed = splitz_core::parse_invite(&invite)?;
+    Ok(splitz_core::render_invite_link(&parsed, &base)?)
+}
+
+/// `invite`'s expiry, and whether it falls before `now_unix_seconds` (§11.1).
+/// An invite with no expiry never expires. Which clock, and whether an
+/// expired invite is refused or only shown, are the wallet's.
+#[uniffi::export]
+pub fn invite_expiry(invite: String, now_unix_seconds: i64) -> Result<ffi::InviteExpiry> {
+    let parsed = splitz_core::parse_invite(&invite)?;
+    Ok(ffi::InviteExpiry {
+        expiry: parsed.expiry,
+        expired: splitz_core::is_invite_expired(&parsed, now_unix_seconds),
+    })
 }
 
 /// What a scanned code turned out to be.
@@ -1249,21 +1393,77 @@ pub fn check_payer_review(
         &via,
         &lower_words,
     )?;
-    Ok(found
-        .into_iter()
-        .map(|f| ffi::ReviewFinding {
-            rule: match f.rule {
-                splitz_host::ReviewRule::Unpayable => ffi::ReviewRule::Unpayable,
-                splitz_host::ReviewRule::ReplacedAddress => ffi::ReviewRule::ReplacedAddress,
-                splitz_host::ReviewRule::Awaiting => ffi::ReviewRule::Awaiting,
-                splitz_host::ReviewRule::LowerPreference => ffi::ReviewRule::LowerPreference,
-                splitz_host::ReviewRule::Rate => ffi::ReviewRule::Rate,
-                splitz_host::ReviewRule::Output => ffi::ReviewRule::Output,
-            },
-            fact: f.fact,
-            expected: f.expected,
-        })
-        .collect())
+    Ok(found.into_iter().map(review_finding).collect())
+}
+
+/// Every §14.2 fact for confirming `payment` that `visible_text` — the
+/// strings the wallet's confirm screen shows — does not show. An empty answer
+/// is the only passing one.
+///
+/// `payment` is a record from [`fold_entries`]. Each of its ZEC, rate and
+/// reference that it carries must be shown, written and matched as
+/// [`check_payer_review`] writes and matches them. A `shieldedZec` or `swap`
+/// record lacking one must show `absent_words`, the wallet's words for a
+/// missing figure; a `cash` record needs nothing shown.
+#[uniffi::export]
+pub fn check_payee_review(
+    payment: ffi::PaymentRecord,
+    visible_text: Vec<String>,
+    absent_words: String,
+) -> Result<Vec<ffi::ReviewFinding>> {
+    let record = splitz_core::PaymentRecord {
+        id: payment.id,
+        from: payment.from,
+        to: payment.to,
+        amount: payment.amount,
+        currency: payment.currency,
+        method: payment.method,
+        at: payment.at,
+        zatoshi: payment.zatoshi,
+        paid_at_rate: payment.paid_at_rate.as_ref().map(exchange_rate),
+        reference: payment.reference,
+        note: payment.note,
+    };
+    let found = splitz_host::check_payee_review(&record, &visible_text, &absent_words)?;
+    Ok(found.into_iter().map(review_finding).collect())
+}
+
+/// The payments this device may confirm, newest first (§10.5): those naming
+/// `facts.me` as payee and not yet confirmed. Only the payee confirms; each is
+/// shown with what [`check_payee_review`] holds a confirm screen to.
+///
+/// `bill_id` names the bill the entries belong to, as for [`fold_entries`].
+#[uniffi::export]
+pub fn awaiting_my_confirmation(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<Vec<ffi::PaymentRecord>> {
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    Ok(
+        splitz_host::awaiting_confirmation_by(&folded.bill, &facts.me)
+            .iter()
+            .map(convert::payment)
+            .collect(),
+    )
+}
+
+fn review_finding(f: splitz_host::ReviewFinding) -> ffi::ReviewFinding {
+    ffi::ReviewFinding {
+        rule: match f.rule {
+            splitz_host::ReviewRule::Unpayable => ffi::ReviewRule::Unpayable,
+            splitz_host::ReviewRule::ReplacedAddress => ffi::ReviewRule::ReplacedAddress,
+            splitz_host::ReviewRule::Awaiting => ffi::ReviewRule::Awaiting,
+            splitz_host::ReviewRule::LowerPreference => ffi::ReviewRule::LowerPreference,
+            splitz_host::ReviewRule::Rate => ffi::ReviewRule::Rate,
+            splitz_host::ReviewRule::Output => ffi::ReviewRule::Output,
+            splitz_host::ReviewRule::PayeeZec => ffi::ReviewRule::PayeeZec,
+            splitz_host::ReviewRule::PayeeRate => ffi::ReviewRule::PayeeRate,
+            splitz_host::ReviewRule::PayeeReference => ffi::ReviewRule::PayeeReference,
+        },
+        fact: f.fact,
+        expected: f.expected,
+    }
 }
 
 fn exchange_rate(r: &ffi::ExchangeRate) -> splitz_core::ExchangeRate {

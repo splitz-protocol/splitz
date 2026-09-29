@@ -23,6 +23,54 @@ use crate::error::HostError;
 use crate::transport::{query_encode, HttpTransport};
 use crate::wallet::SwapProvider;
 
+/// The body of a swap provider's answer, refusing a status it uses to say no.
+///
+/// A 4xx or 5xx carries a body too, and decoding it as a quote would read an
+/// error object as a price, so the status decides before the bytes are read.
+/// The provider's own `message`, when it sends one, goes into the refusal: it
+/// names what to change. A 5xx is transient; a 4xx is a refusal on the
+/// merits. Bytes that are not UTF-8 are replaced rather than refused.
+pub fn swap_answer(status: u16, body: &[u8]) -> Result<String, HostError> {
+    let body = String::from_utf8_lossy(body).into_owned();
+    if status >= 400 {
+        let said = provider_message(&body);
+        return Err(HostError::Swap {
+            message: match said {
+                Some(said) => format!("The swap provider answered {status}: {said}"),
+                None => format!("The swap provider answered {status}"),
+            },
+            transient: status >= 500,
+        });
+    }
+    Ok(body)
+}
+
+/// The `message` of an error body, or `None` when there is none to read: a
+/// string, or a list of strings joined, cut at 200 characters so a verbose
+/// provider cannot fill a screen.
+fn provider_message(body: &str) -> Option<String> {
+    let decoded: Value = serde_json::from_str(body).ok()?;
+    let text = match decoded.as_object()?.get("message")? {
+        Value::String(s) => s.clone(),
+        Value::Array(items) => items
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join("; "),
+        _ => String::new(),
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let cut: String = text.chars().take(200).collect();
+    Some(if cut.len() < text.len() {
+        format!("{cut}…")
+    } else {
+        cut
+    })
+}
+
 fn swap_error(message: impl Into<String>, transient: bool) -> HostError {
     HostError::Swap {
         message: message.into(),

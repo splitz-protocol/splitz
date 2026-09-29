@@ -28,6 +28,7 @@ export 'src/split_draft.dart';
 export 'src/swap_watch.dart';
 export 'src/swaps.dart';
 export 'src/sealing.dart';
+export 'src/send_request.dart';
 export 'src/signing.dart';
 export 'src/store.dart';
 export 'src/sync.dart';

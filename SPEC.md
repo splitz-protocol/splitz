@@ -2334,8 +2334,14 @@ every unpayable recipient's name and the wallet's words for its reason, the
 name of every participant whose address was replaced, every participant a
 pending payment is owed to or went to, every recipient the payer chose to pay
 by a lower preference with the wallet's words for it, the rate figure and who
-set it, and each output's ZEC amount and address. The payee's side is not
-checked by it.
+set it, and each output's ZEC amount and address.
+
+`checkPayeeReview` / `check_payee_review` runs the payee's list against the
+text of the screen a payment is confirmed on. Each of the record's ZEC, rate
+and reference that it carries must be shown, written and matched as above. A
+`shieldedZec` or `swap` record that lacks one must say so in the wallet's own
+words for a missing figure. A `cash` record carries none of them and needs
+nothing shown.
 
 ### 14.3 A send has three outcomes, not two
 

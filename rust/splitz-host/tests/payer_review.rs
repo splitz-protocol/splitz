@@ -10,7 +10,7 @@ use splitz_core::host::{
     set_rate, BillHost, BillLog, FoldedBill, PayerObligation, Sent, CREATOR_KEY_BYTES,
 };
 use splitz_core::ExchangeRate;
-use splitz_host::{check_payer_review, rate_figure, ReviewRule};
+use splitz_host::{check_payee_review, check_payer_review, rate_figure, ReviewRule};
 
 const BEN_OLD: &str = "u1benold0000000000000000";
 const BEN: &str = "u1ben1111111111111111111";
@@ -319,4 +319,114 @@ fn a_first_choice_or_somebody_not_paid_needs_nothing_shown() {
     shown.retain(|l| l != LOWER);
     let chosen = BTreeMap::from([("eve".to_owned(), 0), ("dan".to_owned(), 1)]);
     assert_eq!(lower_found(&BTreeMap::new(), &chosen, &shown, ""), []);
+}
+
+const TXID: &str = "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809";
+
+fn record(
+    method: &str,
+    zatoshi: Option<i64>,
+    rate: bool,
+    reference: Option<&str>,
+) -> splitz_core::PaymentRecord {
+    splitz_core::PaymentRecord {
+        id: "p1".to_owned(),
+        from: "ana".to_owned(),
+        to: "ben".to_owned(),
+        amount: 4000,
+        currency: "EUR".to_owned(),
+        method: method.to_owned(),
+        at: "2026-10-28T19:30:00.000Z".to_owned(),
+        zatoshi,
+        paid_at_rate: rate.then(|| ExchangeRate {
+            currency: "EUR".to_owned(),
+            minor_units_per_zec: 51234,
+            at: "2026-10-28T19:30:00.000Z".to_owned(),
+            source: None,
+        }),
+        reference: reference.map(str::to_owned),
+        note: None,
+    }
+}
+
+fn payee_screen() -> Vec<String> {
+    [
+        "Ana sent 0.07807316 ZEC",
+        "at 512.34 EUR a ZEC",
+        "tx 1a2b3c4d5e6f…c4d5e6f809",
+    ]
+    .map(str::to_owned)
+    .to_vec()
+}
+
+fn payee(
+    payment: &splitz_core::PaymentRecord,
+    shown: &[String],
+    absent: &str,
+) -> Vec<(ReviewRule, String)> {
+    check_payee_review(payment, shown, absent)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.rule, f.expected))
+        .collect()
+}
+
+#[test]
+fn a_payee_screen_showing_the_records_figures_passes_and_each_missing_one_is_named() {
+    let zec = record("shieldedZec", Some(7_807_316), true, Some(TXID));
+    assert_eq!(payee(&zec, &payee_screen(), ""), []);
+    let expected = [
+        (ReviewRule::PayeeZec, "0.07807316"),
+        (ReviewRule::PayeeRate, "512.34"),
+        (ReviewRule::PayeeReference, TXID),
+    ];
+    for (i, (rule, text)) in expected.iter().enumerate() {
+        let mut shown = payee_screen();
+        let removed = shown.remove(i);
+        assert_eq!(
+            payee(&zec, &shown, ""),
+            [(*rule, (*text).to_owned())],
+            "without {removed:?}"
+        );
+    }
+}
+
+#[test]
+fn a_different_reference_sharing_its_first_ten_characters_is_not_shown() {
+    let zec = record("shieldedZec", Some(7_807_316), true, Some(TXID));
+    let mut shown = payee_screen();
+    shown[2] = "tx 1a2b3c4d5e00…".to_owned();
+    assert_eq!(
+        payee(&zec, &shown, ""),
+        [(ReviewRule::PayeeReference, TXID.to_owned())]
+    );
+}
+
+#[test]
+fn a_zec_record_missing_a_figure_must_say_so_in_the_wallets_words() {
+    let bare = record("shieldedZec", Some(7_807_316), false, None);
+    let zec_only = vec!["Ana sent 0.07807316 ZEC".to_owned()];
+    let mut said = zec_only.clone();
+    said.push("rate and reference: not recorded".to_owned());
+    assert_eq!(payee(&bare, &said, "not recorded"), []);
+    assert_eq!(
+        payee(&bare, &zec_only, "not recorded"),
+        [
+            (ReviewRule::PayeeRate, "not recorded".to_owned()),
+            (ReviewRule::PayeeReference, "not recorded".to_owned()),
+        ]
+    );
+    assert_eq!(
+        payee(&bare, &said, ""),
+        [
+            (ReviewRule::PayeeRate, "absent".to_owned()),
+            (ReviewRule::PayeeReference, "absent".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn a_cash_record_needs_nothing_shown() {
+    let cash = record("cash", None, false, None);
+    assert_eq!(payee(&cash, &[], ""), []);
 }

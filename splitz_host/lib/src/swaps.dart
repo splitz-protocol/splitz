@@ -23,6 +23,48 @@ import 'package:splitz_core/splitz_core.dart' as protocol;
 
 import 'relay.dart' show JsonGet, JsonPost;
 
+/// The body of a swap provider's answer, refusing a status it uses to say no.
+///
+/// A 4xx or 5xx carries a body too, and decoding it as a quote would read an
+/// error object as a price, so the status decides before the bytes are read.
+/// The provider's own `message`, when it sends one, goes into the refusal: it
+/// names what to change. A 5xx is transient; a 4xx is a refusal on the
+/// merits. Bytes that are not UTF-8 are replaced rather than raised.
+String swapAnswer(int status, List<int> bodyBytes) {
+  final body = utf8.decode(bodyBytes, allowMalformed: true);
+  if (status >= 400) {
+    final said = _providerMessage(body);
+    throw SwapException(
+      'The swap provider answered $status${said == null ? '' : ': $said'}',
+      isTransient: status >= 500,
+    );
+  }
+  return body;
+}
+
+/// The `message` of an error body, or null when there is none to read: a
+/// string, or a list of strings joined, cut at 200 characters so a verbose
+/// provider cannot fill a screen.
+String? _providerMessage(String body) {
+  Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    return null;
+  }
+  if (decoded is! Map) return null;
+  final text = switch (decoded['message']) {
+    final String s => s,
+    final List<Object?> l => l.whereType<String>().join('; '),
+    _ => '',
+  }.trim();
+  if (text.isEmpty) return null;
+  final runes = text.runes.toList();
+  return runes.length <= 200
+      ? text
+      : '${String.fromCharCodes(runes.take(200))}…';
+}
+
 /// A swap that could not be arranged.
 class SwapException implements Exception {
   const SwapException(this.message, {this.isTransient = false});

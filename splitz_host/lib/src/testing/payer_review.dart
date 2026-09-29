@@ -63,6 +63,15 @@ enum ReviewRule {
 
   /// The ZEC amount and address of every output.
   output,
+
+  /// The ZEC a payment record says was sent, shown to its payee.
+  payeeZec,
+
+  /// The rate a payment record was priced at, shown to its payee.
+  payeeRate,
+
+  /// A payment record's reference, shown to its payee.
+  payeeReference,
 }
 
 /// One fact §14.2 requires that the review screen's text does not show.
@@ -211,6 +220,64 @@ List<ReviewFinding> checkPayerReview({
       _showsAddress(text, p.address),
     );
   }
+  return out;
+}
+
+/// §14.2's payee facts for [payment], against the text of the screen its
+/// payee confirms it on.
+///
+/// Each of the record's ZEC, rate and reference that it carries must be shown:
+/// the ZEC as `renderAmount` writes it, the rate as [rateFigure] writes it,
+/// the reference whole or by a prefix of at least 10 characters, under the
+/// same matching as [checkPayerReview]. A `shieldedZec` or `swap` record
+/// missing one must show [absentWords], the wallet's words for a figure the
+/// record does not carry; empty words are then a finding. A `cash` record
+/// carries none of them and needs nothing shown. Findings come in that order.
+List<ReviewFinding> checkPayeeReview({
+  required splitz.PaymentRecord payment,
+  required List<String> visibleText,
+  String absentWords = '',
+}) {
+  final text = visibleText.join('\n');
+  final overZec = payment.method != 'cash';
+  final out = <ReviewFinding>[];
+  void need(ReviewRule rule, String fact, (String, bool)? shown) {
+    final String expected;
+    final bool seen;
+    if (shown != null) {
+      (expected, seen) = shown;
+    } else if (!overZec) {
+      return;
+    } else if (absentWords.isEmpty) {
+      (expected, seen) = ('absent', false);
+    } else {
+      (expected, seen) = (absentWords, text.contains(absentWords));
+    }
+    if (!seen) out.add(ReviewFinding(rule, fact, expected));
+  }
+
+  final zatoshi = payment.zatoshi;
+  final amount = zatoshi == null ? null : splitz.renderAmount(zatoshi);
+  need(
+    ReviewRule.payeeZec,
+    'the ZEC the record says was sent',
+    amount == null ? null : (amount, _showsNumber(text, amount)),
+  );
+  final rate = payment.paidAtRate;
+  final figure = rate == null ? null : rateFigure(rate);
+  need(
+    ReviewRule.payeeRate,
+    'the rate it was priced at',
+    figure == null ? null : (figure, _showsNumber(text, figure)),
+  );
+  final reference = payment.reference;
+  need(
+    ReviewRule.payeeReference,
+    'its reference',
+    reference == null || reference.isEmpty
+        ? null
+        : (reference, _showsAddress(text, reference)),
+  );
   return out;
 }
 

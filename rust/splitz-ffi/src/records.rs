@@ -352,6 +352,43 @@ pub enum ReviewRule {
     Rate,
     /// The ZEC amount and address of every output.
     Output,
+    /// The ZEC a payment record says was sent, shown to its payee.
+    PayeeZec,
+    /// The rate a payment record was priced at, shown to its payee.
+    PayeeRate,
+    /// A payment record's reference, shown to its payee.
+    PayeeReference,
+}
+
+/// Bytes from the platform's cryptographically secure generator. A record
+/// rather than a bare byte string, so every generator carries it alike.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct RandomBytes {
+    pub bytes: Vec<u8>,
+}
+
+/// An invite's expiry against the caller's clock (§11.1). A record rather than
+/// a bare flag, so every generator carries it alike.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct InviteExpiry {
+    /// The Unix time in seconds the invite states, when it states one.
+    pub expiry: Option<i64>,
+    /// Whether that is before the clock the caller passed.
+    pub expired: bool,
+}
+
+/// What a peer lacks, and whether it fits one scanned square (§14.5).
+///
+/// Three states: `missing` 0 is nothing missing; `uri` is the square carrying
+/// the entries the peer lacks; `too_big_code` is the §12 refusal when they
+/// will not fit one square (`payload_too_large` at the cap), which needs a
+/// relay. A record rather than an enum, so every generator carries it alike.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct Delta {
+    /// How many entries the peer lacks.
+    pub missing: u64,
+    pub uri: Option<String>,
+    pub too_big_code: Option<String>,
 }
 
 /// One fact §14.2 requires that a review screen's text does not show.

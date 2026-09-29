@@ -272,4 +272,99 @@ void main() {
       expect(found(const {}, const {'eve': 0, 'dan': 1}, screen, ''), isEmpty);
     });
   });
+
+  group("the payee's side", () {
+    const txid =
+        '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809';
+    protocol.PaymentRecord record(
+      String method, {
+      int? zatoshi,
+      bool rate = false,
+      String? reference,
+    }) => protocol.PaymentRecord(
+      id: 'p1',
+      from: 'ana',
+      to: 'ben',
+      amount: 4000,
+      currency: 'EUR',
+      method: method,
+      at: '2026-10-28T19:30:00.000Z',
+      zatoshi: zatoshi,
+      paidAtRate: rate
+          ? const protocol.ExchangeRate(
+              currency: 'EUR',
+              minorUnitsPerZec: 51234,
+              at: '2026-10-28T19:30:00.000Z',
+            )
+          : null,
+      reference: reference,
+    );
+    const payeeScreen = [
+      'Ana sent 0.07807316 ZEC',
+      'at 512.34 EUR a ZEC',
+      'tx 1a2b3c4d5e6f…c4d5e6f809',
+    ];
+    List<(ReviewRule, String)> payee(
+      protocol.PaymentRecord p,
+      List<String> shown, [
+      String absent = '',
+    ]) => checkPayeeReview(
+      payment: p,
+      visibleText: shown,
+      absentWords: absent,
+    ).map((f) => (f.rule, f.expected)).toList();
+
+    final zec = record(
+      'shieldedZec',
+      zatoshi: 7807316,
+      rate: true,
+      reference: txid,
+    );
+
+    test(
+      'a screen showing the record passes; each missing figure is named',
+      () {
+        expect(payee(zec, payeeScreen), isEmpty);
+        const expected = [
+          (ReviewRule.payeeZec, '0.07807316'),
+          (ReviewRule.payeeRate, '512.34'),
+          (ReviewRule.payeeReference, txid),
+        ];
+        for (var i = 0; i < payeeScreen.length; i++) {
+          expect(payee(zec, [...payeeScreen]..removeAt(i)), [
+            expected[i],
+          ], reason: 'without "${payeeScreen[i]}"');
+        }
+      },
+    );
+
+    test('a different reference sharing its first ten characters is not '
+        'shown', () {
+      expect(payee(zec, [...payeeScreen]..[2] = 'tx 1a2b3c4d5e00…'), [
+        (ReviewRule.payeeReference, txid),
+      ]);
+    });
+
+    test(
+      'a zec record missing a figure must say so in the wallet\'s words',
+      () {
+        final bare = record('shieldedZec', zatoshi: 7807316);
+        const zecOnly = ['Ana sent 0.07807316 ZEC'];
+        const said = [...zecOnly, 'rate and reference: not recorded'];
+        expect(payee(bare, said, 'not recorded'), isEmpty);
+        expect(payee(bare, zecOnly, 'not recorded'), [
+          (ReviewRule.payeeRate, 'not recorded'),
+          (ReviewRule.payeeReference, 'not recorded'),
+        ]);
+        expect(payee(bare, said), [
+          (ReviewRule.payeeRate, 'absent'),
+          (ReviewRule.payeeReference, 'absent'),
+        ]);
+      },
+    );
+
+    test('a cash record needs nothing shown', () {
+      expect(payee(record('cash'), const []), isEmpty);
+    });
+  });
 }
