@@ -32,9 +32,11 @@ export 'splitz_core.dart'
         Settlement,
         TooBigForOneSquare;
 
+export 'src/host/arrivals.dart';
 export 'src/host/bill_log.dart';
 export 'src/host/entries.dart';
 export 'src/host/host.dart';
 export 'src/host/lanes.dart';
 export 'src/host/settle_flow.dart';
 export 'src/host/sharing.dart';
+export 'src/host/totals.dart';

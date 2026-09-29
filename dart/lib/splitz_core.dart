@@ -6,6 +6,7 @@
 /// implements it.
 library;
 
+export 'src/address.dart';
 export 'src/allocation.dart';
 export 'src/errors.dart';
 export 'src/money.dart' hide checkedBalance;

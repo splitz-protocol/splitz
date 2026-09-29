@@ -12,12 +12,15 @@
 //! on two things at once.
 
 pub mod activity;
+pub mod currencies;
 pub mod error;
 pub mod fold;
 pub mod keys;
+pub mod pending_sends;
 pub mod pricing;
 pub mod relay;
 pub mod sealing;
+pub mod seam_contracts;
 pub mod signing;
 pub mod split_draft;
 pub mod store;
@@ -29,15 +32,23 @@ pub mod wallet;
 pub mod wallet_bill_host;
 
 pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKind};
+pub use currencies::{currency_exponent, ISO_4217_EXPONENTS};
 pub use error::{HostError, Result};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
 pub use keys::{
     identity_seed_from, is_well_formed_key, Randomness, SplitsKeys, SystemRandomness,
     IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
 };
-pub use pricing::{FixedZecPrices, NoZecPrices};
+pub use pending_sends::{PendingSend, PendingSends, SendEnded, Unrecordable};
+pub use pricing::{
+    coingecko_price_url, price_from_coingecko, CoinGeckoZecPrices, FixedZecPrices, NoZecPrices,
+    MAX_MINOR_UNITS_PER_ZEC,
+};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use sealing::{Sealing, BLOB_VERSION};
+pub use seam_contracts::{
+    check_bill_storage, check_secret_store, check_splits_relay, check_zec_prices, SeamFinding,
+};
 pub use signing::{base64url_decode, base64url_encode, Signer, VerifiedLog, SEED_BYTES};
 pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};

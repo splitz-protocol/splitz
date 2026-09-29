@@ -110,20 +110,86 @@ impl<'a> HttpSplitsRelay<'a> {
     /// fragment is refused: the channel is appended to the path, and an origin
     /// carrying either would put it after them, addressing something else.
     pub fn new(origin: &str, transport: &'a dyn HttpTransport) -> Result<Self, HostError> {
-        if origin.contains('?') || origin.contains('#') {
-            return Err(relay_error(
-                "A relay origin carries no query and no fragment",
-                false,
-            ));
-        }
+        Self::check_origin(origin)?;
         Ok(Self {
             origin: origin.to_owned(),
             transport,
         })
     }
 
-    fn channel_url(&self, channel: &str) -> String {
-        format!("{}/c/{channel}", self.origin)
+    fn check_origin(origin: &str) -> Result<(), HostError> {
+        if origin.contains('?') || origin.contains('#') {
+            return Err(relay_error(
+                "A relay origin carries no query and no fragment",
+                false,
+            ));
+        }
+        Ok(())
+    }
+
+    /// The URL both routes address for `channel` under `origin`:
+    /// `<origin>/c/<channel>`. Refused, not retryable, for an origin carrying
+    /// a query or a fragment.
+    pub fn channel_url(origin: &str, channel: &str) -> Result<String, HostError> {
+        Self::check_origin(origin)?;
+        Ok(format!("{origin}/c/{channel}"))
+    }
+
+    /// The body `POST <origin>/c/<channel>` carries for `blobs`:
+    /// `{"blobs":[…]}`, or `None` when there is nothing to push and no request
+    /// is made. A blob over `MAX_BLOB_CHARS` is refused, not retryable, before
+    /// anything is sent.
+    pub fn push_body(blobs: &[String]) -> Result<Option<String>, HostError> {
+        if blobs.is_empty() {
+            return Ok(None);
+        }
+        for blob in blobs {
+            let chars = blob.chars().count();
+            if chars > Self::MAX_BLOB_CHARS {
+                return Err(relay_error(
+                    format!(
+                        "A blob of {chars} characters is over the {} the relay accepts",
+                        Self::MAX_BLOB_CHARS
+                    ),
+                    false,
+                ));
+            }
+        }
+        Ok(Some(json!({ "blobs": blobs }).to_string()))
+    }
+
+    /// Reads the relay's answer to a push, whatever its HTTP status. Anything
+    /// but `{"ok":true}` is a refusal, and retryable: the relay answered, and
+    /// what it refused — a full store, a dropped body — may pass later.
+    pub fn push_answer(body: &str) -> Result<(), HostError> {
+        if Self::decode(body)?.get("ok") != Some(&Value::Bool(true)) {
+            return Err(relay_error(
+                format!("The relay refused the push: {body}"),
+                true,
+            ));
+        }
+        Ok(())
+    }
+
+    /// Reads the relay's answer to a fetch, whatever its HTTP status: the
+    /// blobs of `{"blobs":[…]}`. An answer without that list is refused, and
+    /// retryable.
+    pub fn fetch_answer(body: &str) -> Result<Vec<String>, HostError> {
+        let Some(Value::Array(blobs)) = Self::decode(body)?.get("blobs").cloned() else {
+            return Err(relay_error("The relay answered without a channel", true));
+        };
+        // Everything here was written by somebody else and is opened under the
+        // bill key afterwards. A non-string is dropped rather than refused: it
+        // is reached by talking to a server nobody here runs.
+        Ok(blobs
+            .into_iter()
+            .filter_map(|b| b.as_str().map(str::to_owned))
+            .collect())
+    }
+
+    /// Why a request never reached an answer, as §15.5 raises it: retryable.
+    fn not_reached(cause: &str) -> HostError {
+        relay_error(format!("Could not reach the relay: {cause}"), true)
     }
 
     fn decode(body: &str) -> Result<Value, HostError> {
@@ -141,51 +207,21 @@ impl<'a> HttpSplitsRelay<'a> {
 
 impl SplitsRelay for HttpSplitsRelay<'_> {
     fn push(&self, channel: &str, blobs: &[String]) -> Result<(), HostError> {
-        if blobs.is_empty() {
+        let Some(body) = Self::push_body(blobs)? else {
             return Ok(());
-        }
-        for blob in blobs {
-            if blob.chars().count() > Self::MAX_BLOB_CHARS {
-                return Err(relay_error(
-                    format!(
-                        "A blob of {} characters is over the {} the relay accepts",
-                        blob.chars().count(),
-                        Self::MAX_BLOB_CHARS
-                    ),
-                    false,
-                ));
-            }
-        }
-        let body = self
+        };
+        let answer = self
             .transport
-            .post(
-                &self.channel_url(channel),
-                &json!({ "blobs": blobs }).to_string(),
-            )
-            .map_err(|e| relay_error(format!("Could not reach the relay: {e}"), true))?;
-        if Self::decode(&body)?.get("ok") != Some(&Value::Bool(true)) {
-            return Err(relay_error(
-                format!("The relay refused the push: {body}"),
-                true,
-            ));
-        }
-        Ok(())
+            .post(&Self::channel_url(&self.origin, channel)?, &body)
+            .map_err(|e| Self::not_reached(&e))?;
+        Self::push_answer(&answer)
     }
 
     fn fetch(&self, channel: &str) -> Result<Vec<String>, HostError> {
-        let body = self
+        let answer = self
             .transport
-            .get(&self.channel_url(channel))
-            .map_err(|e| relay_error(format!("Could not reach the relay: {e}"), true))?;
-        let Some(Value::Array(blobs)) = Self::decode(&body)?.get("blobs").cloned() else {
-            return Err(relay_error("The relay answered without a channel", true));
-        };
-        // Everything here was written by somebody else and is opened under the
-        // bill key afterwards. A non-string is dropped rather than refused: it
-        // is reached by talking to a server nobody here runs.
-        Ok(blobs
-            .into_iter()
-            .filter_map(|b| b.as_str().map(str::to_owned))
-            .collect())
+            .get(&Self::channel_url(&self.origin, channel)?)
+            .map_err(|e| Self::not_reached(&e))?;
+        Self::fetch_answer(&answer)
     }
 }

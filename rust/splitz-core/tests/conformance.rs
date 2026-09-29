@@ -382,6 +382,67 @@ fn log() {
 }
 
 #[test]
+fn request() {
+    use splitz_core::host::{check_proposal, ProposedOutput};
+    use splitz_core::zip321::base64url;
+    run_cases("request.json", |c| {
+        let uri = c["uri"].as_str().expect("uri is text");
+        if let Some(outputs) = c.get("outputs") {
+            let outputs: Vec<ProposedOutput> = outputs
+                .as_array()
+                .expect("outputs is a list")
+                .iter()
+                .map(|o| ProposedOutput {
+                    address: o["address"].as_str().expect("address").to_owned(),
+                    zatoshi: o["zatoshi"].as_i64().expect("zatoshi"),
+                })
+                .collect();
+            let check = check_proposal(uri, &outputs)?;
+            let pair = |address: &str, zatoshi: i64| serde_json::json!({"address": address, "zatoshi": zatoshi});
+            return Ok(serde_json::json!({
+                "missing": check.missing.iter().map(|p| pair(&p.address, p.zatoshi)).collect::<Vec<_>>(),
+                "unexpected": check.unexpected.iter().map(|o| pair(&o.address, o.zatoshi)).collect::<Vec<_>>(),
+            }));
+        }
+        let payments = splitz_core::read_request(uri)?;
+        Ok(Value::Array(
+            payments
+                .iter()
+                .map(|p| {
+                    let mut o = serde_json::Map::new();
+                    o.insert("address".into(), p.address.clone().into());
+                    o.insert("zatoshi".into(), p.zatoshi.into());
+                    if let Some(f) = &p.fiat {
+                        o.insert(
+                            "fiat".into(),
+                            format!("{}:{}", f.currency, f.minor_units).into(),
+                        );
+                    }
+                    if let Some(m) = &p.memo {
+                        o.insert("memo".into(), base64url(m).into());
+                    }
+                    if let Some(l) = &p.label {
+                        o.insert("label".into(), l.clone().into());
+                    }
+                    if let Some(m) = &p.message {
+                        o.insert("message".into(), m.clone().into());
+                    }
+                    Value::Object(o)
+                })
+                .collect(),
+        ))
+    });
+}
+
+#[test]
+fn messages() {
+    run_cases("messages.json", |c| {
+        let code = c["code"].as_str().expect("code is text");
+        Ok(splitz_core::describe_code(code).map_or(Value::Null, Value::from))
+    });
+}
+
+#[test]
 fn invite() {
     run_cases("invite.json", |c| {
         if let Some(uri) = c["uri"].as_str() {
@@ -397,12 +458,16 @@ fn invite() {
             Ok(Value::Object(o))
         } else {
             let raw = &c["invite"];
-            Ok(json!(splitz_core::render_invite(&splitz_core::Invite {
+            let invite = splitz_core::Invite {
                 bill_id: raw["billId"].as_str().unwrap_or_default().to_owned(),
                 key: raw["key"].as_str().unwrap_or_default().to_owned(),
                 name: raw["name"].as_str().unwrap_or_default().to_owned(),
                 expiry: raw["expiry"].as_i64(),
-            })?))
+            };
+            Ok(json!(match c["base"].as_str() {
+                Some(base) => splitz_core::render_invite_link(&invite, base)?,
+                None => splitz_core::render_invite(&invite)?,
+            }))
         }
     });
 }
@@ -610,4 +675,17 @@ fn stand_in(verifies: &std::collections::BTreeSet<String>, e: &Value, key: &str)
     names
         .iter()
         .any(|n| verifies.contains(n) || verifies.contains(&format!("{n}@{key}")))
+}
+
+#[test]
+fn address() {
+    run_cases("address.json", |c| {
+        let parsed = splitz_core::parse_address(c["address"].as_str().expect("address is text"))?;
+        Ok(json!({
+            "network": parsed.network.as_str(),
+            "kind": parsed.kind.as_str(),
+            "receivers": parsed.receivers,
+            "canReceiveMemo": parsed.can_receive_memo,
+        }))
+    });
 }

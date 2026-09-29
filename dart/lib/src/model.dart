@@ -118,8 +118,10 @@ class PaymentRecord {
   final int? zatoshi;
   final ExchangeRate? paidAtRate;
 
-  /// Identifies a swap — the provider's intent id, or the transaction on the
-  /// destination chain. Not a Zcash transaction id.
+  /// What the payment went out as. For `shieldedZec`, the Zcash transaction
+  /// (§10.5). For `swap`, the provider's intent id or the transaction on the
+  /// destination chain — never a Zcash transaction, whatever it looks like
+  /// (§9.2).
   final String? reference;
   final String? note;
 }

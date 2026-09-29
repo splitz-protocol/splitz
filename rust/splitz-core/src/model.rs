@@ -83,6 +83,10 @@ pub struct PaymentRecord {
     /// debt and this takes no part in §5 or §6.
     pub zatoshi: Option<i64>,
     pub paid_at_rate: Option<ExchangeRate>,
+    /// What the payment went out as. For `shieldedZec`, the Zcash transaction
+    /// (§10.5). For `swap`, the provider's intent id or the transaction on the
+    /// destination chain — never a Zcash transaction, whatever it looks like
+    /// (§9.2).
     pub reference: Option<String>,
     pub note: Option<String>,
 }

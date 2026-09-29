@@ -67,7 +67,53 @@ ADDRESSES = [
     "a-b",
     "a b",
     "",
+    # Real addresses, so a request carrying a memo reaches §8.6 with one that
+    # can take it and ones that cannot.
+    "zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpq6d8g",
+    "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl",
+    "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+    "tex1s2rt77ggv6q989lr49rkgzmh5slsksa9khdgte",
 ]
+
+# Every address the corpus carries for §8.6, as seeds for the `address`
+# operation, which then damages one in a single place. Accepted ones are
+# grouped by kind and a kind drawn first, so the five kinds are reached alike
+# however many of each the corpus holds.
+_ADDRESS_CASES = json.loads(
+    (pathlib.Path(__file__).resolve().parents[2] / "vectors" / "address.json")
+    .read_text(encoding="utf-8"))["cases"]
+ADDRESSES_BY_KIND = {}
+for _c in _ADDRESS_CASES:
+    if "expect" in _c:
+        ADDRESSES_BY_KIND.setdefault(_c["expect"]["kind"], []).append(_c["address"])
+REFUSED_ADDRESSES = [c["address"] for c in _ADDRESS_CASES if "error" in c]
+BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+
+def damaged_address(rng):
+    """A corpus address, as is or changed in one place."""
+    if rng.random() < 0.25:
+        text = rng.choice(REFUSED_ADDRESSES)
+    else:
+        text = rng.choice(ADDRESSES_BY_KIND[rng.choice(sorted(ADDRESSES_BY_KIND))])
+    how = rng.choice(["as_is"] * 7 + ["flip", "drop", "insert", "upper_one",
+                                      "upper_all", "cut", "pad"])
+    if not text or how == "as_is":
+        return text
+    at = rng.randrange(len(text))
+    if how == "flip":
+        return text[:at] + rng.choice(BECH32_CHARSET + "ABCHJ0Il") + text[at + 1:]
+    if how == "drop":
+        return text[:at] + text[at + 1:]
+    if how == "insert":
+        return text[:at] + rng.choice(BECH32_CHARSET) + text[at:]
+    if how == "upper_one":
+        return text[:at] + text[at].upper() + text[at + 1:]
+    if how == "upper_all":
+        return text.upper()
+    if how == "cut":
+        return text[:at]
+    return rng.choice([" ", "\n", "\u00a0", "\ufeff"]) + text
 
 # MAX_ZATOSHI is 21e6 ZEC in zatoshi; 18 digits is the fiat ceiling.
 ZATOSHI = [1, 2, 10**8, 2_100_000_000_000_000, 2_100_000_000_000_001, 0, -1]
@@ -132,7 +178,7 @@ def operations(seed, count):
     kinds = [
         "allocate", "split", "rate", "amount", "qchar", "instant",
         "invite", "canonical", "billid", "request", "fold", "merge",
-        "property",
+        "property", "address",
     ]
     ops = []
     pairs = _logs.corruptions()
@@ -179,6 +225,9 @@ def operations(seed, count):
 
         elif kind == "invite":
             op["uri"] = rng.choice(INVITES)
+
+        elif kind == "address":
+            op["text"] = damaged_address(rng)
 
         elif kind == "canonical":
             op["value"] = rng.choice(CANONICAL)
@@ -270,6 +319,16 @@ def operations(seed, count):
             else:
                 op["runs"] = [{"op": "fold", "log": full},
                               {"op": "fold", "log": shuffled}]
+            # The variants can all coincide with their originals, and a run
+            # with no id carrying two candidates tests nothing about
+            # resolution: redraw it.
+            candidates = {}
+            for run in op["runs"]:
+                for part in (run.get("parts") or [run.get("log")]):
+                    for e in part:
+                        candidates.setdefault(e["id"], set()).add(e.get("sig"))
+            if not any(len(v) > 1 for v in candidates.values()):
+                continue
 
         ops.append(op)
     return ops

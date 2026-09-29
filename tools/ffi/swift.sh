@@ -16,7 +16,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 pkg="$root/dist/ios/SplitzFFI"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+RELAY_PID=
+trap 'rm -rf "$work"; [ -z "$RELAY_PID" ] || kill "$RELAY_PID" 2>/dev/null || true' EXIT
 
 if ! command -v swift >/dev/null; then
   echo "no swift" >&2
@@ -52,4 +53,9 @@ let package = Package(
 )
 SWIFT
 
-(cd "$work/Consumer" && swift run --quiet Consumer)
+# The two devices sync through a live tools/relay/server.py with the relay
+# client the package ships, tools/package/relay/SplitzRelay.swift.
+# shellcheck source=relay.sh
+. "$root/tools/ffi/relay.sh"
+relay_up "$root" "$work"
+(cd "$work/Consumer" && swift run --quiet Consumer "$RELAY_ORIGIN" "$RELAY_DOWN_ORIGIN")

@@ -1,6 +1,6 @@
 {
   "description": "Invite URIs. SPEC.md section 11.1.",
-  "count": 55,
+  "count": 76,
   "cases": [
     {
       "name": "a_plain_invite",
@@ -326,6 +326,77 @@
       "error": "invite_missing_version"
     },
     {
+      "name": "a_link",
+      "uri": "https://pay.example/j#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_link_with_a_name_and_an_expiry",
+      "uri": "https://pay.example/j?ref=1#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Ana&x=1793000000",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Ana",
+        "expiry": 1793000000
+      }
+    },
+    {
+      "name": "a_link_padded_at_the_ends",
+      "uri": "  https://pay.example/j#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk\n",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      }
+    },
+    {
+      "name": "a_link_with_no_fragment",
+      "uri": "https://pay.example/j?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_link_whose_fragment_is_not_an_invite",
+      "uri": "https://pay.example/j#top",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_link_whose_fragment_is_padded",
+      "uri": "https://pay.example/j# splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "the_link_scheme_is_case_sensitive",
+      "uri": "HTTPS://pay.example/j#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_plain_http_link",
+      "uri": "http://pay.example/j#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
+      "name": "a_link_to_an_invite_from_the_future",
+      "uri": "https://pay.example/j#splitz://join?v=2&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_future_version"
+    },
+    {
+      "name": "a_link_to_an_invite_with_no_key",
+      "uri": "https://pay.example/j#splitz://join?v=1&b=Ab3-_xyz",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "the_first_hash_starts_the_fragment",
+      "uri": "https://pay.example/j#x#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "error": "invite_not_an_invite"
+    },
+    {
       "name": "encode_a_plain_invite",
       "invite": {
         "billId": "Ab3-_xyz",
@@ -363,6 +434,15 @@
       "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Zcon7%20d%C3%AEner%20%E2%9C%A8"
     },
     {
+      "name": "encode_escapes_what_a_payment_request_leaves",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "a+b$c,d;e:f@g"
+      },
+      "expect": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=a%2Bb%24c%2Cd%3Be%3Af%40g"
+    },
+    {
       "name": "encode_with_an_expiry",
       "invite": {
         "billId": "Ab3-_xyz",
@@ -374,6 +454,97 @@
     },
     {
       "name": "encode_refuses_a_key_that_does_not_decode",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkk",
+        "name": ""
+      },
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "link_a_plain_invite",
+      "base": "https://pay.example/j",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "expect": "https://pay.example/j#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    },
+    {
+      "name": "link_with_a_name_and_an_expiry",
+      "base": "https://pay.example/j?ref=1",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Ana",
+        "expiry": 1793000000
+      },
+      "expect": "https://pay.example/j?ref=1#splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Ana&x=1793000000"
+    },
+    {
+      "name": "link_refuses_plain_http",
+      "base": "http://pay.example/j",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "error": "invite_bad_link"
+    },
+    {
+      "name": "link_refuses_a_base_with_a_fragment",
+      "base": "https://pay.example/j#x",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "error": "invite_bad_link"
+    },
+    {
+      "name": "link_refuses_a_base_with_a_space",
+      "base": "https://pay.example/a b",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "error": "invite_bad_link"
+    },
+    {
+      "name": "link_refuses_a_base_with_no_host",
+      "base": "https://",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "error": "invite_bad_link"
+    },
+    {
+      "name": "link_refuses_a_base_that_is_only_a_path",
+      "base": "https:///j",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "error": "invite_bad_link"
+    },
+    {
+      "name": "link_refuses_a_non_ascii_base",
+      "base": "https://pay.example/d\u00eener",
+      "invite": {
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": ""
+      },
+      "error": "invite_bad_link"
+    },
+    {
+      "name": "link_refuses_what_an_invite_refuses",
+      "base": "https://pay.example/j",
       "invite": {
         "billId": "Ab3-_xyz",
         "key": "kkkkk",

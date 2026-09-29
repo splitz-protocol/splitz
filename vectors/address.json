@@ -1,0 +1,919 @@
+{
+  "description": "Zcash addresses. SPEC.md section 8.6.",
+  "count": 112,
+  "cases": [
+    {
+      "name": "zip316_vector_p2pkh_sapling",
+      "address": "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          0,
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_p2pkh_sapling_orchard",
+      "address": "u1pg2aaph7jp8rpf6yhsza25722sg5fcn3vaca6ze27hqjw7jvvhhuxkpcg0ge9xh6drsgdkda8qjq5chpehkcpxf87rnjryjqwymdheptpvnljqqrjqzjwkc2ma6hcq666kgwfytxwac8eyex6ndgr6ezte66706e3vaqrd25dzvzkc69kw0jgywtd0cmq52q5lkw6uh7hyvzjse8ksx",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          0,
+          2,
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_sapling_orchard",
+      "address": "u1ay3aawlldjrmxqnjf5medr5ma6p3acnet464ht8lmwplq5cd3ugytcmlf96rrmtgwldc75x94qn4n8pgen36y8tywlq6yjk7lkf3fa8wzjrav8z2xpxqnrnmjxh8tmz6jhfh425t7f3vy6p4pd3zmqayq49efl2c4xydc0gszg660q9p",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2,
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_p2pkh_orchard",
+      "address": "u1snf9yr883aj2hm8pksp9aymnqdwzy42rpzuffevj35hhxeckays5pcpeq7vy2mtgzlcuc4mnh9443qnuyje0yx6h59angywka4v2ap6kchh2j96ezf9w0c0auyz3wwts2lx5gmk2sk9",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          0,
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_p2pkh_orchard_65532",
+      "address": "u1en8ysypun4gdkdnu8zqqg6k73ankr9ffwfzg08wtzg9z939w0wupewemfrc8a630e8gc4uqucym0l4v44fszy3et4veyypt3jsyp0whfpfsn2lw30kj8nepe6wvvasf00wklh85u9v8glqndupmamk9z2ja9sanf70pp4yxvkt3dmyzxa0kkhv2c9pxmkghrxqk0590azvya3nzrtevj449nu3laskrhf7c7nj9cyw7ty38mccg4znrr876guu6pzndx7ngwzhmlsn8d89saf5araaacrhr9958xr6z23mj4qtzzn98whdpu8u7n8fhf5d2vypljda62q73du44sf0e0kxmq3gvgkta0qqgq9w6r403gc5jz2any02etmwlttkv84hgh95czhdf2jugk3u36ke0kchcthg240",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          0,
+          3,
+          65532
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_sapling_65533",
+      "address": "u1sem2gcey0emntrvxyjv8hyhq0w5fr4sxaj3cppgrfqgg6laydh8m78gy2cw2p54zzak3alnnsx4xjuhazpkrfcd90wl0c7ldj6y095hh5j6j2evry9vg5jqp4dyqpwqeryu7pes4sxyyyqwn6egs5daxk4473v9xpgzrwv5n0tvs93nlj4xpphq4vs2w8um9ph7zkte08t7fa509mnrt9apuhr22xq34mp2svjnq6rvfn0hg6lkehxtlj39vgjxjlkjfhx8rw2f02ckq8k5szcxsnhkgr2cqlmf2udl2gqdqr5t6",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2,
+          65533
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_orchard",
+      "address": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_sapling_orchard_65532",
+      "address": "u1xdrenc94696j8clxa2xnkdg8xd5t3y8s24urctyxu87vggv0u46qr4lkpnh7gqqdev9wwugt6xkv8c8du8ufhfl8nfjnzusf6cw20wpm85hlshmnmj2lkyhka9rua7qw7kr0xeajk7y2rlsuwl6z6l5l3wq3v6rrqt9e8zy7sc7pww45jznrj4xy6h9rp4kjy5xtl5upr30u4cyk58kv3t80k3p8w97k3e345h7avmjylxakx6sgyk5ss8th5kqay50ewav62eeep7tghzejaflsdstpwz55haex398jqpq27007me2",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2,
+          3,
+          65532
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_p2pkh_orchard_65531",
+      "address": "u1tqx832p4wsfe9pd67ggm3qsmfuvdhqvw2259y7uwug7y0lpeu87fmgpqh3zmamex3fzs0d4ct4hhsg2csj5z0q5f3f7n656ap8e4nlng9c4440rz9s7ekxanfw6g84f7vu82fumtmlz3vstl2a9ufa0970k4knsz2wpsjt2xycqeay76pt4fx3ak9y7mps2q6qe2n2h7wkakxr7xu6vd36zhhzgln7ttmrzc0f9ye3jmyu2pp8l8rect87lfxj2fgckcwz3svdx70a947fz04kgu7e907enzrk676zdkdmuyw2kyrclkmj62kmyy2rjetpus7knmxfuu7z0m63uwfhdynhuu3yrjqu5y089v8zwnh60mw5ngc0kszdjmc339fk9mjn396m5ekv7h7td7fa0u9097xph3y5vth9af4sw6ykxdms84wr544mxxqtmgj027d9e8rnlrazge0kwyydyhder3chwhmaqjk9skuxgxzternw4xx962qed",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          0,
+          3,
+          65531
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_orchard_65535",
+      "address": "u1uehkuaq6rpfgt4ed5zpvhczg9apgpmyk5eq9qg23j8w7jxkhdnqzacte6gu8zgzfzgxy48ryzus3wnkhfxrxmlhs34xde3f34uxcnv3y6dsgj288vu56xs9f6ghvqsgkhuwtz4kkfxj8pa27v5p3ttlst340zvwx9nj6s0zw8p3wwk3zh37dwc7znqz52gj2fpaapzxzyagah0aeyxwa9fxxvyyj6w989v96ymsgf7s8s6ej9346p60fcjzzynvf9rmxevumdvt8l9mvhdfz4u5j4h7e0zjr2sde7fu7z9s02447qg6qzllm22egnx6ej6qczkkk2ygvpy08un9ggp853sddp6vskrlar6sygxec5f6c2t2eu9zmc728esy4sj9z853gxuplr6hw7lpcwzk20d85vuflnhlfv8nr3020r0v9z83ryudsyjv66rttxq2cscqlrdxakrmpjptzcf",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3,
+          65535
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "zip316_vector_sapling",
+      "address": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "corpus_unified_address_0",
+      "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "corpus_unified_address_1",
+      "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "corpus_unified_address_2",
+      "address": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "corpus_unified_address_3",
+      "address": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "corpus_unified_address_4",
+      "address": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "corpus_unified_address_5",
+      "address": "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "published_sapling_main",
+      "address": "zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpq6d8g",
+      "expect": {
+        "network": "main",
+        "kind": "sapling",
+        "receivers": [],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "published_sapling_test",
+      "address": "ztestsapling1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqfhgwqu",
+      "expect": {
+        "network": "test",
+        "kind": "sapling",
+        "receivers": [],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "published_sapling_regtest",
+      "address": "zregtestsapling1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqknpr3m",
+      "expect": {
+        "network": "regtest",
+        "kind": "sapling",
+        "receivers": [],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "published_unified_test",
+      "address": "utest10c5kutapazdnf8ztl3pu43nkfsjx89fy3uuff8tsmxm6s86j37pe7uz94z5jhkl49pqe8yz75rlsaygexk6jpaxwx0esjr8wm5ut7d5s",
+      "expect": {
+        "network": "test",
+        "kind": "unified",
+        "receivers": [
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "published_unified_regtest",
+      "address": "uregtest15xk7vj4grjkay6mnfl93dhsflc2yeunhxwdh38rul0rq3dfhzzxgm5szjuvtqdha4t4p2q02ks0jgzrhjkrav70z9xlvq0plpcjkd5z3",
+      "expect": {
+        "network": "regtest",
+        "kind": "unified",
+        "receivers": [
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "published_p2pkh_main",
+      "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+      "expect": {
+        "network": "main",
+        "kind": "p2pkh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "published_p2pkh_test",
+      "address": "tm9iMLAuYMzJ6jtFLcA7rzUmfreGuKvr7Ma",
+      "expect": {
+        "network": "test",
+        "kind": "p2pkh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "published_p2sh_main",
+      "address": "t3JZcvsuaXE6ygokL4XUiZSTrQBUoPYFnXJ",
+      "expect": {
+        "network": "main",
+        "kind": "p2sh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "published_p2sh_test",
+      "address": "t26YoyZ1iPgiMEWL4zGUm74eVWfhyDMXzY2",
+      "expect": {
+        "network": "test",
+        "kind": "p2sh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "published_tex_main",
+      "address": "tex1s2rt77ggv6q989lr49rkgzmh5slsksa9khdgte",
+      "expect": {
+        "network": "main",
+        "kind": "tex",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "published_tex_test",
+      "address": "textest1qyqszqgpqyqszqgpqyqszqgpqyqszqgpfcjgfy",
+      "expect": {
+        "network": "test",
+        "kind": "tex",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "sapling_main",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l",
+      "expect": {
+        "network": "main",
+        "kind": "sapling",
+        "receivers": [],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "sapling_test",
+      "address": "ztestsapling17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7c0j8at",
+      "expect": {
+        "network": "test",
+        "kind": "sapling",
+        "receivers": [],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "sapling_regtest",
+      "address": "zregtestsapling17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg78tm2vv",
+      "expect": {
+        "network": "regtest",
+        "kind": "sapling",
+        "receivers": [],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "tex_main",
+      "address": "tex1r5lveeuvu63xehk8anrf9krdu552usflm06ff3",
+      "expect": {
+        "network": "main",
+        "kind": "tex",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "tex_test",
+      "address": "textest1r5lveeuvu63xehk8anrf9krdu552usflzp9lv2",
+      "expect": {
+        "network": "test",
+        "kind": "tex",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "tex_regtest",
+      "address": "texregtest1r5lveeuvu63xehk8anrf9krdu552usflgh4pr7",
+      "expect": {
+        "network": "regtest",
+        "kind": "tex",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "p2pkh_main",
+      "address": "t1LYEqM7JNuDdrX9WJFWHjNzpUt8qAZG26W",
+      "expect": {
+        "network": "main",
+        "kind": "p2pkh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "p2sh_main",
+      "address": "t3YBfYYRdxtTnGL6f2jPFaRKyhTWzxLNBSg",
+      "expect": {
+        "network": "main",
+        "kind": "p2sh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "p2pkh_test",
+      "address": "tmCNzABbhmZj8zmLwxyp2b3fa5sDedHRtDd",
+      "expect": {
+        "network": "test",
+        "kind": "p2pkh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "p2sh_test",
+      "address": "t2LArbDXmqM59p2gPxUPJ83WcowkAnsBW5z",
+      "expect": {
+        "network": "test",
+        "kind": "p2sh",
+        "receivers": [],
+        "canReceiveMemo": false
+      }
+    },
+    {
+      "name": "unified_orchard_main",
+      "address": "u1dkexuffyluxzxpxmf57xnr7m29hnregt05cgv7kcfds48qdl7pwz8q6qppqtparrmdykzh88a2x34qmmf0z4znz858pzlsy60utnnevj",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_p2sh_sapling_orchard_main",
+      "address": "u1m082epetukjrxf2re6jyxvw4smxem8t7jwdgmt0v0h20c2fvt2c43xf28n0lyptnmknlrzs5cq3se7gq6cpc836x4wgjd3qfafkrmghuxsj54jn7thawfxxx2jxasfmznfqs0w0zeddufv42xdxvwrpq2remzp97r0axl26uyfcvd7pk4fps88dkvne4eacllfyjat5uc9pvku9j7s3",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          1,
+          2,
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_p2pkh_sapling_main",
+      "address": "u1tqpknp76k3puq3m4e56kssnxag5gfhnxvxex3wjpylmva5x70rt6gspay62fzucz7agnwsxl5zvuq25ml2u7e3ghx3fz6utzpdfj0t650fcvacd0l5fsdapekfnetjy8rtw5vjf7n7l",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          0,
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_orchard_test",
+      "address": "utest1jgeatrctku8c5d5jrcgkygpaa94s88yxthmzmq7wv2f3t4rfyaka35f83yzp5nwdalytzshqlszy4yum8tleqwz7pwyv5en3cs6678tx",
+      "expect": {
+        "network": "test",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_p2sh_sapling_orchard_test",
+      "address": "utest1mxxhsmcyj233y06z2dmskqc0353utqzpecau7ej2em9a38a0lx8qdff6msdchtz29e54v80ggenrmwxptrxzp60s4d5mec3ju0285f0pfzmqkdhdlw9f4n0udwc2a0677c35fn29et9j6p4qa3nl5vh96pmyprqa3z427jwjzcm74xlss3s9kyv8f2lf5gdz679ua75a20vwu9gvkf5",
+      "expect": {
+        "network": "test",
+        "kind": "unified",
+        "receivers": [
+          1,
+          2,
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_p2pkh_sapling_test",
+      "address": "utest1h3tr4mpwxm5ffa6djqwtlkx85ytn9qznuv8aftz8wey0z8xh2whhzj5mzmes64axcpsrdjrcmdegq2ejf0vlpvv9d9was7dw2w7d49qtf6kaqqeuaafez3llap6dddnqdlzmsd09j2m",
+      "expect": {
+        "network": "test",
+        "kind": "unified",
+        "receivers": [
+          0,
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_orchard_regtest",
+      "address": "uregtest1t6d0zwlpxcx7zk72d7kj4hp4sel537f34wrra9vvm9nt748zhx7ttjepyfewq4l3t53fchuj7u846emrgr5c4j5z2ct742erlu24a9uw",
+      "expect": {
+        "network": "regtest",
+        "kind": "unified",
+        "receivers": [
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_p2sh_sapling_orchard_regtest",
+      "address": "uregtest1uaaqrpxe74kh4q2k7554zacyu5a30yxzxn68ms9n0634m3zqhqjsv56eszn8vgyl664vdnaz8n3re9kjehkwuy9kzckjua4hzjnys2xqf4kfesqhdc4l2cqjfkluw0lhdgfvs5xa0kr58x7fdk2jsrtpk4vgl33c0mt64zd0f3smwvwt5hc56kurwfkup950v4ggw4agxw476mdxn33",
+      "expect": {
+        "network": "regtest",
+        "kind": "unified",
+        "receivers": [
+          1,
+          2,
+          3
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_p2pkh_sapling_regtest",
+      "address": "uregtest1r9xn99cea53yml5576ex9rc9ssdfgpxkgtwf7djn08vkv9x3282vksqw066pcf6kdq98gvfd24zda0r8h5ktpxz0sqpz260clu9vldv7ey2hn5tqt2zmvnr60hnzdn5pmf645qlg6q6",
+      "expect": {
+        "network": "regtest",
+        "kind": "unified",
+        "receivers": [
+          0,
+          2
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_keeps_an_unassigned_typecode",
+      "address": "u1s33chsxg6dcclrtq4s9hk0mqmfx8ztcju4pj45lze5ze2g76tzhgden8dc4xydu39npjnvxs7nmmgkjkgqvvkmgzkdsyaq6dfgmsjn2l5mzeq6wnssw",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3,
+          4
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_keeps_non_must_understand_metadata",
+      "address": "u1y8zqps0mepymlyuy03ujtx6v42enrnzaxt47h5anr7hes4nmu4wvxwgpa7n7y6vkvr0sg0g5qzezy8dhyvaayj63vsjqwg2tsdgcpqype0rstkzc6d",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2,
+          192
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_keeps_an_experimental_typecode",
+      "address": "u1v0s9xamx064v6qwf38nerwpntrcflxkxhlfk9wmuj3ghkjawjw07d0tlekeywgjf5drjkg5jxefzejds5nvc32x8k839a8v55h87mn7h49276x7pk5qm62qcjemm5p",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2,
+          65530
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_keeps_the_largest_typecode",
+      "address": "u1ujzkvxsywxxv66yax6e9tt5jk8m40v3mupkgjmhnu9vhxke2lumxlyaazumz6mtvkfshrnzvn4cp8m35lscmhuzak3zt2f4fjk7fxnhyukjtva7dac4",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          2,
+          33554432
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "unified_carries_a_long_unknown_item",
+      "address": "u13w7fxvfgkxvd2reqvtln8wweda6t7gc0mae7ydhjgcfw793xd8f8wk5cez65yxmetcvh3yfmec83smksc0aqejfz0dfnztu324hjg9yng25zqwzpx5rs7neeaw44lalz874h5txzlwjh47nhqkwuaj3wr5zea9ax0kq70lwy4rn44ecxaefqq4vzfdvsta9upc8ex5tslk7ed4w8t7rwhwtppxe550tunrn2eqlefggqzcs0cd5hy9jsmsj6qmtdm39cf9z4c0fycd7k9855cnmrd27mcjrtl3x2unepk3e0afqnkysffaaatvv0mj3e704ft5w3s2kr2mv8mn4n8u7dgpgcdprs4at3rsuzwm4we09zl8xhqmls9vrkvm82avts6nc9d4fevlcgwd42zsncplr9xznacyjpzakdm2uzw0fjfdje2vfkfj05tt6u4259n3x0fcjv4mcgar3wvne9gg3vh832vsgleflzs9lqz9288y37algejucmv4d80vtpftdc0uarw8j74cdjrx7rvtwnm7eejkhayxlmzcfvlzyepdgk7n0jw5wa9rj93jzc3n8pl05vgm",
+      "expect": {
+        "network": "main",
+        "kind": "unified",
+        "receivers": [
+          3,
+          5
+        ],
+        "canReceiveMemo": true
+      }
+    },
+    {
+      "name": "the_empty_string",
+      "address": "",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_leading_space",
+      "address": " zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_trailing_newline",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l\n",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_character_outside_the_grammar",
+      "address": "zs17mwa3ge-zw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_non_ascii_letter",
+      "address": "zs17mwa3geézw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_prefix_alone",
+      "address": "zs1",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_sapling_checksum_that_fails",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6q",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_sapling_data_character_that_fails",
+      "address": "zs17mwa3ge5zw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_tex_checksum_that_fails",
+      "address": "tex1r5lveeuvu63xehk8anrf9krdu552usflm06ffj",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_unified_checksum_that_fails",
+      "address": "u1s3jz3mnapv2q20f8zd4j6jac45dj44hrlux223ffzxkuckvk4zxv0twvh5m6lt6ejlhqj9qln0gqu73dwlj29qv5hjs79tuzqlpt5xus42n8e7mcrtwtjlm6dqmafcyvd79v26vf64spu99xjxlsy28c2pe9mq2t9tc2p4j0req5ztva6784e5mpfcaz2698kh2gdcranpzs2n3ggk0",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_unified_data_character_that_fails",
+      "address": "u1s3jz3mnapv2q20f8zd4j6jac45dj44hrlux2232fzxkuckvk4zxv0twvh5m6lt6ejlhqj9qln0gqu73dwlj29qv5hjs79tuzqlpt5xus42n8e7mcrtwtjlm6dqmafcyvd79v26vf64spu99xjxlsy28c2pe9mq2t9tc2p4j0req5ztva6784e5mpfcaz2698kh2gdcranpzs2n3ggkw",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_transparent_checksum_that_fails",
+      "address": "t1LYEqM7JNuDdrX9WJFWHjNzpUt8qAZG26X",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_character_base58_leaves_out",
+      "address": "t1LYE0M7JNuDdrX9WJFWHjNzpUt8qAZG26W",
+      "error": "address_invalid"
+    },
+    {
+      "name": "sapling_under_bech32m",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg79ysgla",
+      "error": "address_invalid"
+    },
+    {
+      "name": "tex_under_bech32",
+      "address": "tex1r5lveeuvu63xehk8anrf9krdu552usflwn29vn",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_under_bech32",
+      "address": "u1dkexuffyluxzxpxmf57xnr7m29hnregt05cgv7kcfds48qdl7pwz8q6qppqtparrmdykzh88a2x34qmmf0z4znz858pzlsy60u70r4fs",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_sapling_address_one_byte_short",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpqjzc9pq",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_sapling_address_one_byte_long",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7qqdys5l5",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_tex_address_one_byte_short",
+      "address": "tex1r5lveeuvu63xehk8anrf9krdu552usgkep8gq",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_tex_address_one_byte_long",
+      "address": "tex1r5lveeuvu63xehk8anrf9krdu552usflqqvff38z",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_transparent_payload_one_byte_short",
+      "address": "CZFPwLZegHHpGbnM41ji5F8hjvtuzh9mtj",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_transparent_payload_one_byte_long",
+      "address": "4t8VEt4PkohfUmfa4YK92Gr46Ca4hZ9buy9oj",
+      "error": "address_invalid"
+    },
+    {
+      "name": "an_orchard_receiver_one_byte_short",
+      "address": "u1vxkunu2davulnfhx2gxqcsumgvtlmx4kdhm97eeznl9d3cw4wvj0qfrnff35ge6kg9gam3e74u08tgu3p65jpgeqcpllxj0w5s4h98",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_p2pkh_receiver_one_byte_long",
+      "address": "u14w33drq3rs8r0n5gfk28uf0mshf3f0wm4fzxq3xjp8kd9gdnen4u8a6s8kxepw60uqj968zwfrwpxxsqyja5q79gqalc2trxfkqcvy4vrunp5cezu9mqtxjeut9tjw7er74k7tcpzjx2h",
+      "error": "address_invalid"
+    },
+    {
+      "name": "sapling_padding_bits_not_zero",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpgldw538d",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_padding_bits_not_zero",
+      "address": "u1dkexuffyluxzxpxmf57xnr7m29hnregt05cgv7kcfds48qdl7pwz8q6qppqtparrmdykzh88a2x34qmmf0z4znz858pzlsy60ak98v3q",
+      "error": "address_invalid"
+    },
+    {
+      "name": "sapling_with_a_whole_extra_group",
+      "address": "zs17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7qdpvztj",
+      "error": "address_invalid"
+    },
+    {
+      "name": "sapling_in_upper_case",
+      "address": "ZS17MWA3GENZW087NGXJXYAHWJWLPJT2XYL362H0D8TRM9MUGWCW2D2560L5DZGFCZQGFPG7SCQY6L",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_in_upper_case",
+      "address": "U1DKEXUFFYLUXZXPXMF57XNR7M29HNREGT05CGV7KCFDS48QDL7PWZ8Q6QPPQTPARRMDYKZH88A2X34QMMF0Z4ZNZ858PZLSY60UTNNEVJ",
+      "error": "address_invalid"
+    },
+    {
+      "name": "tex_in_upper_case",
+      "address": "TEX1R5LVEEUVU63XEHK8ANRF9KRDU552USFLM06FF3",
+      "error": "address_invalid"
+    },
+    {
+      "name": "sapling_in_mixed_case",
+      "address": "ZS17Mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg7scqy6l",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_in_mixed_case",
+      "address": "u1s3jz3mnapv2q20f8zd4j6jac45dj44hrlux223ffzxkuckvk4zxv0twvh5m6lt6ejlhqj9qln0gqu73dwlj29qv5hjs79tuzqlpt5xus42n8e7mcrtwtjlm6dqmafcyvd79v26vf64spu99xjxlsy28c2pe9mq2t9tc2p4j0req5ztva6784e5mpfcaz2698kh2gdcranpzs2n3ggkW",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_only_p2pkh",
+      "address": "u1ck60gv8frgdghkysae7t84ctcez4aapuhcsx5jkva8n4wa7eag5ma5hqh43tznpu32k",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_only_p2sh",
+      "address": "u10jpttfyadc05uz4j5tcrpk8tyjjdph5tr0qmcfvehxlrs7z8849rjpml98r4y7yhj6l",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_only_an_unknown_typecode",
+      "address": "u15k3dlgjhvvt36wx522crkjv3nr6v8pq8sedsnqpq4jdqkp7uu2ppfputjukhh6d3rjme2cc2jv7safzxnhxkx9qnwq8qxn2j44e",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_p2pkh_and_an_unknown_typecode",
+      "address": "u1q5fy4kxnjmaufkazh3z2qykjuvpplru22uq0twzldpnke3pwd844anlape4nrltewq0x9z8ytpnnmuv9w7ula8t24luqeluh4cwwjhkvfjf4gnafnrlps63xpfdj7ltxrn0c5u",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_p2pkh_and_p2sh",
+      "address": "u1l92xgjpvteyy0srl9sf5lwvk7a3cv9sc7dmevs8sku3cq7m34lymvt66mwu5sc2ucj6lmn5d3txalw0w9gjuh424tq6jwphtcgzd3heywnafguyce9se0geufvcn5kdveljqmw9k8qu6emgl8yup7xq58ehwfk262ysek0rfkr49pf",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_duplicate_typecode",
+      "address": "u1gcsl0apjxpy6lnc0ynh65sgh44rkxyqcq7n5jhyjzgg8satxgcydxpnk6802xas0hcnhzsg3wxj4p3fpd8rr92m0m73xp9nd3pzx8kk0jglxd8vet8fhkkk7jjx2mtxfp5ky4qksjveu39ntfd2utz7xwx9f7dt7fumf0ampfu2rc8tm",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_receivers_out_of_order",
+      "address": "u1k2juzjnj23ydgq0ltp3y5kzkmdf0xm9v2qsdvkv2u8d625tyqrr8hupq09rvly6pzsdsnvggj5w6ud2y45rsqwtf3k42gmd0m4c9k23hzwqcjfeaw7msfc7qv39flfla432wuh3ezk2pc58klcspxlm5v52q7qk0fk739x5egvk8mgym",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_must_understand_typecode",
+      "address": "u13jzw2zzy2scuuzq49zvlqm25d70fadrmgg9n6ruw7mvaqfqmm9s6w6fctrj6hwwzqhzf9nm0u9h47l322ynnp9sf49ckrfyc277z3y7jwhusrz30qp",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_the_last_must_understand_typecode",
+      "address": "u13jvn6w6ragynkfv7u4nqw9r8mqk925dcctvjxcdq0nemts5teud24lg0keqruuzykfgkaufefza05txelyh85zjpl6q9tz4296vpncqqukv9v",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_typecode_past_the_limit",
+      "address": "u1v65nfk6hl2lqg4ue2nf7tdk9xc8gejvv8yuk2nnee8ymr8sm50347fw3n3cv3uzg0pzt63fud6p5wp4sjc37a2kelmlqkq7w45zpsmngmp36vpwt5tt",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_non_canonical_typecode",
+      "address": "u1eu7thzakmult0dp4k74crgqeg2q2ju2j2vr67qwmhz4ggn0rumjmhjn2xdlddgw7tmte9swvsv0weutgkx0ardzdnam3ecj2fglm64skvrr",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_non_canonical_length",
+      "address": "u1emtvm37hnetltffwgjrj4c4hu22xkwrnsnwu2tmql57j3vtycxyvlkz7xhl3kcky0v0mcpcz4l279z94mf2dvg9gx6qghvyja3qfvdeept4",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_length_past_the_end",
+      "address": "u1wugnasremjhdhthxmx4lv9yvvavpgp0rq298pvgxgs2vqjxvfsaktqe5s286w6nsr2txya35crwyt2wy8yysdq9wlzxrs55752a6uvqw8quxp",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_a_trailing_byte",
+      "address": "u1gxu03se6yg0lnm00m6409l3ngeahhvanj2k95r54vl5tjf03c90lhy5judl8nzg0ge3cfd6yvaw3z8plqc7dw90rjzdpyds0hursu3guj3",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_testnet_padding",
+      "address": "u1jgeatrctku8c5d5jrcgkygpaa94s88yxthmzmq7wv2f3t4rfyaka35f83yzp5nwdalytzshqlszy4yum8tleqwz7pwyv5en3cs8yfset",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_empty_padding",
+      "address": "u1q7l2yex39y9glf9qk6lcp4whhkklkehp9ta0phjpfw9z226rmqyqf83kefgev229ua7wea22zz5a8at2aswzqt25cgrfnl4cgund3760",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_shorter_than_f4jumble_accepts",
+      "address": "u1uqvpxwxdxngmtturufqtd248gfcadk5qaqh8x42hetehg07py2z6n2hp9gr9l5lkfljr0796n07qplhxes",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_no_items",
+      "address": "u1v4ul6p3v8hp04flnksyvg60el543rjhk",
+      "error": "address_invalid"
+    },
+    {
+      "name": "unified_with_nothing_to_unjumble",
+      "address": "u19trdt5",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_revision_2_shielded_prefix",
+      "address": "zu1qnnj4qwtv8z288y9dr8lk3w6aye673ym9cls602t7gkqydtezx7mrpvmyxt2u42qcr82nt0su29m3kjqdlpfskha8dv28a655ufe2enp",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_revision_2_transparent_prefix",
+      "address": "tu1z73d6a9fs5pw8hdl3ekfgkqzsveznvlz7nn9jufjce8edkjmcfg83l5unmenlcu6hdzg644yq4gh6s65vk9yuqalv5r9uk0e8lxwar64sdgte3dt6xyl2p0fectm6vvmk62gk0tsltf",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_unified_viewing_key_prefix",
+      "address": "uview19a0hjd593s3twjpak49nvqdgfkv62c6umtv6lrr0wludj87kremvthpnrnzucqm98vzuhq2elurnfnz3ufhqrc3k8wvauw947sma5cjq",
+      "error": "address_invalid"
+    },
+    {
+      "name": "an_unknown_unified_prefix",
+      "address": "uinvalid1ck5navqwcng43gvsxwrxsplc22p7uzlcag6qfa0zh09e87efq6rq8wsnv25umqjjravw70rl994n5ueuhza2fghge5gl7zrl2qp6cwmp",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_sprout_address_main",
+      "address": "zc8E5gYid86n4bo2Usdq1cpr7PpfoJGzttwBHEEgGhGkLUg7SPPVFNB2AkRFXZ7usfphup5426dt1buMmY3fkYeRrQGLa8y",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_sprout_address_test",
+      "address": "ztJ1EWLKcGwF2S4NA17pAJVdco8Sdkz4AQPxt1cLTEfNuyNswJJc2BbBqYrsRZsp31xbVZwhF7c7a2L9jsF3p3ZwRWpqqyS",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_bitcoin_address",
+      "address": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_regtest_sapling_prefix_on_tex_bytes",
+      "address": "zregtestsapling1r5lveeuvu63xehk8anrf9krdu552usfld8tyd0",
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_tex_prefix_on_sapling_bytes",
+      "address": "tex17mwa3genzw087ngxjxyahwjwlpjt2xyl362h0d8trm9mugwcw2d2560l5dzgfczqgfpg73g0ppt",
+      "error": "address_invalid"
+    }
+  ]
+}

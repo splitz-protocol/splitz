@@ -1,6 +1,6 @@
 {
   "description": "Payment request URIs. SPEC.md section 8.",
-  "count": 27,
+  "count": 36,
   "cases": [
     {
       "name": "one_payment_puts_the_address_in_the_path",
@@ -189,6 +189,122 @@
       ],
       "includeFiat": true,
       "expect": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&fiat=EUR:999999999999999999"
+    },
+    {
+      "name": "a_memo_to_a_sapling_address",
+      "payments": [
+        {
+          "address": "zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpq6d8g",
+          "zatoshi": 7004,
+          "memo": "thanks"
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpq6d8g?amount=0.00007004&memo=dGhhbmtz"
+    },
+    {
+      "name": "a_transparent_address_without_a_memo",
+      "payments": [
+        {
+          "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+          "zatoshi": 7004,
+          "label": "Ana"
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs?amount=0.00007004&label=Ana"
+    },
+    {
+      "name": "a_memo_beside_a_transparent_output",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "memo": "thanks"
+        },
+        {
+          "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+          "zatoshi": 9246
+        }
+      ],
+      "includeFiat": false,
+      "expect": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&memo=dGhhbmtz&address.1=t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs&amount.1=0.00009246"
+    },
+    {
+      "name": "a_memo_to_a_transparent_address",
+      "payments": [
+        {
+          "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+          "zatoshi": 7004,
+          "memo": "thanks"
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_memo_undeliverable"
+    },
+    {
+      "name": "a_memo_to_a_tex_address",
+      "payments": [
+        {
+          "address": "tex1s2rt77ggv6q989lr49rkgzmh5slsksa9khdgte",
+          "zatoshi": 7004,
+          "memo": "thanks"
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_memo_undeliverable"
+    },
+    {
+      "name": "an_empty_memo_to_a_transparent_address",
+      "payments": [
+        {
+          "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+          "zatoshi": 7004,
+          "memo": ""
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_memo_undeliverable"
+    },
+    {
+      "name": "a_memo_on_the_second_output_to_a_transparent_address",
+      "payments": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        },
+        {
+          "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+          "zatoshi": 9246,
+          "memo": "thanks"
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_memo_undeliverable"
+    },
+    {
+      "name": "a_memo_to_something_that_is_no_address",
+      "payments": [
+        {
+          "address": "u1abc",
+          "zatoshi": 7004,
+          "memo": "thanks"
+        }
+      ],
+      "includeFiat": false,
+      "error": "address_invalid"
+    },
+    {
+      "name": "a_memo_to_a_transparent_address_is_checked_before_the_amount",
+      "payments": [
+        {
+          "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+          "zatoshi": 0,
+          "memo": "thanks"
+        }
+      ],
+      "includeFiat": false,
+      "error": "zip321_memo_undeliverable"
     },
     {
       "name": "no_payments_at_all",

@@ -9,12 +9,14 @@
 /// from the APK by the platform. That is the claim the JVM twin cannot make,
 /// and it is why this file exists beside it.
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.sun.jna.NativeLibrary
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import uniffi.splitz_ffi.BillEventKind
 import uniffi.splitz_ffi.HostFacts
+import uniffi.splitz_ffi.SplitzRelay
 import uniffi.splitz_ffi.addExpenseEntry
 import uniffi.splitz_ffi.billKeyProblem
 import uniffi.splitz_ffi.blobsToPush
@@ -74,16 +76,6 @@ private class Device(private val seedByte: Int) {
     }
 }
 
-/// A relay holding ciphertext, shared by both devices. It holds no key.
-private class Relay {
-    private val channels = LinkedHashMap<String, MutableList<String>>()
-    fun push(channel: String, blobs: List<String>) {
-        val held = channels.getOrPut(channel) { mutableListOf() }
-        for (blob in blobs) if (blob !in held) held.add(blob)
-    }
-    fun fetch(channel: String): List<String> = channels[channel] ?: emptyList()
-}
-
 @RunWith(AndroidJUnit4::class)
 class BillTest {
     private var failures = 0
@@ -112,7 +104,9 @@ class BillTest {
                   !resolved.endsWith(".dylib"),
               resolved)
 
-        val relay = Relay()
+        // The relay client the AAR ships, against a live tools/relay/server.py
+        // on the host, reached through `adb reverse`.
+        val relay = SplitzRelay(InstrumentationRegistry.getArguments().getString("relay")!!)
         val ana = Device(1)
         val ben = Device(90)
         val anaKey = ana.key
@@ -141,8 +135,14 @@ class BillTest {
         check("the channel is the bill id's hash, never the id",
               channel != billId && channel.length == 64, channel.take(16) + "…")
         // Pushed as they are held: each was signed when it was written.
-        relay.push(channel, blobsToPush(ben.entries, billKey))
-        val opened = openBlobs(relay.fetch(channel), billKey)
+        val blobs = blobsToPush(ben.entries, billKey)
+        relay.push(channel, blobs)
+        relay.push(channel, blobs)
+        val fetched = relay.fetch(channel)
+        check("the relay holds each blob once, though it was pushed twice",
+              fetched.size == blobs.size && fetched.toSet() == blobs.toSet(),
+              "${fetched.size} of ${blobs.size}")
+        val opened = openBlobs(fetched, billKey)
         check("every blob opened", opened.unopenable == 0u, "unopenable=${opened.unopenable}")
         ana.entries = mergeEntries(ana.entries, opened.entries).entries
 

@@ -6,6 +6,11 @@ from _spec import render_uri, Refused, ZAT_PER_ZEC, MAX_ZATOSHI, ADDRESSES
 
 A = ADDRESSES[0]
 B = ADDRESSES[1]
+# Addresses of the other kinds section 8.6 answers for, from zcash_address
+# 0.13 `src/encoding.rs` and ZIP 320.
+SAPLING = "zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpq6d8g"
+P2PKH = "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs"
+TEX = "tex1s2rt77ggv6q989lr49rkgzmh5slsksa9khdgte"
 
 CASES = [
     ("one_payment_puts_the_address_in_the_path",
@@ -41,7 +46,30 @@ CASES = [
     ("fiat_at_the_digit_cap",
      [{"address": A, "zatoshi": 7004, "fiat": ("EUR", 10**18 - 1)}], True),
 
+    # A memo goes only where section 8.6 says one can be delivered; an
+    # address carrying no memo is checked for syntax alone.
+    ("a_memo_to_a_sapling_address",
+     [{"address": SAPLING, "zatoshi": 7004, "memo": "thanks"}], False),
+    ("a_transparent_address_without_a_memo",
+     [{"address": P2PKH, "zatoshi": 7004, "label": "Ana"}], False),
+    ("a_memo_beside_a_transparent_output",
+     [{"address": A, "zatoshi": 7004, "memo": "thanks"},
+      {"address": P2PKH, "zatoshi": 9246}], False),
+
     # --- refusals, one per code section 8 names ---
+    ("a_memo_to_a_transparent_address",
+     [{"address": P2PKH, "zatoshi": 7004, "memo": "thanks"}], False),
+    ("a_memo_to_a_tex_address",
+     [{"address": TEX, "zatoshi": 7004, "memo": "thanks"}], False),
+    ("an_empty_memo_to_a_transparent_address",
+     [{"address": P2PKH, "zatoshi": 7004, "memo": ""}], False),
+    ("a_memo_on_the_second_output_to_a_transparent_address",
+     [{"address": A, "zatoshi": 7004},
+      {"address": P2PKH, "zatoshi": 9246, "memo": "thanks"}], False),
+    ("a_memo_to_something_that_is_no_address",
+     [{"address": "u1abc", "zatoshi": 7004, "memo": "thanks"}], False),
+    ("a_memo_to_a_transparent_address_is_checked_before_the_amount",
+     [{"address": P2PKH, "zatoshi": 0, "memo": "thanks"}], False),
     ("no_payments_at_all", [], False),
     ("an_amount_of_zero", [{"address": A, "zatoshi": 0}], False),
     ("a_negative_amount", [{"address": A, "zatoshi": -1}], False),

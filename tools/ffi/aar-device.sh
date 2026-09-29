@@ -33,11 +33,22 @@ if ! "$sdk/platform-tools/adb" devices | grep -qE "device$"; then
   exit 2
 fi
 
+# A live relay on the host; the device reaches it at the same loopback port
+# through `adb reverse`, and the test is told the origin as an argument.
+# shellcheck source=relay.sh
+. "$root/tools/ffi/relay.sh"
+relay_up "$root" "$work" || exit 1
+trap 'kill "$RELAY_PID" 2>/dev/null || true; rm -rf "$work"' EXIT
+port="${RELAY_ORIGIN##*:}"
+"$sdk/platform-tools/adb" reverse "tcp:$port" "tcp:$port" >/dev/null
+
 # Built outside the repository so no build/, .gradle/ or .kotlin/ lands in it.
 cp -R "$root/tools/ffi/aar/." "$work/"
 (cd "$work" && ANDROID_HOME="$sdk" gradle connectedDebugAndroidTest --no-daemon \
-   -PsplitzAar="$aar" -PsplitzLibDir="$(cargo_target_dir "$root")/release")
+   -PsplitzAar="$aar" -PsplitzLibDir="$(cargo_target_dir "$root")/release" \
+   -Pandroid.testInstrumentationRunnerArguments.relay="$RELAY_ORIGIN")
 status=$?
+"$sdk/platform-tools/adb" reverse --remove "tcp:$port" >/dev/null 2>&1 || true
 
 # The device's own stdout, which Gradle does not print.
 log="$(find "$work/build/outputs/androidTest-results" -name 'logcat-null*' 2>/dev/null | head -1)"

@@ -53,19 +53,13 @@ class Device(private val seedByte: Int) {
     }
 }
 
-/// A relay holding ciphertext, shared by both devices. It holds no key.
-class Relay {
-    private val channels = LinkedHashMap<String, MutableList<String>>()
-    fun push(channel: String, blobs: List<String>) {
-        val held = channels.getOrPut(channel) { mutableListOf() }
-        for (blob in blobs) if (blob !in held) held.add(blob)
-    }
-    fun fetch(channel: String): List<String> = channels[channel] ?: emptyList()
-    fun names() = channels.keys.toList()
-}
+/// What `block` raised as a host refusal, or null when it raised nothing.
+fun refusal(block: () -> Unit): SplitzException.Host? =
+    try { block(); null } catch (e: SplitzException.Host) { e }
 
-fun main() {
-    val relay = Relay()
+/// `args` are a running relay's origin and an origin nothing answers.
+fun main(args: Array<String>) {
+    val (origin, downOrigin) = args
     val ana = Device(1)
     val ben = Device(90)
     val anaKey = ana.key
@@ -108,11 +102,40 @@ fun main() {
     val channel = channelForBill(billId)
     check("the channel is the bill id's hash, never the id",
           channel != billId && channel.length == 64, channel.take(16) + "…")
+    // Two clients, as two devices hold them: what one pushes the other fetches.
+    val benRelay = SplitzRelay(origin)
+    val anaRelay = SplitzRelay(origin)
     // Pushed as they are held: each was signed when it was written.
-    relay.push(channel, blobsToPush(ben.entries, billKey))
-    val opened = openBlobs(relay.fetch(channel), billKey)
+    val pushed = blobsToPush(ben.entries, billKey)
+    benRelay.push(channel, pushed)
+    benRelay.push(channel, pushed)
+    val fetched = anaRelay.fetch(channel)
+    check("another client fetches every blob pushed, once, though it was pushed twice",
+          fetched.sorted() == pushed.sorted(), "${fetched.size} of ${pushed.size}")
+    val opened = openBlobs(fetched, billKey)
     check("every blob opened", opened.unopenable == 0u, "unopenable=${opened.unopenable}")
+    // Merged by entry id: what a blob opens to is the entry, not necessarily
+    // the same text, so a round trip adds no entry to the log it came from.
+    val roundTrip = mergeEntries(ben.entries, opened.entries)
+    check("to the entries ben holds",
+          opened.entries.size == ben.entries.size &&
+              roundTrip.entries.size == ben.entries.size && roundTrip.refused.isEmpty(),
+          "${opened.entries.size} opened, ${roundTrip.entries.size} after merging into ${ben.entries.size}")
     ana.entries = mergeEntries(ana.entries, opened.entries).entries
+
+    println("a relay that fails says whether retrying could succeed")
+    val down = refusal { SplitzRelay(downOrigin).fetch(channel) }
+    check("a relay that is down raises, transient", down?.transient == true, "${down?.detail}")
+    val notChannel = refusal { anaRelay.push("not-a-channel", listOf("x")) }
+    check("a 4xx the relay answers raises, transient, as every client classifies it",
+          notChannel?.transient == true && notChannel.detail.contains("refused"),
+          "${notChannel?.detail}")
+    val oversize = refusal { anaRelay.push(channel, listOf("x".repeat(64 * 1024 + 1))) }
+    check("a blob over the cap raises before it is sent, not transient",
+          oversize?.transient == false, "${oversize?.detail}")
+    val queried = refusal { SplitzRelay("$origin?t=1") }
+    check("an origin carrying a query raises, not transient",
+          queried?.transient == false, "${queried?.detail}")
 
     println("ana adds an expense they share, and prices it")
     ana.add(addExpenseEntry(ana.facts(), billId, "x1", ana.me, 9000,
@@ -163,13 +186,36 @@ fun main() {
           "${stillOwed.settlements}")
     check("and is told what is in flight", stillOwed.awaiting.single().paid == 4500L,
           "${stillOwed.awaiting}")
+    val totals = totalsOf(ben.facts(), listOf(HeldBill(billId, ben.entries)))
+    val withAna = totals.standings.single()
+    check("across bills, ben still owes ana, with the payment on its way",
+          withAna.withId == ana.me && withAna.owedByMe == 4500L &&
+              withAna.sentAwaiting == 4500L && totals.uncounted.isEmpty(),
+          "$withAna")
+
+    println("before signing, the wallet holds what it read against the request")
+    val anaAddress = folded.bill.participants.first { it.id == ana.me }.payTo!!
+    val sent = owed.request.payments.single().zatoshi
+    val same = checkProposal(owed.request.uri!!, listOf(ProposedOutput(anaAddress, sent)))
+    check("what the request asks is what would be signed",
+          same.missing.isEmpty() && same.unexpected.isEmpty(), "$same")
+    val dropped = checkProposal(owed.request.uri!!, emptyList())
+    check("a reader that dropped the payment is caught",
+          dropped.missing.map { it.address } == listOf(anaAddress), "$dropped")
+
+    println("ana's wallet saw the transaction arrive")
+    val arrivals = arrivalsOf(ana.facts(), listOf(HeldBill(billId, ana.entries)),
+        listOf(IncomingTransaction("tx-ben-1", sent)))
+    val arrival = arrivals.arrived.singleOrNull()
+    check("the payment is proposed for confirmation",
+          arrival?.payment?.id == afterPayment.bill.payments.single().id,
+          "arrived=${arrivals.arrived.size} short=${arrivals.short.size}")
 
     // A payee confirms a payment they can see, by the id the bill carries. One
     // transaction paying several people writes one record each, so the id is
     // not the transaction's — the transaction is in `reference`.
-    val toConfirm = afterPayment.bill.payments.single().id
-    ana.add(confirmPaymentEntry(ana.facts(), billId, toConfirm, "recipientConfirmed", null,
-        afterPayment.paymentDigests[toConfirm]!!, ana.seed))
+    ana.add(confirmPaymentEntry(ana.facts(), billId, arrival!!.payment.id, "walletReceived",
+        arrival.txid, arrival.record, ana.seed))
     ben.take(ana)
     val settled = obligationOf(ben.facts(), billId, ben.entries)!!
     check("once confirmed, the debt is gone",
@@ -191,6 +237,34 @@ fun main() {
     check("a scan that is nothing is refused by its code",
           readScanned("not a bill").refusedCode?.isNotEmpty() == true,
           "${readScanned("not a bill").refusedCode}")
+    check("and a code has a sentence a person can read",
+          describeCode(readScanned("not a bill").refusedCode!!)?.isNotEmpty() == true &&
+              describeCode("self_payment") == "You can't pay yourself." &&
+              describeCode("no_such_code") == null,
+          "${describeCode("self_payment")}")
+
+    println("an address is decoded before it is paid or published")
+    val unified = parseAddress("u1ay3aawlldjrmxqnjf5medr5ma6p3acnet464ht8lmwplq5cd3ugytcmlf96rrmtgwldc75x94qn4n8pgen36y8tywlq6yjk7lkf3fa8wzjrav8z2xpxqnrnmjxh8tmz6jhfh425t7f3vy6p4pd3zmqayq49efl2c4xydc0gszg660q9p")
+    check("a unified address, on main, that takes a memo",
+          unified.network == "main" && unified.kind == "unified" &&
+              unified.receivers == listOf(2u, 3u) && unified.canReceiveMemo, "$unified")
+    val transparent = parseAddress("t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs")
+    check("a transparent one takes none",
+          transparent.kind == "p2pkh" && !transparent.canReceiveMemo, "$transparent")
+    val refusedAddress = try { parseAddress("u1ana"); null } catch (e: SplitzException.Protocol) { e.code }
+    check("anything else is refused by its code", refusedAddress == "address_invalid",
+          "$refusedAddress")
+
+    println("a price, asked and read without a callback")
+    check("the request names one currency",
+          zecPriceRequest("https://api.coingecko.com/api/v3", "EUR") ==
+              "https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=eur",
+          "${zecPriceRequest("https://api.coingecko.com/api/v3", "EUR")}")
+    check("a code with no exponent is not asked for",
+          zecPriceRequest("https://api.coingecko.com/api/v3", "XAU") == null, "XAU")
+    check("the answer reads as minor units, exactly",
+          zecPriceFromResponse("""{"zcash":{"eur":1222.41}}""", "EUR") == 122241L,
+          "${zecPriceFromResponse("""{"zcash":{"eur":1222.41}}""", "EUR")}")
 
     println(if (failures == 0)
         "CONSUMER RESULT: kotlin drives a whole bill with no callbacks, $failures failures"

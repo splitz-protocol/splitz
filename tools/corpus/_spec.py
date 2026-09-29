@@ -7,6 +7,8 @@ derived from an implementation cannot contain a case that implementation is
 self-consistently wrong about.
 """
 
+import re
+
 I64_MAX = 2**63 - 1
 I64_MIN = -(2**63)
 ZAT_PER_ZEC = 100_000_000
@@ -367,6 +369,10 @@ def render_uri(payments, include_fiat=False):
             raise Refused("zip321_no_address")
         if not _ascii_alnum(addr):
             raise Refused("zip321_bad_address")
+        # Section 8.3: a memo goes only to an address that decodes (8.6) and
+        # can receive one.
+        if p.get("memo") is not None and not parse_address(addr)["canReceiveMemo"]:
+            raise Refused("zip321_memo_undeliverable")
 
     single = len(payments) == 1
     parts = []
@@ -389,6 +395,360 @@ def render_uri(payments, include_fiat=False):
 
     head = f"zcash:{payments[0]['address']}?" if single else "zcash:?"
     return head + "&".join(parts)
+
+
+
+# --- Section 8.7: reading a request back -----------------------------------
+
+REQUEST_PARAMS = {"address", "amount", "fiat", "memo", "label", "message"}
+
+
+def _not_canonical():
+    raise Refused("zip321_not_canonical")
+
+
+def _read_amount(text):
+    m = re.fullmatch(r"([0-9]{1,8})(?:\.([0-9]{1,8}))?", text)
+    if not m:
+        _not_canonical()
+    return int(m.group(1)) * ZAT_PER_ZEC + int((m.group(2) or "").ljust(8, "0"))
+
+
+def _read_fiat(text):
+    m = re.fullmatch(r"([A-Z]{3}):([0-9]{1,18})", text)
+    if not m:
+        _not_canonical()
+    return (m.group(1), int(m.group(2)))
+
+
+def _read_memo(text):
+    import base64
+    if not re.fullmatch(r"[A-Za-z0-9_-]*", text) or len(text) % 4 == 1:
+        _not_canonical()
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def _unqchar(text):
+    out = bytearray()
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c == "%":
+            if i + 2 >= len(text):
+                _not_canonical()
+            pair = text[i + 1:i + 3]
+            if not re.fullmatch(r"[0-9A-Fa-f]{2}", pair):
+                _not_canonical()
+            out.append(int(pair, 16))
+            i += 3
+        elif ord(c) < 0x80:
+            out.append(ord(c))
+            i += 1
+        else:
+            _not_canonical()
+    try:
+        return out.decode("utf-8")
+    except UnicodeDecodeError:
+        _not_canonical()
+
+
+def read_request(uri):
+    """Section 8.7. Reads exactly what render_uri writes, and nothing else."""
+    if not uri.startswith("zcash:"):
+        _not_canonical()
+    rest = uri[len("zcash:"):]
+    q = rest.find("?")
+    if q < 0:
+        _not_canonical()
+    path_address = rest[:q]
+    by_index = {}
+    for part in rest[q + 1:].split("&"):
+        eq = part.find("=")
+        if eq <= 0:
+            _not_canonical()
+        key, value = part[:eq], part[eq + 1:]
+        dot = key.find(".")
+        name = key if dot < 0 else key[:dot]
+        index = 0
+        if dot >= 0:
+            digits = key[dot + 1:]
+            if not re.fullmatch(r"[1-9][0-9]{0,3}", digits):
+                _not_canonical()
+            index = int(digits)
+        if name not in REQUEST_PARAMS:
+            _not_canonical()
+        params = by_index.setdefault(index, {})
+        if name in params:
+            _not_canonical()
+        params[name] = value
+
+    payments = []
+    for i in range(len(by_index)):
+        p = by_index.get(i)
+        if p is None:
+            _not_canonical()
+        if i == 0 and path_address:
+            if "address" in p:
+                _not_canonical()
+            address = path_address
+        else:
+            if "address" not in p:
+                _not_canonical()
+            address = p["address"]
+        if "amount" not in p:
+            _not_canonical()
+        payment = {"address": address, "zatoshi": _read_amount(p["amount"])}
+        if "fiat" in p:
+            payment["fiat"] = _read_fiat(p["fiat"])
+        if "memo" in p:
+            payment["memo"] = _read_memo(p["memo"])
+        if "label" in p:
+            payment["label"] = _unqchar(p["label"])
+        if "message" in p:
+            payment["message"] = _unqchar(p["message"])
+        payments.append(payment)
+
+    rendered = render_uri(payments, include_fiat=any("fiat" in p for p in payments))
+    if rendered != uri:
+        _not_canonical()
+    return payments
+
+
+def check_proposal(uri, outputs):
+    """Section 14.6. Each requested payment matched to one equal output."""
+    pool = list(outputs)
+    missing = []
+    for p in read_request(uri):
+        for j, o in enumerate(pool):
+            if o is not None and o["address"] == p["address"] and o["zatoshi"] == p["zatoshi"]:
+                pool[j] = None
+                break
+        else:
+            missing.append(p)
+    return missing, [o for o in pool if o is not None]
+# --- Section 8.6: Zcash addresses -------------------------------------------
+
+BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+BECH32_CONST = 1
+BECH32M_CONST = 0x2BC830A3
+
+# Bech32 (ZIP 173) for Sapling; Bech32m (BIP 350) for TEX (ZIP 320) and
+# Unified (ZIP 316, revision 0).
+SAPLING_HRPS = {"zs": "main", "ztestsapling": "test", "zregtestsapling": "regtest"}
+TEX_HRPS = {"tex": "main", "textest": "test", "texregtest": "regtest"}
+UNIFIED_HRPS = {"u": "main", "utest": "test", "uregtest": "regtest"}
+
+# Base58Check lead bytes. Regtest uses testnet's, so these answer "test".
+TRANSPARENT_PREFIXES = {
+    (0x1C, 0xB8): ("main", "p2pkh"),
+    (0x1C, 0xBD): ("main", "p2sh"),
+    (0x1D, 0x25): ("test", "p2pkh"),
+    (0x1C, 0xBA): ("test", "p2sh"),
+}
+BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+BASE58CHECK_BYTES = 26         # two lead bytes, a 20-byte hash, a checksum
+
+TYPECODE_P2PKH, TYPECODE_P2SH, TYPECODE_SAPLING, TYPECODE_ORCHARD = 0, 1, 2, 3
+RECEIVER_LENGTHS = {0: 20, 1: 20, 2: 43, 3: 43}
+MAX_COMPACT_SIZE = 0x2000000
+UA_PADDING = 16
+F4_MIN, F4_MAX = 48, 4194368
+
+
+def _bech32_polymod(values):
+    gen = [0x3B6A57B2, 0x26508E6D, 0x1EA119FA, 0x3D4233DD, 0x2A1462B3]
+    chk = 1
+    for v in values:
+        top = chk >> 25
+        chk = ((chk & 0x1FFFFFF) << 5) ^ v
+        for i in range(5):
+            if (top >> i) & 1:
+                chk ^= gen[i]
+    return chk
+
+
+def _bech32_decode(text, hrps, constant):
+    """(network, bytes) for a string under one of `hrps`, or None.
+
+    Lower case only, since the prefixes and the alphabet are compared as
+    written: ZIP 173 has encoders write lower case, and the decoder wallets
+    use (zcash_address 0.13) refuses upper. The 5-bit groups regroup into
+    bytes and the leftover bits number at most four and are zero (ZIP 173,
+    "Decoding").
+    """
+    sep = text.rfind("1")
+    if sep < 1:
+        return None
+    hrp, data = text[:sep], text[sep + 1:]
+    if hrp not in hrps or len(data) < 6:
+        return None
+    if any(c not in BECH32_CHARSET for c in data):
+        return None
+    values = [BECH32_CHARSET.index(c) for c in data]
+    expanded = [ord(c) >> 5 for c in hrp] + [0] + [ord(c) & 31 for c in hrp]
+    if _bech32_polymod(expanded + values) != constant:
+        return None
+    acc = bits = 0
+    out = bytearray()
+    for v in values[:-6]:
+        acc = (acc << 5) | v
+        bits += 5
+        if bits >= 8:
+            bits -= 8
+            out.append((acc >> bits) & 0xFF)
+    if bits > 4 or (acc & ((1 << bits) - 1)) != 0:
+        return None
+    return hrp, bytes(out)
+
+
+def _base58check(text):
+    import hashlib
+    n = 0
+    for c in text:
+        i = BASE58_ALPHABET.find(c)
+        if i < 0:
+            return None
+        n = n * 58 + i
+        if n >> (8 * BASE58CHECK_BYTES):
+            # Lead, payload and checksum are 26 bytes; stopping here keeps
+            # the work linear in the length of the text.
+            return None
+    body = n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b""
+    zeros = len(text) - len(text.lstrip("1"))
+    raw = b"\x00" * zeros + body
+    if len(raw) < 4:
+        return None
+    payload, check = raw[:-4], raw[-4:]
+    if hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4] != check:
+        return None
+    return payload
+
+
+def _f4jumble_inv(m):
+    """ZIP 316, "Jumbling": the inverse of the 4-round Feistel over BLAKE2b."""
+    import hashlib
+    left_len = min(64, len(m) // 2)
+    a, b = bytearray(m[:left_len]), bytearray(m[left_len:])
+
+    def h(i, u):
+        return hashlib.blake2b(bytes(u), digest_size=left_len,
+                               person=b"UA_F4Jumble_H" + bytes([i, 0, 0])).digest()
+
+    def g(i, u):
+        out = b""
+        for j in range((len(b) + 63) // 64):
+            out += hashlib.blake2b(bytes(u), digest_size=64,
+                                   person=b"UA_F4Jumble_G" + bytes([i, j & 0xFF, j >> 8])).digest()
+        return out[:len(b)]
+
+    def xor(x, y):
+        return bytearray(p ^ q for p, q in zip(x, y))
+
+    # c = a, d = b on entry: y = c ^ H1(d); x = d ^ G1(y); a = y ^ H0(x); b = x ^ G0(a)
+    y = xor(a, h(1, b))
+    x = xor(b, g(1, y))
+    a2 = xor(y, h(0, x))
+    b2 = xor(x, g(0, a2))
+    return bytes(a2 + b2)
+
+
+def _compact_size(raw, at):
+    """(value, next) for a canonical compactSize at `at`, or None."""
+    if at >= len(raw):
+        return None
+    flag = raw[at]
+    if flag < 253:
+        value, width = flag, 1
+    else:
+        size = {253: 2, 254: 4, 255: 8}[flag]
+        if at + 1 + size > len(raw):
+            return None
+        value = int.from_bytes(raw[at + 1:at + 1 + size], "little")
+        if value < {253: 253, 254: 0x10000, 255: 0x100000000}[flag]:
+            return None
+        width = 1 + size
+    if value > MAX_COMPACT_SIZE:
+        return None
+    return value, at + width
+
+
+def _unified_receivers(hrp, raw):
+    """The typecodes of a revision 0 Unified Address, in encoding order."""
+    if not F4_MIN <= len(raw) <= F4_MAX:
+        return None
+    plain = _f4jumble_inv(raw)
+    padding = hrp.encode("ascii").ljust(UA_PADDING, b"\x00")
+    if plain[-UA_PADDING:] != padding:
+        return None
+    body = plain[:-UA_PADDING]
+    at, codes = 0, []
+    while at < len(body):
+        tc = _compact_size(body, at)
+        if tc is None:
+            return None
+        typecode, at = tc
+        ln = _compact_size(body, at)
+        if ln is None:
+            return None
+        length, at = ln
+        if at + length > len(body):
+            return None
+        if RECEIVER_LENGTHS.get(typecode, length) != length:
+            return None
+        at += length
+        codes.append(typecode)
+    # Ascending, so a repeat or a reordering is refused by one comparison.
+    if any(b <= a for a, b in zip(codes, codes[1:])):
+        return None
+    if TYPECODE_P2PKH in codes and TYPECODE_P2SH in codes:
+        return None
+    if any(0xE0 <= c <= 0xFC for c in codes):
+        return None
+    if TYPECODE_SAPLING not in codes and TYPECODE_ORCHARD not in codes:
+        return None
+    return codes
+
+
+def parse_address(text):
+    """Section 8.6. What a Zcash address is, or `address_invalid`."""
+    if not isinstance(text, str):
+        raise Refused("address_invalid")
+
+    got = _bech32_decode(text, UNIFIED_HRPS, BECH32M_CONST)
+    if got is not None:
+        hrp, raw = got
+        codes = _unified_receivers(hrp, raw)
+        if codes is None:
+            raise Refused("address_invalid")
+        return {"network": UNIFIED_HRPS[hrp], "kind": "unified",
+                "receivers": codes,
+                "canReceiveMemo": TYPECODE_SAPLING in codes or TYPECODE_ORCHARD in codes}
+
+    got = _bech32_decode(text, SAPLING_HRPS, BECH32_CONST)
+    if got is not None:
+        hrp, raw = got
+        if len(raw) != 43:
+            raise Refused("address_invalid")
+        return {"network": SAPLING_HRPS[hrp], "kind": "sapling",
+                "receivers": [], "canReceiveMemo": True}
+
+    got = _bech32_decode(text, TEX_HRPS, BECH32M_CONST)
+    if got is not None:
+        hrp, raw = got
+        if len(raw) != 20:
+            raise Refused("address_invalid")
+        return {"network": TEX_HRPS[hrp], "kind": "tex",
+                "receivers": [], "canReceiveMemo": False}
+
+    payload = _base58check(text)
+    if payload is None or len(payload) != 22:
+        raise Refused("address_invalid")
+    found = TRANSPARENT_PREFIXES.get((payload[0], payload[1]))
+    if found is None:
+        raise Refused("address_invalid")
+    network, kind = found
+    return {"network": network, "kind": kind, "receivers": [],
+            "canReceiveMemo": False}
 
 
 # --- Section 11.1: the invite URI ------------------------------------------
@@ -448,6 +808,13 @@ def parse_invite(text):
     """Section 11.1. An exact grammar, never a general URI library."""
     s = strip_scan_padding(text)
 
+    # An https link carries the invite as its fragment, whole.
+    if s.startswith(INVITE_LINK_SCHEME):
+        hash_at = s.find("#")
+        if hash_at < 0:
+            raise Refused("invite_not_an_invite")
+        s = s[hash_at + 1:]
+
     if not s.startswith(INVITE_PREFIX):
         raise Refused("invite_not_an_invite")
     rest = s[len(INVITE_PREFIX):]
@@ -497,6 +864,36 @@ def parse_invite(text):
     return out
 
 
+INVITE_EXTRA = set("!*'()")
+INVITE_LINK_SCHEME = "https://"
+
+
+def render_invite_link(base, bill_id, key, name="", expiry=None):
+    """Section 11.1. `base`, a `#`, and the invite URI.
+
+    `base` is `https://`, then at least one character that is not `/`, and
+    nothing outside printable ASCII, no space and no `#`.
+    """
+    rest = base[len(INVITE_LINK_SCHEME):] if base.startswith(INVITE_LINK_SCHEME) else None
+    if (rest is None or not rest or rest.startswith("/")
+            or any(not ("!" <= c <= "~") or c == "#" for c in rest)):
+        raise Refused("invite_bad_link")
+    return f"{base}#{render_invite(bill_id, key, name, expiry)}"
+
+
+def invite_escape(text):
+    """Section 11.1. Every byte outside the unreserved set plus `!*'()`, as an
+    upper-case escape. Not ZIP 321's qchar, which leaves more literal."""
+    out = []
+    for byte in text.encode("utf-8"):
+        ch = chr(byte)
+        if ch in UNRESERVED or ch in INVITE_EXTRA:
+            out.append(ch)
+        else:
+            out.append(f"%{byte:02X}")
+    return "".join(out)
+
+
 def render_invite(bill_id, key, name="", expiry=None):
     """Section 11.1. An encoder refuses what this parser refuses.
 
@@ -512,9 +909,10 @@ def render_invite(bill_id, key, name="", expiry=None):
         raise Refused("invite_bad_bill_id")
     if not key or not _b64url_decodes(key):
         raise Refused("invite_missing_key")
-    parts = [f"v={INVITE_VERSION}", f"b={qchar(bill_id)}", f"k={qchar(key)}"]
+    parts = [f"v={INVITE_VERSION}", f"b={invite_escape(bill_id)}",
+             f"k={invite_escape(key)}"]
     if name:
-        parts.append(f"n={qchar(name)}")
+        parts.append(f"n={invite_escape(name)}")
     if expiry is not None:
         parts.append(f"x={expiry}")
     return f"{INVITE_PREFIX}?" + "&".join(parts)

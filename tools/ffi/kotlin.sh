@@ -4,8 +4,10 @@
 # This builds the cdylib, generates Kotlin from it, and runs two programs over
 # the generated module. `Consumer.kt` drives one bill across two devices —
 # opened, joined, shared by a code, split, priced, settled, confirmed and read
-# back as a history — keeping its storage, its clock, its randomness, its relay
-# and its send in Kotlin and passing the library facts. `Doc.kt` is the sample
+# back as a history — keeping its storage, its clock, its randomness and its
+# send in Kotlin and passing the library facts. The two devices sync through a
+# live tools/relay/server.py with the relay client the Android package ships,
+# tools/package/relay/SplitzRelay.kt. `Doc.kt` is the sample
 # INTEGRATING.md quotes: it runs here so the document's code is code that ran.
 #
 # Needs a Kotlin compiler and JNA. Point KOTLINC and JNA_JAR at them, or let
@@ -70,9 +72,14 @@ fi
   generate --library "$library" --language kotlin --no-format --out-dir "$work/kt")
 
 "$kotlinc" -nowarn -classpath "$jna" \
-  "$work/kt/uniffi/splitz_ffi/splitz_ffi.kt" "$root/tools/ffi/kotlin/Consumer.kt" \
-  "$root/tools/ffi/kotlin/Doc.kt" \
+  "$work/kt/uniffi/splitz_ffi/splitz_ffi.kt" "$root/tools/package/relay/SplitzRelay.kt" \
+  "$root/tools/ffi/kotlin/Consumer.kt" "$root/tools/ffi/kotlin/Doc.kt" \
   -d "$work/classes"
 
-java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" ConsumerKt
+# shellcheck source=relay.sh
+. "$root/tools/ffi/relay.sh"
+relay_up "$root" "$work"
+trap 'kill "$RELAY_PID" 2>/dev/null || true' EXIT
+java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" ConsumerKt \
+  "$RELAY_ORIGIN" "$RELAY_DOWN_ORIGIN"
 java -cp "$work/classes:$jna:$stdlib" -Djna.library.path="$lib" DocKt

@@ -58,6 +58,9 @@ def answer(op):
     if kind == "qchar":
         return attempt(lambda: _spec.qchar(op["text"]))
 
+    if kind == "address":
+        return attempt(lambda: _spec.parse_address(op["text"]))
+
     if kind == "instant":
         return attempt(lambda: _spec.parse_instant(op["text"]))
 

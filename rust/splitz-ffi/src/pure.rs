@@ -454,6 +454,175 @@ pub fn obligation_of(
     Ok(obligation_for(&host, &folded)?.map(|o| convert::obligation(&o)))
 }
 
+/// Compares the payments a wallet is about to sign with the request `uri` it
+/// was handed (§14.6).
+///
+/// `outputs` are what the wallet's own ZIP 321 reader made of `uri`, change
+/// left out. Each requested payment is matched to one output with the same
+/// address and zatoshi, in any order. Sign only when the answer's two lists
+/// are both empty. `uri` must be a request this protocol wrote; anything else
+/// is refused with `zip321_not_canonical`.
+#[uniffi::export]
+pub fn check_proposal(
+    uri: String,
+    outputs: Vec<ffi::ProposedOutput>,
+) -> Result<ffi::ProposalCheck> {
+    let outputs: Vec<splitz_core::host::ProposedOutput> = outputs
+        .into_iter()
+        .map(|o| splitz_core::host::ProposedOutput {
+            address: o.address,
+            zatoshi: o.zatoshi,
+        })
+        .collect();
+    let check = splitz_core::host::check_proposal(&uri, &outputs)?;
+    Ok(ffi::ProposalCheck {
+        missing: check
+            .missing
+            .into_iter()
+            .map(|p| ffi::ProposedOutput {
+                address: p.address,
+                zatoshi: p.zatoshi,
+            })
+            .collect(),
+        unexpected: check
+            .unexpected
+            .into_iter()
+            .map(|o| ffi::ProposedOutput {
+                address: o.address,
+                zatoshi: o.zatoshi,
+            })
+            .collect(),
+    })
+}
+
+/// What `address` is — its network, kind, receivers and whether a memo
+/// reaches it — or `address_invalid` (§8.6). A wallet checks the network
+/// against its own before it pays or publishes an address.
+#[uniffi::export]
+pub fn parse_address(address: String) -> Result<ffi::ParsedAddress> {
+    let parsed = splitz_core::parse_address(&address)?;
+    Ok(ffi::ParsedAddress {
+        network: parsed.network.as_str().to_owned(),
+        kind: parsed.kind.as_str().to_owned(),
+        receivers: parsed.receivers,
+        can_receive_memo: parsed.can_receive_memo,
+    })
+}
+
+/// A plain-language sentence for a §12 code, to show a person in place of the
+/// code; `None` for a code this library does not define.
+#[uniffi::export]
+pub fn describe_code(code: String) -> Option<String> {
+    splitz_core::describe_code(&code).map(str::to_owned)
+}
+
+/// Where this device stands with each person, per currency, summed over
+/// every bill it holds. Each bill is folded as [`obligation_of`] folds one.
+#[uniffi::export]
+pub fn totals_of(facts: HostFacts, bills: Vec<ffi::HeldBill>) -> Result<ffi::Totals> {
+    let folded = fold_held(&facts, bills)?;
+    let totals = splitz_core::host::totals_across(&folded, &facts.me);
+    Ok(ffi::Totals {
+        standings: totals
+            .standings
+            .into_iter()
+            .map(|s| ffi::Standing {
+                with_id: s.with_id,
+                currency: s.currency,
+                owed_to_me: s.owed_to_me,
+                owed_by_me: s.owed_by_me,
+                sent_awaiting: s.sent_awaiting,
+                received_awaiting: s.received_awaiting,
+                bill_ids: s.bill_ids,
+            })
+            .collect(),
+        uncounted: totals.uncounted.into_iter().collect(),
+    })
+}
+
+/// Folds each held bill, verified and held to the id it is named by.
+fn fold_held(
+    facts: &HostFacts,
+    bills: Vec<ffi::HeldBill>,
+) -> Result<Vec<splitz_core::host::FoldedBill>> {
+    let mut folded = Vec::with_capacity(bills.len());
+    for held in bills {
+        let parsed = parse_entries(&held.entries)?;
+        let verified = Signer.prepare(parsed.iter(), &held.bill_id);
+        let verify = |entry: &Value, key: &str| verified.verify(entry, key);
+        let host = FactHost {
+            facts,
+            sign: None,
+            verify: Some(&verify),
+        };
+        folded.push(
+            BillLog::with_entries(&host, parsed)
+                .for_bill(held.bill_id)
+                .fold()?,
+        );
+    }
+    Ok(folded)
+}
+
+/// Payments to this device whose transaction its wallet received (§14.7),
+/// across every bill it holds at once, so one transaction is evidence once.
+///
+/// Each bill is folded as [`obligation_of`] folds one: verified, and held to
+/// the id it is named by. `received` is each transaction this account was
+/// paid in, with the zatoshi it brought.
+#[uniffi::export]
+pub fn arrivals_of(
+    facts: HostFacts,
+    bills: Vec<ffi::HeldBill>,
+    received: Vec<ffi::IncomingTransaction>,
+) -> Result<ffi::Arrivals> {
+    let folded = fold_held(&facts, bills)?;
+    let received: Vec<splitz_core::host::IncomingTransaction> = received
+        .into_iter()
+        .map(|t| splitz_core::host::IncomingTransaction {
+            txid: t.txid,
+            zatoshi: t.zatoshi,
+        })
+        .collect();
+    let found = splitz_core::host::arrivals_for(&folded, &facts.me, &received);
+    let each = |list: Vec<splitz_core::host::Arrival>| -> Vec<ffi::Arrival> {
+        list.into_iter()
+            .map(|a| ffi::Arrival {
+                bill_id: a.bill_id,
+                payment: convert::payment(&a.payment),
+                record: a.record,
+                txid: a.txid,
+            })
+            .collect()
+    };
+    Ok(ffi::Arrivals {
+        arrived: each(found.arrived),
+        short: each(found.short),
+        unstated: each(found.unstated),
+    })
+}
+
+/// The CoinGecko `/simple/price` request for one ZEC in `currency`, under the
+/// API root `origin` a wallet chose (such as
+/// `https://api.coingecko.com/api/v3`). `None` when `currency` is not one the
+/// ISO 4217 register gives an exponent (§2.1): nothing is asked, and the bill
+/// stays unpriced.
+#[uniffi::export]
+pub fn zec_price_request(origin: String, currency: String) -> Option<String> {
+    if !splitz_core::is_currency(&currency) || splitz_host::currency_exponent(&currency).is_none() {
+        return None;
+    }
+    Some(splitz_host::coingecko_price_url(&origin, &currency))
+}
+
+/// Minor units of `currency` one ZEC costs, read from the answer to
+/// [`zec_price_request`] — exactly, rounding halves up. `None` when the answer
+/// does not price it; refused when the answer is not a price answer at all.
+#[uniffi::export]
+pub fn zec_price_from_response(body: String, currency: String) -> Result<Option<i64>> {
+    Ok(splitz_host::price_from_coingecko(&body, &currency)?)
+}
+
 // --- keys a wallet keeps ----------------------------------------------------
 
 /// The participant id `key` speaks as (§10.7): the id a wallet that
@@ -533,6 +702,45 @@ pub fn bill_key_problem(key: String) -> Option<String> {
 #[uniffi::export]
 pub fn channel_for_bill(bill_id: String) -> String {
     splitz_host::channel_for_bill(&bill_id)
+}
+
+// --- the relay's wire, for a client written in the wallet's language --------
+//
+// A wallet makes the two HTTP requests of §15.5 itself, over its own network
+// route; these decide what goes on the wire and what an answer means, so every
+// language's client refuses and retries alike. Every refusal is
+// `SplitzError::Host`, whose `transient` says whether retrying could succeed.
+
+/// The URL both relay routes address for `channel`: `<origin>/c/<channel>`.
+/// An origin carrying a query or a fragment is refused, not transient.
+#[uniffi::export]
+pub fn relay_channel_url(origin: String, channel: String) -> Result<String> {
+    Ok(splitz_host::HttpSplitsRelay::channel_url(
+        &origin, &channel,
+    )?)
+}
+
+/// The JSON body of `POST <origin>/c/<channel>`, or `None` when `blobs` is
+/// empty and no request is made. A blob over 65536 characters is refused, not
+/// transient, before anything is sent.
+#[uniffi::export]
+pub fn relay_push_body(blobs: Vec<String>) -> Result<Option<String>> {
+    Ok(splitz_host::HttpSplitsRelay::push_body(&blobs)?)
+}
+
+/// Reads the body the relay answered a push with, whatever the HTTP status.
+/// Anything but `{"ok":true}` is refused, transient.
+#[uniffi::export]
+pub fn relay_push_answer(body: String) -> Result<()> {
+    Ok(splitz_host::HttpSplitsRelay::push_answer(&body)?)
+}
+
+/// The blobs in the body the relay answered a fetch with, whatever the HTTP
+/// status. An answer that is not `{"blobs":[…]}` is refused, transient; a
+/// non-string inside the list is dropped.
+#[uniffi::export]
+pub fn relay_fetch_answer(body: String) -> Result<Vec<String>> {
+    Ok(splitz_host::HttpSplitsRelay::fetch_answer(&body)?)
 }
 
 /// Every entry this device holds, sealed under the bill key as it is held —

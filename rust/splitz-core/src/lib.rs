@@ -5,6 +5,7 @@
 //! single transaction. The protocol is specified in `SPEC.md`; this crate
 //! implements it.
 
+pub mod address;
 pub mod allocation;
 pub mod authority;
 pub mod balances;
@@ -25,6 +26,10 @@ pub mod sha256;
 pub mod split;
 pub mod zip321;
 
+pub use address::{
+    parse_address, AddressKind, AddressNetwork, ParsedAddress, TYPECODE_ORCHARD, TYPECODE_P2PKH,
+    TYPECODE_P2SH, TYPECODE_SAPLING,
+};
 pub use allocation::{allocate, allocate_evenly};
 pub use authority::{
     participant_id, resolve_identities, signing_message, Identities, ENTRY_SIGNING_DOMAIN,
@@ -34,14 +39,14 @@ pub use balances::{
     creditors, debtors, direct_debts, net_balances, residual_is_zero, DirectDebt, Position,
 };
 pub use canonical_json::canonical_json;
-pub use error::{code, Result, SplitError};
+pub use error::{code, describe_code, Result, SplitError};
 pub use instant::canonical_instant;
 pub use invite::{
-    channel_for, decode_payload, delta_for, encode_payload, frame_sealed, parse_invite,
-    parse_sealed_frame, render_invite, sealed_nonce, sealed_plaintext, strip_scan_padding,
-    within_depth, Delta, Invite, ScannedPayload, SealedFrame, BILL_PREFIX, DELTA_PREFIX,
-    INVITE_VERSION, MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP,
-    PAYLOAD_VERSION, SCAN_PADDING, SEALED_VERSION, TAG_BYTES,
+    channel_for, decode_payload, delta_for, encode_payload, frame_sealed, is_invite_expired,
+    parse_invite, parse_sealed_frame, render_invite, render_invite_link, sealed_nonce,
+    sealed_plaintext, strip_scan_padding, within_depth, Delta, Invite, ScannedPayload, SealedFrame,
+    BILL_PREFIX, DELTA_PREFIX, INVITE_VERSION, MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES,
+    PAYLOAD_CAP, PAYLOAD_VERSION, SCAN_PADDING, SEALED_VERSION, TAG_BYTES,
 };
 pub use log::{
     check_entry, confirmation_rule, derive_bill_id, derive_entry_id, fold_log, merge_logs,
@@ -73,6 +78,6 @@ pub use settle::{
 pub use sha256::{sha256, sha256_hex};
 pub use split::{check_id_lists, split_expense, split_participants, Shares};
 pub use zip321::{
-    bounded_label, is_zip321_address, qchar, render_amount, render_uri, FiatPrice, Zip321Payment,
-    MAX_FIAT_DIGITS, MAX_LABEL_BYTES, MAX_MEMO_BYTES, MAX_PAYMENTS, MAX_ZATOSHI,
+    bounded_label, is_zip321_address, qchar, read_request, render_amount, render_uri, FiatPrice,
+    Zip321Payment, MAX_FIAT_DIGITS, MAX_LABEL_BYTES, MAX_MEMO_BYTES, MAX_PAYMENTS, MAX_ZATOSHI,
 };

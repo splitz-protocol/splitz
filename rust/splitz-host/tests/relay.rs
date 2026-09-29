@@ -188,3 +188,45 @@ fn the_in_memory_relay_keeps_insertion_order_and_no_duplicates() {
     );
     assert!(relay.fetch("other").unwrap().is_empty());
 }
+
+#[test]
+fn the_wire_a_foreign_client_speaks_is_the_one_this_client_speaks() {
+    assert_eq!(
+        HttpSplitsRelay::channel_url("https://relay.example/base", "ch").unwrap(),
+        "https://relay.example/base/c/ch"
+    );
+    assert!(matches!(
+        HttpSplitsRelay::channel_url("https://relay.example?t=1", "ch"),
+        Err(HostError::Relay {
+            transient: false,
+            ..
+        })
+    ));
+    assert_eq!(HttpSplitsRelay::push_body(&[]).unwrap(), None);
+    assert_eq!(
+        HttpSplitsRelay::push_body(&["a".to_owned(), "b".to_owned()]).unwrap(),
+        Some(r#"{"blobs":["a","b"]}"#.to_owned())
+    );
+    // Bodies tools/relay/server.py answers with, a refusal's status aside.
+    assert!(HttpSplitsRelay::push_answer(r#"{"ok": true}"#).is_ok());
+    for refusal in [
+        r#"{"error": "not a channel"}"#,
+        r#"{"error": "the relay is full"}"#,
+        "",
+    ] {
+        assert!(
+            matches!(
+                HttpSplitsRelay::push_answer(refusal),
+                Err(HostError::Relay {
+                    transient: true,
+                    ..
+                })
+            ),
+            "answer {refusal:?}"
+        );
+    }
+    assert_eq!(
+        HttpSplitsRelay::fetch_answer(r#"{"blobs": ["a", 7, "b"]}"#).unwrap(),
+        vec!["a".to_owned(), "b".to_owned()]
+    );
+}

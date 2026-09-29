@@ -20,6 +20,8 @@ dart::SplitsSyncException   # `HostError::Sync`.
 dart::SwapException         # `HostError::Swap { transient }`.
 dart::BillKeyConflict       # `HostError::KeyConflict`, naming the bill.
 dart::BillStorageUnreadable # `HostError::Unreadable`, naming the key: §15.4's read raising on a value that is there and cannot be read.
+dart::SendInFlight          # `HostError::SendInFlight { pending }`, carrying the earlier send when one is written down.
+dart::UnrecordableReason    # The variants of Rust's `Unrecordable` enum, which carries them directly; Dart's `Unrecordable` exception carries one of these.
 dart::UnansweredSignatureQuestion  # `FoldFailure::Unanswered`, one of the two ways a verified fold fails. Dart throws it past a fold that returns.
 rust::HostError          # The enum the four above collapse into.
 rust::Result             # `Result<T> = core::result::Result<T, HostError>`. Dart throws, so there is no alias to name.
@@ -76,3 +78,13 @@ rust::quote_request_body   # The body a quote request carries. Dart builds it in
 rust::assets_from_tokens   # What a `/v0/tokens` answer lists. Dart's `_asset` and the loop in `tradableAssets`.
 rust::quote_from_response  # What a `/v0/quote` answer states. Dart reads it inline in `quote`.
 rust::status_from_response # What a `/v0/status` answer means. Dart reads it inline in `statusOf`.
+
+# --- prices, and the currency register behind them
+dart::ZecPriceException        # `HostError::Price`.
+dart::price_from_coin_gecko    # `price_from_coingecko`: Dart camel-cases the brand as `CoinGecko`, so the mechanical snake case splits it.
+rust::price_from_coingecko     # `priceFromCoinGecko`.
+dart::iso4217_exponents        # `ISO_4217_EXPONENTS`: a Dart top-level constant is lower camel case, a Rust one upper snake case.
+rust::ISO_4217_EXPONENTS       # `iso4217Exponents`.
+dart::max_minor_units_per_zec  # `MAX_MINOR_UNITS_PER_ZEC`, as above.
+rust::MAX_MINOR_UNITS_PER_ZEC  # `maxMinorUnitsPerZec`.
+rust::coingecko_price_url      # `CoinGeckoZecPrices.requestFor`: Rust lifts it to the crate so the binding and the client share one spelling.

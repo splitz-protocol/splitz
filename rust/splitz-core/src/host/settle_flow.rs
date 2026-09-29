@@ -12,6 +12,7 @@ use crate::obligation::{render_obligation, withholdings, Awaiting, Obligation, U
 use crate::rate::ExchangeRate;
 use crate::serialization::rate_to_json;
 use crate::settle::{settle_bill, Settlement, DEFAULT_EXACT_LIMIT};
+use crate::zip321::{read_request, Zip321Payment};
 
 use super::bill_log::{BillLog, FoldedBill};
 use super::entries::{record_payment, sign_entry};
@@ -302,4 +303,60 @@ pub fn record_send(
         records.push(record);
     }
     Ok(records)
+}
+
+/// One payment a wallet is about to make: what its own ZIP 321 reader made of
+/// a request, before anything is signed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposedOutput {
+    pub address: String,
+    pub zatoshi: i64,
+}
+
+/// How the payments a wallet is about to sign differ from the request (§14.6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProposalCheck {
+    /// Payments the request carries that the proposal does not, in request
+    /// order.
+    pub missing: Vec<Zip321Payment>,
+    /// Payments the proposal makes that the request does not carry, in the
+    /// order they were given.
+    pub unexpected: Vec<ProposedOutput>,
+}
+
+impl ProposalCheck {
+    /// True when the proposal pays exactly what the request asks.
+    pub fn matches(&self) -> bool {
+        self.missing.is_empty() && self.unexpected.is_empty()
+    }
+}
+
+/// Compares what a wallet is about to sign with the request `uri` (§14.6).
+///
+/// `outputs` are the payments the wallet's own reader produced from `uri`,
+/// without change: a reader that keeps only the first of several payments
+/// pays one recipient while the payer was shown them all. Each requested
+/// payment is matched to one proposed output with the same address and the
+/// same zatoshi; order is not significant, and one output cannot answer for
+/// two payments.
+///
+/// `uri` must be a request this protocol wrote: it is read with
+/// [`read_request`], which refuses anything else with `zip321_not_canonical`.
+pub fn check_proposal(uri: &str, outputs: &[ProposedOutput]) -> Result<ProposalCheck> {
+    let requested = read_request(uri)?;
+    let mut pool: Vec<Option<&ProposedOutput>> = outputs.iter().map(Some).collect();
+    let mut missing = Vec::new();
+    for payment in requested {
+        let found = pool.iter().position(|o| {
+            o.is_some_and(|o| o.address == payment.address && o.zatoshi == payment.zatoshi)
+        });
+        match found {
+            Some(at) => pool[at] = None,
+            None => missing.push(payment),
+        }
+    }
+    Ok(ProposalCheck {
+        missing,
+        unexpected: pool.into_iter().flatten().cloned().collect(),
+    })
 }

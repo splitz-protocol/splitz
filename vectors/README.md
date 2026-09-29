@@ -1,6 +1,6 @@
 # Conformance vectors
 
-553 cases across 18 files. An implementation is conformant when it reproduces
+841 cases across 21 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape
@@ -43,14 +43,17 @@ Objects keyed by participant id are compared by content, not by key order.
 | `coverage.json` | a `bill` or bare `balances`, `exactLimit` | the plan, each payment carrying the debts it discharges |
 | `rate.json` | `rate`, `minorUnits` or `zatoshi`, `rounding` | the conversion |
 | `zip321.json` | `payments`, `includeFiat` | the URI |
+| `request.json` | `uri`, and `outputs` for a proposal | the payments read back, or what the proposal is missing and adds |
+| `address.json` | `address` | its `network`, `kind`, `receivers` and `canReceiveMemo` |
 | `bill-json.json` | `json` | the decoded bill |
 | `log.json` | `log` and `billId`, or `entry`, or `left` and `right` | the fold, the entry's admission, or the merge |
-| `invite.json` | `uri` to decode, or `invite` to encode | the fields, or the URI |
+| `invite.json` | `uri` to decode, or `invite` to encode, with `base` for a link | the fields, or the URI |
 | `payload.json` | `payload` to decode, or `encode` | the contents, or the string |
 | `sealed.json` | `frame` | the version, nonce and body length |
 | `seal.json` | `entry`, or `billId` | the plaintext and nonce it seals under, or the channel |
 | `withholdings.json` | `plan`, `bill`, `payer`, `contested`, `payAnyway` | what a request carries, and what is held back |
 | `delta.json` | `log`, `theyHave` | nothing missing, one square, or past the cap |
+| `messages.json` | `code` | the sentence a host may show for it |
 
 Two cases in `zip321.json` carry `repeatPayment` and `paymentCount` instead of
 a literal list, because ten thousand payments would make the file unreadable. A
@@ -69,16 +72,18 @@ Each generator carries its own check: allocation and the split methods assert
 that shares sum to their total, rate conversions are recomputed from the
 formula in §7.1, every rendered URI amount is parsed back to the zatoshi it
 came from, every encoded payload is decoded back to the log it carried, and
-every settlement plan is checked to leave each participant at zero.
+every settlement plan is checked to leave each participant at zero. Every
+address in `address.json` is checked against the network, kind and receivers
+its source names.
 
 ## An external oracle
 
 `rust/tests/oracle.rs` checks this implementation against `librustzcash`'s
 `zip321` crate, stock from crates.io, two ways. It renders the same payment
-with both and compares byte for byte — 11 cases; the other 3 emit `fiat` or
+with both and compares byte for byte — 14 cases; the other 3 emit `fiat` or
 carry ten thousand payments, neither of which librustzcash can express. And it
 parses every URI the corpus states, checking the recipients and amounts come
-back unchanged: 14 from `zip321.json`, 9 from `obligations.json`.
+back unchanged: 17 from `zip321.json`, 15 from `obligations.json`.
 
 The rendering half uses this crate's own renderer rather than the corpus
 string. Comparing the corpus would leave a defect in the renderer invisible
@@ -87,7 +92,18 @@ proposed `fiat` parameter ignores it — the stock crate is exactly such a
 parser, and all three fiat-bearing URIs parse to the same zatoshi.
 
 That crate decodes each address into a `ZcashAddress`, which is why every
-address here is a real mainnet Unified Address rather than filler.
+address here is a real one rather than filler.
+
+The same file puts every case in `address.json` through `zcash_address`, the
+decoder those wallets use, and compares network, kind, receivers and whether a
+memo can be delivered. §8.6 is stricter than that crate in five ways — nothing
+is trimmed, Bech32 padding bits are zero, a revision 0 Unified Address carries
+Sapling or Orchard and no MUST-understand typecode, and Sprout is refused — so
+the eleven cases those rules refuse are named in the test, which asserts the
+crate accepts each. Every other case agrees. Nothing §8.6 accepts is refused
+there. And each `zip321.json` case refused with `zip321_memo_undeliverable` is
+one whose payment `zip321::Payment::new` refuses with `TransparentMemo`, while
+no other case is.
 
 ## One guard with no distinguishing case
 

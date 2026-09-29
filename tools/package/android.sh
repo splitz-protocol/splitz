@@ -91,6 +91,9 @@ pkg="$out/splitz"
 mkdir -p "$pkg/src/main/kotlin" "$pkg/src/main/jniLibs"
 cp -R "$out/jniLibs/." "$pkg/src/main/jniLibs/"
 cp -R "$out/kotlin/." "$pkg/src/main/kotlin/"
+# The §15.5 relay client, in the binding's own package, so one import
+# reaches both.
+cp "$root/tools/package/relay/SplitzRelay.kt" "$pkg/src/main/kotlin/uniffi/splitz_ffi/"
 
 cat > "$pkg/build.gradle.kts" <<'GRADLE'
 // The splitz protocol and its wallet plumbing, as an Android wallet reaches it.

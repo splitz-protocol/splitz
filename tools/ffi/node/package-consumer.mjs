@@ -77,6 +77,17 @@ const benKey = ben.key;
 console.log(`the package resolved its own native library on import`);
 check("the surface is callable with no library path given",
       anaKey.length === 43, anaKey);
+check("the relay client is exported beside the binding",
+      typeof splitz.SplitzRelay === "function", typeof splitz.SplitzRelay);
+let refusedOrigin;
+try {
+  new splitz.SplitzRelay("https://relay.example?t=1");
+} catch (e) {
+  refusedOrigin = e;
+}
+check("and decides through the package's own binding",
+      refusedOrigin instanceof splitz.SplitzErrorHost && refusedOrigin.transient === false,
+      `${refusedOrigin?.detail}`);
 
 console.log("ana opens a bill, and both join it");
 const create = splitz.create_bill_entry(ana.facts(), "Dinner", "EUR", "equal",

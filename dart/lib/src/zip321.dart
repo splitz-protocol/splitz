@@ -6,13 +6,14 @@ library;
 
 import 'dart:convert';
 
+import 'address.dart';
 import 'errors.dart';
 import 'money.dart';
 import 'rate.dart';
 
 /// Whether [address] is one §8.3 admits: non-empty and ASCII alphanumeric.
 ///
-/// Syntax only. A wallet still puts every address through its own decoder.
+/// Syntax only; [parseAddress] decodes one (§8.6).
 bool isZip321Address(String address) =>
     RegExp(r'^[A-Za-z0-9]+$').hasMatch(address);
 
@@ -164,6 +165,12 @@ String renderUri(List<Zip321Payment> payments, {bool includeFiat = false}) {
       raise(SplitCode.zip321BadAddress,
           'The ZIP 321 grammar admits only alphanumeric addresses');
     }
+    // A memo goes only to an address that decodes (§8.6) and can receive
+    // one; ZIP 321 refuses the whole request otherwise.
+    if (p.memo != null && !parseAddress(p.address).canReceiveMemo) {
+      raise(SplitCode.zip321MemoUndeliverable,
+          'A memo cannot be delivered to a transparent or TEX address');
+    }
   }
 
   final single = payments.length == 1;
@@ -195,4 +202,143 @@ String renderUri(List<Zip321Payment> payments, {bool includeFiat = false}) {
 
   final head = single ? 'zcash:${payments[0].address}?' : 'zcash:?';
   return head + parts.join('&');
+}
+
+/// The parameters §8.2 writes, and nothing else.
+const Set<String> _requestParams = {
+  'address',
+  'amount',
+  'fiat',
+  'memo',
+  'label',
+  'message',
+};
+
+Never _notCanonical(String why) => raise(SplitCode.zip321NotCanonical, why);
+
+/// Reads back a request in exactly the form [renderUri] writes (§8.7).
+///
+/// Not a general ZIP 321 reader: every URI this protocol hands a wallet is one
+/// [renderUri] produced, so the payments read are rendered again and the
+/// result must equal [uri] byte for byte. Anything else — another parameter,
+/// another order, another spelling of one amount — is refused with
+/// `zip321_not_canonical`, as is anything that does not read at all. A value
+/// [renderUri] itself refuses is refused with that code.
+List<Zip321Payment> readRequest(String uri) {
+  const scheme = 'zcash:';
+  if (!uri.startsWith(scheme)) _notCanonical('Not a zcash: URI');
+  final rest = uri.substring(scheme.length);
+  final query = rest.indexOf('?');
+  if (query < 0) _notCanonical('A request carries a query');
+  final pathAddress = rest.substring(0, query);
+
+  final byIndex = <int, Map<String, String>>{};
+  for (final part in rest.substring(query + 1).split('&')) {
+    final eq = part.indexOf('=');
+    if (eq <= 0) _notCanonical('Not a parameter: "$part"');
+    final key = part.substring(0, eq);
+    final value = part.substring(eq + 1);
+    final dot = key.indexOf('.');
+    final name = dot < 0 ? key : key.substring(0, dot);
+    var index = 0;
+    if (dot >= 0) {
+      final digits = key.substring(dot + 1);
+      // `.0` is not written, and an index has no leading zero (§8.2).
+      if (!RegExp(r'^[1-9][0-9]{0,3}$').hasMatch(digits)) {
+        _notCanonical('Not a parameter index: "$digits"');
+      }
+      index = int.parse(digits);
+    }
+    if (!_requestParams.contains(name)) {
+      _notCanonical('Not a parameter §8.2 writes: "$name"');
+    }
+    final params = byIndex.putIfAbsent(index, () => {});
+    if (params.containsKey(name)) _notCanonical('"$key" appears twice');
+    params[name] = value;
+  }
+
+  final count = byIndex.length;
+  final payments = <Zip321Payment>[];
+  for (var i = 0; i < count; i++) {
+    final p = byIndex[i];
+    if (p == null) _notCanonical('Payment $i is missing');
+    final address = i == 0 && pathAddress.isNotEmpty
+        ? (p.containsKey('address')
+            ? _notCanonical('The address is written twice')
+            : pathAddress)
+        : (p['address'] ?? _notCanonical('Payment $i names no address'));
+    final amount = p['amount'] ?? _notCanonical('Payment $i has no amount');
+    final fiat = p['fiat'];
+    final memo = p['memo'];
+    final label = p['label'];
+    final message = p['message'];
+    payments.add(Zip321Payment(
+      address: address,
+      zatoshi: _readAmount(amount),
+      fiat: fiat == null ? null : _readFiat(fiat),
+      memo: memo == null ? null : _readMemo(memo),
+      label: label == null ? null : _unqchar(label),
+      message: message == null ? null : _unqchar(message),
+    ));
+  }
+
+  final rendered =
+      renderUri(payments, includeFiat: payments.any((p) => p.fiat != null));
+  if (rendered != uri) _notCanonical('Not the form §8 writes');
+  return payments;
+}
+
+/// Decimal ZEC to zatoshi. The canonical spelling is enforced by the
+/// comparison [readRequest] makes afterwards.
+int _readAmount(String text) {
+  final match = RegExp(r'^([0-9]{1,8})(?:\.([0-9]{1,8}))?$').firstMatch(text);
+  if (match == null) _notCanonical('Not an amount: "$text"');
+  final coins = int.parse(match.group(1)!);
+  final zats = int.parse((match.group(2) ?? '').padRight(8, '0'));
+  return coins * zatoshiPerZec + zats;
+}
+
+FiatPrice _readFiat(String text) {
+  final match = RegExp(r'^([A-Z]{3}):([0-9]{1,18})$').firstMatch(text);
+  if (match == null) _notCanonical('Not a fiat price: "$text"');
+  return FiatPrice(match.group(1)!, int.parse(match.group(2)!));
+}
+
+List<int> _readMemo(String text) {
+  if (!RegExp(r'^[A-Za-z0-9_-]*$').hasMatch(text) || text.length % 4 == 1) {
+    _notCanonical('Not unpadded base64url: "$text"');
+  }
+  try {
+    return base64Url.decode(text.padRight((text.length + 3) ~/ 4 * 4, '='));
+  } on FormatException {
+    // Stray bits after the last whole byte: not the spelling §8.3 writes.
+    _notCanonical('Not unpadded base64url: "$text"');
+  }
+}
+
+/// Undoes [qchar]. Malformed escapes and bytes that are not UTF-8 are refused.
+String _unqchar(String text) {
+  final out = <int>[];
+  for (var i = 0; i < text.length; i++) {
+    final unit = text.codeUnitAt(i);
+    if (unit == 0x25) {
+      if (i + 2 >= text.length) _notCanonical('A cut-off escape');
+      final byte = int.tryParse(text.substring(i + 1, i + 3), radix: 16);
+      if (byte == null ||
+          text.substring(i + 1, i + 3).contains(RegExp(r'[^0-9A-Fa-f]'))) {
+        _notCanonical('Not an escape: "${text.substring(i, i + 3)}"');
+      }
+      out.add(byte);
+      i += 2;
+    } else if (unit < 0x80) {
+      out.add(unit);
+    } else {
+      _notCanonical('A raw non-ASCII character');
+    }
+  }
+  try {
+    return utf8.decode(out);
+  } on FormatException {
+    _notCanonical('Escapes that are not UTF-8');
+  }
 }

@@ -38,6 +38,17 @@ pub enum HostError {
     /// `transient` is true when retrying the same request could succeed — a
     /// timeout, a 5xx. A quote the provider refused on its merits is not.
     Swap { message: String, transient: bool },
+    /// A price source answered with something that is not a price, or
+    /// could not be reached. Not `None`: that means the source cannot price
+    /// the currency, and an answer that did not read is a different state.
+    Price(String),
+    /// A send from this bill is written down and not resolved, or is under
+    /// way in this process (§14.3). `pending` is the note, when one is
+    /// written; `None` while the earlier send is still under way.
+    SendInFlight {
+        bill_id: String,
+        pending: Option<Box<crate::pending_sends::PendingSend>>,
+    },
 }
 
 impl fmt::Display for HostError {
@@ -53,6 +64,10 @@ impl fmt::Display for HostError {
                 write!(f, "this device already holds a different key for {bill}")
             }
             HostError::Swap { message, .. } => write!(f, "{message}"),
+            HostError::Price(why) => write!(f, "{why}"),
+            HostError::SendInFlight { bill_id, .. } => {
+                write!(f, "an earlier send from {bill_id} is not resolved")
+            }
         }
     }
 }

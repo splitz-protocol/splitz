@@ -1,0 +1,558 @@
+{
+  "description": "SPEC.md §8.7 and §14.6: a request read back, and the payments a wallet is about to sign checked against it.",
+  "count": 61,
+  "cases": [
+    {
+      "name": "one_payment",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 36843
+        }
+      ]
+    },
+    {
+      "name": "two_payments",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246
+        }
+      ]
+    },
+    {
+      "name": "every_parameter",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00007004&memo=dGhhbmtz&label=Zcon7%20d%C3%AEner%20%E2%9C%A8&message=dinner",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "memo": "dGhhbmtz",
+          "label": "Zcon7 dîner ✨",
+          "message": "dinner"
+        }
+      ]
+    },
+    {
+      "name": "fiat_on_each_payment",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&fiat=EUR:1000&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246&fiat.1=EUR:1500",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": "EUR:1000"
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246,
+          "fiat": "EUR:1500"
+        }
+      ]
+    },
+    {
+      "name": "fiat_on_one_payment_only",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&fiat=EUR:1000&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004,
+          "fiat": "EUR:1000"
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246
+        }
+      ]
+    },
+    {
+      "name": "a_label_at_the_cap",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00000001&label=%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9%C3%A9",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 1,
+          "label": "éééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+      ]
+    },
+    {
+      "name": "an_empty_memo",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00000001&memo=",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 1,
+          "memo": ""
+        }
+      ]
+    },
+    {
+      "name": "the_largest_amount_there_is",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=21000000",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 2100000000000000
+        }
+      ]
+    },
+    {
+      "name": "a_two_digit_index",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00000001&address.1=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.1=0.00000002&address.2=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.2=0.00000003&address.3=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.3=0.00000004&address.4=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.4=0.00000005&address.5=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.5=0.00000006&address.6=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.6=0.00000007&address.7=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.7=0.00000008&address.8=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.8=0.00000009&address.9=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.9=0.0000001&address.10=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.10=0.00000011",
+      "expect": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 1
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 2
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 3
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 4
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 5
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 6
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 8
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 9
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 10
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 11
+        }
+      ]
+    },
+    {
+      "name": "another_scheme",
+      "uri": "bitcoin:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "the_scheme_is_case_sensitive",
+      "uri": "ZCASH:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "no_query",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_empty_query",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_trailing_ampersand",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_parameter_with_no_name",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_parameter_with_no_value_sign",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_required_parameter",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&req-note=x",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_unknown_parameter",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&foo=bar",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_repeated_parameter",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&amount=2",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "index_zero_is_not_written",
+      "uri": "zcash:?address.0=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.0=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_index_with_a_leading_zero",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=1&address.01=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.01=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_index_past_9999",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=1&address.10000=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.10000=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_gap_in_the_indices",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=1&address.2=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.2=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "the_address_written_twice",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_payment_with_no_address",
+      "uri": "zcash:?amount=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_payment_with_no_amount",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?label=Ana",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "one_payment_in_the_indexed_form",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "parameters_out_of_order",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?label=Ana&amount=1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_amount_with_trailing_zeros",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.50",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_amount_with_a_bare_point",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1.",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_amount_with_a_leading_zero",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=01",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_amount_with_nine_places",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.000000001",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_amount_with_a_sign",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=+1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_lower_case_escape",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=d%c3%aener",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_escape_that_is_not_utf8",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=%FF",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_cut_off_escape",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=Ana%2",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "an_escape_that_is_not_hex",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=%G1",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_raw_space",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=A na",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_raw_non_ascii_character",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=dîner",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_label_past_the_cap",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&label=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_padded_memo",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&memo=dGhhbmtzYQ==",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_memo_of_impossible_length",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&memo=A",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_memo_with_stray_bits",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&memo=AB",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_standard_base64_memo",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&memo=a+b/",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_lower_case_fiat_code",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&fiat=eur:100",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_fiat_with_no_count",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&fiat=EUR:",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_zero_amount",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0",
+      "error": "zip321_amount_not_positive"
+    },
+    {
+      "name": "more_zec_than_exists",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=21000000.00000001",
+      "error": "zip321_amount_too_large"
+    },
+    {
+      "name": "an_address_the_grammar_refuses",
+      "uri": "zcash:a-b?amount=1",
+      "error": "zip321_bad_address"
+    },
+    {
+      "name": "a_zero_fiat_price",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&fiat=EUR:0",
+      "error": "zip321_fiat_not_positive"
+    },
+    {
+      "name": "a_memo_past_the_cap",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&memo=bW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1tbW1t",
+      "error": "zip321_memo_too_large"
+    },
+    {
+      "name": "the_same_payments",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246
+        }
+      ],
+      "expect": {
+        "missing": [],
+        "unexpected": []
+      }
+    },
+    {
+      "name": "order_is_not_significant",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246",
+      "outputs": [
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 9246
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        }
+      ],
+      "expect": {
+        "missing": [],
+        "unexpected": []
+      }
+    },
+    {
+      "name": "a_reader_that_kept_only_the_first",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 7004
+        }
+      ],
+      "expect": {
+        "missing": [
+          {
+            "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+            "zatoshi": 9246
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "name": "nothing_proposed",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00007004&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00009246",
+      "outputs": [],
+      "expect": {
+        "missing": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 7004
+          },
+          {
+            "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+            "zatoshi": 9246
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "name": "an_output_nobody_asked_for",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 36843
+        },
+        {
+          "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+          "zatoshi": 1
+        }
+      ],
+      "expect": {
+        "missing": [],
+        "unexpected": [
+          {
+            "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+            "zatoshi": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "the_right_address_the_wrong_amount",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 36844
+        }
+      ],
+      "expect": {
+        "missing": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 36843
+          }
+        ],
+        "unexpected": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 36844
+          }
+        ]
+      }
+    },
+    {
+      "name": "an_address_in_another_case",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843",
+      "outputs": [
+        {
+          "address": "U13J3Q8Q8F9HX2NX0W9L52DQKSY4PNG7FGM0LQJH8AHN9ENYVZ5Z9XNWZDCDJMPF756S2Y88RNYR9PX4F4K9W03SL6FR4VWSQCVG8GGFJX",
+          "zatoshi": 36843
+        }
+      ],
+      "expect": {
+        "missing": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 36843
+          }
+        ],
+        "unexpected": [
+          {
+            "address": "U13J3Q8Q8F9HX2NX0W9L52DQKSY4PNG7FGM0LQJH8AHN9ENYVZ5Z9XNWZDCDJMPF756S2Y88RNYR9PX4F4K9W03SL6FR4VWSQCVG8GGFJX",
+            "zatoshi": 36843
+          }
+        ]
+      }
+    },
+    {
+      "name": "one_output_cannot_answer_for_two_payments",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00000005&address.1=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.1=0.00000005",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 5
+        }
+      ],
+      "expect": {
+        "missing": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 5
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "name": "two_equal_payments_two_equal_outputs",
+      "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00000005&address.1=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.1=0.00000005",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 5
+        },
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 5
+        }
+      ],
+      "expect": {
+        "missing": [],
+        "unexpected": []
+      }
+    },
+    {
+      "name": "a_request_this_protocol_did_not_write",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&foo=bar",
+      "outputs": [
+        {
+          "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+          "zatoshi": 100000000
+        }
+      ],
+      "error": "zip321_not_canonical"
+    }
+  ]
+}

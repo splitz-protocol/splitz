@@ -1,0 +1,150 @@
+{
+  "description": "CoinGecko /simple/price answers and the minor units per ZEC the host packages read from them.",
+  "count": 24,
+  "cases": [
+    {
+      "name": "captured_usd",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "USD",
+      "expect": 138819
+    },
+    {
+      "name": "captured_eur",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "EUR",
+      "expect": 122241
+    },
+    {
+      "name": "captured_jpy",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "JPY",
+      "expect": 218475
+    },
+    {
+      "name": "captured_kwd",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "KWD",
+      "expect": 428680
+    },
+    {
+      "name": "captured_inr",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "INR",
+      "expect": 13333700
+    },
+    {
+      "name": "captured_xau_has_no_exponent",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "XAU",
+      "expect": null
+    },
+    {
+      "name": "captured_gbp_is_not_in_the_answer",
+      "body": "{\"zcash\":{\"usd\":1388.19,\"eur\":1222.41,\"jpy\":218475,\"kwd\":428.68,\"inr\":133337,\"xau\":0.33511}}",
+      "currency": "GBP",
+      "expect": null
+    },
+    {
+      "name": "half_a_cent_rounds_up",
+      "body": "{\"zcash\":{\"usd\":1.005}}",
+      "currency": "USD",
+      "expect": 101
+    },
+    {
+      "name": "just_under_half_a_cent_rounds_down",
+      "body": "{\"zcash\":{\"usd\":1.0049}}",
+      "currency": "USD",
+      "expect": 100
+    },
+    {
+      "name": "a_whole_number",
+      "body": "{\"zcash\":{\"usd\":42}}",
+      "currency": "USD",
+      "expect": 4200
+    },
+    {
+      "name": "an_exponent",
+      "body": "{\"zcash\":{\"usd\":1.5e2}}",
+      "currency": "USD",
+      "expect": 15000
+    },
+    {
+      "name": "a_tiny_price_rounds_to_nothing",
+      "body": "{\"zcash\":{\"usd\":0.004}}",
+      "currency": "USD",
+      "expect": null
+    },
+    {
+      "name": "a_tiny_price_rounds_to_a_cent",
+      "body": "{\"zcash\":{\"usd\":0.005}}",
+      "currency": "USD",
+      "expect": 1
+    },
+    {
+      "name": "three_places_for_kwd",
+      "body": "{\"zcash\":{\"kwd\":0.0005}}",
+      "currency": "KWD",
+      "expect": 1
+    },
+    {
+      "name": "no_places_for_jpy",
+      "body": "{\"zcash\":{\"jpy\":218475.5}}",
+      "currency": "JPY",
+      "expect": 218476
+    },
+    {
+      "name": "zero_is_not_a_price",
+      "body": "{\"zcash\":{\"usd\":0}}",
+      "currency": "USD",
+      "expect": null
+    },
+    {
+      "name": "negative_is_not_a_price",
+      "body": "{\"zcash\":{\"usd\":-5}}",
+      "currency": "USD",
+      "expect": null
+    },
+    {
+      "name": "at_the_bound",
+      "body": "{\"zcash\":{\"jpy\":9007199254740991}}",
+      "currency": "JPY",
+      "expect": 9007199254740991
+    },
+    {
+      "name": "past_the_bound",
+      "body": "{\"zcash\":{\"usd\":90071992547409.92}}",
+      "currency": "USD",
+      "expect": null
+    },
+    {
+      "name": "a_string_is_not_a_price",
+      "body": "{\"zcash\":{\"usd\":\"1388.19\"}}",
+      "currency": "USD",
+      "error": "malformed"
+    },
+    {
+      "name": "no_zcash_member",
+      "body": "{\"bitcoin\":{\"usd\":1}}",
+      "currency": "USD",
+      "error": "malformed"
+    },
+    {
+      "name": "not_an_object",
+      "body": "[1,2]",
+      "currency": "USD",
+      "error": "malformed"
+    },
+    {
+      "name": "not_json",
+      "body": "<html>rate limited</html>",
+      "currency": "USD",
+      "error": "malformed"
+    },
+    {
+      "name": "an_empty_zcash_member",
+      "body": "{\"zcash\":{}}",
+      "currency": "USD",
+      "expect": null
+    }
+  ]
+}

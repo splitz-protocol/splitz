@@ -98,6 +98,8 @@ xcodebuild -create-xcframework \
 # else would not satisfy the import.
 mkdir -p "$pkg/Sources/SplitzFFI"
 cp "$out/swift/splitz_ffi.swift" "$pkg/Sources/SplitzFFI/"
+# The §15.5 relay client, in the same module, so `import SplitzFFI` reaches it.
+cp "$root/tools/package/relay/SplitzRelay.swift" "$pkg/Sources/SplitzFFI/"
 
 cat > "$pkg/Package.swift" <<'SWIFT'
 // swift-tools-version:5.9

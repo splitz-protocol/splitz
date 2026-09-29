@@ -46,3 +46,24 @@ fn a_fraction_and_a_number_past_64_bits_are_refused_by_what_they_are() {
     // The control: the largest 64-bit integer is an integer.
     check_entry(&entry_with_note("9223372036854775807")).expect("i64::MAX fits");
 }
+
+#[test]
+fn an_invite_is_expired_once_the_clock_is_past_its_expiry() {
+    let invite = |expiry| splitz_core::Invite {
+        bill_id: "Ab3-_xyz".to_owned(),
+        key: "k".repeat(43),
+        name: String::new(),
+        expiry,
+    };
+    let x = invite(Some(1_793_000_000));
+    assert!(!splitz_core::is_invite_expired(&x, 1_792_999_999));
+    assert!(!splitz_core::is_invite_expired(&x, 1_793_000_000));
+    assert!(splitz_core::is_invite_expired(&x, 1_793_000_001));
+    assert!(!splitz_core::is_invite_expired(&invite(None), 1 << 62));
+    let largest = splitz_core::parse_invite(&format!(
+        "splitz://join?v=1&b=Ab3-_xyz&k={}&x=9223372036854775807",
+        "k".repeat(43)
+    ))
+    .unwrap();
+    assert!(!splitz_core::is_invite_expired(&largest, 1_793_000_000));
+}

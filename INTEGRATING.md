@@ -399,8 +399,9 @@ wallet passes the facts it owns and gets an answer:
 | `now` | a §9.3 instant. Read when an entry is written, never while folding: §10.2 orders a log by instant, so a fold that read a clock would answer differently for one unchanged entry set |
 | `nonce` | sixteen bytes nobody can predict, for §9.4. Two bills opened in one second by one person are one bill when this can be guessed |
 
-Storage, the keychain, the relay and the send stay in the wallet's own
-language. An entry crosses as the JSON §9.3 canonicalises — it is the
+Storage, the keychain and the send stay in the wallet's own language. So does
+the relay, and each package carries a client for it written in that language —
+see "A relay client" below. An entry crosses as the JSON §9.3 canonicalises — it is the
 protocol's own wire format and a wallet never inspects one — and everything a
 person is shown crosses as a typed record. A refusal crosses as its §12 code.
 
@@ -796,6 +797,49 @@ if (Number(owed.request.withheld_minor_units) !== 0) {
 console.log("DOC RESULT: javascript");
 ```
 
+### A relay client
+
+Each package carries `SplitzRelay`, a §15.5 client in its own language, beside
+the binding: the Android module in package `uniffi.splitz_ffi`, the Swift
+package in module `SplitzFFI`, the npm package from its entry point. Sources are
+`tools/package/relay/`; the package scripts copy them in.
+
+| language | construct | push | fetch |
+|---|---|---|---|
+| Kotlin | `SplitzRelay(origin, timeoutMillis = 30_000)` | `push(channel, blobs)`, blocking | `fetch(channel): List<String>`, blocking |
+| Swift | `try SplitzRelay(origin:session: = .shared)` | `try await push(channel:blobs:)` | `try await fetch(channel:) -> [String]` |
+| JavaScript | `new SplitzRelay(origin, { fetch })` | `await push(channel, blobs)` | `await fetch(channel)` |
+
+The channel is `channelForBill(billId)` (`channel_for_bill` in JavaScript).
+Blobs are what `blobsToPush` returns, and what `fetch` returns goes to
+`openBlobs`. The wire is `POST <origin>/c/<channel>` with `{"blobs":[…]}` and
+`GET <origin>/c/<channel>`, as `tools/relay/server.py` serves it; the binding's
+`relayChannelUrl`, `relayPushBody`, `relayPushAnswer` and `relayFetchAnswer`
+decide the URL, the body and what an answer means, so every client — and
+`splitz_host`'s `HttpSplitsRelay` — refuses alike. A client written for another
+network route calls those four directly.
+
+Every failure is the binding's host error (`SplitzException.Host`,
+`SplitzError.Host`, `SplitzErrorHost`) with `transient` saying whether a retry
+could succeed:
+
+- transient: the relay could not be reached; it answered with anything but
+  `{"ok":true}` to a push — whatever the HTTP status, a 4xx included; it
+  answered a fetch without a `blobs` list, or with something that is not JSON.
+- not transient: an origin carrying a query or a fragment, refused at
+  construction; a blob over 65536 characters, refused before anything is sent;
+  in JavaScript, a runtime with no `fetch` and none passed.
+
+The Kotlin client blocks, so on Android it runs off the main thread. It uses
+`HttpURLConnection`, which API 21 carries; a wallet that sends its traffic over
+another route writes its own client over the four functions above. The Swift
+client uses the `URLSession` it is given, and the JavaScript one the `fetch` it
+is given, the global one of Node 18 and later by default.
+
+`tools/ffi/kotlin.sh`, `tools/ffi/node.sh` and `tools/ffi/swift.sh` each push a
+bill's sealed log through a live `tools/relay/server.py` with one client, fetch
+it with a second, and open it; each also drives the refusals above.
+
 ### Generators
 
 The crate pins `uniffi = "=0.31.0"`, because every bindings generator outside
@@ -814,21 +858,21 @@ against the package `tools/package/ios.sh` writes — `.package(path:)` and
 `import SplitzFFI` — rather than against this source tree, because what a
 wallet reaches is the package and not the tree.
 
-## Ten things the wallet owns
+## Nine things the wallet owns
 
-`SPEC.md` §13 lists these so they are not mistaken for gaps. Three carry a
-MUST: decoding an address (2), surfacing a changed pay-to address (7), and not
-attaching a memo to a transparent recipient (8).
+`SPEC.md` §13 lists these so they are not mistaken for gaps. Two carry a
+MUST: checking an address is for the network the wallet is on (2), and
+surfacing a changed pay-to address (7).
 
 1. **Transport.** §11.3 fixes what a sealed entry looks like and the channel it
    belongs to. Moving blobs — over what, with what retries, stored for how long
    — is the wallet's, as is running the cipher §11.3 names.
-2. **Address validation and network.** §8.3 checks only what the ZIP 321
-   grammar admits: non-empty and alphanumeric. **A wallet MUST decode every
-   address itself and MUST check it is for the network it is transacting on.**
-   ZIP 316 defines the Unified Address format; `zcash_address` in Rust and the
-   equivalent in your stack are what a decoder looks like. The corpus carries
-   real mainnet Unified Addresses so that running it exercises yours.
+2. **Which network a wallet transacts on.** `parseAddress` (§8.6) answers an
+   address's network, kind, Unified receivers and whether it can take a memo,
+   and `renderUri` refuses a memo it cannot deliver. **A wallet MUST check the
+   network it answers is the one it is transacting on**; nothing here knows
+   which that is. Decoding a receiver's bytes as a key is the wallet's too,
+   when it builds the transaction.
 3. **Transaction construction, fees, signing, broadcast.**
 4. **The curve operation.** §10.6 fixes the bytes a signature covers; producing
    and checking the Ed25519 signature is the host's.
@@ -855,19 +899,18 @@ attaching a memo to a transparent recipient (8).
 7. **Surfacing a changed pay-to address.** The fold reports every one.
    **A wallet MUST put a changed address in front of the payer before settling
    to it** — this is what stops a relayed entry silently redirecting a payout.
-8. **Not attaching a memo to a transparent recipient.** ZIP 321 requires a URI
-   carrying a memo at the same parameter index as a transparent address to be
-   refused *in its entirety*, which takes the unrelated shielded outputs with
-   it. This protocol does not parse addresses, so the rule cannot live in §8.
-   A wallet has a decoder and must spend it before setting a memo.
-9. **Honouring an invite's expiry.** §11.1 fixes what `x` looks like and
-   parses it; comparing it to a clock is yours, along with which clock and
-   what to do when two devices disagree. **There is no refusal code for an
-   expired invite, because this protocol cannot tell one** — an invite that
-   expired in 1970 parses without complaint. Nothing in the library will tell
-   you; this line is the only warning you get.
-10. **Rate discovery.** §7 specifies what a snapshotted rate does, not where it
-   came from.
+8. **Honouring an invite's expiry.** §11.1 fixes what `x` looks like and
+   parses it. **There is no refusal code for an expired invite, because this
+   protocol cannot tell one** — an invite that expired in 1970 parses without
+   complaint. `isInviteExpired(invite, nowUnixSeconds)` /
+   `is_invite_expired` compares it with the clock you pass, in whole seconds;
+   which clock, and whether an expired invite is shown or refused, are yours.
+9. **Rate discovery.** §7 specifies what a snapshotted rate does, not where it
+   came from. `CoinGeckoZecPrices` (Dart and Rust) is one source, reading
+   CoinGecko's `/simple/price` for any currency the ISO 4217 register gives an
+   exponent, exactly and rounding halves up; the bindings expose the same as
+   `zec_price_request` and `zec_price_from_response`. Where it points is yours:
+   CoinGecko itself, or a proxy you run.
 
 ## Things that are easy to get wrong
 
@@ -885,9 +928,13 @@ still land. `settle` records nothing for it, so the debt stays in the plan and
 a second tap sends it again. Write down what the request carried
 (`PayerObligation.carriedTo` / `carried_to()`) **before** calling the wallet,
 keep it across a restart, and refuse another send from that bill until the
-person says which way it went. If the transaction turns up, `recordSend` /
-`record_send` writes the same records `settle` would have, so a payee confirms
-the same payment either way.
+person says which way it went. `PendingSends` (Dart and Rust host) does exactly
+this over your `BillStorage`: `begin` before the wallet is called, `end` with
+the outcome, `recordsFor` when a person says the transaction landed, and
+`resolve` once the records are on the bill. A note it cannot read still
+blocks. If the transaction turns up, `recordSend` / `record_send` writes the
+same records `settle` would have, so a payee confirms the same payment either
+way.
 
 **The rate belongs to the bill.** Snapshot it once and put it on the bill. Six
 people applying six live rates to one dinner compute six different amounts and
@@ -935,10 +982,46 @@ so budget against the profile you ship. §6.2 caps the limit at 20
 and reports `isOptimal: false`, which is a worse plan and not a wrong one.
 
 **The exponent is not carried.** `1234` is €12.34 in EUR, ¥1234 in JPY, and
-1.234 KWD in KWD. A wallet that renders or accepts major units needs its own
-ISO 4217 register, and **must refuse a code that register gives no exponent
-for** — `XAU` is well-formed and has no minor unit, so a figure typed in major
-units means nothing.
+1.234 KWD in KWD. A wallet that renders or accepts major units needs an ISO
+4217 register — `currencyExponent` / `currency_exponent` in the host packages
+is one, from ISO 4217 List One — and **must refuse a code that register gives
+no exponent for**: `XAU` is well-formed and has no minor unit, so a figure
+typed in major units means nothing.
+
+**Check what the wallet is about to sign.** A wallet reads a request with its
+own ZIP 321 reader, and a reader that keeps only the first of several payments
+pays one person while the payer was shown them all. Hand the payments your
+reader produced to `checkProposal(uri, outputs)` / `check_proposal` before
+signing, and sign only when both `missing` and `unexpected` are empty
+(§14.6). It reads back only what this protocol wrote (§8.7).
+
+**A payment you received can be confirmed from what arrived.**
+`arrivalsFor(bills, me, received)` / `arrivals_for` matches the transactions
+your wallet received against the unconfirmed ZEC records to you, across every
+bill at once, so one transaction is evidence once (§14.7). Show the payee each
+`arrived` record — its ZEC, its rate, its reference — and on their word write
+`walletReceived` confirmations from it. `short` and `unstated` are records the
+money does not back.
+
+**Say a refusal in words.** `describeCode(code)` / `describe_code` answers a
+short sentence for every §12 code, from `vectors/messages.json`, and nothing
+for a code it does not know — show the code itself then.
+
+**Totals across bills.** `totalsAcross(bills, me)` / `totals_across` answers,
+per person and currency, what their plans ask each side to pay and what is
+recorded and awaiting confirmation. Currencies are never added together, and a
+bill that cannot be counted is named, not partly counted.
+
+**An invite as a link.** `renderInviteLink(invite, base)` /
+`render_invite_link` puts the invite in the fragment of an https link, which a
+chat app shows as tappable and a browser never sends to `base`'s host; every
+reader here accepts it (§11.1).
+
+**Check your seams before you ship them.** `checkSecretStore`,
+`checkBillStorage`, `checkSplitsRelay` and `checkZecPrices` (Dart and Rust
+host) run §15's rules against your own keychain, store, relay and price source
+and answer what each did that §15 says it must not. Run them in your test
+suite; an empty answer is the only passing one.
 
 **A refusal is reported, not thrown away, and it does not converge.**
 `foldLog` returns `setAside` and `mergeLogs` returns `refused` — each row an

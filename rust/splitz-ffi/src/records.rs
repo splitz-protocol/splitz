@@ -186,6 +186,104 @@ pub struct RequestPayment {
     pub zatoshi: i64,
 }
 
+/// One bill's entries, as a wallet holds them, named by the bill they belong
+/// to.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct HeldBill {
+    pub bill_id: String,
+    pub entries: Vec<String>,
+}
+
+/// Money a wallet received in one transaction: the sum of that transaction's
+/// outputs to its account, in zatoshi.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct IncomingTransaction {
+    pub txid: String,
+    pub zatoshi: i64,
+}
+
+/// A payment record to this device, and the transaction it names (§14.7).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct Arrival {
+    pub bill_id: String,
+    /// What the payee is shown before confirming (§14.2).
+    pub payment: PaymentRecord,
+    /// The digest a confirmation of `payment` carries as `record` (§10.5).
+    pub record: String,
+    /// The transaction, lower-cased.
+    pub txid: String,
+}
+
+/// Records to this device whose transaction arrived (§14.7). Only `arrived`
+/// may be confirmed, with `walletReceived`, once the payee has been shown it.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct Arrivals {
+    pub arrived: Vec<Arrival>,
+    /// Their transaction arrived with less ZEC than they state.
+    pub short: Vec<Arrival>,
+    /// They state no ZEC, so nothing can be checked.
+    pub unstated: Vec<Arrival>,
+}
+
+/// What this device and one other participant owe each other in one
+/// currency, across every bill that names both.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct Standing {
+    /// The other participant. One person is one id across bills only when
+    /// the id derives from their key (§10.7).
+    pub with_id: String,
+    pub currency: String,
+    /// What their settlement plans ask them to pay this device.
+    pub owed_to_me: i64,
+    /// What the plans ask this device to pay them.
+    pub owed_by_me: i64,
+    /// Recorded to them by this device, not yet confirmed; still owed.
+    pub sent_awaiting: i64,
+    /// Recorded to this device by them, not yet confirmed.
+    pub received_awaiting: i64,
+    pub bill_ids: Vec<String>,
+}
+
+/// Standings across bills, and the bills left out whole with the §12 code
+/// that kept each out.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct Totals {
+    pub standings: Vec<Standing>,
+    pub uncounted: HashMap<String, String>,
+}
+
+/// What a Zcash address is (§8.6).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct ParsedAddress {
+    /// `main`, `test` or `regtest`. A transparent regtest address answers
+    /// `test`: the two share lead bytes.
+    pub network: String,
+    /// `p2pkh`, `p2sh`, `tex`, `sapling` or `unified`.
+    pub kind: String,
+    /// A Unified Address's typecodes in encoding order; empty otherwise.
+    pub receivers: Vec<u32>,
+    /// Whether a memo reaches the recipient.
+    pub can_receive_memo: bool,
+}
+
+/// One payment a wallet is about to make, as its own ZIP 321 reader produced
+/// it: an address and an amount.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct ProposedOutput {
+    pub address: String,
+    pub zatoshi: i64,
+}
+
+/// How the payments a wallet is about to sign differ from its request
+/// (§14.6). Sign only when both lists are empty.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct ProposalCheck {
+    /// Payments the request carries that nothing proposed matches.
+    pub missing: Vec<ProposedOutput>,
+    /// Proposed payments the request does not carry.
+    pub unexpected: Vec<ProposedOutput>,
+}
+
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Obligation {
     /// None when nothing could be carried.

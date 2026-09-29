@@ -69,6 +69,16 @@ fn answer(op: &Value) -> Value {
             )))
         }),
 
+        "address" => attempt(|| {
+            let a = splitz_core::parse_address(op["text"].as_str().unwrap_or(""))?;
+            Ok(json!({
+                "network": a.network.as_str(),
+                "kind": a.kind.as_str(),
+                "receivers": a.receivers,
+                "canReceiveMemo": a.can_receive_memo,
+            }))
+        }),
+
         "instant" => attempt(|| {
             Ok(json!(splitz_core::instant::canonical_instant(
                 op["text"].as_str().unwrap_or("")

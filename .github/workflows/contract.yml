@@ -1,6 +1,7 @@
 name: contract
 
-# The swap client against the live 1Click API, once a day and on demand.
+# The swap client against the live 1Click API, and the price source against
+# the live CoinGecko answer, once a day and on demand.
 #
 # Everything in ci.yml runs offline, against the provider's schema and answers
 # pinned in tools/contracts/. This is what notices when the provider moves:
@@ -29,3 +30,13 @@ jobs:
         working-directory: splitz_host
       - run: dart run tool/oneclick_live.dart check
         working-directory: splitz_host
+
+  # The price source against the live CoinGecko answer: the same reading the
+  # host packages do, applied to what the service says now. A red run means
+  # re-capture tools/contracts/fixtures/coingecko_price.json, regenerate the
+  # cases with tools/contracts/coingecko.py, and fix what the tests then say.
+  coingecko:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/contracts/coingecko.py --check

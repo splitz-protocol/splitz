@@ -22,6 +22,7 @@ GENERATE = HERE / "generate.py"
 EXPECTED_KINDS = {
     "allocate", "split", "rate", "amount", "qchar", "instant",
     "invite", "canonical", "billid", "request", "fold", "merge", "property",
+    "address",
 }
 
 
@@ -141,6 +142,34 @@ def main():
             trivial.append(o["id"])
     check("no property is true for free", not trivial,
           f"{len(trivial)} of {len(props)} operations share no contested id")
+
+    # §8.6: every kind accepted, and refusals beside them. A lane whose
+    # damage always breaks the checksum compares refusals and nothing else.
+    sys.path.insert(0, str(HERE.parents[1] / "tools" / "corpus"))
+    import _spec
+    answers = []
+    for o in ops:
+        if o["op"] == "address":
+            try:
+                answers.append(_spec.parse_address(o["text"])["kind"])
+            except _spec.Refused:
+                answers.append(None)
+    check("reaches every address kind",
+          {"p2pkh", "p2sh", "tex", "sapling", "unified"} <= set(answers),
+          f"{sorted(set(map(str, answers)))}")
+    check("reaches a refused address", None in answers)
+    memo_to = set()
+    for o in ops:
+        if o["op"] != "request":
+            continue
+        for p in o["payments"]:
+            if p.get("memo") is not None:
+                try:
+                    memo_to.add(_spec.parse_address(p["address"])["canReceiveMemo"])
+                except _spec.Refused:
+                    memo_to.add(None)
+    check("reaches a memo to each answer §8.6 gives", memo_to == {True, False, None},
+          f"{memo_to}")
 
     instants = {o.get("text", "") for o in ops if o["op"] == "instant"}
     check("reaches a leap second",

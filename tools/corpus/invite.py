@@ -2,7 +2,7 @@
 """Generates vectors/invite.json from SPEC.md section 11.1."""
 import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import parse_invite, render_invite, Refused, MAX_BILL_ID
+from _spec import parse_invite, render_invite, render_invite_link, Refused, MAX_BILL_ID
 
 K = "k" * 43
 T = "Ab3-_xyz"
@@ -75,6 +75,33 @@ DECODE = [
      f"splitz://join?v=1&b={T}&k={K}&x={'9' * 5000}"),
     ("a_version_of_five_thousand_digits",
      f"splitz://join?v={'9' * 5000}&b={T}&k={K}"),
+
+    # an https link carries the invite as its fragment
+    ("a_link", f"https://pay.example/j#splitz://join?v=1&b={T}&k={K}"),
+    ("a_link_with_a_name_and_an_expiry",
+     f"https://pay.example/j?ref=1#splitz://join?v=1&b={T}&k={K}&n=Ana&x=1793000000"),
+    ("a_link_padded_at_the_ends", f"  https://pay.example/j#splitz://join?v=1&b={T}&k={K}\n"),
+    ("a_link_with_no_fragment", f"https://pay.example/j?v=1&b={T}&k={K}"),
+    ("a_link_whose_fragment_is_not_an_invite", "https://pay.example/j#top"),
+    ("a_link_whose_fragment_is_padded", f"https://pay.example/j# splitz://join?v=1&b={T}&k={K}"),
+    ("the_link_scheme_is_case_sensitive", f"HTTPS://pay.example/j#splitz://join?v=1&b={T}&k={K}"),
+    ("a_plain_http_link", f"http://pay.example/j#splitz://join?v=1&b={T}&k={K}"),
+    ("a_link_to_an_invite_from_the_future", f"https://pay.example/j#splitz://join?v=2&b={T}&k={K}"),
+    ("a_link_to_an_invite_with_no_key", f"https://pay.example/j#splitz://join?v=1&b={T}"),
+    ("the_first_hash_starts_the_fragment",
+     f"https://pay.example/j#x#splitz://join?v=1&b={T}&k={K}"),
+]
+
+LINKS = [
+    ("link_a_plain_invite", "https://pay.example/j", T, K, "", None),
+    ("link_with_a_name_and_an_expiry", "https://pay.example/j?ref=1", T, K, "Ana", 1793000000),
+    ("link_refuses_plain_http", "http://pay.example/j", T, K, "", None),
+    ("link_refuses_a_base_with_a_fragment", "https://pay.example/j#x", T, K, "", None),
+    ("link_refuses_a_base_with_a_space", "https://pay.example/a b", T, K, "", None),
+    ("link_refuses_a_base_with_no_host", "https://", T, K, "", None),
+    ("link_refuses_a_base_that_is_only_a_path", "https:///j", T, K, "", None),
+    ("link_refuses_a_non_ascii_base", "https://pay.example/dîner", T, K, "", None),
+    ("link_refuses_what_an_invite_refuses", "https://pay.example/j", T, "kkkkk", "", None),
 ]
 
 ENCODE = [
@@ -82,6 +109,9 @@ ENCODE = [
     ("encode_refuses_a_negative_expiry", T, K, "", -1),
     ("encode_with_a_name",      T, K, "Zcon7", None),
     ("encode_escapes_the_name", T, K, "Zcon7 dîner ✨", None),
+    # §11.1 leaves only `!*'()` literal beyond the unreserved set; ZIP 321's
+    # qchar leaves more, and a name is where they meet.
+    ("encode_escapes_what_a_payment_request_leaves", T, K, "a+b$c,d;e:f@g", None),
     ("encode_with_an_expiry",   T, K, "", 1793000000),
     ("encode_refuses_a_key_that_does_not_decode", T, "kkkkk", "", None),
 ]
@@ -113,6 +143,22 @@ def main():
             f"{name}: round trip lost {back}"
         assert back.get("expiry") == x, f"{name}: round trip lost the expiry"
         case["expect"] = uri
+        out.append(case)
+
+    for name, base, t, k, n, x in LINKS:
+        case = {"name": name, "base": base, "invite": {"billId": t, "key": k, "name": n}}
+        if x is not None:
+            case["invite"]["expiry"] = x
+        try:
+            link = render_invite_link(base, t, k, n, x)
+        except Refused as r:
+            case["error"] = r.code
+            out.append(case)
+            continue
+        back = parse_invite(link)
+        assert back["billId"] == t and back["key"] == k and back["name"] == n, name
+        assert back.get("expiry") == x, name
+        case["expect"] = link
         out.append(case)
 
     doc = {"description": "Invite URIs. SPEC.md section 11.1.",

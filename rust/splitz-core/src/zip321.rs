@@ -3,13 +3,14 @@
 //! One canonical rendering, because two wallets that render the same
 //! obligation differently cannot check each other.
 
+use crate::address::parse_address;
 use crate::error::{code, Result, SplitError};
 use crate::money::is_currency;
 use crate::rate::ZATOSHI_PER_ZEC;
 
 /// Whether `address` is one §8.3 admits: non-empty and ASCII alphanumeric.
 ///
-/// Syntax only. A wallet still puts every address through its own decoder.
+/// Syntax only; [`crate::parse_address`] decodes one (§8.6).
 pub fn is_zip321_address(address: &str) -> bool {
     !address.is_empty() && address.bytes().all(|b| b.is_ascii_alphanumeric())
 }
@@ -235,6 +236,14 @@ pub fn render_uri(payments: &[Zip321Payment], include_fiat: bool) -> Result<Stri
                 "The ZIP 321 grammar admits only alphanumeric addresses",
             ));
         }
+        // A memo goes only to an address that decodes (§8.6) and can
+        // receive one; ZIP 321 refuses the whole request otherwise.
+        if p.memo.is_some() && !parse_address(&p.address)?.can_receive_memo {
+            return Err(SplitError::new(
+                code::ZIP321_MEMO_UNDELIVERABLE,
+                "A memo cannot be delivered to a transparent or TEX address",
+            ));
+        }
     }
 
     let single = payments.len() == 1;
@@ -277,4 +286,160 @@ pub fn render_uri(payments: &[Zip321Payment], include_fiat: bool) -> Result<Stri
         "zcash:?".to_owned()
     };
     Ok(head + &parts.join("&"))
+}
+
+/// The parameters §8.2 writes, and nothing else.
+const REQUEST_PARAMS: [&str; 6] = ["address", "amount", "fiat", "memo", "label", "message"];
+
+fn not_canonical(why: impl Into<String>) -> SplitError {
+    SplitError::new(code::ZIP321_NOT_CANONICAL, why)
+}
+
+/// Reads back a request in exactly the form [`render_uri`] writes (§8.7).
+///
+/// Not a general ZIP 321 reader: every URI this protocol hands a wallet is one
+/// [`render_uri`] produced, so the payments read are rendered again and the
+/// result must equal `uri` byte for byte. Anything else — another parameter,
+/// another order, another spelling of one amount — is refused with
+/// `zip321_not_canonical`, as is anything that does not read at all. A value
+/// [`render_uri`] itself refuses is refused with that code.
+pub fn read_request(uri: &str) -> Result<Vec<Zip321Payment>> {
+    let rest = uri
+        .strip_prefix("zcash:")
+        .ok_or_else(|| not_canonical("Not a zcash: URI"))?;
+    let (path_address, query) = rest
+        .split_once('?')
+        .ok_or_else(|| not_canonical("A request carries a query"))?;
+
+    let mut by_index: std::collections::BTreeMap<usize, Vec<(&str, &str)>> =
+        std::collections::BTreeMap::new();
+    for part in query.split('&') {
+        let (key, value) = match part.find('=') {
+            Some(eq) if eq > 0 => (&part[..eq], &part[eq + 1..]),
+            _ => return Err(not_canonical(format!("Not a parameter: \"{part}\""))),
+        };
+        let (name, index) = match key.split_once('.') {
+            None => (key, 0),
+            Some((name, digits)) => {
+                // `.0` is not written, and an index has no leading zero (§8.2).
+                let valid = (1..=4).contains(&digits.len())
+                    && digits.bytes().all(|b| b.is_ascii_digit())
+                    && !digits.starts_with('0');
+                if !valid {
+                    return Err(not_canonical(format!(
+                        "Not a parameter index: \"{digits}\""
+                    )));
+                }
+                (name, digits.parse::<usize>().expect("four digits"))
+            }
+        };
+        if !REQUEST_PARAMS.contains(&name) {
+            return Err(not_canonical(format!(
+                "Not a parameter §8.2 writes: \"{name}\""
+            )));
+        }
+        let params = by_index.entry(index).or_default();
+        if params.iter().any(|(n, _)| *n == name) {
+            return Err(not_canonical(format!("\"{key}\" appears twice")));
+        }
+        params.push((name, value));
+    }
+
+    let mut payments = Vec::with_capacity(by_index.len());
+    for i in 0..by_index.len() {
+        let params = by_index
+            .get(&i)
+            .ok_or_else(|| not_canonical(format!("Payment {i} is missing")))?;
+        let get = |n: &str| params.iter().find(|(k, _)| *k == n).map(|(_, v)| *v);
+        let address = if i == 0 && !path_address.is_empty() {
+            if get("address").is_some() {
+                return Err(not_canonical("The address is written twice"));
+            }
+            path_address
+        } else {
+            get("address").ok_or_else(|| not_canonical(format!("Payment {i} names no address")))?
+        };
+        let amount =
+            get("amount").ok_or_else(|| not_canonical(format!("Payment {i} has no amount")))?;
+        payments.push(Zip321Payment {
+            address: address.to_owned(),
+            zatoshi: read_amount(amount)?,
+            fiat: get("fiat").map(read_fiat).transpose()?,
+            memo: get("memo").map(read_memo).transpose()?,
+            label: get("label").map(unqchar).transpose()?,
+            message: get("message").map(unqchar).transpose()?,
+        });
+    }
+
+    let include_fiat = payments.iter().any(|p| p.fiat.is_some());
+    if render_uri(&payments, include_fiat)? != uri {
+        return Err(not_canonical("Not the form §8 writes"));
+    }
+    Ok(payments)
+}
+
+/// Decimal ZEC to zatoshi. The canonical spelling is enforced by the
+/// comparison [`read_request`] makes afterwards.
+fn read_amount(text: &str) -> Result<i64> {
+    let bad = || not_canonical(format!("Not an amount: \"{text}\""));
+    let (coins, zats) = match text.split_once('.') {
+        None => (text, ""),
+        Some((c, z)) if !z.is_empty() => (c, z),
+        Some(_) => return Err(bad()),
+    };
+    let digits =
+        |s: &str, max: usize| (1..=max).contains(&s.len()) && s.bytes().all(|b| b.is_ascii_digit());
+    if !digits(coins, 8) || !(zats.is_empty() || digits(zats, 8)) {
+        return Err(bad());
+    }
+    let coins: i64 = coins.parse().map_err(|_| bad())?;
+    let zats: i64 = format!("{zats:0<8}").parse().map_err(|_| bad())?;
+    Ok(coins * ZATOSHI_PER_ZEC + zats)
+}
+
+fn read_fiat(text: &str) -> Result<FiatPrice> {
+    let bad = || not_canonical(format!("Not a fiat price: \"{text}\""));
+    let (currency, count) = text.split_once(':').ok_or_else(bad)?;
+    let valid = currency.len() == 3
+        && currency.bytes().all(|b| b.is_ascii_uppercase())
+        && (1..=MAX_FIAT_DIGITS).contains(&count.len())
+        && count.bytes().all(|b| b.is_ascii_digit());
+    if !valid {
+        return Err(bad());
+    }
+    Ok(FiatPrice {
+        currency: currency.to_owned(),
+        minor_units: count.parse().map_err(|_| bad())?,
+    })
+}
+
+fn read_memo(text: &str) -> Result<Vec<u8>> {
+    unbase64url(text).ok_or_else(|| not_canonical(format!("Not unpadded base64url: \"{text}\"")))
+}
+
+/// Undoes [`qchar`]. Malformed escapes and bytes that are not UTF-8 are
+/// refused.
+fn unqchar(text: &str) -> Result<String> {
+    let raw = text.as_bytes();
+    let mut out = Vec::with_capacity(raw.len());
+    let mut i = 0;
+    while i < raw.len() {
+        match raw[i] {
+            b'%' => {
+                let pair = raw
+                    .get(i + 1..i + 3)
+                    .filter(|p| p.iter().all(u8::is_ascii_hexdigit))
+                    .ok_or_else(|| not_canonical("Not an escape"))?;
+                let hex = std::str::from_utf8(pair).expect("hex digits are ASCII");
+                out.push(u8::from_str_radix(hex, 16).expect("two hex digits"));
+                i += 3;
+            }
+            b if b < 0x80 => {
+                out.push(b);
+                i += 1;
+            }
+            _ => return Err(not_canonical("A raw non-ASCII character")),
+        }
+    }
+    String::from_utf8(out).map_err(|_| not_canonical("Escapes that are not UTF-8"))
 }

@@ -13,6 +13,7 @@ use crate::sha256::{sha256, sha256_hex};
 use crate::zip321::{base64url, is_b64url, unbase64url};
 
 const PREFIX: &str = "splitz://join";
+const LINK_SCHEME: &str = "https://";
 
 /// The invite format version this crate writes and the highest it reads.
 pub const INVITE_VERSION: i64 = 1;
@@ -89,7 +90,18 @@ fn escape(text: &str) -> String {
 
 /// Parses an invite.
 pub fn parse_invite(text: &str) -> Result<Invite> {
-    let s = strip_scan_padding(text);
+    let mut s = strip_scan_padding(text);
+
+    // An https link carries the invite as its fragment, whole (§11.1).
+    if s.starts_with(LINK_SCHEME) {
+        let hash = s.find('#').ok_or_else(|| {
+            SplitError::new(
+                code::INVITE_NOT_AN_INVITE,
+                format!("A link with no invite: \"{text}\""),
+            )
+        })?;
+        s = &s[hash + 1..];
+    }
 
     // The scheme and host are matched case-sensitively.
     let rest = s.strip_prefix(PREFIX).ok_or_else(|| {
@@ -221,6 +233,42 @@ pub fn parse_invite(text: &str) -> Result<Invite> {
 /// An encoder refuses what [`parse_invite`] refuses: a bound enforced only on
 /// decode lets a caller build a URI no reader accepts, and the caller learns
 /// of it from somebody else's scanner.
+/// Renders `invite` as an https link: `base`, a `#`, and the invite URI
+/// (§11.1).
+///
+/// The invite rides in the fragment, which a browser never sends to `base`'s
+/// host, and a chat app shows an https link as one a person can tap. `base` is
+/// `https://`, then at least one character that is not `/`, and nothing but
+/// printable ASCII — no space and no `#` — or it is refused with
+/// `invite_bad_link`.
+pub fn render_invite_link(invite: &Invite, base: &str) -> Result<String> {
+    let valid = base.strip_prefix(LINK_SCHEME).is_some_and(|rest| {
+        !rest.is_empty()
+            && !rest.starts_with('/')
+            && rest
+                .bytes()
+                .all(|b| (b'!'..=b'~').contains(&b) && b != b'#')
+    });
+    if !valid {
+        return Err(SplitError::new(
+            code::INVITE_BAD_LINK,
+            format!("Not a base for an invite link: \"{base}\""),
+        ));
+    }
+    Ok(format!("{base}#{}", render_invite(invite)?))
+}
+
+/// Whether `invite` is past the expiry its sender wrote, at
+/// `now_unix_seconds`.
+///
+/// A hint to show, not a refusal (§11.1): `x` is unauthenticated, and removing
+/// it yields an invite to the same bill. Compared in whole seconds, because
+/// `x` may be any of nineteen digits and scaling it to milliseconds would
+/// overflow. An invite with no expiry never expires.
+pub fn is_invite_expired(invite: &Invite, now_unix_seconds: i64) -> bool {
+    invite.expiry.is_some_and(|x| x < now_unix_seconds)
+}
+
 pub fn render_invite(invite: &Invite) -> Result<String> {
     if let Some(x) = invite.expiry {
         if x < 0 {

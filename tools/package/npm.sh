@@ -90,6 +90,17 @@ rm -rf "$out"
 (cd "$root/rust" && "$generator" generate --out-dir "$out" \
    --package-name splitz-ffi --bundled-prebuilds "$library")
 
+# The §15.5 relay client, re-exported from the entry point so
+# `import { SplitzRelay } from "splitz-ffi"` reaches it beside the binding.
+cp "$root/tools/package/relay/splitz_relay.js" "$root/tools/package/relay/splitz_relay.d.ts" "$out/"
+for entry in index.js index.d.ts; do
+  if [ ! -f "$out/$entry" ]; then
+    echo "the generator wrote no $entry to re-export the relay client from" >&2
+    exit 1
+  fi
+  printf '\nexport * from "./splitz_relay.js";\n' >>"$out/$entry"
+done
+
 mkdir -p "$out/prebuilds/$target"
 cp "$library" "$out/prebuilds/$target/$(basename "$library")"
 

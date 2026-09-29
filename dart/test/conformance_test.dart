@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:splitz_core/splitz_core.dart';
+import 'package:splitz_core/host.dart' show ProposedOutput, checkProposal;
 import 'package:test/test.dart';
 
 /// The corpus lives at the repository root, one level above this package, so a
@@ -349,6 +350,45 @@ void main() {
     });
   });
 
+  runCases('request.json', (c, produce) {
+    final uri = c['uri'] as String;
+    if (c.containsKey('outputs')) {
+      final outputs = [
+        for (final o in (c['outputs'] as List).cast<Map<String, dynamic>>())
+          ProposedOutput(o['address'] as String, o['zatoshi'] as int),
+      ];
+      final check = checkProposal(uri, outputs);
+      produce({
+        'missing': [
+          for (final p in check.missing)
+            {'address': p.address, 'zatoshi': p.zatoshi},
+        ],
+        'unexpected': [
+          for (final o in check.unexpected)
+            {'address': o.address, 'zatoshi': o.zatoshi},
+        ],
+      });
+      return;
+    }
+    produce([
+      for (final p in readRequest(uri))
+        {
+          'address': p.address,
+          'zatoshi': p.zatoshi,
+          if (p.fiat != null)
+            'fiat': '${p.fiat!.currency}:${p.fiat!.minorUnits}',
+          if (p.memo != null)
+            'memo': base64UrlEncode(p.memo!).replaceAll('=', ''),
+          if (p.label != null) 'label': p.label,
+          if (p.message != null) 'message': p.message,
+        },
+    ]);
+  });
+
+  runCases('messages.json', (c, produce) {
+    produce(describeCode(c['code'] as String));
+  });
+
   runCases('invite.json', (c, produce) {
     if (c.containsKey('uri')) {
       final invite = parseInvite(c['uri'] as String);
@@ -361,12 +401,15 @@ void main() {
       });
     } else {
       final raw = (c['invite'] as Map).cast<String, dynamic>();
-      produce(renderInvite(Invite(
+      final invite = Invite(
         billId: raw['billId'] as String,
         key: raw['key'] as String,
         name: raw['name'] as String? ?? '',
         expiry: raw['expiry'] as int?,
-      )));
+      );
+      final base = c['base'] as String?;
+      produce(
+          base == null ? renderInvite(invite) : renderInviteLink(invite, base));
     }
   });
 
@@ -472,6 +515,16 @@ void main() {
     } else {
       produce(uri);
     }
+  });
+
+  runCases('address.json', (c, produce) {
+    final a = parseAddress(c['address'] as String);
+    produce({
+      'network': a.network.name,
+      'kind': a.kind.name,
+      'receivers': a.receivers,
+      'canReceiveMemo': a.canReceiveMemo,
+    });
   });
 
   runCases('rate.json', (c, produce) {

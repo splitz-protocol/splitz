@@ -55,6 +55,17 @@ Map<String, Object?> answer(Map<String, dynamic> op) {
     case 'qchar':
       return attempt(() => qchar(op['text'] as String));
 
+    case 'address':
+      return attempt(() {
+        final a = parseAddress(op['text'] as String);
+        return {
+          'network': a.network.name,
+          'kind': a.kind.name,
+          'receivers': a.receivers,
+          'canReceiveMemo': a.canReceiveMemo,
+        };
+      });
+
     case 'instant':
       return attempt(() => canonicalInstant(op['text'] as String));
 

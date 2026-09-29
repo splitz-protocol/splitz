@@ -415,3 +415,296 @@ fn corpus_addresses_are_real_unified_addresses() {
         addresses.len()
     );
 }
+
+/// Section 8.7 reads back only what section 8.2 writes. Every request it
+/// accepts must mean the same payments to librustzcash: the same recipients,
+/// amounts, labels, messages and memos, in the same order.
+#[test]
+fn requests_read_back_as_librustzcash_reads_them() {
+    require_corpus();
+    let doc = load("request.json");
+    let mut checked = 0;
+    let mut failures = Vec::new();
+    for case in doc["cases"].as_array().expect("cases is a list") {
+        let name = case["name"].as_str().unwrap_or("<unnamed>");
+        let (Some(uri), Some(want)) = (case["uri"].as_str(), case["expect"].as_array()) else {
+            continue;
+        };
+        let parsed = match TransactionRequest::from_uri(uri) {
+            Ok(r) => r,
+            Err(e) => {
+                failures.push(format!("{name}: librustzcash refuses it: {e:?}"));
+                continue;
+            }
+        };
+        let got: Vec<Value> = parsed
+            .payments()
+            .values()
+            .map(|p: &Payment| {
+                let mut o = serde_json::Map::new();
+                o.insert("address".into(), p.recipient_address().encode().into());
+                o.insert(
+                    "zatoshi".into(),
+                    (p.amount().map(u64::from).unwrap_or(0) as i64).into(),
+                );
+                if let Some(m) = p.memo() {
+                    let raw = m.as_slice();
+                    let end = raw.iter().rposition(|b| *b != 0).map_or(0, |i| i + 1);
+                    o.insert(
+                        "memo".into(),
+                        splitz_core::zip321::base64url(&raw[..end]).into(),
+                    );
+                }
+                if let Some(l) = p.label() {
+                    o.insert("label".into(), l.clone().into());
+                }
+                if let Some(m) = p.message() {
+                    o.insert("message".into(), m.clone().into());
+                }
+                Value::Object(o)
+            })
+            .collect();
+        // `fiat` is this protocol's parameter; librustzcash ignores it.
+        let want: Vec<Value> = want
+            .iter()
+            .map(|p| {
+                let mut p = p.as_object().expect("a payment").clone();
+                p.remove("fiat");
+                Value::Object(p)
+            })
+            .collect();
+        if got != want {
+            failures.push(format!(
+                "{name}: librustzcash reads {got:?}, the corpus {want:?}"
+            ));
+            continue;
+        }
+        checked += 1;
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert!(
+        checked >= 8,
+        "only {checked} requests were checked against the oracle"
+    );
+    println!("{checked} requests read back as librustzcash reads them");
+}
+
+/// What `zcash_address` says an address is, in the corpus's own terms.
+struct Oracle(Value);
+
+impl zcash_address::TryFromAddress for Oracle {
+    type Error = ();
+
+    fn try_from_sprout(
+        net: zcash_protocol::consensus::NetworkType,
+        _: [u8; 64],
+    ) -> Result<Self, zcash_address::ConversionError<()>> {
+        Ok(Oracle(oracle_answer(net, "sprout", vec![], true)))
+    }
+
+    fn try_from_sapling(
+        net: zcash_protocol::consensus::NetworkType,
+        _: [u8; 43],
+    ) -> Result<Self, zcash_address::ConversionError<()>> {
+        Ok(Oracle(oracle_answer(net, "sapling", vec![], true)))
+    }
+
+    fn try_from_unified(
+        net: zcash_protocol::consensus::NetworkType,
+        ua: zcash_address::unified::Address,
+    ) -> Result<Self, zcash_address::ConversionError<()>> {
+        use zcash_address::unified::{Container, Receiver};
+        let codes = ua
+            .items_as_parsed()
+            .iter()
+            .map(|r| match r {
+                Receiver::P2pkh(_) => 0,
+                Receiver::P2sh(_) => 1,
+                Receiver::Sapling(_) => 2,
+                Receiver::Orchard(_) => 3,
+                Receiver::Unknown { typecode, .. } => *typecode,
+            })
+            .collect();
+        Ok(Oracle(oracle_answer(
+            net,
+            "unified",
+            codes,
+            ua.can_receive_memo(),
+        )))
+    }
+
+    fn try_from_transparent_p2pkh(
+        net: zcash_protocol::consensus::NetworkType,
+        _: [u8; 20],
+    ) -> Result<Self, zcash_address::ConversionError<()>> {
+        Ok(Oracle(oracle_answer(net, "p2pkh", vec![], false)))
+    }
+
+    fn try_from_transparent_p2sh(
+        net: zcash_protocol::consensus::NetworkType,
+        _: [u8; 20],
+    ) -> Result<Self, zcash_address::ConversionError<()>> {
+        Ok(Oracle(oracle_answer(net, "p2sh", vec![], false)))
+    }
+
+    fn try_from_tex(
+        net: zcash_protocol::consensus::NetworkType,
+        _: [u8; 20],
+    ) -> Result<Self, zcash_address::ConversionError<()>> {
+        Ok(Oracle(oracle_answer(net, "tex", vec![], false)))
+    }
+}
+
+fn oracle_answer(
+    net: zcash_protocol::consensus::NetworkType,
+    kind: &str,
+    receivers: Vec<u32>,
+    memo: bool,
+) -> Value {
+    use zcash_protocol::consensus::NetworkType;
+    let network = match net {
+        NetworkType::Main => "main",
+        NetworkType::Test => "test",
+        NetworkType::Regtest => "regtest",
+    };
+    serde_json::json!({
+        "network": network,
+        "kind": kind,
+        "receivers": receivers,
+        "canReceiveMemo": memo,
+    })
+}
+
+/// Every case in `address.json` against `zcash_address`, the decoder
+/// librustzcash wallets use, written independently of this crate.
+///
+/// Where §8.6 is stricter than that crate, the case is named here with the
+/// rule that separates them, and the test asserts the crate really does
+/// accept it: an entry that stops diverging fails rather than lingering.
+#[test]
+fn addresses_agree_with_zcash_address() {
+    require_corpus();
+    // Case name -> the §8.6 rule `zcash_address` 0.13 does not apply.
+    const STRICTER: &[(&str, &str)] = &[
+        (
+            "a_leading_space",
+            "the text is taken exactly; nothing is trimmed",
+        ),
+        (
+            "a_trailing_newline",
+            "the text is taken exactly; nothing is trimmed",
+        ),
+        (
+            "sapling_padding_bits_not_zero",
+            "ZIP 173: leftover bits are zero",
+        ),
+        (
+            "unified_padding_bits_not_zero",
+            "ZIP 173: leftover bits are zero",
+        ),
+        (
+            "sapling_with_a_whole_extra_group",
+            "ZIP 173: at most four leftover bits",
+        ),
+        (
+            "unified_with_only_an_unknown_typecode",
+            "ZIP 316: a revision 0 UA carries typecode 0x02 or 0x03",
+        ),
+        (
+            "unified_with_p2pkh_and_an_unknown_typecode",
+            "ZIP 316: a revision 0 UA carries typecode 0x02 or 0x03",
+        ),
+        (
+            "unified_with_a_must_understand_typecode",
+            "ZIP 316: a revision 0 UA carries no typecode in 0xE0..=0xFC",
+        ),
+        (
+            "unified_with_the_last_must_understand_typecode",
+            "ZIP 316: a revision 0 UA carries no typecode in 0xE0..=0xFC",
+        ),
+        ("a_sprout_address_main", "ZIP 211: Sprout receives no funds"),
+        ("a_sprout_address_test", "ZIP 211: Sprout receives no funds"),
+    ];
+
+    let doc = load("address.json");
+    let cases = doc["cases"].as_array().expect("cases is a list");
+    let mut failures = Vec::new();
+    let mut agreed = 0;
+    for case in cases {
+        let name = case["name"].as_str().unwrap_or("<unnamed>");
+        let text = case["address"].as_str().expect("address is text");
+        let oracle = zcash_address::ZcashAddress::try_from_encoded(text)
+            .ok()
+            .map(|a| a.convert::<Oracle>().expect("every kind converts").0);
+        let stricter = STRICTER.iter().find(|(n, _)| *n == name);
+        match (case.get("expect"), oracle, stricter) {
+            (Some(want), Some(got), None) if *want == got => agreed += 1,
+            (None, None, None) => agreed += 1,
+            (None, Some(_), Some(_)) => {}
+            (_, got, Some((_, rule))) => failures.push(format!(
+                "{name}: listed as stricter ({rule}) but zcash_address answers {got:?}"
+            )),
+            (want, got, None) => failures.push(format!(
+                "{name}: corpus {}, zcash_address {got:?}",
+                want.map_or("refuses".to_owned(), Value::to_string)
+            )),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert_eq!(agreed + STRICTER.len(), cases.len());
+    println!(
+        "{agreed} of {} address cases agree with zcash_address; {} are refused by the stricter rules of §8.6",
+        cases.len(),
+        STRICTER.len()
+    );
+}
+
+/// §8.3 refuses a memo §8.6 says cannot be delivered, and so does
+/// librustzcash: a case the corpus refuses with `zip321_memo_undeliverable`
+/// holds a payment `zip321::Payment::new` refuses with `TransparentMemo`, and
+/// no other case does.
+#[test]
+fn undeliverable_memos_are_the_ones_librustzcash_refuses() {
+    require_corpus();
+    let doc = load("zip321.json");
+    let (mut refused, mut built) = (0, 0);
+    let mut failures = Vec::new();
+    for case in doc["cases"].as_array().expect("cases is a list") {
+        let name = case["name"].as_str().unwrap_or("<unnamed>");
+        let ours = case["error"].as_str() == Some("zip321_memo_undeliverable");
+        let mut theirs = false;
+        for raw in case["payments"].as_array().cloned().unwrap_or_default() {
+            let Some(memo) = raw["memo"].as_str() else {
+                continue;
+            };
+            let Ok(address) = raw["address"]
+                .as_str()
+                .unwrap_or_default()
+                .parse::<zcash_address::ZcashAddress>()
+            else {
+                continue;
+            };
+            let memo = zcash_protocol::memo::MemoBytes::from_bytes(memo.as_bytes()).ok();
+            let amount = zcash_protocol::value::Zatoshis::from_u64(7004).ok();
+            match Payment::new(address, amount, memo, None, None, vec![]) {
+                Err(zip321::PaymentError::TransparentMemo) => {
+                    refused += 1;
+                    theirs = true;
+                }
+                Ok(_) => built += 1,
+                Err(e) => failures.push(format!("{name}: {e}")),
+            }
+        }
+        if ours != theirs {
+            failures.push(format!(
+                "{name}: memo_undeliverable here is {ours}, TransparentMemo there is {theirs}"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    assert!(
+        refused >= 4 && built >= 3,
+        "only {refused} refused and {built} built; the lane is not reaching the rule"
+    );
+    println!("{refused} memos librustzcash refuses are refused here; {built} it builds are built");
+}

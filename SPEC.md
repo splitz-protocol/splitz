@@ -573,9 +573,11 @@ implementations' output comparable byte for byte.
 
 - `memo` is unpadded base64url. The decoded memo MUST be at most **512** bytes
   (`zip321_memo_too_large`). ZIP 321 requires the whole URI to be refused when
-  a memo shares a parameter index with a transparent address; this protocol
-  does not parse addresses, so an implementation MUST NOT attach a memo to a
-  recipient it has not confirmed can receive one.
+  a memo shares a parameter index with a transparent address, which takes the
+  unrelated shielded outputs with it. A payment carrying a memo — an empty one
+  included — MUST therefore name an address §8.6 accepts (`address_invalid`)
+  and whose answer says a memo can be delivered to it
+  (`zip321_memo_undeliverable`). A payment carrying no memo is not decoded.
 
 - An address is written verbatim. It MUST be present and non-empty
   (`zip321_no_address`) and **ASCII alphanumeric** — `A`–`Z`, `a`–`z`, `0`–`9`
@@ -583,15 +585,14 @@ implementations' output comparable byte for byte.
   (`zip321_bad_address`): that grammar reads
   `zcashaddress = 1*( ALPHA / DIGIT )`, and RFC 3986's `ALPHA` and `DIGIT` are
   ASCII. A Unicode-aware test is a different rule: it admits U+00E9 and
-  U+FF12, which are letters and digits and are not in the grammar. **This is a
-  syntactic check, not validation:** a wallet MUST put every address through
-  its own decoder — **ZIP 316** for a Unified Address, and the network's own
-  rules for the receivers inside it. This protocol never decodes one, so it
-  cannot tell a mainnet address from a testnet address, nor a Unified Address
-  from a string that merely looks like one.
+  U+FF12, which are letters and digits and are not in the grammar. **For a
+  payment with no memo this is a syntactic check, not validation:** §8.6
+  decodes an address, and a wallet MUST check that the network it answers is
+  the one it is transacting on.
 
-  **The address is checked before any other parameter of the same payment**, so
-  a payment invalid in two ways is refused with the same code everywhere.
+  **The address is checked before any other parameter of the same payment**,
+  the memo rule above included, so a payment invalid in two ways is refused
+  with the same code everywhere.
 
 - A `label` MUST be at most **96** bytes of UTF-8 once decoded, truncated if
   longer at the last Unicode scalar value that fits whole — never inside one
@@ -680,6 +681,99 @@ An implementation therefore reports, for one payer's obligation, three groups:
 the outputs the URI carries, the recipients it cannot carry and why, and the
 total each group accounts for. **A figure that prices the whole obligation MUST
 NOT be presented as what the URI sends.**
+
+### 8.6 Zcash addresses
+
+Given a string, an implementation answers four things or refuses with
+`address_invalid`:
+
+- `network`: `main`, `test` or `regtest`;
+- `kind`: `p2pkh`, `p2sh`, `tex`, `sapling` or `unified`;
+- `receivers`: for `unified`, the typecode of every item, in encoding order.
+  `0` is P2PKH, `1` P2SH, `2` Sapling and `3` Orchard; every other typecode is
+  kept by its number. Empty for every other kind;
+- `canReceiveMemo`: false for `p2pkh`, `p2sh` and `tex`; true for `sapling`;
+  for `unified`, true when `receivers` holds `2` or `3`. Every Unified Address
+  this section accepts holds one of them, so it is true for each.
+
+The string is taken exactly. Nothing is trimmed, and a string with any byte
+outside what the encoding it claims admits is refused.
+
+| kind | bytes | encoding | prefix: main / test / regtest |
+|---|---|---|---|
+| `p2pkh` | 20 | Base58Check | lead `1C B8` / `1D 25` / `1D 25` |
+| `p2sh` | 20 | Base58Check | lead `1C BD` / `1C BA` / `1C BA` |
+| `tex` | 20 | Bech32m | `tex` / `textest` / `texregtest` |
+| `sapling` | 43 | Bech32 | `zs` / `ztestsapling` / `zregtestsapling` |
+| `unified` | items | Bech32m over F4Jumble | `u` / `utest` / `uregtest` |
+
+Regtest shares testnet's Base58Check lead bytes, so a transparent address on
+either answers `test`. Every lead byte and prefix is zcash_protocol 0.10's
+(`constants/{mainnet,testnet,regtest}.rs`); ZIP 320 and ZIP 316 define the
+main and test prefixes of `tex` and `unified` the same way. Base58Check is the lead bytes, the 20-byte hash and four checksum bytes, the
+first four of SHA-256d over the rest; any other decoded length is refused.
+
+**Bech32 and Bech32m** (ZIP 173, BIP 350) are read in lower case only. ZIP 173
+has an encoder write lower case, and the decoder librustzcash wallets use
+refuses upper case, so an address accepted here in upper case could be written
+into a request a payer's wallet cannot read. The prefix is everything before
+the last `1`; the checksum MUST verify under the constant the kind requires —
+a Sapling address under Bech32m, or a TEX or Unified Address under Bech32, is
+refused. The 5-bit groups regroup into bytes, and the bits left over MUST
+number at most four and be zero. There is no length limit on a Unified
+Address.
+
+**A Unified Address** is ZIP 316 **revision 0**, the revision ZIP 316 marks
+active. Revision 1 is withdrawn and revision 2 is a draft; its `zu` and `tu`
+prefixes are not in the table and are refused. The decoded bytes MUST number
+48 to 4194368, the lengths F4Jumble⁻¹ accepts. After F4Jumble⁻¹ (BLAKE2b,
+personalized `UA_F4Jumble_H` and `UA_F4Jumble_G`, as ZIP 316 "Jumbling"
+defines it) the last 16 bytes MUST be the prefix zero-padded to 16; the rest
+is a sequence of items, each a typecode, a length and that many bytes. The
+typecode and the length are compactSize values in their shortest encoding,
+at most `0x2000000`. The address is refused when:
+
+- an item runs past the end;
+- a P2PKH or P2SH item is not 20 bytes, or a Sapling or Orchard item not 43;
+- the typecodes are not strictly ascending, which refuses a repeat and a
+  reordering alike;
+- it carries both P2PKH and P2SH;
+- it carries a typecode in `0xE0`–`0xFC`, which revision 0 forbids;
+- it carries neither Sapling nor Orchard. ZIP 316 requires a revision 0
+  address to carry typecode `0x02` or `0x03`, so an unknown typecode beside a
+  transparent one does not satisfy it.
+
+Sprout addresses are refused: ZIP 211 closed the Sprout pool to new funds.
+**This section checks encodings, not keys.** A receiver's bytes are counted,
+not decoded as a curve point; a wallet's own decoder does that when it builds
+the transaction.
+
+`vectors/address.json` carries every kind under every prefix in the table, the
+Unified Address test vectors of zcash-test-vectors, and every refusal above.
+
+### 8.7 Reading a request back
+
+A request this protocol wrote is read back by rendering what was read and
+comparing. Reading is structural: `zcash:`, an optional path address, a `?`,
+and `&`-separated parameters named `address`, `amount`, `fiat`, `memo`,
+`label` or `message`, each with the empty index or `.1` to `.9999` without a
+leading zero, each at most once per index, the indices running from the empty
+one without a gap. A path address stands for payment zero's `address`, which
+then MUST NOT also be written. `amount` is up to eight digits, optionally a
+period and one to eight digits; `fiat` is three upper-case letters, a colon
+and one to eighteen digits; `memo` is unpadded base64url whose bits end on a
+byte; `label` and `message` are percent-decoded, and a malformed escape, a raw
+non-ASCII character or bytes that are not UTF-8 do not read.
+
+The payments read are then rendered under §8.2, with `fiat` included when any
+payment carries one, and the result MUST equal the input byte for byte.
+Anything that does not read, and anything whose rendering differs, is refused
+with `zip321_not_canonical`; a value the rendering itself refuses is refused
+with that rendering's code.
+
+This is not a general ZIP 321 reader, and does not replace one. It exists so a
+host can hold the request it is about to send next to what the wallet made of
+it (§14.6).
 
 ## 9. The bill wire format
 
@@ -1895,6 +1989,21 @@ saw it has to move the bill to a new key, which this version does not specify.
 means "expired", and no reader compares it to a clock: a clock is not in this
 document's reach, the two devices' clocks disagree, and `at` is already
 whatever its author wrote. Honouring an expiry is the host's (§13).
+`isInviteExpired` / `is_invite_expired` answers the hint for a host that
+shows it: an invite is expired when it carries `x` and the host's clock, in
+whole Unix seconds, is past it. Seconds, because `x` may be any of nineteen
+digits and scaling it to milliseconds overflows.
+
+**An invite may travel as an https link.** `https://<rest>#<invite URI>`: the
+invite URI above, whole, as the fragment of a link whose `<rest>` the sharer
+chooses. A browser never sends a fragment to the link's host, so the key
+reaches nobody but whoever holds the link, and a chat app shows an https link
+as one a person can tap. After scan padding is stripped, a reader that meets
+`https://` — matched case-sensitively — takes everything after the first `#`
+and reads it under every rule above; a link with no `#` is
+`invite_not_an_invite`, and padding inside the fragment is content. An encoder
+refuses a `<rest>` that is empty, begins with `/`, or holds anything but
+printable ASCII (`!` to `~`) or a `#`, with `invite_bad_link`.
 
 ### 11.2 Scanned payloads
 
@@ -2093,16 +2202,23 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `bill_unknown_settlement_method`, `bill_unknown_payout_method`,
 `invite_not_an_invite`, `invite_missing_version`, `invite_future_version`,
 `invite_missing_bill_id`, `invite_bad_bill_id`, `invite_missing_key`,
-`invite_bad_expiry`, `payload_not_a_payload`, `payload_damaged`,
+`invite_bad_expiry`, `invite_bad_link`, `payload_not_a_payload`, `payload_damaged`,
 `payload_missing_body`, `payload_future_version`, `payload_too_large`,
 `sealed_malformed`, `sealed_future_version`, `zip321_no_payments`,
 `zip321_too_many_payments`, `zip321_amount_not_positive`,
 `zip321_amount_too_large`, `zip321_memo_too_large`, `zip321_bad_address`,
 `zip321_bad_currency_code`, `zip321_fiat_not_positive`,
-`zip321_fiat_too_many_digits`, `zip321_no_address`.
+`zip321_fiat_too_many_digits`, `zip321_no_address`,
+`zip321_not_canonical`, `zip321_memo_undeliverable`, `address_invalid`.
 
 **The code is part of the protocol; the message that accompanies it is prose
 and is not.** A user-facing string MUST be derived from the code.
+
+`vectors/messages.json` gives one plain-language sentence per code, which a
+host MAY show as it stands. Both implementations return it from
+`describeCode` / `describe_code`, and answer empty for a code they do not
+define rather than a generic sentence: a code from a newer version is itself
+something to tell a person.
 
 **Every code in this list MUST have at least one vector that produces it**, with
 one exception, named below. A refusal nothing exercises is either unreachable,
@@ -2131,12 +2247,10 @@ input at all is conformant without it.
 - **Transport.** §11.3 fixes what a sealed entry looks like and the channel it
   belongs to; moving blobs — over what, with what retries, stored for how long
   — is the wallet's. So is running the cipher §11.3 names.
-- **Address validation and network.** §8.3 checks only what the ZIP 321 grammar
-  admits. A wallet MUST decode every address itself — **ZIP 316** defines the
-  Unified Address format — and MUST check it is for the network it is
-  transacting on. The vectors carry real mainnet Unified Addresses precisely so
-  that a wallet running the corpus puts each one through its own decoder rather
-  than through filler that would never reach one.
+- **Which network a wallet transacts on.** §8.6 answers the network an address
+  belongs to; comparing it with the network the wallet is on is the wallet's,
+  and so is decoding a receiver's bytes as a key when it builds the
+  transaction.
 - **Transaction construction, fees, signing, broadcast.** §8's payment request
   is one input to that, and it is not the only shape a wallet may want: a
   partially-created transaction (PCZT) carries a transaction between a creator,
@@ -2157,11 +2271,6 @@ input at all is conformant without it.
   does not prevent it.
 - **Surfacing a changed pay-to address.** §10.3 records every one; a wallet
   MUST show them before settling.
-- **Not attaching a memo to a transparent recipient.** ZIP 321 requires a URI
-  carrying a memo at the same parameter index as a transparent address to be
-  refused in its entirety, which takes the unrelated shielded outputs with it.
-  This protocol does not parse addresses, so the rule cannot live in §8; a
-  wallet has a decoder and MUST spend it before setting a memo.
 - **Honouring an invite's expiry.** §11.1 fixes what `x` looks like and parses
   it; comparing it to a clock is the wallet's, along with which clock and what
   to do about the two devices disagreeing. There is no refusal code for an
@@ -2228,6 +2337,16 @@ Recording the third as paid settles a debt that nothing on chain settled.
 Retrying it pays the debt twice, and this protocol has no remedy for an
 overpayment.
 
+A host therefore writes a send down **before** calling its wallet, in storage
+that outlives the process, and refuses every further send from that bill while
+the note stands — including a second send started in the same process before
+the first note is written. A note that is there and will not read blocks
+exactly as a readable one does. When the wallet answers, the note goes if the
+send was refused, or if it reached the network and its records are on the
+bill; otherwise it stays, carrying the transaction id when the wallet named
+one, until a person says which way the send went. `PendingSends` implements
+this in both host packages.
+
 ### 14.4 A pending payment withholds the whole debt
 
 §10.5 moves a balance only on confirmation, so a debt this payer has already
@@ -2262,6 +2381,47 @@ A wallet computing them MUST distinguish three states: the peer holds
 everything; the peer is missing entries that fit; the peer is missing entries
 that do not. Reporting the third as the first tells somebody their bill is up
 to date while entries on it have never reached them.
+
+### 14.6 What is signed is what was shown
+
+A wallet reads a request with its own ZIP 321 reader, and a reader that keeps
+only the first of several payments — or drops one it does not understand —
+builds a transaction paying less than the payer was shown, with nothing on the
+wallet's screen to say so.
+
+Before signing, a host SHOULD hand the payments its wallet's reader produced,
+without change, to `checkProposal` / `check_proposal` with the request it sent.
+Each payment of the request (§8.7) is matched to one proposed payment with the
+same address and the same zatoshi. Order is not significant, and one proposed
+payment cannot answer for two. The answer lists the requested payments nothing
+matched and the proposed payments that match nothing; a host MUST NOT sign
+unless both are empty.
+
+### 14.7 A payment the payee's wallet has already seen
+
+A payee's wallet that received the transaction a `shieldedZec` record names
+holds the evidence §10.5 asks the payee for. A host MAY propose confirming it
+with `walletReceived`, and computes the proposals with `arrivalsFor` /
+`arrivals_for` from every bill it holds, its own participant id, and the
+transactions it received, each as a transaction id and the zatoshi that
+transaction paid this account.
+
+- A record is a candidate when it is to this participant, its method is
+  `shieldedZec`, it is not confirmed, and its `reference` names a received
+  transaction. Transaction ids are compared trimmed and lower-cased.
+- **A transaction's zatoshi is counted once, across every bill.** Records
+  already confirmed that name it use their stated `zatoshi` first; the
+  candidates then use theirs in order of bill id and payment id (§2.3). A
+  candidate is `arrived` when what is left covers its `zatoshi`, `short` when
+  it does not, and `unstated` when it states none. Only `arrived` may be
+  proposed. Without this, one payment recorded on two bills is evidence for
+  both.
+- Amounts are held inside zero and 21000000 ZEC throughout: no transaction
+  brings more than exists, and using up a share floors at zero.
+
+§14.2 still applies: a proposal is shown to the payee — its ZEC, its rate and
+its reference — before a confirmation is written. A host MAY write every
+`arrived` confirmation on one acceptance.
 
 ## 15. The wallet seam
 

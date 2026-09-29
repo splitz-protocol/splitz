@@ -1,0 +1,431 @@
+{
+  "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
+  "count": 85,
+  "cases": [
+    {
+      "name": "address_invalid",
+      "code": "address_invalid",
+      "expect": "This isn't a Zcash address."
+    },
+    {
+      "name": "allocation_overflow",
+      "code": "allocation_overflow",
+      "expect": "This amount is too large to divide."
+    },
+    {
+      "name": "ambiguous_create",
+      "code": "ambiguous_create",
+      "expect": "This bill was started twice. It can't be opened."
+    },
+    {
+      "name": "amend_kind_mismatch",
+      "code": "amend_kind_mismatch",
+      "expect": "A change must be the same kind as what it changes."
+    },
+    {
+      "name": "amount_overflow",
+      "code": "amount_overflow",
+      "expect": "This amount is too large."
+    },
+    {
+      "name": "amount_too_large",
+      "code": "amount_too_large",
+      "expect": "This amount is too large."
+    },
+    {
+      "name": "balances_nonzero_residual",
+      "code": "balances_nonzero_residual",
+      "expect": "The balances don't add up. The bill may be damaged."
+    },
+    {
+      "name": "bill_ambiguous_entry",
+      "code": "bill_ambiguous_entry",
+      "expect": "Part of this bill is damaged."
+    },
+    {
+      "name": "bill_bad_currency",
+      "code": "bill_bad_currency",
+      "expect": "This bill's currency isn't valid."
+    },
+    {
+      "name": "bill_bad_participant_id",
+      "code": "bill_bad_participant_id",
+      "expect": "Part of this bill is damaged."
+    },
+    {
+      "name": "bill_future_version",
+      "code": "bill_future_version",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "bill_missing_currency",
+      "code": "bill_missing_currency",
+      "expect": "This bill has no currency."
+    },
+    {
+      "name": "bill_missing_entry_payload",
+      "code": "bill_missing_entry_payload",
+      "expect": "Part of this bill is damaged."
+    },
+    {
+      "name": "bill_missing_version",
+      "code": "bill_missing_version",
+      "expect": "This bill can't be read."
+    },
+    {
+      "name": "bill_not_scalar_values",
+      "code": "bill_not_scalar_values",
+      "expect": "This bill is damaged."
+    },
+    {
+      "name": "bill_type_error",
+      "code": "bill_type_error",
+      "expect": "This bill is damaged."
+    },
+    {
+      "name": "bill_unknown_confirmation_method",
+      "code": "bill_unknown_confirmation_method",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "bill_unknown_entry_kind",
+      "code": "bill_unknown_entry_kind",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "bill_unknown_payout_method",
+      "code": "bill_unknown_payout_method",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "bill_unknown_settlement_method",
+      "code": "bill_unknown_settlement_method",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "bill_unknown_split_mode",
+      "code": "bill_unknown_split_mode",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "bill_unknown_split_type",
+      "code": "bill_unknown_split_type",
+      "expect": "This bill needs a newer app. Update to open it."
+    },
+    {
+      "name": "canonical_json_float",
+      "code": "canonical_json_float",
+      "expect": "This bill holds a number this app can't read."
+    },
+    {
+      "name": "confirmation_missing_reference",
+      "code": "confirmation_missing_reference",
+      "expect": "Add the transaction to confirm this."
+    },
+    {
+      "name": "create_id_not_derived",
+      "code": "create_id_not_derived",
+      "expect": "This bill's start is damaged."
+    },
+    {
+      "name": "create_unbound",
+      "code": "create_unbound",
+      "expect": "This bill's start is damaged."
+    },
+    {
+      "name": "currency_mismatch",
+      "code": "currency_mismatch",
+      "expect": "This uses a different currency from the bill."
+    },
+    {
+      "name": "duplicate_expense",
+      "code": "duplicate_expense",
+      "expect": "This expense is already on the bill."
+    },
+    {
+      "name": "duplicate_participant",
+      "code": "duplicate_participant",
+      "expect": "That person is already on this bill."
+    },
+    {
+      "name": "duplicate_payment",
+      "code": "duplicate_payment",
+      "expect": "This payment is already recorded."
+    },
+    {
+      "name": "empty_split",
+      "code": "empty_split",
+      "expect": "Pick who shares this cost."
+    },
+    {
+      "name": "empty_weights",
+      "code": "empty_weights",
+      "expect": "Nobody is sharing this cost."
+    },
+    {
+      "name": "entry_id_not_derived",
+      "code": "entry_id_not_derived",
+      "expect": "Part of this bill is damaged."
+    },
+    {
+      "name": "exact_limit_too_large",
+      "code": "exact_limit_too_large",
+      "expect": "This bill has too many people to settle exactly."
+    },
+    {
+      "name": "exact_total_mismatch",
+      "code": "exact_total_mismatch",
+      "expect": "The amounts don't add up to the total."
+    },
+    {
+      "name": "invite_bad_bill_id",
+      "code": "invite_bad_bill_id",
+      "expect": "This invite is damaged. Ask for a new one."
+    },
+    {
+      "name": "invite_bad_expiry",
+      "code": "invite_bad_expiry",
+      "expect": "This invite is damaged. Ask for a new one."
+    },
+    {
+      "name": "invite_bad_link",
+      "code": "invite_bad_link",
+      "expect": "This invite link can't be made from that address."
+    },
+    {
+      "name": "invite_future_version",
+      "code": "invite_future_version",
+      "expect": "This invite needs a newer app. Update to join."
+    },
+    {
+      "name": "invite_missing_bill_id",
+      "code": "invite_missing_bill_id",
+      "expect": "This invite is incomplete. Ask for a new one."
+    },
+    {
+      "name": "invite_missing_key",
+      "code": "invite_missing_key",
+      "expect": "This invite is incomplete. Ask for a new one."
+    },
+    {
+      "name": "invite_missing_version",
+      "code": "invite_missing_version",
+      "expect": "This invite can't be read."
+    },
+    {
+      "name": "invite_not_an_invite",
+      "code": "invite_not_an_invite",
+      "expect": "This isn't a bill invite."
+    },
+    {
+      "name": "itemized_no_items",
+      "code": "itemized_no_items",
+      "expect": "Add at least one item."
+    },
+    {
+      "name": "itemized_total_mismatch",
+      "code": "itemized_total_mismatch",
+      "expect": "The items don't add up to the total."
+    },
+    {
+      "name": "itemized_unassigned_item",
+      "code": "itemized_unassigned_item",
+      "expect": "Pick who shares each item."
+    },
+    {
+      "name": "log_empty",
+      "code": "log_empty",
+      "expect": "This bill is empty."
+    },
+    {
+      "name": "log_no_create",
+      "code": "log_no_create",
+      "expect": "This bill's start is missing. Sync again."
+    },
+    {
+      "name": "negative_amount",
+      "code": "negative_amount",
+      "expect": "An amount can't be negative."
+    },
+    {
+      "name": "negative_share",
+      "code": "negative_share",
+      "expect": "A share can't be negative."
+    },
+    {
+      "name": "negative_weight",
+      "code": "negative_weight",
+      "expect": "A share can't be negative."
+    },
+    {
+      "name": "participant_id_not_derived",
+      "code": "participant_id_not_derived",
+      "expect": "This person's id doesn't match their key."
+    },
+    {
+      "name": "participant_still_named",
+      "code": "participant_still_named",
+      "expect": "This person still has costs or payments on the bill."
+    },
+    {
+      "name": "payload_damaged",
+      "code": "payload_damaged",
+      "expect": "This code is damaged. Scan it again."
+    },
+    {
+      "name": "payload_future_version",
+      "code": "payload_future_version",
+      "expect": "This code needs a newer app. Update to scan it."
+    },
+    {
+      "name": "payload_missing_body",
+      "code": "payload_missing_body",
+      "expect": "This code is incomplete. Scan it again."
+    },
+    {
+      "name": "payload_not_a_payload",
+      "code": "payload_not_a_payload",
+      "expect": "This isn't a bill code."
+    },
+    {
+      "name": "payload_too_large",
+      "code": "payload_too_large",
+      "expect": "This bill is too big for one code. Share an invite."
+    },
+    {
+      "name": "percentage_not_full_scale",
+      "code": "percentage_not_full_scale",
+      "expect": "The percentages don't add up to 100."
+    },
+    {
+      "name": "rate_amount_too_large",
+      "code": "rate_amount_too_large",
+      "expect": "This amount is too large to price."
+    },
+    {
+      "name": "rate_currency_mismatch",
+      "code": "rate_currency_mismatch",
+      "expect": "This price is in a different currency from the bill."
+    },
+    {
+      "name": "rate_not_positive",
+      "code": "rate_not_positive",
+      "expect": "A price must be more than zero."
+    },
+    {
+      "name": "sealed_future_version",
+      "code": "sealed_future_version",
+      "expect": "An update to this bill needs a newer app."
+    },
+    {
+      "name": "sealed_malformed",
+      "code": "sealed_malformed",
+      "expect": "An update to this bill is damaged."
+    },
+    {
+      "name": "self_payment",
+      "code": "self_payment",
+      "expect": "You can't pay yourself."
+    },
+    {
+      "name": "unauthorized_confirmation",
+      "code": "unauthorized_confirmation",
+      "expect": "Only the person paid can confirm this."
+    },
+    {
+      "name": "unauthorized_entry",
+      "code": "unauthorized_entry",
+      "expect": "Only the person who wrote this can change it."
+    },
+    {
+      "name": "unauthorized_payment",
+      "code": "unauthorized_payment",
+      "expect": "Only the payer can record this payment."
+    },
+    {
+      "name": "unknown_entry",
+      "code": "unknown_entry",
+      "expect": "That item isn't on this bill."
+    },
+    {
+      "name": "unknown_participant",
+      "code": "unknown_participant",
+      "expect": "That person isn't on this bill."
+    },
+    {
+      "name": "unknown_payment",
+      "code": "unknown_payment",
+      "expect": "That payment isn't on this bill."
+    },
+    {
+      "name": "weight_sum_overflow",
+      "code": "weight_sum_overflow",
+      "expect": "The shares are too large to add up."
+    },
+    {
+      "name": "zero_weight_sum",
+      "code": "zero_weight_sum",
+      "expect": "The shares add up to nothing."
+    },
+    {
+      "name": "zip321_amount_not_positive",
+      "code": "zip321_amount_not_positive",
+      "expect": "An amount to pay must be more than zero."
+    },
+    {
+      "name": "zip321_amount_too_large",
+      "code": "zip321_amount_too_large",
+      "expect": "This amount is more ZEC than exists."
+    },
+    {
+      "name": "zip321_bad_address",
+      "code": "zip321_bad_address",
+      "expect": "An address on this bill isn't valid."
+    },
+    {
+      "name": "zip321_bad_currency_code",
+      "code": "zip321_bad_currency_code",
+      "expect": "This bill's currency isn't valid."
+    },
+    {
+      "name": "zip321_fiat_not_positive",
+      "code": "zip321_fiat_not_positive",
+      "expect": "An amount must be more than zero."
+    },
+    {
+      "name": "zip321_fiat_too_many_digits",
+      "code": "zip321_fiat_too_many_digits",
+      "expect": "This amount is too large."
+    },
+    {
+      "name": "zip321_memo_too_large",
+      "code": "zip321_memo_too_large",
+      "expect": "This note is too long."
+    },
+    {
+      "name": "zip321_memo_undeliverable",
+      "code": "zip321_memo_undeliverable",
+      "expect": "A note can't be sent to this address."
+    },
+    {
+      "name": "zip321_no_address",
+      "code": "zip321_no_address",
+      "expect": "Someone on this bill has no address to be paid at."
+    },
+    {
+      "name": "zip321_no_payments",
+      "code": "zip321_no_payments",
+      "expect": "There's nothing to pay."
+    },
+    {
+      "name": "zip321_not_canonical",
+      "code": "zip321_not_canonical",
+      "expect": "This payment request wasn't made by this bill."
+    },
+    {
+      "name": "zip321_too_many_payments",
+      "code": "zip321_too_many_payments",
+      "expect": "Too many people to pay at once."
+    }
+  ]
+}

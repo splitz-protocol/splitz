@@ -1,0 +1,300 @@
+/// §14.3's guard: a send is written down before the wallet is called, and
+/// blocks the next one from the same bill until it is resolved.
+library;
+
+import 'package:splitz_core/host.dart' as entries;
+import 'package:splitz_core/splitz_core.dart' as splitz;
+import 'package:splitz_host/splitz_host.dart';
+import 'package:test/test.dart';
+
+import 'support/fake_wallet.dart';
+
+const _txid =
+    'aa00000000000000000000000000000000000000000000000000000000000001';
+
+PendingSend _send({String billId = 'b1', Map<String, int>? carried}) =>
+    PendingSend(
+      billId: billId,
+      uri: 'zcash:u1ben?amount=0.1',
+      carried: carried ?? const {'ben': 1000},
+      at: '2026-10-28T19:30:00.000Z',
+      sent: const {'ben': 10000000},
+      rate: const splitz.ExchangeRate(
+        currency: 'USD',
+        minorUnitsPerZec: 10000,
+        at: '2026-10-28T19:00:00.000Z',
+        source: 'a named feed',
+      ),
+    );
+
+/// Storage whose reads and writes can be made to fail, key by key.
+class _Flaky extends InMemoryBillStorage {
+  bool unreadable = false;
+  bool refuseWrites = false;
+
+  @override
+  Future<String?> read(String key) async {
+    if (unreadable) throw BillStorageUnreadable(key, 'damaged');
+    return super.read(key);
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    if (refuseWrites) throw StateError('disk full');
+    return super.write(key, value);
+  }
+}
+
+void main() {
+  group('a send is written down before the wallet is called', () {
+    test('and the next send from that bill is refused', () async {
+      final sends = PendingSends(InMemoryBillStorage());
+      await sends.begin(_send());
+      await sends.end('b1', SendEnded.unresolved);
+      final held = await sends.of('b1');
+      expect(held?.uri, 'zcash:u1ben?amount=0.1');
+      expect(held?.carried, {'ben': 1000});
+      expect(held?.rate?.minorUnitsPerZec, 10000);
+      await expectLater(
+        sends.begin(_send()),
+        throwsA(
+          isA<SendInFlight>().having((e) => e.pending?.billId, 'held', 'b1'),
+        ),
+      );
+    });
+
+    test('another bill is not blocked', () async {
+      final sends = PendingSends(InMemoryBillStorage());
+      await sends.begin(_send());
+      await sends.begin(_send(billId: 'b2'));
+      expect(await sends.of('b2'), isNotNull);
+    });
+
+    test(
+      'a second send started before the first is written is refused',
+      () async {
+        final sends = PendingSends(InMemoryBillStorage());
+        final first = sends.begin(_send());
+        await expectLater(
+          sends.begin(_send()),
+          throwsA(
+            isA<SendInFlight>().having((e) => e.pending, 'pending', isNull),
+          ),
+        );
+        await first;
+      },
+    );
+
+    test('a note that failed to write lets the next send try again', () async {
+      final storage = _Flaky()..refuseWrites = true;
+      final sends = PendingSends(storage);
+      await expectLater(sends.begin(_send()), throwsStateError);
+      storage.refuseWrites = false;
+      await sends.begin(_send());
+      expect(await sends.of('b1'), isNotNull);
+    });
+  });
+
+  group('§14.3: what each outcome does to the note', () {
+    Future<PendingSends> started() async {
+      final sends = PendingSends(InMemoryBillStorage());
+      await sends.begin(_send());
+      return sends;
+    }
+
+    test('refused: the note goes, and the debt can be sent again', () async {
+      final sends = await started();
+      await sends.end('b1', SendEnded.refused);
+      expect(await sends.of('b1'), isNull);
+      await sends.begin(_send());
+    });
+
+    test('reached the network and recorded: the note goes', () async {
+      final sends = await started();
+      await sends.end(
+        'b1',
+        SendEnded.reachedNetwork,
+        txid: _txid,
+        recorded: true,
+      );
+      expect(await sends.of('b1'), isNull);
+    });
+
+    test('reached the network and not recorded: it stays, with the '
+        'transaction', () async {
+      final sends = await started();
+      await sends.end('b1', SendEnded.reachedNetwork, txid: _txid);
+      expect((await sends.of('b1'))?.txid, _txid);
+      await expectLater(sends.begin(_send()), throwsA(isA<SendInFlight>()));
+    });
+
+    test(
+      'unresolved: it stays, with the transaction the wallet built',
+      () async {
+        final sends = await started();
+        await sends.end('b1', SendEnded.unresolved, txid: _txid);
+        expect((await sends.of('b1'))?.txid, _txid);
+      },
+    );
+
+    test('unresolved with no transaction named: it stays as written', () async {
+      final sends = await started();
+      await sends.end('b1', SendEnded.unresolved);
+      final held = await sends.of('b1');
+      expect(held, isNotNull);
+      expect(held!.txid, isNull);
+    });
+
+    test('resolving removes it', () async {
+      final sends = await started();
+      await sends.end('b1', SendEnded.unresolved);
+      await sends.resolve('b1');
+      expect(await sends.of('b1'), isNull);
+    });
+  });
+
+  group('a note that will not read still blocks', () {
+    test('when it is not JSON', () async {
+      final storage = InMemoryBillStorage();
+      await storage.write('pendingsend/b1', '{not json');
+      final sends = PendingSends(storage);
+      final held = await sends.of('b1');
+      expect(held?.damaged, isTrue);
+      await expectLater(sends.begin(_send()), throwsA(isA<SendInFlight>()));
+    });
+
+    test('when it is JSON this class did not write', () async {
+      final storage = InMemoryBillStorage();
+      await storage.write('pendingsend/b1', '{"billId":"b1","uri":""}');
+      expect((await PendingSends(storage).of('b1'))?.damaged, isTrue);
+    });
+
+    test('when it names another bill', () async {
+      final storage = InMemoryBillStorage();
+      final other = _send(billId: 'b2').toJson();
+      await storage.write('pendingsend/b1', '$other'.replaceAll("'", '"'));
+      expect((await PendingSends(storage).of('b1'))?.damaged, isTrue);
+    });
+
+    test('when the storage cannot read it', () async {
+      final storage = _Flaky();
+      final sends = PendingSends(storage);
+      await sends.begin(_send());
+      await sends.end('b1', SendEnded.unresolved);
+      storage.unreadable = true;
+      expect((await sends.of('b1'))?.damaged, isTrue);
+    });
+  });
+
+  group('recording a send that turned out to land', () {
+    ({entries.BillLog log, FakeHost ana}) bill() {
+      final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
+      final ben = FakeHost(me: 'ben');
+      final log = entries.BillLog(
+        ana,
+        entries: [
+          entries.createBill(
+            host: ana,
+            name: 'D',
+            currency: 'USD',
+            creatorKey: fakeKey('ana'),
+          ),
+          entries.joinBill(host: ana, name: 'Ana', payTo: 'u1ana'),
+          entries.joinBill(host: ben, name: 'Ben', payTo: 'u1ben'),
+        ],
+      );
+      ana.tick();
+      return (log: log, ana: ana);
+    }
+
+    test('records each recipient under the transaction', () async {
+      final b = bill();
+      final records = await PendingSends(
+        InMemoryBillStorage(),
+      ).recordsFor(b.ana, b.log, _send(), '  ${_txid.toUpperCase()} ');
+      expect(records, hasLength(1));
+      final payment = b.log.fold().bill.payments.single;
+      expect(payment.id, entries.paymentIdForSend(_txid, 'ben'));
+      expect(payment.amount, 1000);
+      expect(payment.to, 'ben');
+    });
+
+    test('does not record a recipient twice', () async {
+      final b = bill();
+      final sends = PendingSends(InMemoryBillStorage());
+      await sends.recordsFor(b.ana, b.log, _send(), _txid);
+      final again = await sends.recordsFor(b.ana, b.log, _send(), _txid);
+      expect(again, isEmpty);
+      expect(b.log.fold().bill.payments, hasLength(1));
+    });
+
+    test('refuses what is not a transaction id', () async {
+      final b = bill();
+      await expectLater(
+        PendingSends(
+          InMemoryBillStorage(),
+        ).recordsFor(b.ana, b.log, _send(), _txid.substring(1)),
+        throwsA(
+          isA<Unrecordable>().having(
+            (e) => e.reason,
+            'reason',
+            UnrecordableReason.notATransactionId,
+          ),
+        ),
+      );
+    });
+
+    test('refuses a note that lost its details', () async {
+      final b = bill();
+      await expectLater(
+        PendingSends(
+          InMemoryBillStorage(),
+        ).recordsFor(b.ana, b.log, const PendingSend.damaged('b1'), _txid),
+        throwsA(
+          isA<Unrecordable>().having(
+            (e) => e.reason,
+            'reason',
+            UnrecordableReason.detailsLost,
+          ),
+        ),
+      );
+    });
+
+    test('refuses a swap, which is recorded by its reference', () async {
+      final b = bill();
+      final swap = PendingSend(
+        billId: 'b1',
+        uri: 'zcash:t1deposit?amount=0.1',
+        carried: const {'ben': 1000},
+        at: '2026-10-28T19:30:00.000Z',
+        swap: const SwapWatch(
+          billId: 'b1',
+          reference: 'ref-1',
+          to: 'ben',
+          depositAddress: 't1deposit',
+          assetSymbol: 'USDC',
+          assetChain: 'base',
+        ),
+        zatoshi: 10000000,
+      );
+      await expectLater(
+        PendingSends(
+          InMemoryBillStorage(),
+        ).recordsFor(b.ana, b.log, swap, _txid),
+        throwsA(
+          isA<Unrecordable>().having(
+            (e) => e.reason,
+            'reason',
+            UnrecordableReason.isASwap,
+          ),
+        ),
+      );
+    });
+  });
+
+  test('a note reads back as it was written', () {
+    final send = _send().sentAs(_txid);
+    final back = PendingSend.fromJson(send.toJson());
+    expect(back?.toJson(), send.toJson());
+  });
+}

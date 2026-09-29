@@ -6,8 +6,11 @@
 // this is the language with no static types to catch one going wrong.
 import * as splitz from "./splitz_ffi.js";
 import { load } from "./splitz_ffi-ffi.js";
+import { SplitzRelay } from "./splitz_relay.js";
 
-load(process.argv[2]);
+// The library, a running relay's origin, and an origin nothing answers.
+const [library, origin, downOrigin] = process.argv.slice(2);
+load(library);
 
 let failures = 0;
 const check = (name, ok, saw) => {
@@ -64,18 +67,17 @@ class Device {
   }
 }
 
-/// A relay holding ciphertext, shared by both devices. It holds no key.
-class Relay {
-  constructor() { this.channels = new Map(); }
-  push(channel, blobs) {
-    const held = this.channels.get(channel) ?? [];
-    for (const blob of blobs) if (!held.includes(blob)) held.push(blob);
-    this.channels.set(channel, held);
+/// What `run` threw as a host refusal, or undefined when it threw nothing.
+const refusal = async (run) => {
+  try {
+    await run();
+    return undefined;
+  } catch (e) {
+    if (e instanceof splitz.SplitzErrorHost) return e;
+    throw e;
   }
-  fetch(channel) { return this.channels.get(channel) ?? []; }
-}
+};
 
-const relay = new Relay();
 const ana = new Device(1);
 const ben = new Device(90);
 const anaKey = ana.key;
@@ -108,11 +110,44 @@ console.log("the two logs move through a relay that holds only ciphertext");
 const channel = splitz.channel_for_bill(billId);
 check("the channel is the bill id's hash, never the id",
       channel !== billId && channel.length === 64, channel.slice(0, 16) + "…");
+// Two clients, as two devices hold them: what one pushes the other fetches.
+const benRelay = new SplitzRelay(origin);
+const anaRelay = new SplitzRelay(origin);
 // Pushed as they are held: each was signed when it was written.
-relay.push(channel, splitz.blobs_to_push(ben.entries, billKey));
-const opened = splitz.open_blobs(relay.fetch(channel), billKey);
+const pushed = splitz.blobs_to_push(ben.entries, billKey);
+await benRelay.push(channel, pushed);
+await benRelay.push(channel, pushed);
+const fetched = await anaRelay.fetch(channel);
+check("another client fetches every blob pushed, once, though it was pushed twice",
+      JSON.stringify([...fetched].sort()) === JSON.stringify([...pushed].sort()),
+      `${fetched.length} of ${pushed.length}`);
+const opened = splitz.open_blobs(fetched, billKey);
 check("every blob opened", Number(opened.unopenable) === 0, `unopenable=${opened.unopenable}`);
+// Merged by entry id: what a blob opens to is the entry, not necessarily the
+// same text, so a round trip adds no entry to the log it came from.
+const roundTrip = splitz.merge_entries(ben.entries, opened.entries);
+check("to the entries ben holds",
+      opened.entries.length === ben.entries.length &&
+        roundTrip.entries.length === ben.entries.length && roundTrip.refused.length === 0,
+      `${opened.entries.length} opened, ${roundTrip.entries.length} after merging into ${ben.entries.length}`);
 ana.entries = splitz.merge_entries(ana.entries, opened.entries).entries;
+
+console.log("a relay that fails says whether retrying could succeed");
+const down = await refusal(() => new SplitzRelay(downOrigin).fetch(channel));
+check("a relay that is down raises, transient", down?.transient === true, `${down?.detail}`);
+const notChannel = await refusal(() => anaRelay.push("not-a-channel", ["x"]));
+check("a 4xx the relay answers raises, transient, as every client classifies it",
+      notChannel?.transient === true && notChannel.detail.includes("refused"),
+      `${notChannel?.detail}`);
+const oversize = await refusal(() => anaRelay.push(channel, ["x".repeat(64 * 1024 + 1)]));
+check("a blob over the cap raises before it is sent, not transient",
+      oversize?.transient === false, `${oversize?.detail}`);
+const queried = await refusal(() => new SplitzRelay(`${origin}?t=1`));
+check("an origin carrying a query raises, not transient",
+      queried?.transient === false, `${queried?.detail}`);
+const noFetch = await refusal(() => new SplitzRelay(origin, { fetch: 42 }));
+check("a runtime with no fetch is named, not transient",
+      noFetch?.transient === false, `${noFetch?.detail}`);
 
 console.log("ana adds an expense they share, and prices it");
 ana.add(splitz.add_expense_entry(ana.facts(), billId, "x1", ana.me, 9000,
@@ -149,13 +184,39 @@ check("and it is not confirmed", afterPayment.bill.confirmed_payments.length ===
 check("so ben is asked for nothing twice",
       splitz.obligation_of(ben.facts(), billId, ben.entries).settlements.length === 0,
       JSON.stringify(splitz.obligation_of(ben.facts(), billId, ben.entries).settlements));
+const totals = splitz.totals_of(ben.facts(), [{ bill_id: billId, entries: ben.entries }]);
+const withAna = totals.standings[0];
+check("across bills, ben still owes ana, with the payment on its way",
+      totals.standings.length === 1 && withAna.with_id === ana.me &&
+        Number(withAna.owed_by_me) === 4500 && Number(withAna.sent_awaiting) === 4500 &&
+        totals.uncounted.size === 0,
+      `${withAna?.with_id} owed=${withAna?.owed_by_me} sent=${withAna?.sent_awaiting}`);
+
+console.log("before signing, the wallet holds what it read against the request");
+const anaAddress = folded.bill.participants.find((p) => p.id === ana.me).pay_to;
+const sent = owed.request.payments[0].zatoshi;
+const same = splitz.check_proposal(owed.request.uri, [{ address: anaAddress, zatoshi: sent }]);
+check("what the request asks is what would be signed",
+      same.missing.length === 0 && same.unexpected.length === 0,
+      `missing=${same.missing.length} unexpected=${same.unexpected.length}`);
+const dropped = splitz.check_proposal(owed.request.uri, []);
+check("a reader that dropped the payment is caught",
+      dropped.missing.length === 1 && dropped.missing[0].address === anaAddress,
+      `missing=${dropped.missing.map((m) => m.address)}`);
+
+console.log("ana's wallet saw the transaction arrive");
+const arrivals = splitz.arrivals_of(ana.facts(), [{ bill_id: billId, entries: ana.entries }],
+    [{ txid: "tx-ben-1", zatoshi: sent }]);
+const arrival = arrivals.arrived[0];
+check("the payment is proposed for confirmation",
+      arrivals.arrived.length === 1 && arrival.payment.id === afterPayment.bill.payments[0].id,
+      `arrived=${arrivals.arrived.length} short=${arrivals.short.length}`);
 
 // A payee confirms a payment they can see, by the id the bill carries. One
 // transaction paying several people writes one record each, so the id is not
 // the transaction's — the transaction is in `reference`.
-const toConfirm = afterPayment.bill.payments[0].id;
-ana.add(splitz.confirm_payment_entry(ana.facts(), billId, toConfirm, "recipientConfirmed",
-    undefined, afterPayment.payment_digests.get(toConfirm), ana.seed));
+ana.add(splitz.confirm_payment_entry(ana.facts(), billId, arrival.payment.id, "walletReceived",
+    arrival.txid, arrival.record, ana.seed));
 ben.take(ana);
 const settled = splitz.obligation_of(ben.facts(), billId, ben.entries);
 check("once confirmed, the debt is gone",
@@ -166,6 +227,36 @@ console.log("a refusal crosses as a §12 code");
 check("a scan that is nothing is refused by its code",
       typeof splitz.read_scanned("not a bill").refused_code === "string",
       `${splitz.read_scanned("not a bill").refused_code}`);
+check("and a code has a sentence a person can read",
+      typeof splitz.describe_code(splitz.read_scanned("not a bill").refused_code) === "string" &&
+        splitz.describe_code("self_payment") === "You can't pay yourself." &&
+        splitz.describe_code("no_such_code") === undefined,
+      `${splitz.describe_code("self_payment")}`);
+
+console.log("an address is decoded before it is paid or published");
+const unified = splitz.parse_address("u1ay3aawlldjrmxqnjf5medr5ma6p3acnet464ht8lmwplq5cd3ugytcmlf96rrmtgwldc75x94qn4n8pgen36y8tywlq6yjk7lkf3fa8wzjrav8z2xpxqnrnmjxh8tmz6jhfh425t7f3vy6p4pd3zmqayq49efl2c4xydc0gszg660q9p");
+check("a unified address, on main, that takes a memo",
+      unified.network === "main" && unified.kind === "unified" &&
+        JSON.stringify([...unified.receivers]) === "[2,3]" && unified.can_receive_memo === true,
+      JSON.stringify({ ...unified, receivers: [...unified.receivers] }));
+const transparent = splitz.parse_address("t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs");
+check("a transparent one takes none",
+      transparent.kind === "p2pkh" && transparent.can_receive_memo === false, transparent.kind);
+let refusedAddress;
+try { splitz.parse_address("u1ana"); } catch (e) { refusedAddress = e.code; }
+check("anything else is refused by its code", refusedAddress === "address_invalid",
+      `${refusedAddress}`);
+
+console.log("a price, asked and read without a callback");
+const priceOrigin = "https://api.coingecko.com/api/v3";
+check("the request names one currency",
+      splitz.zec_price_request(priceOrigin, "EUR") ===
+        "https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=eur",
+      `${splitz.zec_price_request(priceOrigin, "EUR")}`);
+check("a code with no exponent is not asked for",
+      splitz.zec_price_request(priceOrigin, "XAU") === undefined, "XAU");
+const eur = splitz.zec_price_from_response('{"zcash":{"eur":1222.41}}', "EUR");
+check("the answer reads as minor units, exactly", Number(eur) === 122241, `${eur}`);
 
 console.log(failures === 0
   ? `CONSUMER RESULT: javascript drives a whole bill with no callbacks, ${failures} failures`

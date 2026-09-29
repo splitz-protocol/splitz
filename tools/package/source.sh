@@ -26,18 +26,20 @@ rust_source_stamp() {
   fi
 }
 
-# The git blob hashes, at HEAD, of the script that builds <pkg> and of this
-# file, joined by "+", with "+dirty" when either carries uncommitted changes.
-# A package script decides what lands in the package — slices, ABIs, the
-# manifest — so a change to one leaves a package stale though rust/ is not.
+# The git hashes, at HEAD, of the script that builds <pkg>, of this file and
+# of tools/package/relay/ (the relay clients every package carries), joined by
+# "+", with "+dirty" when any carries uncommitted changes. A package script
+# decides what lands in the package — slices, ABIs, the manifest, the sources
+# copied in — so a change to one leaves a package stale though rust/ is not.
 script_source_stamp() {
-  local root="$1" pkg="$2" a b
+  local root="$1" pkg="$2" a b c
   a="$(git -C "$root" rev-parse "HEAD:tools/package/$pkg.sh")"
   b="$(git -C "$root" rev-parse HEAD:tools/package/source.sh)"
-  if [ -n "$(git -C "$root" status --porcelain -- "tools/package/$pkg.sh" tools/package/source.sh)" ]; then
-    echo "$a+$b+dirty"
+  c="$(git -C "$root" rev-parse HEAD:tools/package/relay)"
+  if [ -n "$(git -C "$root" status --porcelain -- "tools/package/$pkg.sh" tools/package/source.sh tools/package/relay)" ]; then
+    echo "$a+$b+$c+dirty"
   else
-    echo "$a+$b"
+    echo "$a+$b+$c"
   fi
 }
 

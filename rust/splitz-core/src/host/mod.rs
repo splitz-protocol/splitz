@@ -14,6 +14,7 @@
 //! ids and entry ids are digests, and two devices running different rules do
 //! not agree on what the bill is.
 
+pub mod arrivals;
 pub mod bill_log;
 pub mod entries;
 #[allow(clippy::module_inception)]
@@ -21,7 +22,9 @@ pub mod host;
 pub mod lanes;
 pub mod settle_flow;
 pub mod sharing;
+pub mod totals;
 
+pub use arrivals::{arrivals_for, Arrival, Arrivals, IncomingTransaction};
 pub use bill_log::{BillLog, FoldedBill};
 pub use entries::{
     add_expense, amend_entry, base64url_no_pad, confirm_payment, create_bill, join_bill,
@@ -31,8 +34,10 @@ pub use entries::{
 pub use host::{BillHost, SendResult, Sent, SignEntry, VerifyEntry};
 pub use lanes::{lane_for, SettleLane};
 pub use settle_flow::{
-    obligation_for, payment_id_for_send, record_send, settle, PayerObligation, Settled,
+    check_proposal, obligation_for, payment_id_for_send, record_send, settle, PayerObligation,
+    ProposalCheck, ProposedOutput, Settled,
 };
 pub use sharing::{
     accept_scan, delta_for, invite_for, read_scan, shareable_bill, Scanned, ScannedBill,
 };
+pub use totals::{totals_across, Standing, Totals};

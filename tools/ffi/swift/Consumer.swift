@@ -72,7 +72,20 @@ final class Device {
     }
 }
 
-func run() throws {
+/// What `body` threw as a host refusal, or nil when it threw nothing.
+func refusal(_ body: () async throws -> Void) async -> (detail: String, transient: Bool)? {
+    do {
+        try await body()
+        return nil
+    } catch SplitzError.Host(let detail, let transient) {
+        return (detail, transient)
+    } catch {
+        return ("threw something else: \(error)", false)
+    }
+}
+
+/// `origin` is a running relay; `downOrigin` is one nothing answers.
+func run(origin: String, downOrigin: String) async throws {
     let ana = try Device(1)
     let ben = try Device(90)
     let anaKey = ana.key
@@ -100,7 +113,49 @@ func run() throws {
                                   payTo: "u1ben", identityKey: benKey,
                                   payouts: [], seed: ben.seed))
     try ben.take(ana)
-    try ana.take(ben)
+
+    print("the two logs move through a relay that holds only ciphertext")
+    // The bill key is the wallet's to mint and to keep; §9.4's id is public.
+    let billKey = "-_" + String(repeating: "A", count: 41)
+    let channel = channelForBill(billId: billId)
+    check("the channel is the bill id's hash, never the id",
+          channel != billId && channel.count == 64, String(channel.prefix(16)) + "…")
+    // Two clients, as two devices hold them: what one pushes the other fetches.
+    let benRelay = try SplitzRelay(origin: origin)
+    let anaRelay = try SplitzRelay(origin: origin)
+    // Pushed as they are held: each was signed when it was written.
+    let pushed = try blobsToPush(entries: ben.entries, billKey: billKey)
+    try await benRelay.push(channel: channel, blobs: pushed)
+    try await benRelay.push(channel: channel, blobs: pushed)
+    let fetched = try await anaRelay.fetch(channel: channel)
+    check("another client fetches every blob pushed, once, though it was pushed twice",
+          fetched.sorted() == pushed.sorted(), "\(fetched.count) of \(pushed.count)")
+    let opened = openBlobs(blobs: fetched, billKey: billKey)
+    check("every blob opened", opened.unopenable == 0, "unopenable=\(opened.unopenable)")
+    // Merged by entry id: what a blob opens to is the entry, not necessarily
+    // the same text, so a round trip adds no entry to the log it came from.
+    let roundTrip = try mergeEntries(held: ben.entries, incoming: opened.entries)
+    check("to the entries ben holds",
+          opened.entries.count == ben.entries.count
+            && roundTrip.entries.count == ben.entries.count && roundTrip.refused.isEmpty,
+          "\(opened.entries.count) opened, \(roundTrip.entries.count) after merging into \(ben.entries.count)")
+    ana.entries = try mergeEntries(held: ana.entries, incoming: opened.entries).entries
+
+    print("a relay that fails says whether retrying could succeed")
+    let down = await refusal { _ = try await SplitzRelay(origin: downOrigin).fetch(channel: channel) }
+    check("a relay that is down raises, transient", down?.transient == true, down?.detail ?? "nil")
+    let notChannel = await refusal { try await anaRelay.push(channel: "not-a-channel", blobs: ["x"]) }
+    check("a 4xx the relay answers raises, transient, as every client classifies it",
+          notChannel?.transient == true && notChannel?.detail.contains("refused") == true,
+          notChannel?.detail ?? "nil")
+    let oversize = await refusal {
+        try await anaRelay.push(channel: channel, blobs: [String(repeating: "x", count: 64 * 1024 + 1)])
+    }
+    check("a blob over the cap raises before it is sent, not transient",
+          oversize?.transient == false, oversize?.detail ?? "nil")
+    let queried = await refusal { _ = try SplitzRelay(origin: origin + "?t=1") }
+    check("an origin carrying a query raises, not transient",
+          queried?.transient == false, queried?.detail ?? "nil")
 
     print("ana adds an expense they share, and prices it")
     try ana.add(try addExpenseEntry(
@@ -148,23 +203,84 @@ func run() throws {
           "\(afterPayment.bill.payments.map(\.id))")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty,
           "\(afterPayment.bill.confirmedPayments)")
+    let totals = try totalsOf(facts: ben.facts(),
+                              bills: [HeldBill(billId: billId, entries: ben.entries)])
+    check("across bills, ben still owes ana, with the payment on its way",
+          totals.standings.count == 1 && totals.standings[0].withId == ana.me
+            && totals.standings[0].owedByMe == 4500 && totals.standings[0].sentAwaiting == 4500
+            && totals.uncounted.isEmpty,
+          "\(totals.standings)")
 
-    let toConfirm = afterPayment.bill.payments[0].id
+    print("before signing, the wallet holds what it read against the request")
+    let anaAddress = folded.bill.participants.first { $0.id == ana.me }!.payTo!
+    let sent = owed!.request.payments[0].zatoshi
+    let same = try checkProposal(uri: owed!.request.uri!,
+                                 outputs: [ProposedOutput(address: anaAddress, zatoshi: sent)])
+    check("what the request asks is what would be signed",
+          same.missing.isEmpty && same.unexpected.isEmpty, "\(same)")
+    let dropped = try checkProposal(uri: owed!.request.uri!, outputs: [])
+    check("a reader that dropped the payment is caught",
+          dropped.missing.map(\.address) == [anaAddress], "\(dropped)")
+
+    print("ana's wallet saw the transaction arrive")
+    let arrivals = try arrivalsOf(facts: ana.facts(),
+                                  bills: [HeldBill(billId: billId, entries: ana.entries)],
+                                  received: [IncomingTransaction(txid: "tx-ben-1", zatoshi: sent)])
+    check("the payment is proposed for confirmation",
+          arrivals.arrived.count == 1
+            && arrivals.arrived[0].payment.id == afterPayment.bill.payments[0].id,
+          "arrived=\(arrivals.arrived.count) short=\(arrivals.short.count)")
+    let arrival = arrivals.arrived[0]
     try ana.add(try confirmPaymentEntry(facts: ana.facts(), billId: billId,
-                                        paymentId: toConfirm,
-                                        method: "recipientConfirmed",
-                                        reference: nil,
-                                        record: afterPayment.paymentDigests[toConfirm]!,
+                                        paymentId: arrival.payment.id,
+                                        method: "walletReceived",
+                                        reference: arrival.txid,
+                                        record: arrival.record,
                                         seed: ana.seed))
     try ben.take(ana)
     let settled = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries)!
     check("once confirmed, the debt is gone",
           settled.settlements.isEmpty && settled.awaiting.isEmpty,
           "settlements=\(settled.settlements.count) awaiting=\(settled.awaiting.count)")
+
+    print("a code has a sentence a person can read")
+    check("a known code reads as a sentence, an unknown one as nothing",
+          describeCode(code: "self_payment") == "You can't pay yourself."
+            && describeCode(code: "no_such_code") == nil,
+          "\(describeCode(code: "self_payment") ?? "nil")")
+
+    print("an address is decoded before it is paid or published")
+    let unified = try parseAddress(address: "u1ay3aawlldjrmxqnjf5medr5ma6p3acnet464ht8lmwplq5cd3ugytcmlf96rrmtgwldc75x94qn4n8pgen36y8tywlq6yjk7lkf3fa8wzjrav8z2xpxqnrnmjxh8tmz6jhfh425t7f3vy6p4pd3zmqayq49efl2c4xydc0gszg660q9p")
+    check("a unified address, on main, that takes a memo",
+          unified.network == "main" && unified.kind == "unified"
+            && unified.receivers == [2, 3] && unified.canReceiveMemo, "\(unified)")
+    let transparent = try parseAddress(address: "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs")
+    check("a transparent one takes none",
+          transparent.kind == "p2pkh" && !transparent.canReceiveMemo, "\(transparent)")
+    var refusedAddress: String? = nil
+    do { _ = try parseAddress(address: "u1ana") } catch SplitzError.Protocol(let code, _) { refusedAddress = code }
+    check("anything else is refused by its code", refusedAddress == "address_invalid",
+          refusedAddress ?? "nil")
+
+    print("a price, asked and read without a callback")
+    let priceOrigin = "https://api.coingecko.com/api/v3"
+    check("the request names one currency",
+          zecPriceRequest(origin: priceOrigin, currency: "EUR")
+            == "https://api.coingecko.com/api/v3/simple/price?ids=zcash&vs_currencies=eur",
+          zecPriceRequest(origin: priceOrigin, currency: "EUR") ?? "nil")
+    check("a code with no exponent is not asked for",
+          zecPriceRequest(origin: priceOrigin, currency: "XAU") == nil, "XAU")
+    let eur = try zecPriceFromResponse(body: #"{"zcash":{"eur":1222.41}}"#, currency: "EUR")
+    check("the answer reads as minor units, exactly", eur == 122241, "\(eur ?? -1)")
 }
 
+let arguments = CommandLine.arguments
+guard arguments.count == 3 else {
+    print("usage: Consumer <relay origin> <origin nothing answers>")
+    exit(2)
+}
 do {
-    try run()
+    try await run(origin: arguments[1], downOrigin: arguments[2])
 } catch {
     failures += 1
     print("  FAIL  the run threw — \(error)")

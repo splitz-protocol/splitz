@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'errors.dart';
 
 const String _prefix = 'splitz://join';
+const String _linkScheme = 'https://';
 
 /// The invite format version this library writes and the highest it reads.
 const int inviteVersion = 1;
@@ -113,7 +114,16 @@ bool _decodesAsB64Url(String value) {
 
 /// Parses an invite.
 Invite parseInvite(String text) {
-  final s = stripScanPadding(text);
+  var s = stripScanPadding(text);
+
+  // An https link carries the invite as its fragment, whole (§11.1).
+  if (s.startsWith(_linkScheme)) {
+    final hash = s.indexOf('#');
+    if (hash < 0) {
+      raise(SplitCode.inviteNotAnInvite, 'A link with no invite: "$text"');
+    }
+    s = s.substring(hash + 1);
+  }
 
   // The scheme and host are matched case-sensitively.
   if (!s.startsWith(_prefix)) {
@@ -240,4 +250,36 @@ String renderInvite(Invite invite) {
     if (invite.expiry != null) 'x=${invite.expiry}',
   ];
   return '$_prefix?${parts.join('&')}';
+}
+
+/// Renders [invite] as an https link: [base], a `#`, and the invite URI
+/// (§11.1).
+///
+/// The invite rides in the fragment, which a browser never sends to [base]'s
+/// host, and a chat app shows an https link as one a person can tap. [base] is
+/// `https://`, then at least one character that is not `/`, and nothing but
+/// printable ASCII — no space and no `#` — or it is refused with
+/// `invite_bad_link`.
+String renderInviteLink(Invite invite, String base) {
+  final rest =
+      base.startsWith(_linkScheme) ? base.substring(_linkScheme.length) : null;
+  final printable = RegExp(r'^[!-~]+$');
+  if (rest == null ||
+      rest.startsWith('/') ||
+      !printable.hasMatch(rest) ||
+      rest.contains('#')) {
+    raise(SplitCode.inviteBadLink, 'Not a base for an invite link: "$base"');
+  }
+  return '$base#${renderInvite(invite)}';
+}
+
+/// Whether [invite] is past the expiry its sender wrote, at [nowUnixSeconds].
+///
+/// A hint to show, not a refusal (§11.1): `x` is unauthenticated, and removing
+/// it yields an invite to the same bill. Compared in whole seconds, because
+/// `x` may be any of nineteen digits and scaling it to milliseconds would
+/// overflow. An invite with no expiry never expires.
+bool isInviteExpired(Invite invite, int nowUnixSeconds) {
+  final expiry = invite.expiry;
+  return expiry != null && expiry < nowUnixSeconds;
 }

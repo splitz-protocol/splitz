@@ -277,3 +277,64 @@ Future<List<Map<String, dynamic>>> recordSend(
   }
   return records;
 }
+
+/// One payment a wallet is about to make: what its own ZIP 321 reader made of
+/// a request, before anything is signed.
+class ProposedOutput {
+  const ProposedOutput(this.address, this.zatoshi);
+
+  final String address;
+  final int zatoshi;
+}
+
+/// How the payments a wallet is about to sign differ from the request (§14.6).
+class ProposalCheck {
+  const ProposalCheck({required this.missing, required this.unexpected});
+
+  /// Payments the request carries that the proposal does not, in request
+  /// order.
+  final List<splitz.Zip321Payment> missing;
+
+  /// Payments the proposal makes that the request does not carry, in the
+  /// order they were given.
+  final List<ProposedOutput> unexpected;
+
+  /// True when the proposal pays exactly what the request asks.
+  bool get matches => missing.isEmpty && unexpected.isEmpty;
+}
+
+/// Compares what a wallet is about to sign with the request [uri] (§14.6).
+///
+/// [outputs] are the payments the wallet's own reader produced from [uri],
+/// without change: a reader that keeps only the first of several payments
+/// pays one recipient while the payer was shown them all. Each requested
+/// payment is matched to one proposed output with the same address and the
+/// same zatoshi; order is not significant, and one output cannot answer for
+/// two payments.
+///
+/// [uri] must be a request this protocol wrote: it is read with
+/// [splitz.readRequest], which refuses anything else with
+/// `zip321_not_canonical`.
+ProposalCheck checkProposal(String uri, List<ProposedOutput> outputs) {
+  final requested = splitz.readRequest(uri);
+  final pool = List<ProposedOutput?>.of(outputs);
+  final missing = <splitz.Zip321Payment>[];
+  for (final payment in requested) {
+    final at = pool.indexWhere((o) =>
+        o != null &&
+        o.address == payment.address &&
+        o.zatoshi == payment.zatoshi);
+    if (at < 0) {
+      missing.add(payment);
+    } else {
+      pool[at] = null;
+    }
+  }
+  return ProposalCheck(
+    missing: missing,
+    unexpected: [
+      for (final o in pool)
+        if (o != null) o
+    ],
+  );
+}
