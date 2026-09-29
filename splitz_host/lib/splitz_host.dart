@@ -31,6 +31,7 @@ export 'src/sealing.dart';
 export 'src/signing.dart';
 export 'src/store.dart';
 export 'src/sync.dart';
+export 'src/testing/payer_review.dart';
 export 'src/testing/seam_contracts.dart';
 export 'src/testing/seed_driver.dart';
 export 'src/wallet.dart';

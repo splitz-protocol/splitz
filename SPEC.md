@@ -2322,6 +2322,15 @@ record says was sent, the rate it was priced at, and its reference. A
 confirmation settles the debt in the bill's currency, so a payee who confirms
 a record without reading its ZEC accepts whatever the payer's rate made of it.
 
+`checkPayerReview` / `check_payer_review` in both host packages runs the
+payer's list against the text a review screen shows. It is given the
+obligation about to be sent, the folded bill and the strings the screen
+displays, and answers each fact above that the text does not contain: every
+unpayable recipient's name and the wallet's words for its reason, the name of
+every participant whose address was replaced, every participant a pending
+payment is owed to or went to, the rate figure and who set it, and each
+output's ZEC amount and address. The payee's side is not checked by it.
+
 ### 14.3 A send has three outcomes, not two
 
 A transaction may reach the network, may be refused before it is built, or may

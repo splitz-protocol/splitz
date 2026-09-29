@@ -16,6 +16,7 @@ pub mod currencies;
 pub mod error;
 pub mod fold;
 pub mod keys;
+pub mod payer_review;
 pub mod pending_sends;
 pub mod pricing;
 pub mod relay;
@@ -39,6 +40,7 @@ pub use keys::{
     identity_seed_from, is_well_formed_key, Randomness, SplitsKeys, SystemRandomness,
     IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
 };
+pub use payer_review::{check_payer_review, rate_figure, ReviewFinding, ReviewRule};
 pub use pending_sends::{PendingSend, PendingSends, SendEnded, Unrecordable};
 pub use pricing::{
     coingecko_price_url, price_from_coingecko, CoinGeckoZecPrices, FixedZecPrices, NoZecPrices,
