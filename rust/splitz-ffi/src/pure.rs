@@ -7,13 +7,13 @@
 
 use serde_json::Value;
 use splitz_core::host::{
-    add_expense, amend_entry, confirm_payment, create_bill, invite_for, join_bill, obligation_for,
-    read_scan, record_payment, set_rate, shareable_bill, sign_entry, void_entry, BillLog, Scanned,
+    add_expense, amend_entry, confirm_payment, create_bill, invite_for, join_bill, read_scan,
+    record_payment, set_rate, shareable_bill, sign_entry, void_entry, BillLog, Scanned,
 };
 use splitz_core::money::checked_add;
 use splitz_core::{code, decode_rate, merge_logs, order_entries};
 use splitz_host::{activity_of, PendingSend, Sealing, SendEnded, Signer, Unrecordable};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::convert;
 use crate::error::{Result, SplitzError};
@@ -441,6 +441,25 @@ pub fn obligation_of(
     bill_id: String,
     entries: Vec<String>,
 ) -> Result<Option<ffi::PayerObligation>> {
+    obligation_via(facts, bill_id, entries, HashMap::new())
+}
+
+/// `obligation_of`, with the payer's choice of payout for the recipients `via`
+/// names (§14.8).
+///
+/// `via` maps a participant id to the index of one of their declared payouts;
+/// that payout is the one the request is rendered from, for this payment
+/// alone, and who owes what does not move. Refused with `unknown_participant`
+/// for an id not on the bill and `payout_not_declared` for an index that is
+/// not one of that participant's payouts.
+#[uniffi::export]
+pub fn obligation_via(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    via: HashMap<String, i64>,
+) -> Result<Option<ffi::PayerObligation>> {
+    let via: BTreeMap<String, i64> = via.into_iter().collect();
     let parsed = parse_entries(&entries)?;
     let verified = Signer.prepare(parsed.iter(), &bill_id);
     let verify = |entry: &Value, key: &str| verified.verify(entry, key);
@@ -452,7 +471,7 @@ pub fn obligation_of(
     let folded = BillLog::with_entries(&host, parsed)
         .for_bill(bill_id)
         .fold()?;
-    Ok(obligation_for(&host, &folded)?.map(|o| convert::obligation(&o)))
+    Ok(splitz_core::host::obligation_via(&host, &folded, &via)?.map(|o| convert::obligation(&o)))
 }
 
 /// Compares the payments a wallet is about to sign with the request `uri` it
@@ -1159,6 +1178,176 @@ pub fn pending_send_records(
     let mut log = BillLog::with_entries(&host, parsed).for_bill(bill_id);
     let records = send.records(&host, &mut log, &txid).map_err(unrecordable)?;
     Ok(records.iter().map(Value::to_string).collect())
+}
+
+// --- what the payer is shown before sending (§14.2) -------------------------
+
+/// The reason codes §8.5 gives a recipient a request cannot carry.
+const UNPAYABLE_REASONS: [&str; 4] = ["no_address", "bad_address", "payout_not_zec", "unpriceable"];
+
+/// `zatoshi` as §8.1 writes decimal ZEC: no trailing zeros, `.` as the
+/// decimal point, no grouping. The text a review screen shows for an output's
+/// amount. Refused for nothing or less, and for more than the supply.
+#[uniffi::export]
+pub fn render_amount(zatoshi: i64) -> Result<String> {
+    Ok(splitz_core::render_amount(zatoshi)?)
+}
+
+/// The rate figure a review screen shows: `rate`'s minor units per ZEC in the
+/// currency's major units, `.` as the decimal point and every fractional
+/// digit its ISO 4217 exponent gives (`51234` EUR is `512.34`). A currency the
+/// register gives no exponent is shown as its minor units unchanged.
+#[uniffi::export]
+pub fn rate_figure(rate: ffi::ExchangeRate) -> String {
+    splitz_host::rate_figure(&exchange_rate(&rate))
+}
+
+/// Every §14.2 fact for sending `obligation` from the bill `entries` hold that
+/// `visible_text` — the strings the wallet's review screen shows — does not
+/// show. An empty answer is the only passing one.
+///
+/// `obligation` is the one `obligation_of` gave for this bill; its outputs'
+/// addresses are read from its request. The bill is folded as
+/// `fold_entries` folds it, and a participant is looked for by the name it
+/// gives them. `reason_words` maps each §8.5 reason code to the screen's own
+/// words for it; a code with no entry is a finding. `via` is the choice the
+/// obligation was made with (`obligation_via`, empty for `obligation_of`),
+/// and `lower_words` the screen's words for a recipient paid by a payout
+/// other than their first (§14.8); empty words are a finding when one is.
+///
+/// The strings are joined with a line break and each fact is looked for as a
+/// case-sensitive substring: an amount as [`render_amount`] writes it with no
+/// digit touching it, the rate as [`rate_figure`] writes it, an address whole
+/// or by a prefix of at least 10 characters that stops on a character that is
+/// not an ASCII letter or digit. Findings come in the order of §14.2's list.
+///
+/// Refused when the entries do not read or fold, and when `obligation` is not
+/// one this binding wrote: a request that does not read (`zip321_not_canonical`),
+/// outputs that are not the ones its request carries, or a reason §8.5 does
+/// not give.
+#[allow(clippy::too_many_arguments)]
+#[uniffi::export]
+pub fn check_payer_review(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    obligation: ffi::PayerObligation,
+    visible_text: Vec<String>,
+    reason_words: HashMap<String, String>,
+    via: HashMap<String, i64>,
+    lower_words: String,
+) -> Result<Vec<ffi::ReviewFinding>> {
+    let obligation = payer_obligation(&obligation)?;
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    let reason_words: BTreeMap<String, String> = reason_words.into_iter().collect();
+    let via: BTreeMap<String, i64> = via.into_iter().collect();
+    let found = splitz_host::check_payer_review(
+        &obligation,
+        &folded,
+        &visible_text,
+        &reason_words,
+        &via,
+        &lower_words,
+    )?;
+    Ok(found
+        .into_iter()
+        .map(|f| ffi::ReviewFinding {
+            rule: match f.rule {
+                splitz_host::ReviewRule::Unpayable => ffi::ReviewRule::Unpayable,
+                splitz_host::ReviewRule::ReplacedAddress => ffi::ReviewRule::ReplacedAddress,
+                splitz_host::ReviewRule::Awaiting => ffi::ReviewRule::Awaiting,
+                splitz_host::ReviewRule::LowerPreference => ffi::ReviewRule::LowerPreference,
+                splitz_host::ReviewRule::Rate => ffi::ReviewRule::Rate,
+                splitz_host::ReviewRule::Output => ffi::ReviewRule::Output,
+            },
+            fact: f.fact,
+            expected: f.expected,
+        })
+        .collect())
+}
+
+fn exchange_rate(r: &ffi::ExchangeRate) -> splitz_core::ExchangeRate {
+    splitz_core::ExchangeRate {
+        currency: r.currency.clone(),
+        minor_units_per_zec: r.minor_units_per_zec,
+        at: r.at.clone(),
+        source: r.source.clone(),
+    }
+}
+
+/// The library's obligation for one `obligation_of` handed out. Each output's
+/// address is read from the request, which must carry exactly the outputs the
+/// record lists, in its order and for its zatoshi.
+fn payer_obligation(o: &ffi::PayerObligation) -> Result<splitz_core::host::PayerObligation> {
+    let not_ours = |detail: &str| SplitzError::Host {
+        detail: format!("this obligation is not one the binding wrote: {detail}"),
+        transient: false,
+    };
+    let payments = match &o.request.uri {
+        Some(uri) => splitz_core::read_request(uri)?,
+        None => Vec::new(),
+    };
+    if payments.len() != o.request.payments.len()
+        || payments
+            .iter()
+            .zip(&o.request.payments)
+            .any(|(read, listed)| read.zatoshi != listed.zatoshi)
+    {
+        return Err(not_ours("its outputs are not the ones its request carries"));
+    }
+    let mut unpayable = Vec::with_capacity(o.request.unpayable.len());
+    for u in &o.request.unpayable {
+        let Some(reason) = UNPAYABLE_REASONS.iter().find(|r| **r == u.reason) else {
+            return Err(not_ours(&format!(
+                "{:?} is not a reason §8.5 gives",
+                u.reason
+            )));
+        };
+        unpayable.push(splitz_core::Unpayable {
+            id: u.id.clone(),
+            reason,
+            minor_units: u.minor_units,
+        });
+    }
+    Ok(splitz_core::host::PayerObligation {
+        settlements: o
+            .settlements
+            .iter()
+            .map(|s| splitz_core::Settlement {
+                from: s.from.clone(),
+                to: s.to.clone(),
+                amount: s.amount,
+                covers: s
+                    .covers
+                    .iter()
+                    .map(|d| splitz_core::DirectDebt {
+                        from: d.from.clone(),
+                        to: d.to.clone(),
+                        amount: d.amount,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        awaiting: o
+            .awaiting
+            .iter()
+            .map(|a| splitz_core::Awaiting {
+                to: a.to.clone(),
+                owed: a.owed,
+                paid: a.paid,
+                paid_to: a.paid_to.clone(),
+            })
+            .collect(),
+        request: splitz_core::Obligation {
+            uri: o.request.uri.clone(),
+            payments,
+            recipients: o.request.payments.iter().map(|p| p.to.clone()).collect(),
+            unpayable,
+            carried_minor_units: o.request.carried_minor_units,
+            withheld_minor_units: o.request.withheld_minor_units,
+        },
+        rate: exchange_rate(&o.rate),
+    })
 }
 
 // --- a debt owed in another asset (§9.2, §15.7) ----------------------------

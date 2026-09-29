@@ -163,6 +163,21 @@ fun main(args: Array<String>) {
     check("nothing is withheld", owed.request.withheldMinorUnits == 0L,
           "${owed.request.withheldMinorUnits}")
 
+    println("ben's review screen shows what §14.2 says it must")
+    // The screen is the wallet's; these are the strings it draws, with the
+    // amount and the rate written as the binding writes them.
+    val zec = renderAmount(owed.request.payments.single().zatoshi)
+    val screen = listOf("Pay Ana $zec ZEC", "to u1ana",
+                        "at ${rateFigure(owed.rate)} EUR per ZEC, set by Ana")
+    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "")
+    check("a screen showing every fact passes", shown.isEmpty(), "$screen")
+    val noAddress = checkPayerReview(ben.facts(), billId, ben.entries, owed,
+                                     screen.map { if (it == "to u1ana") "to your contact" else it },
+                                     mapOf(), mapOf(), "")
+    check("one without the output's address is told exactly that",
+          noAddress == listOf(ReviewFinding(ReviewRule.OUTPUT, "the address Ana is paid at", "u1ana")),
+          "$noAddress")
+
     println("the wallet writes the send down before it sends (§14.3)")
     // One string per bill, kept where it outlives the process. The send is the
     // wallet's; these say what the note becomes.

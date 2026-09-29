@@ -13,11 +13,15 @@ const benOld = 'u1benold0000000000000000';
 const ben = 'u1ben1111111111111111111';
 const dan = 'u1dan3333333333333333333';
 const eve = 'u1eve4444444444444444444';
+const eveLater = 'u1eve5555555555555555555';
 
 /// Ana owes Ben 40.00, Cat 30.00, Dan 20.00 and Eve 10.00 (EUR). Ben moved
 /// his address, Cat has none, Ana has recorded paying Dan, and Eve set the
-/// rate. The request Ana sends carries Ben and Eve.
-({splitz.PayerObligation obligation, splitz.FoldedBill folded}) bill() {
+/// rate. The request Ana sends carries Ben and Eve. Eve declares a second
+/// address after her first, which [via] can choose (§14.8).
+({splitz.PayerObligation obligation, splitz.FoldedBill folded}) bill({
+  Map<String, int> via = const {},
+}) {
   final hosts = {
     for (final id in ['ana', 'ben', 'cat', 'dan', 'eve']) id: FakeHost(me: id),
   };
@@ -56,7 +60,14 @@ const eve = 'u1eve4444444444444444444';
     splitz.joinBill(host: at('ben'), name: 'Ben', payTo: benOld),
     splitz.joinBill(host: at('cat'), name: 'Cat'),
     splitz.joinBill(host: at('dan'), name: 'Dan', payTo: dan),
-    splitz.joinBill(host: at('eve'), name: 'Eve', payTo: eve),
+    splitz.joinBill(
+      host: at('eve'),
+      name: 'Eve',
+      payouts: [
+        {'type': 'zec', 'address': eve},
+        {'type': 'zec', 'address': eveLater},
+      ],
+    ),
     splitz.joinBill(host: at('ben'), name: 'Ben', payTo: ben),
     spent('ben', 8000, 'x1'),
     spent('cat', 6000, 'x2'),
@@ -74,7 +85,7 @@ const eve = 'u1eve4444444444444444444';
   final folded = log.fold();
   expect(folded.setAside, isEmpty);
   return (
-    obligation: splitz.obligationFor(hosts['ana']!, folded)!,
+    obligation: splitz.obligationVia(hosts['ana']!, folded, via)!,
     folded: folded,
   );
 }
@@ -206,5 +217,59 @@ void main() {
     expect(rateFigure(rate('EUR', 5000)), '50.00');
     expect(rateFigure(rate('JPY', 7000)), '7000');
     expect(rateFigure(rate('BHD', 12345)), '12.345');
+  });
+
+  group('a lower preference (§14.8)', () {
+    const lower = 'by a later choice';
+    const eveSecond = {'eve': 1};
+    final lowerScreen = [...screen]
+      ..[9] = eveLater
+      ..add(lower);
+
+    List<(ReviewRule, String)> found(
+      Map<String, int> via,
+      Map<String, int> checked,
+      List<String> shown,
+      String words,
+    ) {
+      final b = bill(via: via);
+      return checkPayerReview(
+        obligation: b.obligation,
+        folded: b.folded,
+        visibleText: shown,
+        reasonWords: reasons,
+        via: checked,
+        lowerWords: words,
+      ).map((f) => (f.rule, f.expected)).toList();
+    }
+
+    test('is shown with the wallet\'s words', () {
+      expect(
+        bill(via: eveSecond).obligation.request.payments[1].address,
+        eveLater,
+      );
+      expect(found(eveSecond, eveSecond, lowerScreen, lower), isEmpty);
+      expect(
+        found(eveSecond, eveSecond, [...lowerScreen]..removeLast(), lower),
+        [(ReviewRule.lowerPreference, lower)],
+      );
+      expect(found(eveSecond, eveSecond, lowerScreen, ''), [
+        (ReviewRule.lowerPreference, 'lower_preference'),
+      ]);
+    });
+
+    test('names the recipient', () {
+      // Eve's name is on the screen twice over — she set the rate — so the
+      // name is removed from both lines to see the rule ask for it.
+      final shown = lowerScreen.where((l) => l != 'Eve').toList();
+      expect(found(eveSecond, eveSecond, shown, lower), [
+        (ReviewRule.lowerPreference, 'Eve'),
+        (ReviewRule.rate, 'Eve'),
+      ]);
+    });
+
+    test('a first choice or somebody not paid needs nothing shown', () {
+      expect(found(const {}, const {'eve': 0, 'dan': 1}, screen, ''), isEmpty);
+    });
   });
 }

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
 use splitz_core::host::{
-    add_expense, base64url_no_pad, create_bill, join_bill, obligation_for, record_payment,
+    add_expense, base64url_no_pad, create_bill, join_bill, obligation_via, record_payment,
     set_rate, BillHost, BillLog, FoldedBill, PayerObligation, Sent, CREATOR_KEY_BYTES,
 };
 use splitz_core::ExchangeRate;
@@ -16,6 +16,7 @@ const BEN_OLD: &str = "u1benold0000000000000000";
 const BEN: &str = "u1ben1111111111111111111";
 const DAN: &str = "u1dan3333333333333333333";
 const EVE: &str = "u1eve4444444444444444444";
+const EVE_LATER: &str = "u1eve5555555555555555555";
 
 /// A host speaking as `me` on a clock every host of the test shares.
 struct Host<'c> {
@@ -46,8 +47,13 @@ impl BillHost for Host<'_> {
 
 /// Ana owes Ben 40.00, Cat 30.00, Dan 20.00 and Eve 10.00 (EUR). Ben moved
 /// his address, Cat has none, Ana has recorded paying Dan, and Eve set the
-/// rate. The request Ana sends carries Ben and Eve.
+/// rate. The request Ana sends carries Ben and Eve. Eve declares a second
+/// address after her first, which `via` can choose (§14.8).
 fn bill() -> (PayerObligation, FoldedBill) {
+    bill_via(&BTreeMap::new())
+}
+
+fn bill_via(via: &BTreeMap<String, i64>) -> (PayerObligation, FoldedBill) {
     let minute = Cell::new(0);
     let host = |me: &'static str| Host {
         me,
@@ -72,7 +78,17 @@ fn bill() -> (PayerObligation, FoldedBill) {
         join_bill(&ben, Some("Ben"), Some(BEN_OLD), None, None).unwrap(),
         join_bill(&cat, Some("Cat"), None, None, None).unwrap(),
         join_bill(&dan, Some("Dan"), Some(DAN), None, None).unwrap(),
-        join_bill(&eve, Some("Eve"), Some(EVE), None, None).unwrap(),
+        join_bill(
+            &eve,
+            Some("Eve"),
+            None,
+            None,
+            Some(vec![
+                json!({"type": "zec", "address": EVE}),
+                json!({"type": "zec", "address": EVE_LATER}),
+            ]),
+        )
+        .unwrap(),
         join_bill(&ben, Some("Ben"), Some(BEN), None, None).unwrap(),
         spent(&ben, 8000, "x1"),
         spent(&cat, 6000, "x2"),
@@ -96,7 +112,7 @@ fn bill() -> (PayerObligation, FoldedBill) {
     assert!(log.add(entries).unwrap().is_empty());
     let folded = log.fold().unwrap();
     assert!(folded.set_aside.is_empty(), "{:?}", folded.set_aside);
-    let obligation = obligation_for(&ana, &folded).unwrap().expect("priced");
+    let obligation = obligation_via(&ana, &folded, via).unwrap().expect("priced");
     (obligation, folded)
 }
 
@@ -124,7 +140,7 @@ fn screen() -> Vec<String> {
 
 fn found(shown: &[String], reasons: &BTreeMap<String, String>) -> Vec<(ReviewRule, String)> {
     let (obligation, folded) = bill();
-    check_payer_review(&obligation, &folded, shown, reasons)
+    check_payer_review(&obligation, &folded, shown, reasons, &BTreeMap::new(), "")
         .unwrap()
         .into_iter()
         .map(|f| (f.rule, f.expected))
@@ -232,4 +248,75 @@ fn the_rate_figure_keeps_the_currencys_fractional_digits() {
     assert_eq!(rate_figure(&rate("EUR", 5000)), "50.00");
     assert_eq!(rate_figure(&rate("JPY", 7000)), "7000");
     assert_eq!(rate_figure(&rate("BHD", 12345)), "12.345");
+}
+
+const LOWER: &str = "by a later choice";
+
+/// Eve paid at her second address: the screen of every fact, with her
+/// address swapped and the wallet's words for a lower preference added.
+fn lower_found(
+    via: &BTreeMap<String, i64>,
+    checked: &BTreeMap<String, i64>,
+    shown: &[String],
+    words: &str,
+) -> Vec<(ReviewRule, String)> {
+    let (obligation, folded) = bill_via(via);
+    check_payer_review(&obligation, &folded, shown, &reasons(), checked, words)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.rule, f.expected))
+        .collect()
+}
+
+fn lower_screen() -> Vec<String> {
+    let mut shown = screen();
+    shown[9] = EVE_LATER.to_owned();
+    shown.push(LOWER.to_owned());
+    shown
+}
+
+fn eve_second() -> BTreeMap<String, i64> {
+    BTreeMap::from([("eve".to_owned(), 1)])
+}
+
+#[test]
+fn a_recipient_paid_by_a_lower_preference_is_shown_with_the_wallets_words() {
+    let via = eve_second();
+    let (obligation, _) = bill_via(&via);
+    assert_eq!(obligation.request.payments[1].address, EVE_LATER);
+    assert_eq!(lower_found(&via, &via, &lower_screen(), LOWER), []);
+
+    let mut shown = lower_screen();
+    shown.pop();
+    assert_eq!(
+        lower_found(&via, &via, &shown, LOWER),
+        [(ReviewRule::LowerPreference, LOWER.to_owned())]
+    );
+    assert_eq!(
+        lower_found(&via, &via, &lower_screen(), ""),
+        [(ReviewRule::LowerPreference, "lower_preference".to_owned())]
+    );
+}
+
+#[test]
+fn a_lower_preference_names_the_recipient() {
+    // Eve's name is on the screen twice over — she set the rate — so the name
+    // is removed from both lines to see the rule ask for it.
+    let via = eve_second();
+    let shown: Vec<String> = lower_screen().into_iter().filter(|l| l != "Eve").collect();
+    assert_eq!(
+        lower_found(&via, &via, &shown, LOWER),
+        [
+            (ReviewRule::LowerPreference, "Eve".to_owned()),
+            (ReviewRule::Rate, "Eve".to_owned()),
+        ]
+    );
+}
+
+#[test]
+fn a_first_choice_or_somebody_not_paid_needs_nothing_shown() {
+    let mut shown = screen();
+    shown.retain(|l| l != LOWER);
+    let chosen = BTreeMap::from([("eve".to_owned(), 0), ("dan".to_owned(), 1)]);
+    assert_eq!(lower_found(&BTreeMap::new(), &chosen, &shown, ""), []);
 }

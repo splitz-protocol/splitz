@@ -1044,6 +1044,27 @@ text does not show. Amounts must appear as `renderAmount` writes them, the rate
 as `rateFigure` / `rate_figure` writes it, and an address whole or by a prefix
 of at least 10 characters; matching is case-sensitive.
 
+**Paying somebody by a lower preference.** When a payer cannot use a
+recipient's first payout — a swap their wallet cannot reach, cash to somebody
+far away — `obligationVia(host, folded, via)` / `obligation_via` renders the
+request from the payout the payer chose instead, for that payment alone (§14.8).
+`via` maps a participant id to the index of one of their declared payouts.
+Who owes what does not move and no entry is written; every other device keeps
+the order the recipient declared. Pass the same `via` to `checkPayerReview`,
+with your words for "paid by a lower preference", and it asks that every such
+recipient be named with them.
+
+A wallet on the binding runs the same check with `checkPayerReview(facts,
+billId, entries, obligation, visibleText, reasonWords, via, lowerWords)`: the
+bill crosses as its entries, as it does for `obligationOf`, and `obligation` is
+the one `obligationOf` or `obligationVia` gave. `renderAmount` and
+`rateFigure` write the figures. An
+obligation the binding did not write — a request that does not read, outputs
+it does not carry, a reason §8.5 does not give — is refused.
+`tools/ffi/kotlin/Consumer.kt`, `tools/ffi/node/consumer.mjs`,
+`tools/ffi/swift/Consumer.swift` and `tools/ffi/dart/consumer.dart` run it against a screen that shows every fact
+and one that leaves out the output's address.
+
 **A refusal is reported, not thrown away, and it does not converge.**
 `foldLog` returns `setAside` and `mergeLogs` returns `refused` — each row an
 entry id and a §12 code. Render them; an entry that vanished silently is

@@ -336,6 +336,34 @@ pub struct PayerObligation {
     pub rate: ExchangeRate,
 }
 
+/// Which of §14.2's facts a review finding is about.
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReviewRule {
+    /// Every recipient the request cannot carry, with the reason (§8.5).
+    Unpayable,
+    /// Every pay-to address the fold recorded as replaced (§10.3).
+    ReplacedAddress,
+    /// Every debt with a payment recorded and not yet confirmed (§10.5,
+    /// §14.4).
+    Awaiting,
+    /// Every recipient paid by a preference other than their first (§14.8).
+    LowerPreference,
+    /// The rate the request was priced at, and who set it.
+    Rate,
+    /// The ZEC amount and address of every output.
+    Output,
+}
+
+/// One fact §14.2 requires that a review screen's text does not show.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct ReviewFinding {
+    pub rule: ReviewRule,
+    /// The fact, in words: whose, and which part of it.
+    pub fact: String,
+    /// The text looked for and not found.
+    pub expected: String,
+}
+
 /// What one entry did (the log, read as a history).
 #[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BillEventKind {

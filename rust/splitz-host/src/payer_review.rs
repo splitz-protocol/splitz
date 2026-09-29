@@ -19,6 +19,9 @@
 //!   (`no_address`, `bad_address`, `payout_not_zec`, `unpriceable`). A code
 //!   with no entry there is a finding: the kit cannot tell which words carry
 //!   it.
+//! - A recipient paid by a lower preference (§14.8) is shown by their name
+//!   and by `lower_words`, the wallet's own words for that. Empty words are a
+//!   finding, for the same reason.
 //! - A ZEC amount is [`render_amount`]'s text (§8.1: no trailing zeros, `.` as
 //!   the decimal point, no grouping), not touching a digit on either side and
 //!   not followed by `.` and a digit, so `0.1` is not found inside `0.12`.
@@ -52,6 +55,8 @@ pub enum ReviewRule {
     /// Every debt with a payment recorded and not yet confirmed (§10.5,
     /// §14.4).
     Awaiting,
+    /// Every recipient paid by a preference other than their first (§14.8).
+    LowerPreference,
     /// The rate the request was priced at, and who set it.
     Rate,
     /// The ZEC amount and address of every output.
@@ -87,7 +92,10 @@ pub fn rate_figure(rate: &ExchangeRate) -> String {
 /// §14.2's facts for `obligation` on `folded`, against `visible_text`.
 ///
 /// `reason_words` maps each §8.5 reason code to the words the screen uses for
-/// it. Findings come in the order of §14.2's list; within a rule, in the order
+/// it. `via` is the payer's choice of payouts the obligation was rendered with
+/// (`obligation_via`), and `lower_words` the screen's words for a recipient
+/// paid by one other than their first; a choice for somebody the obligation
+/// does not pay needs nothing shown. Findings come in the order of §14.2's list; within a rule, in the order
 /// the obligation or the fold gives the facts. Refused only for an output
 /// whose zatoshi §8.1 cannot render, which no rendered obligation carries.
 pub fn check_payer_review(
@@ -95,6 +103,8 @@ pub fn check_payer_review(
     folded: &FoldedBill,
     visible_text: &[String],
     reason_words: &BTreeMap<String, String>,
+    via: &BTreeMap<String, i64>,
+    lower_words: &str,
 ) -> splitz_core::Result<Vec<ReviewFinding>> {
     let text = visible_text.join("\n");
     let names: BTreeMap<&str, &str> = folded
@@ -163,6 +173,35 @@ pub fn check_payer_review(
                 shown,
             );
         }
+    }
+
+    let paid: BTreeSet<&str> = obligation
+        .settlements
+        .iter()
+        .map(|s| s.to.as_str())
+        .collect();
+    for (id, &index) in via {
+        if index == 0 || !paid.contains(id.as_str()) {
+            continue;
+        }
+        let who = name(id);
+        let shown = text.contains(&who);
+        need(
+            ReviewRule::LowerPreference,
+            "who is paid by a lower preference".to_owned(),
+            who.clone(),
+            shown,
+        );
+        need(
+            ReviewRule::LowerPreference,
+            format!("that {who} is paid by a lower preference"),
+            if lower_words.is_empty() {
+                "lower_preference".to_owned()
+            } else {
+                lower_words.to_owned()
+            },
+            !lower_words.is_empty() && text.contains(lower_words),
+        );
     }
 
     let figure = rate_figure(&obligation.rate);

@@ -176,6 +176,45 @@ void main(List<String> args) {
     '${owed.request.withheldMinorUnits}',
   );
 
+  print('ben\'s review screen shows what §14.2 says it must');
+  // The screen is the wallet's; these are the strings it draws, with the
+  // amount and the rate written as the binding writes them.
+  final zec = renderAmount(owed.request.payments.single.zatoshi);
+  final screen = [
+    'Pay Ana $zec ZEC',
+    'to u1ana',
+    'at ${rateFigure(owed.rate)} EUR per ZEC, set by Ana',
+  ];
+  final shown = checkPayerReview(
+    ben.facts(),
+    billId,
+    ben.entries,
+    owed,
+    screen,
+    const {},
+    const {},
+    '',
+  );
+  check('a screen showing every fact passes', shown.isEmpty, '$screen');
+  final noAddress = checkPayerReview(
+    ben.facts(),
+    billId,
+    ben.entries,
+    owed,
+    [for (final l in screen) l == 'to u1ana' ? 'to your contact' : l],
+    const {},
+    const {},
+    '',
+  );
+  check(
+    'one without the output\'s address is told exactly that',
+    noAddress.length == 1 &&
+        noAddress.single.rule == ReviewRule.output &&
+        noAddress.single.fact == 'the address Ana is paid at' &&
+        noAddress.single.expected == 'u1ana',
+    '$noAddress',
+  );
+
   print('the wallet sends it, then records what §14.3 allows');
   ben.add(
     recordPaymentEntry(

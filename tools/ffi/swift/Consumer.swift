@@ -185,6 +185,25 @@ func run(origin: String, downOrigin: String) async throws {
     check("the request is a ZIP 321 URI naming ana's address",
           owed!.request.uri!.hasPrefix("zcash:u1ana"), owed!.request.uri!)
 
+    print("ben's review screen shows what §14.2 says it must")
+    // The screen is the wallet's; these are the strings it draws, with the
+    // amount and the rate written as the binding writes them.
+    let zec = try renderAmount(zatoshi: owed!.request.payments[0].zatoshi)
+    let screen = ["Pay Ana \(zec) ZEC", "to u1ana",
+                  "at \(rateFigure(rate: owed!.rate)) EUR per ZEC, set by Ana"]
+    let shown = try checkPayerReview(facts: ben.facts(), billId: billId, entries: ben.entries,
+                                     obligation: owed!, visibleText: screen, reasonWords: [:],
+                                     via: [:], lowerWords: "")
+    check("a screen showing every fact passes", shown.isEmpty, "\(screen)")
+    let noAddress = try checkPayerReview(
+        facts: ben.facts(), billId: billId, entries: ben.entries, obligation: owed!,
+        visibleText: screen.map { $0 == "to u1ana" ? "to your contact" : $0 }, reasonWords: [:],
+        via: [:], lowerWords: "")
+    check("one without the output's address is told exactly that",
+          noAddress == [ReviewFinding(rule: .output, fact: "the address Ana is paid at",
+                                      expected: "u1ana")],
+          "\(noAddress)")
+
     print("the wallet writes the send down before it sends (§14.3)")
     // One string per bill, kept where it outlives the process. The send is the
     // wallet's; these say what the note becomes.

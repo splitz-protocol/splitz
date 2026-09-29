@@ -19,6 +19,9 @@
 ///   (`no_address`, `bad_address`, `payout_not_zec`, `unpriceable`). A code
 ///   with no entry there is a finding: the kit cannot tell which words carry
 ///   it.
+/// - A recipient paid by a lower preference (§14.8) is shown by their name
+///   and by `lowerWords`, the wallet's own words for that. Empty words are a
+///   finding, for the same reason.
 /// - A ZEC amount is [renderAmount]'s text (§8.1: no trailing zeros, `.` as
 ///   the decimal point, no grouping), not touching a digit on either side and
 ///   not followed by `.` and a digit, so `0.1` is not found inside `0.12`.
@@ -51,6 +54,9 @@ enum ReviewRule {
 
   /// Every debt with a payment recorded and not yet confirmed (§10.5, §14.4).
   awaiting,
+
+  /// Every recipient paid by a preference other than their first (§14.8).
+  lowerPreference,
 
   /// The rate the request was priced at, and who set it.
   rate,
@@ -92,13 +98,18 @@ String rateFigure(splitz.ExchangeRate rate) {
 /// §14.2's facts for [obligation] on [folded], against [visibleText].
 ///
 /// [reasonWords] maps each §8.5 reason code to the words the screen uses for
-/// it. Findings come in the order of §14.2's list; within a rule, in the order
+/// it. [via] is the payer's choice of payouts the obligation was rendered with
+/// (`obligationVia`), and [lowerWords] the screen's words for a recipient paid
+/// by one other than their first; a choice for somebody the obligation does
+/// not pay needs nothing shown. Findings come in the order of §14.2's list; within a rule, in the order
 /// the obligation or the fold gives the facts.
 List<ReviewFinding> checkPayerReview({
   required PayerObligation obligation,
   required FoldedBill folded,
   required List<String> visibleText,
   required Map<String, String> reasonWords,
+  Map<String, int> via = const {},
+  String lowerWords = '',
 }) {
   final text = visibleText.join('\n');
   final names = {for (final p in folded.bill.participants) p.id: p.name};
@@ -149,6 +160,24 @@ List<ReviewFinding> checkPayerReview({
         text.contains(who),
       );
     }
+  }
+
+  final paid = {for (final s in obligation.settlements) s.to};
+  for (final id in via.keys.toList()..sort()) {
+    if (via[id] == 0 || !paid.contains(id)) continue;
+    final who = name(id);
+    need(
+      ReviewRule.lowerPreference,
+      'who is paid by a lower preference',
+      who,
+      text.contains(who),
+    );
+    need(
+      ReviewRule.lowerPreference,
+      'that $who is paid by a lower preference',
+      lowerWords.isEmpty ? 'lower_preference' : lowerWords,
+      lowerWords.isNotEmpty && text.contains(lowerWords),
+    );
   }
 
   final figure = rateFigure(obligation.rate);

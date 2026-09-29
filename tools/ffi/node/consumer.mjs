@@ -169,6 +169,21 @@ check("it is four and a half thousand to ana",
 check("the request is a ZIP 321 URI naming ana's address",
       owed.request.uri.startsWith("zcash:u1ana"), owed.request.uri);
 
+console.log("ben's review screen shows what §14.2 says it must");
+// The screen is the wallet's; these are the strings it draws, with the amount
+// and the rate written as the binding writes them.
+const zec = splitz.render_amount(owed.request.payments[0].zatoshi);
+const screen = [`Pay Ana ${zec} ZEC`, "to u1ana",
+                `at ${splitz.rate_figure(owed.rate)} EUR per ZEC, set by Ana`];
+const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "");
+check("a screen showing every fact passes", shown.length === 0, JSON.stringify(screen));
+const noAddress = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed,
+    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "");
+check("one without the output's address is told exactly that",
+      noAddress.length === 1 && noAddress[0].rule === splitz.ReviewRule.Output &&
+        noAddress[0].fact === "the address Ana is paid at" && noAddress[0].expected === "u1ana",
+      JSON.stringify(noAddress));
+
 console.log("the wallet writes the send down before it sends (§14.3)");
 // One string per bill, kept where it outlives the process. The send is the
 // wallet's; these say what the note becomes.
