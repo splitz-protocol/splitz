@@ -113,10 +113,29 @@ func run(origin: String, downOrigin: String) async throws {
                                   payTo: "u1ben", identityKey: benKey,
                                   payouts: [], seed: ben.seed))
     try ben.take(ana)
+    // What ana holds, as she would report it: the ids of her entries.
+    let anaHolds = try historyOf(facts: ana.facts(), billId: billId, entries: ana.entries)
+        .map(\.entryId)
+    let behind = try deltaForPeer(facts: ben.facts(), billId: billId, entries: ben.entries,
+                                  theyHave: anaHolds)
+    check("ana lacks only ben's join, and it fits one code",
+          behind.missing == 1 && behind.uri != nil && behind.tooBigCode == nil, "\(behind.missing)")
 
     print("the two logs move through a relay that holds only ciphertext")
-    // The bill key is the wallet's to mint and to keep; §9.4's id is public.
-    let billKey = "-_" + String(repeating: "A", count: 41)
+    // The bill key is the wallet's to keep, minted from the platform's own
+    // entropy (SystemRandomNumberGenerator is cryptographically secure on
+    // Apple platforms); §9.4's id is public.
+    var entropy = SystemRandomNumberGenerator()
+    let billKey = try newBillKey(entropy: RandomBytes(
+        bytes: Data((0..<32).map { _ in UInt8.random(in: 0...255, using: &entropy) })))
+    check("that key is one the cipher can use", billKeyProblem(key: billKey) == nil, billKey)
+    let invite = try inviteForBill(facts: ana.facts(), billId: billId, entries: ana.entries,
+                                   billKey: billKey, name: "Dinner", expiry: 1_800_000_000)
+    let link = try renderInviteLink(invite: invite, base: "https://example.org/join")
+    check("the invite reads back from an https link", readScanned(text: link).billId == billId, link)
+    check("and expires by the wallet's clock",
+          try !inviteExpiry(invite: invite, nowUnixSeconds: 1_799_999_999).expired
+            && inviteExpiry(invite: invite, nowUnixSeconds: 1_800_000_001).expired, "1800000000")
     let channel = channelForBill(billId: billId)
     check("the channel is the bill id's hash, never the id",
           channel != billId && channel.count == 64, String(channel.prefix(16)) + "…")
@@ -266,6 +285,18 @@ func run(origin: String, downOrigin: String) async throws {
           "\(afterPayment.bill.payments.map(\.id))")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty,
           "\(afterPayment.bill.confirmedPayments)")
+    let paid = afterPayment.bill.payments[0]
+    let confirmScreen = ["Ben says he paid you",
+                         "\(try renderAmount(zatoshi: paid.zatoshi!)) ZEC",
+                         "priced at \(rateFigure(rate: paid.paidAtRate!)) EUR a ZEC",
+                         "transaction \(paid.reference!)"]
+    check("ana's confirm screen shows what §14.2 says a payee must see",
+          try checkPayeeReview(payment: paid, visibleText: confirmScreen,
+                               absentWords: "not recorded").isEmpty, "\(confirmScreen)")
+    let noReference = try checkPayeeReview(payment: paid, visibleText: Array(confirmScreen.dropLast()),
+                                           absentWords: "not recorded")
+    check("one without the transaction is told exactly that",
+          noReference.map(\.rule) == [.payeeReference], "\(noReference)")
     let totals = try totalsOf(facts: ben.facts(),
                               bills: [HeldBill(billId: billId, entries: ben.entries)])
     check("across bills, ben still owes ana, with the payment on its way",
@@ -335,6 +366,20 @@ func run(origin: String, downOrigin: String) async throws {
           zecPriceRequest(origin: priceOrigin, currency: "XAU") == nil, "XAU")
     let eur = try zecPriceFromResponse(body: #"{"zcash":{"eur":1222.41}}"#, currency: "EUR")
     check("the answer reads as minor units, exactly", eur == 122241, "\(eur ?? -1)")
+
+    print("the fallback price sources, asked and read the same way")
+    check("binance is asked for the ZECUSDC ticker",
+          binancePriceRequest(origin: "https://data-api.binance.vision")
+            == "https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC",
+          binancePriceRequest(origin: "https://data-api.binance.vision"))
+    let usd = try zecPriceFromBinance(body: #"{"symbol":"ZECUSDC","price":"1390.54000000"}"#, currency: "USD")
+    let notUsd = try zecPriceFromBinance(body: #"{"symbol":"ZECUSDC","price":"1390.54"}"#, currency: "EUR")
+    check("and prices USD alone", usd == 139054 && notUsd == nil, "\(usd ?? -1)")
+    let kes = try zecPriceFromCoinbase(
+        body: #"{"data":{"currency":"ZEC","rates":{"KES":"180159.79"}}}"#, currency: "KES")
+    check("coinbase prices the rest from one answer",
+          kes == 18015979 && coinbasePriceRequest(origin: "https://api.coinbase.com")
+            == "https://api.coinbase.com/v2/exchange-rates?currency=ZEC", "\(kes ?? -1)")
 }
 
 let arguments = CommandLine.arguments

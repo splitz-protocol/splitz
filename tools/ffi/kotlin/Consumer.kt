@@ -87,9 +87,16 @@ fun main(args: Array<String>) {
     ana.add(joinBillEntry(ana.facts(), billId, "Ana", "u1ana", anaKey, listOf(), ana.seed))
 
     println("ana shares it, and ben takes it from the code")
-    // The bill key is the wallet's to mint and to keep; §9.4's id is public.
-    val billKey = "-_" + "A".repeat(41)
+    // The bill key is the wallet's to keep, minted from the platform's own
+    // entropy; §9.4's id is public.
+    val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
     check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
+    val invite = inviteForBill(ana.facts(), billId, ana.entries, billKey, "Dinner", 1_800_000_000L)
+    val link = renderInviteLink(invite, "https://example.org/join")
+    check("the invite reads back from an https link", readScanned(link).billId == billId, link)
+    check("and expires by the wallet's clock",
+          !inviteExpiry(invite, 1_799_999_999L).expired && inviteExpiry(invite, 1_800_000_001L).expired,
+          "1800000000")
     val payload = shareableBillPayload(ana.facts(), billId, ana.entries, billKey)
     check("the whole bill fits in one code", payload != null, "${payload?.length} characters")
     val scanned = readScanned(payload!!)
@@ -97,6 +104,11 @@ fun main(args: Array<String>) {
     check("and carries the key", scanned.billKey == billKey, "${scanned.billKey}")
     ben.entries = mergeEntries(ben.entries, scanned.entries).entries
     ben.add(joinBillEntry(ben.facts(), billId, "Ben", "u1ben", benKey, listOf(), ben.seed))
+    // What ana holds, as she would report it: the ids of her entries.
+    val anaHolds = historyOf(ana.facts(), billId, ana.entries).map { it.entryId }
+    val behind = deltaForPeer(ben.facts(), billId, ben.entries, anaHolds)
+    check("ana lacks only ben's join, and it fits one code",
+          behind.missing == 1uL && behind.uri != null && behind.tooBigCode == null, "$behind")
 
     println("the two logs move through a relay that holds only ciphertext")
     val channel = channelForBill(billId)
@@ -226,6 +238,16 @@ fun main(args: Array<String>) {
           "${afterPayment.bill.payments.map { it.id }}")
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty(),
           "${afterPayment.bill.confirmedPayments}")
+    val paid = afterPayment.bill.payments.single()
+    val confirmScreen = listOf("Ben says he paid you",
+                               "${renderAmount(paid.zatoshi!!)} ZEC",
+                               "priced at ${rateFigure(paid.paidAtRate!!)} EUR a ZEC",
+                               "transaction ${paid.reference}")
+    check("ana's confirm screen shows what §14.2 says a payee must see",
+          checkPayeeReview(paid, confirmScreen, "not recorded").isEmpty(), "$confirmScreen")
+    val noReference = checkPayeeReview(paid, confirmScreen.dropLast(1), "not recorded")
+    check("one without the transaction is told exactly that",
+          noReference.map { it.rule } == listOf(ReviewRule.PAYEE_REFERENCE), "$noReference")
     val stillOwed = obligationOf(ben.facts(), billId, ben.entries)!!
     check("so ben is asked for nothing twice", stillOwed.settlements.isEmpty(),
           "${stillOwed.settlements}")
@@ -310,6 +332,21 @@ fun main(args: Array<String>) {
     check("the answer reads as minor units, exactly",
           zecPriceFromResponse("""{"zcash":{"eur":1222.41}}""", "EUR") == 122241L,
           "${zecPriceFromResponse("""{"zcash":{"eur":1222.41}}""", "EUR")}")
+
+    println("the fallback price sources, asked and read the same way")
+    check("binance is asked for the ZECUSDC ticker",
+          binancePriceRequest("https://data-api.binance.vision") ==
+              "https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC",
+          binancePriceRequest("https://data-api.binance.vision"))
+    check("and prices USD alone",
+          zecPriceFromBinance("""{"symbol":"ZECUSDC","price":"1390.54000000"}""", "USD") == 139054L &&
+              zecPriceFromBinance("""{"symbol":"ZECUSDC","price":"1390.54"}""", "EUR") == null,
+          "139054")
+    check("coinbase prices the rest from one answer",
+          zecPriceFromCoinbase("""{"data":{"currency":"ZEC","rates":{"KES":"180159.79"}}}""", "KES") ==
+              18015979L && coinbasePriceRequest("https://api.coinbase.com") ==
+              "https://api.coinbase.com/v2/exchange-rates?currency=ZEC",
+          "18015979")
 
     println(if (failures == 0)
         "CONSUMER RESULT: kotlin drives a whole bill with no callbacks, $failures failures"

@@ -4,6 +4,8 @@
 /// hands the library facts rather than implementing seven interfaces. Nothing
 /// calls back into Dart.
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:splitz_dart_consumer/splitz_ffi.dart';
@@ -102,6 +104,49 @@ void main(List<String> args) {
       const [],
       ben.signingSeed(),
     ),
+  );
+  // What ana holds, as she would report it: the ids of her entries.
+  final anaHolds = [
+    for (final e in historyOf(ana.facts(), billId, ana.entries)) e.entryId,
+  ];
+  final behind = deltaForPeer(ben.facts(), billId, ben.entries, anaHolds);
+  check(
+    'ana lacks only ben\'s join, and it fits one code',
+    behind.missing == 1 && behind.uri != null && behind.tooBigCode == null,
+    '${behind.missing}',
+  );
+
+  print('the bill key is minted from the platform\'s entropy, and invites');
+  final random = Random.secure();
+  final billKey = newBillKey(
+    RandomBytes(
+      bytes: Uint8List.fromList(List.generate(32, (_) => random.nextInt(256))),
+    ),
+  );
+  check(
+    'that key is one the cipher can use',
+    billKeyProblem(billKey) == null,
+    billKey,
+  );
+  final invite = inviteForBill(
+    ana.facts(),
+    billId,
+    ana.entries,
+    billKey,
+    'Dinner',
+    1800000000,
+  );
+  final link = renderInviteLink(invite, 'https://example.org/join');
+  check(
+    'the invite reads back from an https link',
+    readScanned(link).billId == billId,
+    link,
+  );
+  check(
+    'and expires by the wallet\'s clock',
+    !inviteExpiry(invite, 1799999999).expired &&
+        inviteExpiry(invite, 1800000001).expired,
+    '1800000000',
   );
 
   print('ana adds an expense they share, and prices it');
@@ -247,6 +292,40 @@ void main(List<String> args) {
     afterPayment.bill.confirmedPayments.isEmpty,
     '${afterPayment.bill.confirmedPayments}',
   );
+  final paid = afterPayment.bill.payments.single;
+  // This record was written by hand, with no ZEC figure, rate or reference:
+  // the screen says so in the wallet's own words.
+  final zatoshi = paid.zatoshi;
+  final rate = paid.paidAtRate;
+  final confirmScreen = [
+    'Ben says he paid you',
+    zatoshi == null ? 'ZEC sent: not recorded' : '${renderAmount(zatoshi)} ZEC',
+    rate == null
+        ? 'rate: not recorded'
+        : 'priced at ${rateFigure(rate)} EUR a ZEC',
+    paid.reference == null
+        ? 'reference: not recorded'
+        : 'transaction ${paid.reference}',
+  ];
+  check(
+    'ana\'s confirm screen shows what §14.2 says a payee must see',
+    checkPayeeReview(paid, confirmScreen, 'not recorded').isEmpty,
+    '$confirmScreen',
+  );
+  final unsaid = checkPayeeReview(paid, const [
+    'Ben says he paid you',
+  ], 'not recorded');
+  check(
+    'one that never says a figure is missing is told each one',
+    unsaid.map((f) => f.rule).toList().toString() ==
+        [
+          ReviewRule.payeeZec,
+          ReviewRule.payeeRate,
+          ReviewRule.payeeReference,
+        ].toString(),
+    '$unsaid',
+  );
+
   final stillOwed = obligationOf(ben.facts(), billId, ben.entries)!;
   check(
     'so ben is asked for nothing twice',
@@ -305,9 +384,40 @@ void main(List<String> args) {
     '${history.first.at} .. ${history.last.at}',
   );
 
+  print('the fallback price sources, asked and read the same way');
+  check(
+    'binance is asked for the ZECUSDC ticker',
+    binancePriceRequest('https://data-api.binance.vision') ==
+        'https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC',
+    binancePriceRequest('https://data-api.binance.vision'),
+  );
+  check(
+    'and prices USD alone',
+    zecPriceFromBinance(
+              '{"symbol":"ZECUSDC","price":"1390.54000000"}',
+              'USD',
+            ) ==
+            139054 &&
+        zecPriceFromBinance('{"symbol":"ZECUSDC","price":"1390.54"}', 'EUR') ==
+            null,
+    '139054',
+  );
+  check(
+    'coinbase prices the rest from one answer',
+    zecPriceFromCoinbase(
+              '{"data":{"currency":"ZEC","rates":{"KES":"180159.79"}}}',
+              'KES',
+            ) ==
+            18015979 &&
+        coinbasePriceRequest('https://api.coinbase.com') ==
+            'https://api.coinbase.com/v2/exchange-rates?currency=ZEC',
+    '18015979',
+  );
+
   print(
     failures == 0
         ? 'CONSUMER RESULT: dart drives a whole bill with no callbacks, $failures failures'
         : 'CONSUMER RESULT: $failures check(s) failed',
   );
+  if (failures != 0) exit(1);
 }

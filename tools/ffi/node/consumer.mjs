@@ -97,7 +97,15 @@ const billId = JSON.parse(create).id;
 ana.add(splitz.join_bill_entry(ana.facts(), billId, "Ana", "u1ana", anaKey, [], ana.seed));
 
 console.log("ana shares it, and ben takes it from the code");
-const billKey = "-_" + "A".repeat(41);
+// The bill key is the wallet's to keep, minted from the platform's own entropy.
+const billKey = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
+check("that key is one the cipher can use", splitz.bill_key_problem(billKey) === undefined, billKey);
+const invite = splitz.invite_for_bill(ana.facts(), billId, ana.entries, billKey, "Dinner", 1800000000);
+const link = splitz.render_invite_link(invite, "https://example.org/join");
+check("the invite reads back from an https link", splitz.read_scanned(link).bill_id === billId, link);
+check("and expires by the wallet's clock",
+      !splitz.invite_expiry(invite, 1799999999).expired && splitz.invite_expiry(invite, 1800000001).expired,
+      "1800000000");
 const payload = splitz.shareable_bill_payload(ana.facts(), billId, ana.entries, billKey);
 check("the whole bill fits in one code", typeof payload === "string",
       `${payload?.length} characters`);
@@ -105,6 +113,13 @@ const scanned = splitz.read_scanned(payload);
 check("the scan names the same bill", scanned.bill_id === billId, `${scanned.bill_id}`);
 ben.entries = splitz.merge_entries(ben.entries, scanned.entries).entries;
 ben.add(splitz.join_bill_entry(ben.facts(), billId, "Ben", "u1ben", benKey, [], ben.seed));
+// What ana holds, as she would report it: the ids of her entries.
+const anaHolds = splitz.history_of(ana.facts(), billId, ana.entries).map((e) => e.entry_id);
+const behind = splitz.delta_for_peer(ben.facts(), billId, ben.entries, anaHolds);
+check("ana lacks only ben's join, and it fits one code",
+      Number(behind.missing) === 1 && typeof behind.uri === "string" &&
+        behind.too_big_code === undefined,
+      JSON.stringify({ missing: String(behind.missing), code: behind.too_big_code }));
 
 console.log("the two logs move through a relay that holds only ciphertext");
 const channel = splitz.channel_for_bill(billId);
@@ -237,6 +252,18 @@ check("ana sees the payment", afterPayment.bill.payments.length === 1,
       JSON.stringify(afterPayment.bill.payments.map((p) => p.id)));
 check("and it is not confirmed", afterPayment.bill.confirmed_payments.length === 0,
       JSON.stringify(afterPayment.bill.confirmed_payments));
+const paid = afterPayment.bill.payments[0];
+const confirmScreen = ["Ben says he paid you",
+                       `${splitz.render_amount(paid.zatoshi)} ZEC`,
+                       `priced at ${splitz.rate_figure(paid.paid_at_rate)} EUR a ZEC`,
+                       `transaction ${paid.reference}`];
+check("ana's confirm screen shows what §14.2 says a payee must see",
+      splitz.check_payee_review(paid, confirmScreen, "not recorded").length === 0,
+      JSON.stringify(confirmScreen));
+const noReference = splitz.check_payee_review(paid, confirmScreen.slice(0, -1), "not recorded");
+check("one without the transaction is told exactly that",
+      noReference.length === 1 && noReference[0].rule === splitz.ReviewRule.PayeeReference,
+      JSON.stringify(noReference));
 check("so ben is asked for nothing twice",
       splitz.obligation_of(ben.facts(), billId, ben.entries).settlements.length === 0,
       JSON.stringify(splitz.obligation_of(ben.facts(), billId, ben.entries).settlements));
@@ -313,6 +340,21 @@ check("a code with no exponent is not asked for",
       splitz.zec_price_request(priceOrigin, "XAU") === undefined, "XAU");
 const eur = splitz.zec_price_from_response('{"zcash":{"eur":1222.41}}', "EUR");
 check("the answer reads as minor units, exactly", Number(eur) === 122241, `${eur}`);
+
+console.log("the fallback price sources, asked and read the same way");
+check("binance is asked for the ZECUSDC ticker",
+      splitz.binance_price_request("https://data-api.binance.vision") ===
+        "https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC",
+      splitz.binance_price_request("https://data-api.binance.vision"));
+check("and prices USD alone",
+      Number(splitz.zec_price_from_binance('{"symbol":"ZECUSDC","price":"1390.54000000"}', "USD")) === 139054 &&
+        splitz.zec_price_from_binance('{"symbol":"ZECUSDC","price":"1390.54"}', "EUR") === undefined,
+      "139054");
+check("coinbase prices the rest from one answer",
+      Number(splitz.zec_price_from_coinbase('{"data":{"currency":"ZEC","rates":{"KES":"180159.79"}}}', "KES")) === 18015979 &&
+        splitz.coinbase_price_request("https://api.coinbase.com") ===
+          "https://api.coinbase.com/v2/exchange-rates?currency=ZEC",
+      "18015979");
 
 console.log(failures === 0
   ? `CONSUMER RESULT: javascript drives a whole bill with no callbacks, ${failures} failures`

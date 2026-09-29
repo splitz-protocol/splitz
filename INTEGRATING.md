@@ -416,6 +416,29 @@ JavaScript — and the JavaScript generator spells record *fields* as Rust does,
 so a record reads `withheld_minor_units` there and `withheldMinorUnits` in the
 other two.
 
+Beyond a bill's arithmetic the binding carries what every wallet would
+otherwise write for itself, each pure and each run by the four consumers
+(`tools/ffi/{kotlin,node,swift,dart}`):
+
+| call | what it does |
+|---|---|
+| `newBillKey(RandomBytes(bytes))` | a bill key from 32 bytes of the platform's secure generator |
+| `renderInviteLink(invite, base)` | the invite as an https link under your host (§11.1); `readScanned` reads it back |
+| `inviteExpiry(invite, nowUnixSeconds)` | the invite's expiry, and whether it is past your clock |
+| `deltaForPeer(facts, billId, entries, theyHave)` | what a peer holding `theyHave` lacks, as one scanned code, or `tooBigCode` when it needs a relay (§14.5) |
+| `awaitingMyConfirmation(facts, billId, entries)` | the payments naming this device as payee, not yet confirmed (§10.5) |
+| `checkPayeeReview(payment, visibleText, absentWords)` | the payee's confirm screen against §14.2 |
+| `binancePriceRequest` / `zecPriceFromBinance` | ZEC in USD from Binance's ZECUSDC ticker, USDC read as USD |
+| `coinbasePriceRequest` / `zecPriceFromCoinbase` | ZEC in most currencies from one Coinbase answer |
+
+Ask Binance first for USD and Coinbase for every other currency, or for USD
+when Binance cannot answer. The HTTP is yours; the binding writes each request
+and reads each answer. `RandomBytes`, `InviteExpiry` and the three-field
+`Delta` are records rather than a bare byte string, flag or tagged enum
+because not every generator lowers those correctly.
+`tools/parity/binding.py` holds the binding to the host crate: every host
+function is exported, or listed with why a binding wallet has no use for it.
+
 ### Kotlin
 
 ```kotlin file=tools/ffi/kotlin/Doc.kt
@@ -1013,6 +1036,20 @@ reader produced to `checkProposal(uri, outputs)` / `check_proposal` before
 signing, and sign only when both `missing` and `unexpected` are empty
 (§14.6). It reads back only what this protocol wrote (§8.7).
 
+`sendPaymentRequest(uri:, read:, propose:, broadcast:)` /
+`send_payment_request` is your `WalletSender.send` in that order: your reading
+is held against the request with `proposalProblem`, then built, then
+broadcast. Anything refused before a transaction exists — a reading that
+differs, too little to spend, a reader or builder that raised — comes back as
+`failed`, never as a send that may still land (§14.3). You supply the three
+steps; your broadcast's own outcome is returned as it is. The binding carries
+`proposal_problem` for a wallet that runs the steps itself.
+
+**Read a swap provider's HTTP answer by its status first.** `swapAnswer(status,
+bodyBytes)` / `swap_answer` returns the body of a 2xx or 3xx and refuses a 4xx
+or 5xx with the provider's own `message`, transient for a 5xx; an error body
+parsed as a quote reads an error object as a price.
+
 **A payment you received can be confirmed from what arrived.**
 `arrivalsFor(bills, me, received)` / `arrivals_for` matches the transactions
 your wallet received against the unconfirmed ZEC records to you, across every
@@ -1070,6 +1107,13 @@ it does not carry, a reason §8.5 does not give — is refused.
 `tools/ffi/kotlin/Consumer.kt`, `tools/ffi/node/consumer.mjs`,
 `tools/ffi/swift/Consumer.swift` and `tools/ffi/dart/consumer.dart` run it against a screen that shows every fact
 and one that leaves out the output's address.
+
+**Check the payee's confirm screen too.** `checkPayeeReview(payment,
+visibleText, absentWords)` / `check_payee_review` takes a payment record and the
+strings the screen a payee confirms it on shows. Each of the record's ZEC, rate
+and reference that it carries must be shown; a `shieldedZec` or `swap` record
+lacking one must show `absentWords`, your words for a missing figure. A cash
+record needs nothing shown. It is in both host packages and the binding.
 
 **A refusal is reported, not thrown away, and it does not converge.**
 `foldLog` returns `setAside` and `mergeLogs` returns `refused` — each row an

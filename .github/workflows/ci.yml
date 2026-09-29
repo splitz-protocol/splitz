@@ -185,6 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/parity/surface.py
+      - run: python3 tools/parity/binding.py
 
   web-target:
     # Asserts the package still refuses to compile to JavaScript. A JS number

@@ -12,6 +12,8 @@
 #     tools/ffi/aar-device.sh
 #
 # Needs Gradle, the Android SDK, and a booted emulator or attached device.
+# With more than one attached, set ANDROID_SERIAL to the one to use: adb and
+# the instrumented test both read it.
 # Not run by CI: a hosted runner has neither.
 set -euo pipefail
 

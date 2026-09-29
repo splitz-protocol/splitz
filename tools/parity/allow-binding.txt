@@ -1,0 +1,33 @@
+# Every public function of the Rust host crate (rust/splitz-host/src/lib.rs)
+# that the binding (rust/splitz-ffi/src/pure.rs) does not export under the
+# same name: either `host -> binding`, the export that carries it, or the host
+# name and why a binding wallet has no use for it. tools/parity/binding.py
+# fails on a host function listed nowhere, and on an entry naming an export
+# that does not exist.
+
+activity_of               -> history_of
+assets_from_tokens        -> swap_assets_from_tokens
+awaiting_confirmation_by  -> awaiting_my_confirmation
+binance_price_url         -> binance_price_request
+coinbase_price_url        -> coinbase_price_request
+coingecko_price_url       -> zec_price_request
+price_from_binance        -> zec_price_from_binance
+price_from_coinbase       -> zec_price_from_coinbase
+price_from_coingecko      -> zec_price_from_response
+quote_request_body        -> swap_quote_request
+quote_from_response       -> swap_quote_from_response
+status_from_response      -> swap_status_from_response
+fold_verified             -> fold_entries
+fold_unverified           -> fold_entries
+identity_seed_from        -> identity_seed_from_secret
+is_well_formed_key        -> bill_key_problem
+check_bill_storage        # takes the wallet's storage as a trait object; the binding has no callbacks, and a binding wallet's storage is its own code
+check_secret_store        # the same, over the wallet's keychain
+check_splits_relay        # the same, over the relay client; the relay's answers are checked by relay_push_answer and relay_fetch_answer
+check_zec_prices          # the same, over the price source; the binding's price readers are pure and checked by their own cases
+base64url_encode          # encoding the platform already has; keys and seeds cross as the base64url strings the binding writes
+base64url_decode          # the same
+component_encode          # URL encoding for the relay client; relay_channel_url writes the whole URL
+query_encode              # the same, for query strings the binding's request builders write whole
+send_payment_request      # takes the wallet's read, propose and broadcast as closures, and the binding has no callbacks; a binding wallet calls proposal_problem before building
+currency_exponent         # read inside every price and amount the binding writes; rate_figure and render_amount carry it
