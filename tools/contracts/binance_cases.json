@@ -1,76 +1,76 @@
 {
-  "description": "Binance ZECUSDT ticker answers and the minor units of USD per ZEC the host packages read from them.",
+  "description": "Binance ZECUSDC ticker answers and the minor units of USD per ZEC the host packages read from them.",
   "count": 15,
   "cases": [
     {
       "name": "captured_usd",
-      "body": "{\"symbol\":\"ZECUSDT\",\"price\":\"1390.28000000\"}",
+      "body": "{\"symbol\":\"ZECUSDC\",\"price\":\"1391.88000000\"}",
       "currency": "USD",
-      "expect": 139028
+      "expect": 139188
     },
     {
       "name": "captured_lower_case_is_not_a_code",
-      "body": "{\"symbol\":\"ZECUSDT\",\"price\":\"1390.28000000\"}",
+      "body": "{\"symbol\":\"ZECUSDC\",\"price\":\"1391.88000000\"}",
       "currency": "usd",
       "expect": null
     },
     {
       "name": "captured_eur_is_not_priced",
-      "body": "{\"symbol\":\"ZECUSDT\",\"price\":\"1390.28000000\"}",
+      "body": "{\"symbol\":\"ZECUSDC\",\"price\":\"1391.88000000\"}",
       "currency": "EUR",
       "expect": null
     },
     {
       "name": "half_a_cent_rounds_up",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"1.00500000\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"1.00500000\"}",
       "currency": "USD",
       "expect": 101
     },
     {
       "name": "just_under_half_a_cent_rounds_down",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"1.00490000\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"1.00490000\"}",
       "currency": "USD",
       "expect": 100
     },
     {
       "name": "a_whole_number",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"42\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"42\"}",
       "currency": "USD",
       "expect": 4200
     },
     {
       "name": "a_tiny_price_rounds_to_nothing",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"0.00400000\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"0.00400000\"}",
       "currency": "USD",
       "expect": null
     },
     {
       "name": "zero_is_not_a_price",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"0.00000000\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"0.00000000\"}",
       "currency": "USD",
       "expect": null
     },
     {
       "name": "past_the_bound",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"90071992547409.92\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"90071992547409.92\"}",
       "currency": "USD",
       "expect": null
     },
     {
       "name": "a_number_is_not_a_price",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": 1390.54}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": 1390.54}",
       "currency": "USD",
       "error": "malformed"
     },
     {
       "name": "an_exponent_is_not_a_price",
-      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"1.5e2\"}",
+      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"1.5e2\"}",
       "currency": "USD",
       "error": "malformed"
     },
     {
       "name": "another_symbol",
-      "body": "{\"symbol\": \"ZECUSDC\", \"price\": \"1\"}",
+      "body": "{\"symbol\": \"ZECUSDT\", \"price\": \"1\"}",
       "currency": "USD",
       "error": "malformed"
     },

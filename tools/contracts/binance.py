@@ -7,12 +7,12 @@
 
 The cases pair an answer with a currency and the minor units the packages must
 read from it. Binance lists ZEC against stablecoins and crypto, not currencies,
-so the ZECUSDT price is read as USD and every other currency is unpriced. The
+so the ZECUSDC price is read as USD and every other currency is unpriced. The
 price is a decimal string, scaled by USD's exponent exactly and rounded half up.
 
 Source: https://developers.binance.com/docs/binance-spot-api-docs/rest-api/market-data-endpoints —
-GET https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDT answers
-{"symbol": "ZECUSDT", "price": "<decimal>"}. fixtures/binance_ticker.json is
+GET https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC answers
+{"symbol": "ZECUSDC", "price": "<decimal>"}. fixtures/binance_ticker.json is
 one such answer, captured as is.
 """
 
@@ -29,8 +29,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 CASES = HERE / "binance_cases.json"
 FIXTURE = HERE / "fixtures" / "binance_ticker.json"
-LIVE = "https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDT"
-SYMBOL = "ZECUSDT"
+LIVE = "https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC"
+SYMBOL = "ZECUSDC"
 MAX = 2**53 - 1
 DECIMAL = re.compile(r"^[0-9]+(\.[0-9]+)?$")
 
@@ -80,7 +80,7 @@ def cases() -> list[dict]:
     add("past_the_bound", ticker("90071992547409.92"), "USD")
     add("a_number_is_not_a_price", ticker(1390.54), "USD")
     add("an_exponent_is_not_a_price", ticker("1.5e2"), "USD")
-    add("another_symbol", ticker("1", "ZECUSDC"), "USD")
+    add("another_symbol", ticker("1", "ZECUSDT"), "USD")
     add("the_error_answer", '{"code":-1121,"msg":"Invalid symbol."}', "USD")
     add("not_json", "<html>blocked</html>", "USD")
     add("not_an_object", "[1,2]", "USD")
@@ -114,7 +114,7 @@ def main() -> int:
         FIXTURE.write_text(answer.strip() + "\n")
         print(f"{FIXTURE.relative_to(ROOT)}: captured")
     doc = {
-        "description": "Binance ZECUSDT ticker answers and the minor units of USD per ZEC the host packages read from them.",
+        "description": "Binance ZECUSDC ticker answers and the minor units of USD per ZEC the host packages read from them.",
         "count": 0,
         "cases": cases(),
     }

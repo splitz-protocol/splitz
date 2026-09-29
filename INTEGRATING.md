@@ -912,8 +912,8 @@ surfacing a changed pay-to address (7).
    `zec_price_request` and `zec_price_from_response`. Where it points is yours:
    CoinGecko itself, or a proxy you run. `CoinbaseZecPrices` reads Coinbase's
    keyless `/v2/exchange-rates?currency=ZEC`, which prices most currencies in
-   one request; `BinanceZecPrices` reads the ZECUSDT ticker and prices USD
-   alone, taking USDT as USD. `FirstZecPrices([...])` asks sources in order
+   one request; `BinanceZecPrices` reads the ZECUSDC ticker and prices USD
+   alone, taking USDC as USD. `FirstZecPrices([...])` asks sources in order
    and passes over one that fails, so a blocked feed does not leave a bill
    unpriced while another can price it.
 

@@ -107,7 +107,7 @@ void main() {
       expect(await prices.minorUnitsPerZec('USD'), isPositive);
       expect(await prices.minorUnitsPerZec('EUR'), isNull);
       expect(asked.map((u) => u.toString()), [
-        'https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDT',
+        'https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC',
       ]);
     });
 

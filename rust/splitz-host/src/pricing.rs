@@ -307,16 +307,16 @@ impl ZecPrices for CoinbaseZecPrices<'_> {
     }
 }
 
-/// The Binance pair [`BinanceZecPrices`] reads: ZEC against USDT, taken as US
+/// The Binance pair [`BinanceZecPrices`] reads: ZEC against USDC, taken as US
 /// dollars. Binance lists ZEC against stablecoins and crypto only, so no
 /// other currency is priced.
-pub const BINANCE_ZEC_SYMBOL: &str = "ZECUSDT";
+pub const BINANCE_ZEC_SYMBOL: &str = "ZECUSDC";
 
 /// Minor units of USD one ZEC costs, read from a Binance
-/// `/api/v3/ticker/price?symbol=ZECUSDT` answer: `{"symbol": "ZECUSDT",
+/// `/api/v3/ticker/price?symbol=ZECUSDC` answer: `{"symbol": "ZECUSDC",
 /// "price": "1390.54000000"}`.
 ///
-/// USDT is read as USD, so the figure is as good as that peg. `None` for any
+/// USDC is read as USD, so the figure is as good as that peg. `None` for any
 /// currency but USD, and when the price is not positive, rounds to nothing, or
 /// exceeds [`MAX_MINOR_UNITS_PER_ZEC`]. Refused with [`HostError::Price`] when
 /// `body` is not a ticker for [`BINANCE_ZEC_SYMBOL`], or its price is not a

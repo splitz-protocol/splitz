@@ -93,7 +93,7 @@ fn the_binance_client_asks_for_the_ticker_and_prices_usd_only() {
     assert_eq!(prices.minor_units_per_zec("EUR").unwrap(), None);
     assert_eq!(
         transport.asked.borrow().as_slice(),
-        ["https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDT"]
+        ["https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC"]
     );
 }
 
