@@ -1,0 +1,13 @@
+# The bill relay as a Cloudflare Worker. `npx wrangler deploy` from this
+# directory publishes it at https://splitz-relay.<account>.workers.dev.
+name = "splitz-relay"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "Relay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Relay"]
