@@ -910,7 +910,12 @@ surfacing a changed pay-to address (7).
    CoinGecko's `/simple/price` for any currency the ISO 4217 register gives an
    exponent, exactly and rounding halves up; the bindings expose the same as
    `zec_price_request` and `zec_price_from_response`. Where it points is yours:
-   CoinGecko itself, or a proxy you run.
+   CoinGecko itself, or a proxy you run. `CoinbaseZecPrices` reads Coinbase's
+   keyless `/v2/exchange-rates?currency=ZEC`, which prices most currencies in
+   one request; `BinanceZecPrices` reads the ZECUSDT ticker and prices USD
+   alone, taking USDT as USD. `FirstZecPrices([...])` asks sources in order
+   and passes over one that fails, so a blocked feed does not leave a bill
+   unpriced while another can price it.
 
 ## Things that are easy to get wrong
 

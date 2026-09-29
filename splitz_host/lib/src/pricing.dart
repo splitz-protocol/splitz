@@ -169,3 +169,179 @@ class CoinGeckoZecPrices implements ZecPrices {
     return priceFromCoinGecko(await _get(requestFor(currency)), currency);
   }
 }
+
+/// Minor units of [currency] one ZEC costs, read from a Coinbase
+/// `/v2/exchange-rates?currency=ZEC` answer.
+///
+/// The answer is `{"data": {"currency": "ZEC", "rates": {"USD": "1393.12",
+/// …}}}`: every rate a decimal string, keyed by upper-case code. The string is
+/// scaled by the currency's ISO 4217 exponent in exact integers, rounding
+/// halves up, as [priceFromCoinGecko] does.
+///
+/// Null when the answer does not price [currency], when the register gives
+/// [currency] no exponent (§2.1), and when the price is not positive, rounds
+/// to nothing, or exceeds [maxMinorUnitsPerZec]. Throws [ZecPriceException]
+/// when [body] is not such an answer for ZEC, or a rate is not a decimal
+/// string.
+int? priceFromCoinbase(String body, String currency) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    throw const ZecPriceException('The price answer is not JSON');
+  }
+  final data = decoded is Map<String, dynamic> ? decoded['data'] : null;
+  if (data is! Map<String, dynamic>) {
+    throw const ZecPriceException('The price answer has no data object');
+  }
+  if (data['currency'] != 'ZEC') {
+    throw const ZecPriceException('The price answer is not for ZEC');
+  }
+  final rates = data['rates'];
+  if (rates is! Map<String, dynamic>) {
+    throw const ZecPriceException('The price answer has no rates');
+  }
+  final exponent = currencyExponent(currency);
+  if (exponent == null) return null;
+  final raw = rates[currency.toUpperCase()];
+  if (raw == null) return null;
+  if (raw is! String || !RegExp(r'^[0-9]+(\.[0-9]+)?$').hasMatch(raw)) {
+    throw ZecPriceException('The $currency rate is not a decimal string');
+  }
+  final scaled = _scaleExactly(raw, exponent);
+  if (scaled == null ||
+      scaled <= BigInt.zero ||
+      scaled > BigInt.from(maxMinorUnitsPerZec)) {
+    return null;
+  }
+  return scaled.toInt();
+}
+
+/// ZEC prices from Coinbase's `/v2/exchange-rates` (or a proxy speaking it).
+///
+/// [origin] is the host the wallet chose, such as `https://api.coinbase.com`.
+/// One request prices every currency, since the base is ZEC. Held to the
+/// provider's answers by `test/coinbase_contract_test.dart`, and against the
+/// live service daily by `tools/contracts/coinbase.py --check`.
+///
+/// A failed fetch raises: an unreachable feed is not an unpriced currency.
+class CoinbaseZecPrices implements ZecPrices {
+  CoinbaseZecPrices({required this.origin, required JsonGet get}) : _get = get;
+
+  final Uri origin;
+  final JsonGet _get;
+
+  /// The request for ZEC's rates against every currency.
+  Uri get request => origin.replace(
+    path: '${origin.path.replaceFirst(RegExp(r'/+$'), '')}/v2/exchange-rates',
+    queryParameters: const {'currency': 'ZEC'},
+  );
+
+  @override
+  Future<int?> minorUnitsPerZec(String currency) async {
+    if (!splitz.isCurrency(currency) || currencyExponent(currency) == null) {
+      return null;
+    }
+    return priceFromCoinbase(await _get(request), currency);
+  }
+}
+
+/// The Binance pair [BinanceZecPrices] reads: ZEC against USDT, taken as US
+/// dollars. Binance lists ZEC against stablecoins and crypto only, so no
+/// other currency is priced.
+const String binanceZecSymbol = 'ZECUSDT';
+
+/// Minor units of USD one ZEC costs, read from a Binance
+/// `/api/v3/ticker/price?symbol=ZECUSDT` answer: `{"symbol": "ZECUSDT",
+/// "price": "1390.54000000"}`.
+///
+/// USDT is read as USD, so the figure is as good as that peg. Null for any
+/// currency but USD, and when the price is not positive, rounds to nothing, or
+/// exceeds [maxMinorUnitsPerZec]. Throws [ZecPriceException] when [body] is
+/// not a ticker for [binanceZecSymbol], or its price is not a decimal string.
+int? priceFromBinance(String body, String currency) {
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(body);
+  } on FormatException {
+    throw const ZecPriceException('The price answer is not JSON');
+  }
+  if (decoded is! Map<String, dynamic> ||
+      decoded['symbol'] != binanceZecSymbol) {
+    throw const ZecPriceException('The price answer is not the ZEC ticker');
+  }
+  final raw = decoded['price'];
+  if (raw is! String || !RegExp(r'^[0-9]+(\.[0-9]+)?$').hasMatch(raw)) {
+    throw const ZecPriceException('The ZEC price is not a decimal string');
+  }
+  if (currency != 'USD') return null;
+  final scaled = _scaleExactly(raw, currencyExponent('USD')!);
+  if (scaled == null ||
+      scaled <= BigInt.zero ||
+      scaled > BigInt.from(maxMinorUnitsPerZec)) {
+    return null;
+  }
+  return scaled.toInt();
+}
+
+/// ZEC prices in USD from Binance's `/api/v3/ticker/price` (or a proxy
+/// speaking it).
+///
+/// [origin] is the host the wallet chose, such as
+/// `https://data-api.binance.vision`, Binance's market-data host. Any other
+/// currency is null without a request. Held to the provider's answers by
+/// `test/binance_contract_test.dart`, and against the live service daily by
+/// `tools/contracts/binance.py --check`.
+///
+/// A failed fetch raises: an unreachable feed is not an unpriced currency.
+class BinanceZecPrices implements ZecPrices {
+  BinanceZecPrices({required this.origin, required JsonGet get}) : _get = get;
+
+  final Uri origin;
+  final JsonGet _get;
+
+  /// The request for the ZEC ticker.
+  Uri get request => origin.replace(
+    path: '${origin.path.replaceFirst(RegExp(r'/+$'), '')}/api/v3/ticker/price',
+    queryParameters: const {'symbol': binanceZecSymbol},
+  );
+
+  @override
+  Future<int?> minorUnitsPerZec(String currency) async {
+    if (currency != 'USD') return null;
+    return priceFromBinance(await _get(request), currency);
+  }
+}
+
+/// The first of [sources] that prices a currency.
+///
+/// Each is asked in order until one answers with a price. One that fails is
+/// passed over for the next; only when every source failed does the last
+/// failure raise, since an unreachable feed is not an unpriced currency. Null
+/// when at least one answered and none priced it.
+class FirstZecPrices implements ZecPrices {
+  const FirstZecPrices(this.sources);
+
+  final List<ZecPrices> sources;
+
+  @override
+  Future<int?> minorUnitsPerZec(String currency) async {
+    Object? failure;
+    StackTrace? trace;
+    var answered = false;
+    for (final source in sources) {
+      try {
+        final price = await source.minorUnitsPerZec(currency);
+        if (price != null) return price;
+        answered = true;
+      } on Object catch (e, s) {
+        failure = e;
+        trace = s;
+      }
+    }
+    if (!answered && failure != null) {
+      Error.throwWithStackTrace(failure, trace!);
+    }
+    return null;
+  }
+}

@@ -18,6 +18,7 @@ price. fixtures/coingecko_price.json is one such answer, captured as is.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import sys
@@ -103,7 +104,14 @@ def cases() -> list[dict]:
 
 
 def check() -> int:
-    request = urllib.request.Request(LIVE, headers={"User-Agent": "curl/8", "Accept": "application/json"})
+    headers = {"User-Agent": "curl/8", "Accept": "application/json"}
+    # A demo key, when one is configured, as the header the Demo API reads
+    # (https://docs.coingecko.com/v3.0.1/reference/authentication). Without
+    # one the keyless API is asked, which blocks some callers outright.
+    key = os.environ.get("COINGECKO_API_KEY", "").strip()
+    if key:
+        headers["x-cg-demo-api-key"] = key
+    request = urllib.request.Request(LIVE, headers=headers)
     with urllib.request.urlopen(request, timeout=60) as r:
         status, body = r.status, r.read().decode()
     problems = []

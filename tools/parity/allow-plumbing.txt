@@ -88,3 +88,7 @@ rust::ISO_4217_EXPONENTS       # `iso4217Exponents`.
 dart::max_minor_units_per_zec  # `MAX_MINOR_UNITS_PER_ZEC`, as above.
 rust::MAX_MINOR_UNITS_PER_ZEC  # `maxMinorUnitsPerZec`.
 rust::coingecko_price_url      # `CoinGeckoZecPrices.requestFor`: Rust lifts it to the crate so the binding and the client share one spelling.
+dart::binance_zec_symbol       # `BINANCE_ZEC_SYMBOL`: a Rust constant is upper-case, so the mechanical snake case differs.
+rust::BINANCE_ZEC_SYMBOL       # `binanceZecSymbol`.
+rust::binance_price_url        # `BinanceZecPrices.request`: Rust lifts it to the crate as it does `coingecko_price_url`.
+rust::coinbase_price_url       # `CoinbaseZecPrices.request`: the same.

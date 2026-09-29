@@ -43,7 +43,9 @@ pub use keys::{
 pub use payer_review::{check_payer_review, rate_figure, ReviewFinding, ReviewRule};
 pub use pending_sends::{PendingSend, PendingSends, SendEnded, Unrecordable};
 pub use pricing::{
-    coingecko_price_url, price_from_coingecko, CoinGeckoZecPrices, FixedZecPrices, NoZecPrices,
+    binance_price_url, coinbase_price_url, coingecko_price_url, price_from_binance,
+    price_from_coinbase, price_from_coingecko, BinanceZecPrices, CoinGeckoZecPrices,
+    CoinbaseZecPrices, FirstZecPrices, FixedZecPrices, NoZecPrices, BINANCE_ZEC_SYMBOL,
     MAX_MINOR_UNITS_PER_ZEC,
 };
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};

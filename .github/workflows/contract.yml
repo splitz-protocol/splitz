@@ -1,7 +1,7 @@
 name: contract
 
-# The swap client against the live 1Click API, and the price source against
-# the live CoinGecko answer, once a day and on demand.
+# The swap client against the live 1Click API, and the price sources against
+# the live CoinGecko, Coinbase and Binance answers, once a day and on demand.
 #
 # Everything in ci.yml runs offline, against the provider's schema and answers
 # pinned in tools/contracts/. This is what notices when the provider moves:
@@ -35,8 +35,27 @@ jobs:
   # host packages do, applied to what the service says now. A red run means
   # re-capture tools/contracts/fixtures/coingecko_price.json, regenerate the
   # cases with tools/contracts/coingecko.py, and fix what the tests then say.
+  #
+  # COINGECKO_API_KEY, a repository secret, is sent as the demo key when set.
   coingecko:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/contracts/coingecko.py --check
+        env:
+          COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
+
+  # The two fallback price sources, the same way. A red run means re-capture
+  # with `--capture`, which also regenerates the cases, and fix what the tests
+  # then say.
+  coinbase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/contracts/coinbase.py --check
+
+  binance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/contracts/binance.py --check
