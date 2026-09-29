@@ -34,6 +34,15 @@ pub enum SendEnded {
     Unresolved,
 }
 
+impl SendEnded {
+    /// True when a send that ended this way takes its note with it: it was
+    /// refused, or it reached the network and `recorded` says its records are
+    /// on the bill. Every other ending keeps the note.
+    pub fn clears_note(self, recorded: bool) -> bool {
+        self == SendEnded::Refused || (self == SendEnded::ReachedNetwork && recorded)
+    }
+}
+
 /// One send from one bill, written down before the wallet was called.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PendingSend {
@@ -86,6 +95,85 @@ impl PendingSend {
     /// a person records what they paid by hand, then resolves it.
     pub fn is_damaged(&self) -> bool {
         self.uri.is_empty()
+    }
+
+    /// The note stored for `bill_id` as `raw` holds it.
+    ///
+    /// **A note that will not read still blocks.** Treating it as absent
+    /// would let the send it stands for go out a second time, so text that is
+    /// not JSON, is not what [`PendingSend::to_json`] writes, or names another
+    /// bill is answered as [`PendingSend::damaged`].
+    pub fn held(bill_id: &str, raw: &str) -> Self {
+        serde_json::from_str::<Value>(raw)
+            .ok()
+            .and_then(|v| Self::from_json(&v))
+            .filter(|s| s.bill_id == bill_id)
+            .unwrap_or_else(|| Self::damaged(bill_id))
+    }
+
+    /// What this note becomes once the wallet has answered (§14.3): `None`
+    /// when it goes, else the note to keep.
+    ///
+    /// - `ReachedNetwork` and `recorded`: the bill holds the records, so the
+    ///   note goes.
+    /// - `ReachedNetwork` and not `recorded` — the bill was forgotten while
+    ///   the money went out: the note stays, with `txid`, so the records can
+    ///   be written once the bill is back.
+    /// - `Refused`: nothing was spent, so the note goes and the debt can be
+    ///   sent again.
+    /// - `Unresolved`: the note stays, with `txid` when the wallet named the
+    ///   transaction it built.
+    ///
+    /// A damaged note is kept unchanged: it has nothing to carry a `txid` on.
+    pub fn after(&self, how: SendEnded, txid: Option<&str>, recorded: bool) -> Option<Self> {
+        if how.clears_note(recorded) {
+            return None;
+        }
+        match txid {
+            Some(id) if !self.is_damaged() => Some(self.sent_as(Some(id))),
+            _ => Some(self.clone()),
+        }
+    }
+
+    /// The payment records for this send having gone out as the transaction
+    /// `txid`, signed and appended to `log`. Recipients the bill already
+    /// holds a record for under this transaction are left out: a second
+    /// record under one payment id is a duplicate the fold sets aside.
+    ///
+    /// `txid` is trimmed and lower-cased.
+    pub fn records(
+        &self,
+        host: &dyn BillHost,
+        log: &mut BillLog<'_>,
+        txid: &str,
+    ) -> std::result::Result<Vec<Value>, Unrecordable> {
+        let id = txid.trim().to_ascii_lowercase();
+        let hex = id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+        if !hex {
+            return Err(Unrecordable::NotATransactionId);
+        }
+        if self.is_damaged() || self.carried.is_empty() {
+            return Err(Unrecordable::DetailsLost);
+        }
+        if self.swap.is_some() {
+            return Err(Unrecordable::IsASwap);
+        }
+        let recorded: BTreeSet<String> = log
+            .fold()
+            .map_err(Unrecordable::Refused)?
+            .bill
+            .payments
+            .into_iter()
+            .map(|p| p.id)
+            .collect();
+        let carried: BTreeMap<String, i64> = self
+            .carried
+            .iter()
+            .filter(|(to, _)| !recorded.contains(&payment_id_for_send(&id, to)))
+            .map(|(to, amount)| (to.clone(), *amount))
+            .collect();
+        record_send(host, log, &carried, &id, &self.sent, self.rate.as_ref())
+            .map_err(Unrecordable::Refused)
     }
 
     /// This send, with the transaction `id` it went out as.
@@ -207,17 +295,12 @@ impl<'a> PendingSends<'a> {
     /// would let the send it stands for go out a second time, so it is
     /// answered as [`PendingSend::damaged`].
     pub fn of(&self, bill_id: &str) -> Result<Option<PendingSend>> {
-        let raw = match self.storage.read(&Self::key(bill_id)) {
-            Ok(Some(raw)) => raw,
-            Ok(None) => return Ok(None),
-            Err(HostError::Unreadable(_)) => return Ok(Some(PendingSend::damaged(bill_id))),
-            Err(e) => return Err(e),
-        };
-        let send = serde_json::from_str::<Value>(&raw)
-            .ok()
-            .and_then(|v| PendingSend::from_json(&v))
-            .filter(|s| s.bill_id == bill_id);
-        Ok(Some(send.unwrap_or_else(|| PendingSend::damaged(bill_id))))
+        match self.storage.read(&Self::key(bill_id)) {
+            Ok(Some(raw)) => Ok(Some(PendingSend::held(bill_id, &raw))),
+            Ok(None) => Ok(None),
+            Err(HostError::Unreadable(_)) => Ok(Some(PendingSend::damaged(bill_id))),
+            Err(e) => Err(e),
+        }
     }
 
     /// Writes `send` down before the wallet is called.
@@ -255,17 +338,8 @@ impl<'a> PendingSends<'a> {
         written
     }
 
-    /// Settles what the note says once the wallet has answered (§14.3).
-    ///
-    /// - `ReachedNetwork` and `recorded`: the bill holds the records, so the
-    ///   note goes.
-    /// - `ReachedNetwork` and not `recorded` — the bill was forgotten while
-    ///   the money went out: the note stays, with `txid`, so the records can
-    ///   be written once the bill is back.
-    /// - `Refused`: nothing was spent, so the note goes and the debt can be
-    ///   sent again.
-    /// - `Unresolved`: the note stays, with `txid` when the wallet named the
-    ///   transaction it built.
+    /// Settles what the note says once the wallet has answered (§14.3), by
+    /// [`PendingSend::after`]'s rules.
     pub fn end(
         &self,
         bill_id: &str,
@@ -274,18 +348,19 @@ impl<'a> PendingSends<'a> {
         recorded: bool,
     ) -> Result<()> {
         let outcome = (|| {
-            let clear = how == SendEnded::Refused || (how == SendEnded::ReachedNetwork && recorded);
-            if clear {
+            if how.clears_note(recorded) {
                 return self.storage.delete(&Self::key(bill_id));
             }
-            let Some(txid) = txid else {
+            if txid.is_none() {
+                return Ok(());
+            }
+            let Some(held) = self.of(bill_id)? else {
                 return Ok(());
             };
-            match self.of(bill_id)? {
-                Some(held) if !held.is_damaged() => self.storage.write(
-                    &Self::key(bill_id),
-                    &held.sent_as(Some(txid)).to_json().to_string(),
-                ),
+            match held.after(how, txid, recorded) {
+                Some(kept) if kept != held => self
+                    .storage
+                    .write(&Self::key(bill_id), &kept.to_json().to_string()),
                 _ => Ok(()),
             }
         })();
@@ -300,12 +375,8 @@ impl<'a> PendingSends<'a> {
     }
 
     /// The payment records for `send` having gone out as the transaction
-    /// `txid`, signed and appended to `log` — to merge into the bill before
-    /// [`PendingSends::resolve`]. Recipients the bill already holds a record
-    /// for under this transaction are left out: a second record under one
-    /// payment id is a duplicate the fold sets aside.
-    ///
-    /// `txid` is trimmed and lower-cased.
+    /// `txid`, by [`PendingSend::records`] — to merge into the bill before
+    /// [`PendingSends::resolve`].
     pub fn records_for(
         &self,
         host: &dyn BillHost,
@@ -313,32 +384,6 @@ impl<'a> PendingSends<'a> {
         send: &PendingSend,
         txid: &str,
     ) -> std::result::Result<Vec<Value>, Unrecordable> {
-        let id = txid.trim().to_ascii_lowercase();
-        let hex = id.len() == 64 && id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
-        if !hex {
-            return Err(Unrecordable::NotATransactionId);
-        }
-        if send.is_damaged() || send.carried.is_empty() {
-            return Err(Unrecordable::DetailsLost);
-        }
-        if send.swap.is_some() {
-            return Err(Unrecordable::IsASwap);
-        }
-        let recorded: BTreeSet<String> = log
-            .fold()
-            .map_err(Unrecordable::Refused)?
-            .bill
-            .payments
-            .into_iter()
-            .map(|p| p.id)
-            .collect();
-        let carried: BTreeMap<String, i64> = send
-            .carried
-            .iter()
-            .filter(|(to, _)| !recorded.contains(&payment_id_for_send(&id, to)))
-            .map(|(to, amount)| (to.clone(), *amount))
-            .collect();
-        record_send(host, log, &carried, &id, &send.sent, send.rate.as_ref())
-            .map_err(Unrecordable::Refused)
+        send.records(host, log, txid)
     }
 }

@@ -169,11 +169,52 @@ check("it is four and a half thousand to ana",
 check("the request is a ZIP 321 URI naming ana's address",
       owed.request.uri.startsWith("zcash:u1ana"), owed.request.uri);
 
-console.log("the wallet sends, then records what §14.3 allows");
-const records = splitz.payment_entries_for_send(ben.facts(), billId, owed, "tx-ben-1", ben.seed);
+console.log("the wallet writes the send down before it sends (§14.3)");
+// One string per bill, kept where it outlives the process. The send is the
+// wallet's; these say what the note becomes.
+const txid = "ab".repeat(32);
+check("with no note, nothing blocks a send",
+      splitz.pending_send_blocks(billId, undefined) === undefined, "none");
+let note = splitz.pending_send_note(billId, owed, ben.now());
+check("with the note stored, a second send from this bill is blocked",
+      splitz.pending_send_blocks(billId, note)?.damaged === false,
+      JSON.stringify(splitz.pending_send_blocks(billId, note)?.uri));
+check("a refused send takes its note with it",
+      splitz.pending_send_after(billId, note, splitz.SendEnded.Refused, undefined, false) === undefined,
+      "cleared");
+check("so does one that reached the network once its records are on the bill",
+      splitz.pending_send_after(billId, note, splitz.SendEnded.ReachedNetwork, txid, true) === undefined,
+      "cleared");
+note = splitz.pending_send_after(billId, note, splitz.SendEnded.Unresolved, txid, false);
+check("one built and not broadcast keeps its note, naming the transaction",
+      splitz.pending_send_blocks(billId, note)?.txid === txid,
+      `${splitz.pending_send_blocks(billId, note)?.txid}`);
+check("and the next send is still blocked",
+      splitz.pending_send_blocks(billId, note) !== undefined, "blocked");
+check("a note that does not read blocks as well",
+      splitz.pending_send_blocks(billId, "{not json")?.damaged === true, "damaged");
+const lost = await refusal(() =>
+  splitz.pending_send_records(ben.facts(), billId, ben.entries, "{not json", txid, ben.seed));
+check("and nothing is recorded from it", lost !== undefined, `${lost?.detail}`);
+
+console.log("a person says the send landed; its records come from the note alone");
+const records = splitz.pending_send_records(ben.facts(), billId, ben.entries, note, txid, ben.seed);
 check("one record, for what the request carried", records.length === 1,
       `${records.length} record(s)`);
+const paymentId = `"${txid}:${ana.me}"`;
+check("under the payment id a send that succeeded records",
+      records[0].includes(paymentId) &&
+        splitz.payment_entries_for_send(ben.facts(), billId, owed, txid, ben.seed)[0]
+          .includes(paymentId),
+      `${txid}:${ana.me.slice(0, 8)}…`);
 for (const record of records) ben.add(record);
+check("asked again, nothing is recorded twice",
+      splitz.pending_send_records(ben.facts(), billId, ben.entries, note, txid, ben.seed)
+        .length === 0,
+      "none");
+note = undefined; // deleted, now the records are on the bill
+check("with the note deleted, the bill can be sent from again",
+      splitz.pending_send_blocks(billId, note) === undefined, "none");
 
 ana.take(ben);
 const afterPayment = splitz.fold_entries(ana.facts(), billId, ana.entries);
@@ -206,7 +247,7 @@ check("a reader that dropped the payment is caught",
 
 console.log("ana's wallet saw the transaction arrive");
 const arrivals = splitz.arrivals_of(ana.facts(), [{ bill_id: billId, entries: ana.entries }],
-    [{ txid: "tx-ben-1", zatoshi: sent }]);
+    [{ txid, zatoshi: sent }]);
 const arrival = arrivals.arrived[0];
 check("the payment is proposed for confirmation",
       arrivals.arrived.length === 1 && arrival.payment.id === afterPayment.bill.payments[0].id,

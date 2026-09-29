@@ -163,17 +163,47 @@ fun main(args: Array<String>) {
     check("nothing is withheld", owed.request.withheldMinorUnits == 0L,
           "${owed.request.withheldMinorUnits}")
 
-    println("the wallet sends, then records what §14.3 allows")
-    // The send is the wallet's. These are written only because it reached the
-    // network: a transaction built and not broadcast may still land.
-    val records = paymentEntriesForSend(ben.facts(), billId, owed, "tx-ben-1", ben.seed)
+    println("the wallet writes the send down before it sends (§14.3)")
+    // One string per bill, kept where it outlives the process. The send is the
+    // wallet's; these say what the note becomes.
+    val txid = "ab".repeat(32)
+    check("with no note, nothing blocks a send", pendingSendBlocks(billId, null) == null, "none")
+    var note: String? = pendingSendNote(billId, owed, ben.now())
+    check("with the note stored, a second send from this bill is blocked",
+          pendingSendBlocks(billId, note)?.damaged == false, "${pendingSendBlocks(billId, note)}")
+    check("a refused send takes its note with it",
+          pendingSendAfter(billId, note!!, SendEnded.REFUSED, null, false) == null, "cleared")
+    check("so does one that reached the network once its records are on the bill",
+          pendingSendAfter(billId, note, SendEnded.REACHED_NETWORK, txid, true) == null, "cleared")
+    note = pendingSendAfter(billId, note, SendEnded.UNRESOLVED, txid, false)
+    check("one built and not broadcast keeps its note, naming the transaction",
+          pendingSendBlocks(billId, note)?.txid == txid, "${pendingSendBlocks(billId, note)?.txid}")
+    check("and the next send is still blocked", pendingSendBlocks(billId, note) != null, "blocked")
+    check("a note that does not read blocks as well",
+          pendingSendBlocks(billId, "{not json")?.damaged == true, "damaged")
+    val lost = refusal { pendingSendRecords(ben.facts(), billId, ben.entries, "{not json", txid, ben.seed) }
+    check("and nothing is recorded from it", lost != null, "${lost?.detail}")
+
+    println("a person says the send landed; its records come from the note alone")
+    val records = pendingSendRecords(ben.facts(), billId, ben.entries, note!!, txid, ben.seed)
     check("one record, for what the request carried", records.size == 1,
           "${records.size} record(s)")
+    check("under the payment id a send that succeeded records",
+          records.single().contains("\"$txid:${ana.me}\"") &&
+              paymentEntriesForSend(ben.facts(), billId, owed, txid, ben.seed)
+                  .single().contains("\"$txid:${ana.me}\""),
+          "$txid:${ana.me.take(8)}…")
     check("and it states the ZEC it sent and the rate it was priced at",
           records.single().contains("\"zatoshi\":${owed.request.payments.single().zatoshi}") &&
               records.single().contains("\"paidAtRate\""),
           records.single())
     for (record in records) ben.add(record)
+    check("asked again, nothing is recorded twice",
+          pendingSendRecords(ben.facts(), billId, ben.entries, note, txid, ben.seed).isEmpty(),
+          "none")
+    note = null // deleted, now the records are on the bill
+    check("with the note deleted, the bill can be sent from again",
+          pendingSendBlocks(billId, note) == null, "none")
 
     ana.take(ben)
     val afterPayment = foldEntries(ana.facts(), billId, ana.entries)
@@ -205,7 +235,7 @@ fun main(args: Array<String>) {
 
     println("ana's wallet saw the transaction arrive")
     val arrivals = arrivalsOf(ana.facts(), listOf(HeldBill(billId, ana.entries)),
-        listOf(IncomingTransaction("tx-ben-1", sent)))
+        listOf(IncomingTransaction(txid, sent)))
     val arrival = arrivals.arrived.singleOrNull()
     check("the payment is proposed for confirmation",
           arrival?.payment?.id == afterPayment.bill.payments.single().id,

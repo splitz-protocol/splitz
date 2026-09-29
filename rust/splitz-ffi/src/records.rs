@@ -7,9 +7,38 @@
 
 use std::collections::HashMap;
 
-// §14.3's three send outcomes are not here. The wallet sends, so the wallet
-// owns what happened: it calls `payment_entries_for_send` when — and only
-// when — a transaction reached the network, and records nothing otherwise.
+/// Which of §14.3's three outcomes a send ended in, as a wallet tells
+/// `pending_send_after`.
+///
+/// The wallet sends, so the wallet owns what happened: it calls
+/// `payment_entries_for_send` when — and only when — a transaction reached
+/// the network, and records nothing otherwise.
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SendEnded {
+    /// The transaction reached the network.
+    ReachedNetwork,
+    /// Nothing was built, or nothing was spent.
+    Refused,
+    /// Built and signed and not known to have reached the network — or the
+    /// send raised, so which way it went is unknown. It may still land.
+    Unresolved,
+}
+
+/// The send a stored note says is under way from one bill (§14.3). While a
+/// wallet holds one, it starts no other send from that bill.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct PendingSendHeld {
+    /// True when the note would not read. It blocks exactly as a readable one
+    /// does, and nothing can be recorded from it: a person records what they
+    /// paid by hand, then clears it.
+    pub damaged: bool,
+    /// The request handed to the wallet. Empty when `damaged`.
+    pub uri: String,
+    /// When the send was started, a §9.3 instant. Empty when `damaged`.
+    pub at: String,
+    /// The transaction, when the wallet named one.
+    pub txid: Option<String>,
+}
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Payout {

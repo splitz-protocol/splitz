@@ -936,6 +936,19 @@ blocks. If the transaction turns up, `recordSend` / `record_send` writes the
 same records `settle` would have, so a payee confirms the same payment either
 way.
 
+A wallet on the binding keeps the note as one string per bill, in its own
+storage, and the binding carries the rules. `pendingSendBlocks(billId, note)`
+answers the send that blocks the bill, or none; a note that does not read
+comes back `damaged` and blocks all the same. `pendingSendNote(billId,
+obligation, at)` is the string to store **before** the wallet is called, in
+the same step that checked — a second send started between the check and the
+write is the one this exists to stop. `pendingSendAfter(billId, note, how,
+txid, recorded)` is what to store once the wallet answers, or none to delete
+it. `pendingSendRecords(facts, billId, entries, note, txid, seed)` writes a
+kept send's records once a person says it landed; merge them, then delete the
+note. `tools/ffi/kotlin/Consumer.kt` and `tools/ffi/node/consumer.mjs` run
+all four.
+
 **The rate belongs to the bill.** Snapshot it once and put it on the bill. Six
 people applying six live rates to one dinner compute six different amounts and
 the bill never closes.
@@ -1022,6 +1035,14 @@ reader here accepts it (§11.1).
 host) run §15's rules against your own keychain, store, relay and price source
 and answer what each did that §15 says it must not. Run them in your test
 suite; an empty answer is the only passing one.
+
+**Check your review screen the same way.** `checkPayerReview` /
+`check_payer_review` (Dart and Rust host) takes the `PayerObligation` you are
+about to send, the `FoldedBill`, the text your review screen shows as a list of
+strings, and your words for each §8.5 reason, and answers every §14.2 fact that
+text does not show. Amounts must appear as `renderAmount` writes them, the rate
+as `rateFigure` / `rate_figure` writes it, and an address whole or by a prefix
+of at least 10 characters; matching is case-sensitive.
 
 **A refusal is reported, not thrown away, and it does not converge.**
 `foldLog` returns `setAside` and `mergeLogs` returns `refused` — each row an

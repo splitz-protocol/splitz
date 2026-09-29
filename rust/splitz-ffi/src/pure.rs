@@ -11,8 +11,9 @@ use splitz_core::host::{
     read_scan, record_payment, set_rate, shareable_bill, sign_entry, void_entry, BillLog, Scanned,
 };
 use splitz_core::money::checked_add;
-use splitz_core::{code, merge_logs, order_entries};
-use splitz_host::{activity_of, Sealing, Signer};
+use splitz_core::{code, decode_rate, merge_logs, order_entries};
+use splitz_host::{activity_of, PendingSend, Sealing, SendEnded, Signer, Unrecordable};
+use std::collections::BTreeMap;
 
 use crate::convert;
 use crate::error::{Result, SplitzError};
@@ -936,6 +937,34 @@ pub fn payment_entries_for_send(
             transient: false,
         });
     }
+    let (owed, sent) = carried(&obligation)?;
+    let paid_at_rate = rate_json(&obligation.rate);
+    let mut records = Vec::with_capacity(owed.len());
+    for (to, amount) in owed {
+        let payment_id = splitz_core::host::payment_id_for_send(&txid, &to);
+        records.push(build(&facts, &seed, Some(&bill_id), |host| {
+            record_payment(
+                host,
+                &payment_id,
+                &to,
+                amount,
+                "shieldedZec",
+                Some(&txid),
+                sent.get(&to).copied(),
+                Some(paid_at_rate.clone()),
+                None,
+            )
+        })?);
+    }
+    Ok(records)
+}
+
+/// What `obligation`'s request pays each recipient: in the bill's minor units,
+/// the debts it carries — a recipient §8.5 left out is not paid by it — and
+/// in zatoshi, what its outputs send.
+fn carried(
+    obligation: &ffi::PayerObligation,
+) -> Result<(BTreeMap<String, i64>, BTreeMap<String, i64>)> {
     let unpayable: std::collections::BTreeSet<&str> = obligation
         .request
         .unpayable
@@ -948,40 +977,188 @@ pub fn payment_entries_for_send(
         detail: "the amounts this obligation carries overflow 64 bits".to_owned(),
         transient: false,
     };
-    let mut owed: std::collections::BTreeMap<&str, i64> = std::collections::BTreeMap::new();
+    let mut owed: BTreeMap<String, i64> = BTreeMap::new();
     for settlement in &obligation.settlements {
         if unpayable.contains(settlement.to.as_str()) {
             continue;
         }
-        let held = owed.entry(settlement.to.as_str()).or_insert(0);
+        let held = owed.entry(settlement.to.clone()).or_insert(0);
         *held = checked_add(*held, settlement.amount, code::AMOUNT_OVERFLOW).map_err(overflow)?;
     }
     // Each record states what it sent in ZEC and the rate it was priced at
     // (§9.2), from the request the send carried.
-    let mut sent: std::collections::BTreeMap<&str, i64> = std::collections::BTreeMap::new();
+    let mut sent: BTreeMap<String, i64> = BTreeMap::new();
     for payment in &obligation.request.payments {
-        let held = sent.entry(payment.to.as_str()).or_insert(0);
+        let held = sent.entry(payment.to.clone()).or_insert(0);
         *held = checked_add(*held, payment.zatoshi, code::AMOUNT_OVERFLOW).map_err(overflow)?;
     }
-    let paid_at_rate = rate_json(&obligation.rate);
-    let mut records = Vec::with_capacity(owed.len());
-    for (to, amount) in owed {
-        let payment_id = splitz_core::host::payment_id_for_send(&txid, to);
-        records.push(build(&facts, &seed, Some(&bill_id), |host| {
-            record_payment(
-                host,
-                &payment_id,
-                to,
-                amount,
-                "shieldedZec",
-                Some(&txid),
-                sent.get(to).copied(),
-                Some(paid_at_rate.clone()),
-                None,
-            )
-        })?);
+    Ok((owed, sent))
+}
+
+// --- the pay-twice guard (§14.3) --------------------------------------------
+//
+// A wallet on this binding keeps one string per bill in storage that outlives
+// the process, and these carry every rule about it: `PendingSends` in the host
+// crate, with the storage left to the wallet.
+//
+// 1. `pending_send_blocks` before offering a send. `Some` means a send from
+//    this bill is written down and not resolved: start no other.
+// 2. `pending_send_note`, stored **before** the wallet is called, and in the
+//    same step that checked (1) — a second send started between the check and
+//    the write is the one this exists to stop.
+// 3. `pending_send_after` once the wallet answers: store what it returns, or
+//    delete the note on `None`.
+// 4. `pending_send_records` when a person says a kept send landed; merge the
+//    records into the bill, then delete the note.
+
+/// Why a pending send's records cannot be written, as a foreign caller reads
+/// it. A refusal the protocol made keeps its §12 code.
+fn unrecordable(e: Unrecordable) -> SplitzError {
+    let detail = match e {
+        Unrecordable::NotATransactionId => "a transaction id is 64 hexadecimal digits",
+        Unrecordable::DetailsLost => {
+            "the pending send's note would not read or carries nothing to record; \
+             record what was paid by hand, then delete the note"
+        }
+        Unrecordable::IsASwap => {
+            "the pending send was a swap's deposit, recorded by the provider's \
+             reference and not by a transaction id"
+        }
+        Unrecordable::Refused(e) => return e.into(),
+    };
+    SplitzError::Host {
+        detail: detail.to_owned(),
+        transient: false,
     }
-    Ok(records)
+}
+
+/// The send `note` holds for `bill_id`, or `None` when there is no note.
+///
+/// **A note that does not read still blocks**, answered with `damaged` set:
+/// text that is not JSON, is not what `pending_send_note` writes, or names
+/// another bill. Taking it for no note would let the send it stands for go
+/// out a second time.
+#[uniffi::export]
+pub fn pending_send_blocks(bill_id: String, note: Option<String>) -> Option<ffi::PendingSendHeld> {
+    let held = PendingSend::held(&bill_id, &note?);
+    Some(ffi::PendingSendHeld {
+        damaged: held.is_damaged(),
+        uri: held.uri,
+        at: held.at,
+        txid: held.txid,
+    })
+}
+
+/// The note to store for sending `obligation`'s request from `bill_id`,
+/// written before the wallet is called. `at` is the wallet's §9.3 instant.
+///
+/// It carries what a record of the send needs — what the request carries to
+/// each recipient in minor units and in zatoshi, and its rate — so the records
+/// can be written after a restart, from the note alone. Refused when the
+/// obligation has no request or carries nobody.
+#[uniffi::export]
+pub fn pending_send_note(
+    bill_id: String,
+    obligation: ffi::PayerObligation,
+    at: String,
+) -> Result<String> {
+    let Some(uri) = obligation.request.uri.clone() else {
+        return Err(SplitzError::Host {
+            detail: "there is nothing to send".to_owned(),
+            transient: false,
+        });
+    };
+    let (carried, sent) = carried(&obligation)?;
+    if carried.is_empty() {
+        return Err(SplitzError::Host {
+            detail: "there is nothing this request can carry".to_owned(),
+            transient: false,
+        });
+    }
+    let send = PendingSend {
+        bill_id,
+        uri,
+        carried,
+        at,
+        sent,
+        rate: Some(decode_rate(&rate_json(&obligation.rate))?),
+        swap: None,
+        zatoshi: None,
+        txid: None,
+    };
+    Ok(send.to_json().to_string())
+}
+
+/// What `note` becomes once the wallet has answered: the note to store, or
+/// `None` to delete it (§14.3).
+///
+/// - `ReachedNetwork` and `recorded` — the records are on the bill: `None`.
+/// - `ReachedNetwork` and not `recorded`: kept, with `txid`, so the records
+///   can be written once the bill is back.
+/// - `Refused` — nothing was spent: `None`, and the debt can be sent again.
+/// - `Unresolved`: kept, with `txid` when the wallet named the transaction it
+///   built. The wallet does not retry it; a person says which way it went.
+///
+/// A note that does not read is kept exactly as it was.
+#[uniffi::export]
+pub fn pending_send_after(
+    bill_id: String,
+    note: String,
+    how: ffi::SendEnded,
+    txid: Option<String>,
+    recorded: bool,
+) -> Option<String> {
+    let held = PendingSend::held(&bill_id, &note);
+    let how = match how {
+        ffi::SendEnded::ReachedNetwork => SendEnded::ReachedNetwork,
+        ffi::SendEnded::Refused => SendEnded::Refused,
+        ffi::SendEnded::Unresolved => SendEnded::Unresolved,
+    };
+    let kept = held.after(how, txid.as_deref(), recorded)?;
+    Some(if kept == held {
+        note
+    } else {
+        kept.to_json().to_string()
+    })
+}
+
+/// The signed payment records for the send `note` holds having gone out as
+/// the transaction `txid`, for a wallet to merge into the bill before it
+/// deletes the note.
+///
+/// One record per recipient the request carried, each under the payment id
+/// `payment_entries_for_send` gives that recipient for the transaction written
+/// in lower case; a recipient the bill already holds a record for under it is
+/// left out, so one payment is never on the bill twice. `txid` is trimmed
+/// and lower-cased. Refused when `txid` is not a transaction id, when the
+/// note does not read, and when it was a swap's deposit.
+#[uniffi::export]
+pub fn pending_send_records(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    note: String,
+    txid: String,
+    seed: String,
+) -> Result<Vec<String>> {
+    let send = PendingSend::held(&bill_id, &note);
+    let seed = seed_bytes(&seed)?;
+    let parsed = parse_entries(&entries)?;
+    let verified = Signer.prepare(parsed.iter(), &bill_id);
+    let verify = |entry: &Value, key: &str| verified.verify(entry, key);
+    let sign = |message: &[u8]| {
+        Signer
+            .sign(&seed, message)
+            .expect("seed_bytes checked the length")
+    };
+    let host = FactHost {
+        facts: &facts,
+        sign: Some(&sign),
+        verify: Some(&verify),
+    };
+    let mut log = BillLog::with_entries(&host, parsed).for_bill(bill_id);
+    let records = send.records(&host, &mut log, &txid).map_err(unrecordable)?;
+    Ok(records.iter().map(Value::to_string).collect())
 }
 
 // --- a debt owed in another asset (§9.2, §15.7) ----------------------------

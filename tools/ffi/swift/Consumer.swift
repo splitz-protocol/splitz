@@ -185,17 +185,61 @@ func run(origin: String, downOrigin: String) async throws {
     check("the request is a ZIP 321 URI naming ana's address",
           owed!.request.uri!.hasPrefix("zcash:u1ana"), owed!.request.uri!)
 
-    print("the wallet sends, then records what §14.3 allows")
-    let records = try paymentEntriesForSend(facts: ben.facts(), billId: billId,
-                                            obligation: owed!,
-                                            txid: "tx-ben-1", seed: ben.seed)
+    print("the wallet writes the send down before it sends (§14.3)")
+    // One string per bill, kept where it outlives the process. The send is the
+    // wallet's; these say what the note becomes.
+    let txid = String(repeating: "ab", count: 32)
+    check("with no note, nothing blocks a send",
+          pendingSendBlocks(billId: billId, note: nil) == nil, "none")
+    var note: String? = try pendingSendNote(billId: billId, obligation: owed!, at: ben.now())
+    check("with the note stored, a second send from this bill is blocked",
+          pendingSendBlocks(billId: billId, note: note)?.damaged == false,
+          pendingSendBlocks(billId: billId, note: note)?.uri ?? "nil")
+    check("a refused send takes its note with it",
+          pendingSendAfter(billId: billId, note: note!, how: .refused, txid: nil,
+                           recorded: false) == nil, "cleared")
+    check("so does one that reached the network once its records are on the bill",
+          pendingSendAfter(billId: billId, note: note!, how: .reachedNetwork, txid: txid,
+                           recorded: true) == nil, "cleared")
+    note = pendingSendAfter(billId: billId, note: note!, how: .unresolved, txid: txid,
+                            recorded: false)
+    check("one built and not broadcast keeps its note, naming the transaction",
+          pendingSendBlocks(billId: billId, note: note)?.txid == txid,
+          pendingSendBlocks(billId: billId, note: note)?.txid ?? "nil")
+    check("and the next send is still blocked",
+          pendingSendBlocks(billId: billId, note: note) != nil, "blocked")
+    check("a note that does not read blocks as well",
+          pendingSendBlocks(billId: billId, note: "{not json")?.damaged == true, "damaged")
+    let lost = await refusal {
+        _ = try pendingSendRecords(facts: ben.facts(), billId: billId, entries: ben.entries,
+                                   note: "{not json", txid: txid, seed: ben.seed)
+    }
+    check("and nothing is recorded from it", lost != nil, lost?.detail ?? "nil")
+
+    print("a person says the send landed; its records come from the note alone")
+    let records = try pendingSendRecords(facts: ben.facts(), billId: billId,
+                                         entries: ben.entries, note: note!, txid: txid,
+                                         seed: ben.seed)
     check("one record, for what the request carried", records.count == 1,
           "\(records.count) record(s)")
+    let paymentId = "\"\(txid):\(ana.me)\""
+    let succeeded = try paymentEntriesForSend(facts: ben.facts(), billId: billId,
+                                              obligation: owed!, txid: txid, seed: ben.seed)
+    check("under the payment id a send that succeeded records",
+          records[0].contains(paymentId) && succeeded[0].contains(paymentId),
+          "\(txid):\(ana.me.prefix(8))…")
     check("and it states the ZEC it sent and the rate it was priced at",
           records[0].contains("\"zatoshi\":\(owed!.request.payments[0].zatoshi)")
             && records[0].contains("\"paidAtRate\""),
           records[0])
     for record in records { try ben.add(record) }
+    let again = try pendingSendRecords(facts: ben.facts(), billId: billId,
+                                       entries: ben.entries, note: note!, txid: txid,
+                                       seed: ben.seed)
+    check("asked again, nothing is recorded twice", again.isEmpty, "\(again.count)")
+    note = nil // deleted, now the records are on the bill
+    check("with the note deleted, the bill can be sent from again",
+          pendingSendBlocks(billId: billId, note: note) == nil, "none")
 
     try ana.take(ben)
     let afterPayment = try foldEntries(facts: ana.facts(), billId: billId, entries: ana.entries)
@@ -225,7 +269,7 @@ func run(origin: String, downOrigin: String) async throws {
     print("ana's wallet saw the transaction arrive")
     let arrivals = try arrivalsOf(facts: ana.facts(),
                                   bills: [HeldBill(billId: billId, entries: ana.entries)],
-                                  received: [IncomingTransaction(txid: "tx-ben-1", zatoshi: sent)])
+                                  received: [IncomingTransaction(txid: txid, zatoshi: sent)])
     check("the payment is proposed for confirmation",
           arrivals.arrived.count == 1
             && arrivals.arrived[0].payment.id == afterPayment.bill.payments[0].id,
