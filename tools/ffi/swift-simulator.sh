@@ -17,7 +17,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 pkg="$root/dist/ios/SplitzFFI"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+RELAY_PID=
+trap 'rm -rf "$work"; [ -z "$RELAY_PID" ] || kill "$RELAY_PID" 2>/dev/null || true' EXIT
 
 if [ ! -d "$pkg/splitz_ffiFFI.xcframework" ]; then
   echo "no package at $pkg — run tools/package/ios.sh first" >&2
@@ -45,23 +46,37 @@ mkdir -p "$src/Sources/SimConsumer" "$src/Tests/SimConsumerTests"
 echo "// Present so the package generates a scheme." \
   > "$src/Sources/SimConsumer/Empty.swift"
 
-# The macOS consumer, as a test case. `run()` is renamed: inside an
-# XCTestCase that name resolves to XCTestCase.run(), so the test would start
-# itself and fail with "a test run that has already been started".
+# The two devices sync through a live tools/relay/server.py, as in swift.sh.
+# A simulator shares the Mac's network, so 127.0.0.1 reaches it.
+# shellcheck source=relay.sh
+. "$root/tools/ffi/relay.sh"
+relay_up "$root" "$work"
+
+# The macOS consumer, as a test case: its entry point is replaced by one that
+# runs the bill against the relay. `run` is renamed: inside an XCTestCase that
+# name resolves to XCTestCase.run(), so the test would start itself and fail
+# with "a test run that has already been started".
 python3 - "$root/tools/ffi/swift/Consumer.swift" \
-         "$src/Tests/SimConsumerTests/Flow.swift" <<'PY'
+         "$src/Tests/SimConsumerTests/Flow.swift" \
+         "$RELAY_ORIGIN" "$RELAY_DOWN_ORIGIN" <<'PY'
 import io, sys
 s = io.open(sys.argv[1], encoding='utf-8').read()
-s = s.replace("import SplitzFFI", "import SplitzFFI\nimport XCTest", 1)
-s = s.replace("func run() throws {", "func runBill() throws {", 1)
-i = s.index("do {\n    try run()")
+def once(old, new):
+    global s
+    if s.count(old) != 1:
+        raise SystemExit(f"Consumer.swift no longer has exactly one {old!r}")
+    s = s.replace(old, new)
+once("import SplitzFFI", "import SplitzFFI\nimport XCTest")
+once("func run(origin: String, downOrigin: String) async throws {",
+     "func runBill(origin: String, downOrigin: String) async throws {")
+i = s.index("let arguments = CommandLine.arguments")
 s = s[:i] + '''final class SimConsumerTests: XCTestCase {
-    func testDrivesAWholeBill() throws {
-        try runBill()
+    func testDrivesAWholeBill() async throws {
+        try await runBill(origin: "%s", downOrigin: "%s")
         XCTAssertEqual(failures, 0, "\\(failures) check(s) failed")
     }
 }
-'''
+''' % (sys.argv[3], sys.argv[4])
 io.open(sys.argv[2], 'w', encoding='utf-8').write(s)
 PY
 
