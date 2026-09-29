@@ -1044,10 +1044,11 @@ text does not show. Amounts must appear as `renderAmount` writes them, the rate
 as `rateFigure` / `rate_figure` writes it, and an address whole or by a prefix
 of at least 10 characters; matching is case-sensitive.
 
-**Paying somebody by a lower preference.** When a payer cannot use a
-recipient's first payout — a swap their wallet cannot reach, cash to somebody
-far away — `obligationVia(host, folded, via)` / `obligation_via` renders the
-request from the payout the payer chose instead, for that payment alone (§14.8).
+**Paying somebody another way.** For any reason — the first payout cannot be
+paid, a send failed, or the payer prefers another —
+`obligationVia(host, folded, via)` / `obligation_via` renders the request from
+the payout the payer chose instead, for that payment alone (§14.8). Do not
+offer the switch while a send is unresolved (§14.3).
 `via` maps a participant id to the index of one of their declared payouts.
 Who owes what does not move and no entry is written; every other device keeps
 the order the recipient declared. Pass the same `via` to `checkPayerReview`,

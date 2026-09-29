@@ -2440,10 +2440,16 @@ its reference — before a confirmation is written. A host MAY write every
 
 ### 14.8 Paying by a lower preference
 
-A recipient's first payout decides how they are paid (§9.1). When a payer
-cannot use it — a swap to an asset their wallet cannot reach, an address no
-request can carry, cash to somebody far away — the payer MAY settle that debt
-by another payout the recipient declared, chosen for that payment alone.
+A recipient's first payout decides how they are paid (§9.1). A payer MAY
+settle a debt by any other payout the recipient declared, chosen for that
+payment alone and for any reason: a swap to an asset their wallet cannot
+reach, an address no request can carry, cash to somebody far away, or simply
+preferring it. A wallet MAY make that choice itself when it cannot pay by the
+first payout, taking the next one it can in the recipient's order; it MUST
+show the payer which payout it passed over and why (§14.2).
+
+A payer MUST NOT change how a debt is paid while a send that carries it is
+unresolved (§14.3): it may still land, and a second way would pay it twice.
 
 `choosePayouts` / `choose_payouts` takes a bill and the payer's choices,
 each a participant id and the index of one of that participant's declared
