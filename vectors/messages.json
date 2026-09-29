@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
-  "count": 85,
+  "count": 86,
   "cases": [
     {
       "name": "address_invalid",
@@ -291,6 +291,11 @@
       "name": "payload_too_large",
       "code": "payload_too_large",
       "expect": "This bill is too big for one code. Share an invite."
+    },
+    {
+      "name": "payout_not_declared",
+      "code": "payout_not_declared",
+      "expect": "They haven't added that way to be paid."
     },
     {
       "name": "percentage_not_full_scale",

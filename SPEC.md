@@ -845,7 +845,9 @@ order and MUST be preserved.
 
 A preference takes no part in any arithmetic; §6 decides who owes what.
 Honouring one — building the transaction, performing a swap, telling a person
-to hand over cash — is the wallet's.
+to hand over cash — is the wallet's. A payer MAY settle one debt by a lower
+preference the recipient declared, as its own choice for that payment and
+never by rewriting the order (§14.8).
 
 **A participant id MUST be a non-empty string** (`bill_bad_participant_id`).
 An empty id is not a name anyone can be settled to: §8.5 would render its
@@ -2209,7 +2211,8 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `zip321_amount_too_large`, `zip321_memo_too_large`, `zip321_bad_address`,
 `zip321_bad_currency_code`, `zip321_fiat_not_positive`,
 `zip321_fiat_too_many_digits`, `zip321_no_address`,
-`zip321_not_canonical`, `zip321_memo_undeliverable`, `address_invalid`.
+`zip321_not_canonical`, `zip321_memo_undeliverable`, `address_invalid`,
+`payout_not_declared`.
 
 **The code is part of the protocol; the message that accompanies it is prose
 and is not.** A user-facing string MUST be derived from the code.
@@ -2312,6 +2315,7 @@ nothing to omit.
 - Every recipient the request cannot carry, with the reason for each (§8.5).
 - Every pay-to address the fold recorded as replaced (§10.3).
 - Every debt with a payment recorded and not yet confirmed (§10.5).
+- Every recipient paid by a preference other than their first (§14.8).
 - The rate the request was priced at, who set it, and the ZEC amount and
   address of every output. A participant owed money can set the rate, and a
   request stated only in the bill's currency hides what that rate did to the
@@ -2322,14 +2326,16 @@ record says was sent, the rate it was priced at, and its reference. A
 confirmation settles the debt in the bill's currency, so a payee who confirms
 a record without reading its ZEC accepts whatever the payer's rate made of it.
 
-`checkPayerReview` / `check_payer_review` in both host packages runs the
-payer's list against the text a review screen shows. It is given the
-obligation about to be sent, the folded bill and the strings the screen
-displays, and answers each fact above that the text does not contain: every
-unpayable recipient's name and the wallet's words for its reason, the name of
-every participant whose address was replaced, every participant a pending
-payment is owed to or went to, the rate figure and who set it, and each
-output's ZEC amount and address. The payee's side is not checked by it.
+`checkPayerReview` / `check_payer_review` in both host packages, and in the
+binding, runs the payer's list against the text a review screen shows. It is
+given the obligation about to be sent, the folded bill and the strings the
+screen displays, and answers each fact above that the text does not contain:
+every unpayable recipient's name and the wallet's words for its reason, the
+name of every participant whose address was replaced, every participant a
+pending payment is owed to or went to, every recipient the payer chose to pay
+by a lower preference with the wallet's words for it, the rate figure and who
+set it, and each output's ZEC amount and address. The payee's side is not
+checked by it.
 
 ### 14.3 A send has three outcomes, not two
 
@@ -2431,6 +2437,29 @@ transaction paid this account.
 §14.2 still applies: a proposal is shown to the payee — its ZEC, its rate and
 its reference — before a confirmation is written. A host MAY write every
 `arrived` confirmation on one acceptance.
+
+### 14.8 Paying by a lower preference
+
+A recipient's first payout decides how they are paid (§9.1). When a payer
+cannot use it — a swap to an asset their wallet cannot reach, an address no
+request can carry, cash to somebody far away — the payer MAY settle that debt
+by another payout the recipient declared, chosen for that payment alone.
+
+`choosePayouts` / `choose_payouts` takes a bill and the payer's choices,
+each a participant id and the index of one of that participant's declared
+payouts, and returns the bill with each chosen payout moved to the front of
+that participant's list and the others in their declared order. A request
+rendered from them (§8.5) carries a chosen `zec` payout's address; a chosen
+`swap` or `cash` payout leaves the recipient reported as `payout_not_zec`, for
+the wallet to settle in that lane. Choices are checked in §2.3's order of
+their ids: an id not on the bill is refused with `unknown_participant`, an
+index that is not one of that participant's declared payouts with
+`payout_not_declared`.
+
+The choice changes no entry. Every other device keeps reading the order the
+recipient declared, and a payment made this way is recorded as any other.
+A choice for somebody this payer does not currently owe is not a refusal:
+it changes nothing the request carries.
 
 ## 15. The wallet seam
 

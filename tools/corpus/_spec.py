@@ -2763,6 +2763,34 @@ UNPRICEABLE_CODES = ("rate_amount_too_large", "zip321_amount_too_large",
                      "zip321_fiat_too_many_digits")
 
 
+def choose_payouts(participants, via):
+    """Section 14.8. The participants with the payer's chosen payouts first.
+
+    `via` maps a participant id to the index of one of their declared payouts.
+    That payout moves to the front and the rest keep their order; a
+    participant `via` does not name is unchanged. Ids are checked in section
+    2.3's order, so the first refusal is the same everywhere.
+    """
+    by_id = {p["id"]: p for p in participants}
+    for pid in _sorted_ids(via):
+        who = by_id.get(pid)
+        if who is None:
+            raise Refused("unknown_participant")
+        payouts = who.get("payouts") or []
+        index = via[pid]
+        if (not isinstance(index, int) or isinstance(index, bool)
+                or index < 0 or index >= len(payouts)):
+            raise Refused("payout_not_declared")
+    out = []
+    for p in participants:
+        if p["id"] in via:
+            payouts = list(p.get("payouts") or [])
+            chosen = payouts.pop(via[p["id"]])
+            p = {**p, "payouts": [chosen] + payouts}
+        out.append(p)
+    return out
+
+
 def render_obligation(settlements, participants, rate, currency,
                       skip_unpayable=False, include_fiat=False):
     """Section 8.5. One payer's whole obligation as a payment request.

@@ -216,14 +216,22 @@ void main() {
       for (final s in (c['settlements'] as List).cast<Map<String, dynamic>>())
         Settlement(s['from'] as String, s['to'] as String, s['amount'] as int),
     ];
+    final via = (c['via'] as Map?)?.cast<String, int>();
+    final chosen = via == null ? bill : choosePayouts(bill, via);
     final r = renderObligation(
       settlements,
-      bill,
+      chosen,
       rate: rateOf(raw),
       skipUnpayable: c['skipUnpayable'] as bool,
       includeFiat: c['includeFiat'] as bool,
     );
     produce({
+      if (via != null)
+        'payouts': {
+          for (final p in chosen.participants)
+            if (via.containsKey(p.id))
+              p.id: [for (final o in p.payouts) payoutToJson(o)],
+        },
       'uri': r.uri,
       'payments': [
         for (final p in r.payments)

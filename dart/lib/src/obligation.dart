@@ -140,6 +140,57 @@ Obligation renderObligation(
   );
 }
 
+/// [bill] with each participant [via] names paid by the payout chosen for
+/// them (§14.8).
+///
+/// [via] maps a participant id to the index of one of their declared payouts.
+/// That payout moves to the front and the rest keep their order; everything
+/// else on the bill is unchanged. Rendering a request from the result carries
+/// a chosen `zec` payout's address. Ids are checked in §2.3's order: one not
+/// on the bill is refused with `unknown_participant`, an index outside what
+/// that participant declared with `payout_not_declared`.
+Bill choosePayouts(Bill bill, Map<String, int> via) {
+  if (via.isEmpty) return bill;
+  for (final id in sortedUtf8(via.keys)) {
+    final who = bill.participant(id);
+    if (who == null) {
+      raise(SplitCode.unknownParticipant, '$id is not on this bill');
+    }
+    final index = via[id]!;
+    if (index < 0 || index >= who.payouts.length) {
+      raise(SplitCode.payoutNotDeclared,
+          '$id declared ${who.payouts.length} payouts, not one at $index');
+    }
+  }
+  return Bill(
+    id: bill.id,
+    name: bill.name,
+    currency: bill.currency,
+    splitMode: bill.splitMode,
+    participants: [
+      for (final p in bill.participants)
+        if (via[p.id] case final index?)
+          Participant(
+            id: p.id,
+            name: p.name,
+            payTo: p.payTo,
+            identityKey: p.identityKey,
+            payouts: [
+              p.payouts[index],
+              for (var i = 0; i < p.payouts.length; i++)
+                if (i != index) p.payouts[i],
+            ],
+          )
+        else
+          p,
+    ],
+    expenses: bill.expenses,
+    payments: bill.payments,
+    confirmedPayments: bill.confirmedPayments,
+    rate: bill.rate,
+  );
+}
+
 /// A debt held back because a payment to that participant is unconfirmed
 /// (§14.4).
 class Awaiting {

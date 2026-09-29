@@ -104,6 +104,8 @@ MESSAGES = {
     "zip321_memo_undeliverable": "A note can't be sent to this address.",
     # §8.6 addresses
     "address_invalid": "This isn't a Zcash address.",
+    # §14.8 paying by a lower preference
+    "payout_not_declared": "They haven't added that way to be paid.",
 }
 
 
@@ -133,10 +135,26 @@ def main():
     out = ROOT / "vectors" / "messages.json"
     out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
     print(f"{out.relative_to(ROOT)}: {len(cases)} cases")
-    write_table(ROOT / "dart/lib/src/errors.dart", "  ",
-                lambda c, t: "'" + c + "': '" + t.replace("\\", "\\\\").replace("'", "\\'") + "',")
-    write_table(ROOT / "rust/splitz-core/src/error.rs", "    ",
-                lambda c, t: '("' + c + '", "' + t.replace("\\", "\\\\").replace('"', '\\"') + '"),')
+    write_table(ROOT / "dart/lib/src/errors.dart", "  ", dart_row)
+    write_table(ROOT / "rust/splitz-core/src/error.rs", "    ", rust_row)
+
+
+def dart_row(code, text):
+    """One map entry as `dart format` lays it out: split after the key when
+    the whole entry is past 80 columns."""
+    value = "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "',"
+    row = f"'{code}': {value}"
+    return row if len("  " + row) <= 80 else f"'{code}':\n      {value}"
+
+
+def rust_row(code, text):
+    """One tuple as `rustfmt` lays it out: one element to a line when its
+    elements are past the 60 columns of `fn_call_width`."""
+    value = '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    row = f'("{code}", {value}),'
+    if len(f'"{code}", {value}') <= 60:
+        return row
+    return f'(\n        "{code}",\n        {value},\n    ),'
 
 
 def write_table(path, indent, line):

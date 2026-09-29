@@ -109,6 +109,9 @@ pub mod code {
 
     // §8.6 addresses
     pub const ADDRESS_INVALID: &str = "address_invalid";
+
+    // §14.8 paying by a lower preference
+    pub const PAYOUT_NOT_DECLARED: &str = "payout_not_declared";
 }
 
 /// A refusal, carrying the code that names it.
@@ -290,6 +293,10 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
     (
         "payload_too_large",
         "This bill is too big for one code. Share an invite.",
+    ),
+    (
+        "payout_not_declared",
+        "They haven't added that way to be paid.",
     ),
     (
         "percentage_not_full_scale",

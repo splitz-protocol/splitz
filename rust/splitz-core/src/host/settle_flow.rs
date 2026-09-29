@@ -8,7 +8,9 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::Result;
-use crate::obligation::{render_obligation, withholdings, Awaiting, Obligation, Unpayable};
+use crate::obligation::{
+    choose_payouts, render_obligation, withholdings, Awaiting, Obligation, Unpayable,
+};
 use crate::rate::ExchangeRate;
 use crate::serialization::rate_to_json;
 use crate::settle::{settle_bill, Settlement, DEFAULT_EXACT_LIMIT};
@@ -139,6 +141,21 @@ pub struct Settled {
 /// Returns `None` when the bill carries no rate: an unpriced bill is an
 /// ordinary bill, not a refusal, and there is no §12 code to catch.
 pub fn obligation_for(host: &dyn BillHost, folded: &FoldedBill) -> Result<Option<PayerObligation>> {
+    obligation_via(host, folded, &BTreeMap::new())
+}
+
+/// `obligation_for`, with the payer's choice of payout for the recipients
+/// `via` names (§14.8).
+///
+/// `via` maps a participant id to the index of one of their declared payouts,
+/// as `choose_payouts` takes it. Who owes what is read from the bill as
+/// folded — a preference takes no part in it (§9.1) — and only the request is
+/// rendered from the chosen payouts. Refuses as `choose_payouts` does.
+pub fn obligation_via(
+    host: &dyn BillHost,
+    folded: &FoldedBill,
+    via: &BTreeMap<String, i64>,
+) -> Result<Option<PayerObligation>> {
     let Some(rate) = folded.bill.rate.as_ref() else {
         return Ok(None);
     };
@@ -159,7 +176,10 @@ pub fn obligation_for(host: &dyn BillHost, folded: &FoldedBill) -> Result<Option
     // either refuse the whole request, or render what can be carried and
     // report the rest. Writing the loop by hand is how a wallet ends up doing
     // neither.
-    let request = render_obligation(&split.carried, &folded.bill, rate, true, false)?;
+    // Checked before anything is rendered, so a choice that names nobody is
+    // refused whether or not this device owes anything.
+    let chosen = choose_payouts(&folded.bill, via)?;
+    let request = render_obligation(&split.carried, &chosen, rate, true, false)?;
 
     Ok(Some(PayerObligation {
         settlements: split.carried,

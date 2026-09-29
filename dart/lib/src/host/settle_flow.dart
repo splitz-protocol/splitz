@@ -120,7 +120,21 @@ class Settled {
 ///
 /// Returns null when the bill carries no rate: an unpriced bill is an ordinary
 /// bill, not an error, and there is no refusal code to catch.
-PayerObligation? obligationFor(BillHost host, FoldedBill folded) {
+PayerObligation? obligationFor(BillHost host, FoldedBill folded) =>
+    obligationVia(host, folded, const {});
+
+/// [obligationFor], with the payer's choice of payout for the recipients
+/// [via] names (§14.8).
+///
+/// [via] maps a participant id to the index of one of their declared payouts,
+/// as `choosePayouts` takes it. Who owes what is read from the bill as
+/// folded — a preference takes no part in it (§9.1) — and only the request is
+/// rendered from the chosen payouts. Refuses as `choosePayouts` does.
+PayerObligation? obligationVia(
+  BillHost host,
+  FoldedBill folded,
+  Map<String, int> via,
+) {
   final rate = folded.bill.rate;
   if (rate == null) return null;
 
@@ -137,14 +151,17 @@ PayerObligation? obligationFor(BillHost host, FoldedBill folded) {
   );
   final mine = split.carried;
   final awaiting = split.awaiting;
+  // Checked before anything is rendered, so a choice that names nobody is
+  // refused whether or not this device owes anything.
+  final chosen = splitz.choosePayouts(folded.bill, via);
 
   if (mine.isEmpty) {
     return PayerObligation(
       settlements: const [],
       awaiting: awaiting,
       rate: rate,
-      request: splitz.renderObligation(const [], folded.bill,
-          rate: rate, skipUnpayable: true),
+      request: splitz
+          .renderObligation(const [], chosen, rate: rate, skipUnpayable: true),
     );
   }
 
@@ -153,7 +170,7 @@ PayerObligation? obligationFor(BillHost host, FoldedBill folded) {
   // the rest. Writing the loop by hand is how a wallet ends up doing neither.
   final rendered = splitz.renderObligation(
     mine,
-    folded.bill,
+    chosen,
     rate: rate,
     skipUnpayable: true,
   );

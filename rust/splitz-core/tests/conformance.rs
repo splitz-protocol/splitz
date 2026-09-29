@@ -288,14 +288,23 @@ fn obligations() {
                     .collect()
             })
             .unwrap_or_default();
+        let via: Option<std::collections::BTreeMap<String, i64>> = c["via"].as_object().map(|m| {
+            m.iter()
+                .map(|(k, v)| (k.clone(), v.as_i64().unwrap_or(i64::MIN)))
+                .collect()
+        });
+        let chosen = match &via {
+            Some(via) => splitz_core::choose_payouts(&bill, via)?,
+            None => bill,
+        };
         let r = splitz_core::render_obligation(
             &settlements,
-            &bill,
+            &chosen,
             &rate_of(&c["rate"]),
             c["skipUnpayable"].as_bool().unwrap_or(false),
             c["includeFiat"].as_bool().unwrap_or(false),
         )?;
-        Ok(json!({
+        let mut out = json!({
             "uri": r.uri,
             "payments": r.payments.iter().map(|p| json!({
                 "address": p.address, "zatoshi": p.zatoshi,
@@ -306,7 +315,20 @@ fn obligations() {
             "carriedMinorUnits": r.carried_minor_units,
             "withheldMinorUnits": r.withheld_minor_units,
             "isComplete": r.is_complete(),
-        }))
+        });
+        if let Some(via) = &via {
+            out["payouts"] = chosen
+                .participants
+                .iter()
+                .filter(|p| via.contains_key(&p.id))
+                .map(|p| {
+                    let payouts = p.payouts.iter().map(splitz_core::payout_to_json);
+                    (p.id.clone(), Value::Array(payouts.collect()))
+                })
+                .collect::<serde_json::Map<_, _>>()
+                .into();
+        }
+        Ok(out)
     });
 }
 

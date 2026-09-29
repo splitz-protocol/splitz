@@ -59,7 +59,7 @@ pub use money::{
     MAX_ENTRY_AMOUNT, MIN_AMOUNT,
 };
 pub use obligation::{
-    render_obligation, withholdings, Awaiting, Obligation, Unpayable, Withholdings,
+    choose_payouts, render_obligation, withholdings, Awaiting, Obligation, Unpayable, Withholdings,
 };
 pub use ordering::{compare_utf8, sorted_utf8, unique_sorted_utf8};
 pub use rate::{

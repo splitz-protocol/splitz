@@ -98,6 +98,7 @@ RENAMES = {
     "signingMessage": "signing_message",
     "resolveIdentities": "resolve_identities",
     "renderObligation": "render_obligation",
+    "choosePayouts": "choose_payouts",
     "decodeRate": "decode_rate",
     "billSplitModes": "SPLIT_MODES",
     "checkCurrency": "check_currency",
@@ -162,6 +163,7 @@ RENAMES = {
     "shareableBill": "shareable_bill",
     "acceptScan": "accept_scan",
     "obligationFor": "obligation_for",
+    "obligationVia": "obligation_via",
     "paymentIdForSend": "payment_id_for_send",
     "recordSend": "record_send",
 }

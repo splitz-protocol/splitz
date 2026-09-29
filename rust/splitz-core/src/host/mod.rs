@@ -34,8 +34,8 @@ pub use entries::{
 pub use host::{BillHost, SendResult, Sent, SignEntry, VerifyEntry};
 pub use lanes::{lane_for, SettleLane};
 pub use settle_flow::{
-    check_proposal, obligation_for, payment_id_for_send, record_send, settle, PayerObligation,
-    ProposalCheck, ProposedOutput, Settled,
+    check_proposal, obligation_for, obligation_via, payment_id_for_send, record_send, settle,
+    PayerObligation, ProposalCheck, ProposedOutput, Settled,
 };
 pub use sharing::{
     accept_scan, delta_for, invite_for, read_scan, shareable_bill, Scanned, ScannedBill,

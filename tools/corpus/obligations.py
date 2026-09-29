@@ -11,7 +11,8 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import ADDRESSES, Refused, render_obligation  # noqa: E402
+from _spec import (  # noqa: E402
+    ADDRESSES, Refused, choose_payouts, render_obligation)
 
 AT = "2026-10-28T19:30:00.000Z"
 RATE = {"currency": "MXN", "minorUnitsPerZec": 950000, "at": AT}
@@ -123,16 +124,69 @@ CASES = [
 ]
 
 
+# Section 14.8. A payer settling one debt by a lower preference the
+# recipient declared. `via` maps an id to the index of the chosen payout.
+ZEC_2 = {"type": "zec", "address": ADDRESSES[5]}
+SWAP = {"type": "swap", "asset": "USDC", "chain": "near", "address": "hal.near"}
+CASH = {"type": "cash"}
+HAL = who("hal", "Hal", None, [SWAP, ZEC_2])
+IVY = who("ivy", "Ivy", None, [CASH, SWAP, ZEC_2])
+JON = who("jon", "Jon", None,
+          [{"type": "zec", "address": "u1 jon"}, ZEC_2])
+
+VIA_CASES = [
+    ("a_second_zec_payout_is_carried_when_chosen",
+     [pay("ana", 7004), pay("hal", 9246)], [ANA, HAL, CAI], {"hal": 1}),
+    ("and_the_first_is_withheld_without_the_choice",
+     [pay("ana", 7004), pay("hal", 9246)], [ANA, HAL, CAI], {}),
+    ("a_choice_past_an_address_no_request_can_carry",
+     [pay("jon", 9246)], [JON, CAI], {"jon": 1}),
+    ("the_chosen_payout_moves_first_and_the_rest_keep_their_order",
+     [pay("ivy", 9246)], [IVY, CAI], {"ivy": 2}),
+    ("a_chosen_swap_is_reported_for_its_own_lane",
+     [pay("ivy", 9246)], [IVY, CAI], {"ivy": 1}),
+    ("choosing_the_first_changes_nothing",
+     [pay("hal", 9246)], [HAL, CAI], {"hal": 0}),
+    ("a_choice_for_somebody_not_owed_changes_nothing",
+     [pay("ana", 7004)], [ANA, HAL, CAI], {"hal": 1}),
+    ("an_index_past_what_they_declared_is_refused",
+     [pay("hal", 9246)], [HAL, CAI], {"hal": 2}),
+    ("a_negative_index_is_refused",
+     [pay("hal", 9246)], [HAL, CAI], {"hal": -1}),
+    ("pay_to_alone_declares_no_payout_to_choose",
+     [pay("ana", 7004)], [ANA, CAI], {"ana": 0}),
+    ("a_choice_for_somebody_not_on_the_bill_is_refused",
+     [pay("ana", 7004)], [ANA, CAI], {"zed": 0}),
+    # Checked in section 2.3's order: `hal` before `zed`, `abe` before `hal`.
+    ("the_first_refusal_in_id_order_names_a_payout",
+     [pay("hal", 9246)], [HAL, CAI], {"zed": 0, "hal": 5}),
+    ("and_names_a_participant_when_that_id_sorts_first",
+     [pay("hal", 9246)], [HAL, CAI], {"hal": 5, "abe": 0}),
+]
+
+
 def main():
     out = []
-    for name, settlements, participants, skip, fiat, *rest in CASES:
+    for name, settlements, participants, skip, fiat, *rest in CASES + [
+            (n, s, ps, True, True, RATE, via)
+            for n, s, ps, via in VIA_CASES]:
         rate = rest[0] if rest else RATE
+        via = rest[1] if len(rest) > 1 else None
         case = {"name": name, "settlements": settlements,
                 "participants": participants, "rate": rate,
                 "currency": "MXN", "skipUnpayable": skip, "includeFiat": fiat}
+        if via is not None:
+            case["via"] = via
         try:
-            result = render_obligation(settlements, participants, rate, "MXN",
+            chosen = participants if via is None else \
+                choose_payouts(participants, via)
+            result = render_obligation(settlements, chosen, rate, "MXN",
                                        skip_unpayable=skip, include_fiat=fiat)
+            if via is not None:
+                # What the choice did to each participant it names.
+                result["payouts"] = {
+                    p["id"]: p.get("payouts") or []
+                    for p in chosen if p["id"] in via}
             # What the URI carries plus what it withholds must account for the
             # whole obligation. A figure that prices the whole of it must never
             # be presented as what the URI sends.

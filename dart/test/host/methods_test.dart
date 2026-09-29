@@ -18,6 +18,7 @@ import 'support/fake_host.dart';
 /// and Eve has declared nothing at all.
 ({BillLog log, FoldedBill folded, FakeHost ana}) threeLaneBill({
   List<Map<String, dynamic>> extra = const [],
+  List<Map<String, dynamic>> caraAlso = const [],
 }) {
   final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
   final entries = <Map<String, dynamic>>[
@@ -41,6 +42,7 @@ import 'support/fake_host.dart';
           'chain': 'base',
           'address': '0xcara',
         },
+        ...caraAlso,
       ],
     ),
     joinBill(
@@ -167,6 +169,59 @@ void main() {
       expect(owed.carriedMinorUnits, 1000); // Ben only
       expect(owed.withheldMinorUnits, 3000); // Cara, Dan, Eve
       expect(owed.isComplete, isFalse);
+    });
+  });
+
+  group('a payer may settle by a lower preference (§14.8)', () {
+    // Cara ranks USDC on Base first and a Zcash address second.
+    ({BillLog log, FoldedBill folded, FakeHost ana}) bill() => threeLaneBill(
+          caraAlso: [
+            <String, dynamic>{'type': 'zec', 'address': 'u1cara'},
+          ],
+        );
+
+    test('choosing her second payout carries it in the request', () {
+      final b = bill();
+      final first = obligationFor(b.ana, b.folded)!;
+      final chosen = obligationVia(b.ana, b.folded, const {'cara': 1})!;
+
+      // Who owes what does not move; only where Cara's share is sent does.
+      expect(
+        chosen.settlements.map((s) => (s.to, s.amount)),
+        first.settlements.map((s) => (s.to, s.amount)),
+      );
+      expect(first.request.payments.map((p) => p.label), ['Ben']);
+      expect(chosen.request.payments.map((p) => p.label), ['Ben', 'Cara']);
+      expect(chosen.request.payments.last.address, 'u1cara');
+      expect(chosen.unpayable.map((u) => u.id), ['dan', 'eve']);
+      expect(chosen.carriedMinorUnits, 2000);
+    });
+
+    test('the send records her payment like any other, and her order stands',
+        () async {
+      final b = bill();
+      final owed = obligationVia(b.ana, b.folded, const {'cara': 1})!;
+      final settled = await settle(b.ana, b.log, owed);
+
+      expect(settled.result, SendResult.sent);
+      final cara = settled.records
+          .map((r) => r['payment'] as Map<String, dynamic>)
+          .singleWhere((p) => p['to'] == 'cara');
+      expect(cara['method'], 'shieldedZec');
+      expect(cara['id'], paymentIdForSend(settled.txid!, 'cara'));
+      expect(cara['reference'], settled.txid);
+      // No entry rewrote her preferences: every device still reads USDC first.
+      final after = b.log.fold().bill.participant('cara')!;
+      expect(after.payouts.map((p) => p.type), ['swap', 'zec']);
+    });
+
+    test('a payout she never declared is refused', () {
+      final b = bill();
+      expect(
+        () => obligationVia(b.ana, b.folded, const {'cara': 2}),
+        throwsA(isA<splitz.SplitError>()
+            .having((e) => e.code, 'code', splitz.SplitCode.payoutNotDeclared)),
+      );
     });
   });
 

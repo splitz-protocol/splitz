@@ -1,6 +1,6 @@
 # Conformance vectors
 
-841 cases across 21 files. An implementation is conformant when it reproduces
+855 cases across 21 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape
@@ -83,7 +83,7 @@ its source names.
 with both and compares byte for byte — 14 cases; the other 3 emit `fiat` or
 carry ten thousand payments, neither of which librustzcash can express. And it
 parses every URI the corpus states, checking the recipients and amounts come
-back unchanged: 17 from `zip321.json`, 15 from `obligations.json`.
+back unchanged: 17 from `zip321.json`, 20 from `obligations.json`.
 
 The rendering half uses this crate's own renderer rather than the corpus
 string. Comparing the corpus would leave a defect in the renderer invisible

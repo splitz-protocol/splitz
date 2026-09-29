@@ -110,6 +110,9 @@ abstract final class SplitCode {
 
   // §8.6 addresses
   static const addressInvalid = 'address_invalid';
+
+  // §14.8 paying by a lower preference
+  static const payoutNotDeclared = 'payout_not_declared';
 }
 
 /// A refusal, carrying the code that names it.
@@ -198,6 +201,7 @@ const Map<String, String> _plainMessages = {
   'payload_missing_body': 'This code is incomplete. Scan it again.',
   'payload_not_a_payload': 'This isn\'t a bill code.',
   'payload_too_large': 'This bill is too big for one code. Share an invite.',
+  'payout_not_declared': 'They haven\'t added that way to be paid.',
   'percentage_not_full_scale': 'The percentages don\'t add up to 100.',
   'rate_amount_too_large': 'This amount is too large to price.',
   'rate_currency_mismatch':

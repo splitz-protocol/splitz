@@ -35,7 +35,9 @@ pub enum SettleLane {
 ///
 /// The **first** declared preference decides, and only the first: §9.1 makes
 /// the order the preference order, so falling through to the second because
-/// the first is inconvenient pays them somewhere they ranked lower.
+/// the first is inconvenient pays them somewhere they ranked lower. A payer
+/// who settles by a lower one chooses it explicitly with `choose_payouts` (§14.8),
+/// and the lane is read from what that returns.
 ///
 /// A participant who declared nothing is paid by `pay_to` if they have one.
 pub fn lane_for(participant: &Participant) -> SettleLane {

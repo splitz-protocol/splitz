@@ -196,6 +196,44 @@ pub struct Awaiting {
     pub paid_to: Vec<String>,
 }
 
+/// `bill` with each participant `via` names paid by the payout chosen for
+/// them (§14.8).
+///
+/// `via` maps a participant id to the index of one of their declared payouts.
+/// That payout moves to the front and the rest keep their order; everything
+/// else on the bill is unchanged. Rendering a request from the result carries
+/// a chosen `zec` payout's address. Ids are checked in §2.3's order: one not
+/// on the bill is refused with `unknown_participant`, an index outside what
+/// that participant declared with `payout_not_declared`.
+pub fn choose_payouts(bill: &Bill, via: &BTreeMap<String, i64>) -> Result<Bill> {
+    // A `BTreeMap<String, _>` iterates in byte order, which is §2.3's.
+    let mut chosen = BTreeMap::new();
+    for (id, &index) in via {
+        let Some(who) = bill.participant(id) else {
+            return Err(SplitError::new(
+                code::UNKNOWN_PARTICIPANT,
+                format!("{id} is not on this bill"),
+            ));
+        };
+        let declared = who.payouts.len();
+        let Some(at) = usize::try_from(index).ok().filter(|&i| i < declared) else {
+            return Err(SplitError::new(
+                code::PAYOUT_NOT_DECLARED,
+                format!("{id} declared {declared} payouts, not one at {index}"),
+            ));
+        };
+        chosen.insert(id.as_str(), at);
+    }
+    let mut out = bill.clone();
+    for p in &mut out.participants {
+        if let Some(&at) = chosen.get(p.id.as_str()) {
+            let first = p.payouts.remove(at);
+            p.payouts.insert(0, first);
+        }
+    }
+    Ok(out)
+}
+
 /// One payer's settlements, split into what a request may carry and what
 /// section 14 holds back.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -7,12 +7,12 @@
 
 use serde_json::{json, Value};
 use std::cell::Cell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use splitz_core::host::{
     add_expense, base64url_no_pad, create_bill, join_bill, lane_for, obligation_for,
-    payment_id_for_send, record_payment, set_rate, settle, BillHost, BillLog, SendResult, Sent,
-    SettleLane, SignEntry, VerifyEntry,
+    obligation_via, payment_id_for_send, record_payment, set_rate, settle, BillHost, BillLog,
+    SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
 };
 use splitz_core::model::Participant;
 use splitz_core::net_balances;
@@ -67,6 +67,22 @@ fn fake_key(who: &str) -> String {
 /// Ana owes everybody: Ben wants ZEC, Cara wants USDC on Base, Dan wants cash,
 /// and Eve has declared nothing at all.
 fn three_lane_bill<'a>(ana: &'a FakeHost, extra: Vec<Value>) -> BillLog<'a> {
+    three_lane_bill_with(ana, extra, vec![])
+}
+
+/// `three_lane_bill`, with `cara_also` declared after Cara's first payout.
+fn three_lane_bill_with<'a>(
+    ana: &'a FakeHost,
+    extra: Vec<Value>,
+    cara_also: Vec<Value>,
+) -> BillLog<'a> {
+    let mut cara = vec![json!({
+        "type": "swap",
+        "asset": "USDC",
+        "chain": "base",
+        "address": "0xcara"
+    })];
+    cara.extend(cara_also);
     let mut entries = vec![
         create_bill(ana, "Dinner", "USD", "equal", &fake_key("ana")).unwrap(),
         join_bill(ana, Some("Ana"), Some("u1ana"), None, None).unwrap(),
@@ -78,19 +94,7 @@ fn three_lane_bill<'a>(ana: &'a FakeHost, extra: Vec<Value>) -> BillLog<'a> {
             Some(vec![json!({"type": "zec", "address": "u1ben"})]),
         )
         .unwrap(),
-        join_bill(
-            &FakeHost::new("cara"),
-            Some("Cara"),
-            None,
-            None,
-            Some(vec![json!({
-                "type": "swap",
-                "asset": "USDC",
-                "chain": "base",
-                "address": "0xcara"
-            })]),
-        )
-        .unwrap(),
+        join_bill(&FakeHost::new("cara"), Some("Cara"), None, None, Some(cara)).unwrap(),
         join_bill(
             &FakeHost::new("dan"),
             Some("Dan"),
@@ -124,6 +128,91 @@ fn three_lane_bill<'a>(ana: &'a FakeHost, extra: Vec<Value>) -> BillLog<'a> {
     let mut log = BillLog::new(ana);
     log.add(entries).unwrap();
     log
+}
+
+// --- a payer may settle by a lower preference (§14.8) ----------------------
+
+/// Cara ranks USDC on Base first and a Zcash address second.
+fn cara_also_zec(ana: &FakeHost) -> BillLog<'_> {
+    three_lane_bill_with(
+        ana,
+        vec![],
+        vec![json!({"type": "zec", "address": "u1cara"})],
+    )
+}
+
+#[test]
+fn choosing_her_second_payout_carries_it_in_the_request() {
+    let ana = FakeHost::new("ana");
+    let log = cara_also_zec(&ana);
+    let folded = log.fold().unwrap();
+    let first = obligation_for(&ana, &folded).unwrap().unwrap();
+    let via = BTreeMap::from([("cara".to_owned(), 1)]);
+    let chosen = obligation_via(&ana, &folded, &via).unwrap().unwrap();
+
+    // Who owes what does not move; only where Cara's share is sent does.
+    assert_eq!(chosen.settlements, first.settlements);
+    let labels = |o: &splitz_core::host::PayerObligation| -> Vec<String> {
+        o.request
+            .payments
+            .iter()
+            .map(|p| p.label.clone().unwrap_or_default())
+            .collect()
+    };
+    assert_eq!(labels(&first), ["Ben"]);
+    assert_eq!(labels(&chosen), ["Ben", "Cara"]);
+    assert_eq!(chosen.request.payments[1].address, "u1cara");
+    let unpayable: Vec<&str> = chosen
+        .request
+        .unpayable
+        .iter()
+        .map(|u| u.id.as_str())
+        .collect();
+    assert_eq!(unpayable, ["dan", "eve"]);
+    assert_eq!(chosen.request.carried_minor_units, 2000);
+}
+
+#[test]
+fn the_send_records_her_payment_like_any_other_and_her_order_stands() {
+    let ana = FakeHost::new("ana");
+    let mut log = cara_also_zec(&ana);
+    let folded = log.fold().unwrap();
+    let via = BTreeMap::from([("cara".to_owned(), 1)]);
+    let owed = obligation_via(&ana, &folded, &via).unwrap().unwrap();
+    let settled = settle(&ana, &mut log, &owed).unwrap();
+
+    assert_eq!(settled.result, SendResult::Sent);
+    let txid = settled.txid.clone().unwrap();
+    let cara = settled
+        .records
+        .iter()
+        .map(|r| &r["payment"])
+        .find(|p| p["to"] == "cara")
+        .unwrap();
+    assert_eq!(cara["method"], "shieldedZec");
+    assert_eq!(cara["id"], json!(payment_id_for_send(&txid, "cara")));
+    assert_eq!(cara["reference"], json!(txid));
+    // No entry rewrote her preferences: every device still reads USDC first.
+    let after = log.fold().unwrap();
+    let kinds: Vec<&str> = after
+        .bill
+        .participant("cara")
+        .unwrap()
+        .payouts
+        .iter()
+        .map(|p| p.kind.as_str())
+        .collect();
+    assert_eq!(kinds, ["swap", "zec"]);
+}
+
+#[test]
+fn a_payout_she_never_declared_is_refused() {
+    let ana = FakeHost::new("ana");
+    let log = cara_also_zec(&ana);
+    let folded = log.fold().unwrap();
+    let via = BTreeMap::from([("cara".to_owned(), 2)]);
+    let refused = obligation_via(&ana, &folded, &via).unwrap_err();
+    assert_eq!(refused.code, splitz_core::code::PAYOUT_NOT_DECLARED);
 }
 
 // --- a payout preference chooses a lane -------------------------------------
