@@ -10,7 +10,7 @@ one transaction.
 
 This is a library and a specification, not an app. The wallet keeps what a
 wallet should keep: your keys, your storage, the clock, randomness, the network,
-and actually sending the transaction. `SPEC.md` §13 lists all ten of those, so
+and actually sending the transaction. `SPEC.md` §13 lists all nine of those, so
 nobody mistakes them for missing features.
 
 ## What's in the repo
