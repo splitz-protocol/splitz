@@ -16,10 +16,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import uniffi.splitz_ffi.BillEventKind
 import uniffi.splitz_ffi.HostFacts
+import uniffi.splitz_ffi.RandomBytes
+import uniffi.splitz_ffi.ReviewRule
 import uniffi.splitz_ffi.SplitzRelay
 import uniffi.splitz_ffi.addExpenseEntry
 import uniffi.splitz_ffi.billKeyProblem
 import uniffi.splitz_ffi.blobsToPush
+import uniffi.splitz_ffi.checkPayeeReview
 import uniffi.splitz_ffi.channelForBill
 import uniffi.splitz_ffi.confirmPaymentEntry
 import uniffi.splitz_ffi.createBillEntry
@@ -28,11 +31,14 @@ import uniffi.splitz_ffi.historyOf
 import uniffi.splitz_ffi.identityKeyFromSeed
 import uniffi.splitz_ffi.joinBillEntry
 import uniffi.splitz_ffi.mergeEntries
+import uniffi.splitz_ffi.newBillKey
 import uniffi.splitz_ffi.obligationOf
 import uniffi.splitz_ffi.openBlobs
 import uniffi.splitz_ffi.participantIdForKey
+import uniffi.splitz_ffi.rateFigure
 import uniffi.splitz_ffi.paymentEntriesForSend
 import uniffi.splitz_ffi.readScanned
+import uniffi.splitz_ffi.renderAmount
 import uniffi.splitz_ffi.setRateEntry
 import uniffi.splitz_ffi.shareableBillPayload
 
@@ -121,7 +127,9 @@ class BillTest {
         ana.add(joinBillEntry(ana.facts(), billId, "Ana", "u1ana", anaKey, listOf(), ana.seed))
 
         println("ana shares it, and ben takes it from the code")
-        val billKey = "-_" + "A".repeat(41)
+        // The bill key is the wallet's to keep, minted from the platform's own
+        // entropy; §9.4's id is public.
+        val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
         check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
         val payload = shareableBillPayload(ana.facts(), billId, ana.entries, billKey)
         check("the whole bill fits in one code", payload != null, "${payload?.length} characters")
@@ -181,6 +189,16 @@ class BillTest {
               "${afterPayment.bill.payments.map { it.id }}")
         check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty(),
               "${afterPayment.bill.confirmedPayments}")
+        val paid = afterPayment.bill.payments.single()
+        val confirmScreen = listOf("Ben says he paid you",
+                                   "${renderAmount(paid.zatoshi!!)} ZEC",
+                                   "priced at ${rateFigure(paid.paidAtRate!!)} EUR a ZEC",
+                                   "transaction ${paid.reference}")
+        check("ana's confirm screen shows what §14.2 says a payee must see",
+              checkPayeeReview(paid, confirmScreen, "not recorded").isEmpty(), "$confirmScreen")
+        val noReference = checkPayeeReview(paid, confirmScreen.dropLast(1), "not recorded")
+        check("one without the transaction is told exactly that",
+              noReference.map { it.rule } == listOf(ReviewRule.PAYEE_REFERENCE), "$noReference")
         val stillOwed = obligationOf(ben.facts(), billId, ben.entries)!!
         check("so ben is asked for nothing twice", stillOwed.settlements.isEmpty(),
               "${stillOwed.settlements}")

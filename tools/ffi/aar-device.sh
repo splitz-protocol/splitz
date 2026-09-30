@@ -44,12 +44,12 @@ trap 'kill "$RELAY_PID" 2>/dev/null || true; rm -rf "$work"' EXIT
 port="${RELAY_ORIGIN##*:}"
 "$sdk/platform-tools/adb" reverse "tcp:$port" "tcp:$port" >/dev/null
 
+status=0
 # Built outside the repository so no build/, .gradle/ or .kotlin/ lands in it.
 cp -R "$root/tools/ffi/aar/." "$work/"
 (cd "$work" && ANDROID_HOME="$sdk" gradle connectedDebugAndroidTest --no-daemon \
    -PsplitzAar="$aar" -PsplitzLibDir="$(cargo_target_dir "$root")/release" \
-   -Pandroid.testInstrumentationRunnerArguments.relay="$RELAY_ORIGIN")
-status=$?
+   -Pandroid.testInstrumentationRunnerArguments.relay="$RELAY_ORIGIN") || status=$?
 "$sdk/platform-tools/adb" reverse --remove "tcp:$port" >/dev/null 2>&1 || true
 
 # The device's own stdout, which Gradle does not print.
