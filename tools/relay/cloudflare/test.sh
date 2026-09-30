@@ -20,7 +20,7 @@ port=""
 # `npx` runs wrangler as node processes under it, which killing `npx` leaves
 # running; they are found by the port they serve.
 stop() {
-  kill "${pids[@]}" 2>/dev/null || true
+  kill ${pids[@]+"${pids[@]}"} 2>/dev/null || true
   if [ -n "$port" ]; then pkill -f "wrangler.* dev --port $port" 2>/dev/null || true; fi
   rm -rf "$work"
 }
