@@ -234,6 +234,9 @@ void main() {
         '--define-file',
         define.path,
       ]);
+      // Stopped whatever the test's outcome: a failed expectation would
+      // otherwise leave the driver serving until someone kills it.
+      addTearDown(process.kill);
       process.stdout.drain<void>();
       process.stderr.drain<void>();
       return (process, dir, seeds);
