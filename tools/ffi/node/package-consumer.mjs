@@ -90,8 +90,10 @@ check("and decides through the package's own binding",
       `${refusedOrigin?.detail}`);
 
 console.log("ana opens a bill, and both join it");
+// The key is minted first: the create entry commits to it (§9.4).
+const billKey = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
 const create = splitz.create_bill_entry(ana.facts(), "Dinner", "EUR", "equal",
-    anaKey, ana.seed);
+    anaKey, billKey, ana.seed);
 ana.add(create);
 const billId = JSON.parse(create).id;
 ana.add(splitz.join_bill_entry(ana.facts(), billId, "Ana", "u1ana", anaKey, [], ana.seed));
