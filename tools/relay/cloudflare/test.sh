@@ -3,7 +3,9 @@
 #
 # Runs splitz_host/test/relay_origin_test.dart twice: against
 # tools/relay/server.py, then against this Worker under `wrangler dev`, which
-# runs it locally with no account. Both must pass the same tests.
+# runs it locally with no account. Both must pass the same tests. Then
+# bounds.py holds the Worker to the per-channel, per-address and expiry bounds
+# only it keeps.
 #
 #     tools/relay/cloudflare/test.sh
 #     SPLITZ_RELAY_ORIGIN=https://splitz-relay.<account>.workers.dev \
@@ -13,6 +15,8 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# One exact version, so a run is not whatever npm published that morning.
+wrangler="4.145.0"
 root="$(cd "$here/../../.." && pwd)"
 work="$(mktemp -d)"
 pids=()
@@ -47,7 +51,7 @@ echo "== server.py at $py"
 origin_test "$py"
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
-(cd "$here" && npx --yes wrangler@4 dev --port "$port" --ip 127.0.0.1 \
+(cd "$here" && npx --yes "wrangler@$wrangler" dev --port "$port" --ip 127.0.0.1 \
   --persist-to "$work/state") >"$work/worker.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 120); do
@@ -57,4 +61,19 @@ done
 grep -q "Ready on" "$work/worker.log" || { cat "$work/worker.log" >&2; exit 1; }
 echo "== the Worker at http://127.0.0.1:$port"
 origin_test "http://127.0.0.1:$port"
+pkill -f "wrangler.* dev --port $port" 2>/dev/null || true
+
+# The bounds a public origin adds, with small figures so a run reaches them.
+port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
+(cd "$here" && npx --yes "wrangler@$wrangler" dev --port "$port" --ip 127.0.0.1 \
+  --persist-to "$work/bounded" --var MAX_CHANNEL_CHARS:4096 \
+  --var MAX_SOURCE_CHARS:8192 --var EXPIRE_DAYS:0.00005) >"$work/bounded.log" 2>&1 &
+pids+=($!)
+for _ in $(seq 120); do
+  grep -q "Ready on" "$work/bounded.log" && break
+  sleep 1
+done
+grep -q "Ready on" "$work/bounded.log" || { cat "$work/bounded.log" >&2; exit 1; }
+echo "== the Worker's own bounds at http://127.0.0.1:$port"
+python3 "$here/bounds.py" "http://127.0.0.1:$port"
 echo "== both relays give the same answers"
