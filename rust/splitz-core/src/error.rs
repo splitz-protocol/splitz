@@ -69,6 +69,7 @@ pub mod code {
     pub const CREATE_ID_NOT_DERIVED: &str = "create_id_not_derived";
     pub const UNAUTHORIZED_ENTRY: &str = "unauthorized_entry";
     pub const UNAUTHORIZED_PAYMENT: &str = "unauthorized_payment";
+    pub const ID_NOT_MINTED: &str = "id_not_minted";
     pub const UNAUTHORIZED_CONFIRMATION: &str = "unauthorized_confirmation";
     pub const CONFIRMATION_MISSING_REFERENCE: &str = "confirmation_missing_reference";
     pub const UNKNOWN_PAYMENT: &str = "unknown_payment";
@@ -107,6 +108,9 @@ pub mod code {
     pub const ZIP321_NO_ADDRESS: &str = "zip321_no_address";
     pub const ZIP321_NOT_CANONICAL: &str = "zip321_not_canonical";
     pub const ZIP321_MEMO_UNDELIVERABLE: &str = "zip321_memo_undeliverable";
+
+    // §8.5 one payer's obligation
+    pub const OBLIGATION_MIXED_PAYERS: &str = "obligation_mixed_payers";
 
     // §8.6 addresses
     pub const ADDRESS_INVALID: &str = "address_invalid";
@@ -237,6 +241,10 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
         "The amounts don't add up to the total.",
     ),
     (
+        "id_not_minted",
+        "This was written under an id its author did not make.",
+    ),
+    (
         "invite_bad_bill_id",
         "This invite is damaged. Ask for a new one.",
     ),
@@ -277,6 +285,10 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
     ("negative_amount", "An amount can't be negative."),
     ("negative_share", "A share can't be negative."),
     ("negative_weight", "A share can't be negative."),
+    (
+        "obligation_mixed_payers",
+        "This asks you to pay what someone else owes.",
+    ),
     (
         "participant_id_not_derived",
         "This person's id doesn't match their key.",

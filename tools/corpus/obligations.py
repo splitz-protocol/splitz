@@ -19,6 +19,10 @@ RATE = {"currency": "MXN", "minorUnitsPerZec": 950000, "at": AT}
 LOW_RATE = {"currency": "MXN", "minorUnitsPerZec": 3000, "at": AT}
 
 
+# The bill every case renders for; section 8.5's memo names it.
+BILL_ID = "tTxV6g2Sx7CcGd0rq8zO4Q"
+
+
 def who(pid, name, address=None, payouts=None):
     p = {"id": pid, "name": name}
     if address is not None:
@@ -165,14 +169,34 @@ VIA_CASES = [
 ]
 
 
+# Section 8.5: one payer's obligation. A plan's settlements from two payers
+# are refused whole, however payable each is.
+MIXED = [
+    ("settlements_from_two_payers_are_refused",
+     [pay("ana", 4500), {"from": "ben", "to": "ana", "amount": 1500}],
+     [ANA, BEN, CAI], True, True),
+    ("and_refused_without_skipping_too",
+     [{"from": "ben", "to": "ana", "amount": 1500}, pay("ana", 4500)],
+     [ANA, BEN, CAI], False, False),
+    # Section 8.5: a transparent address takes no memo; the shielded one in
+    # the same request still carries the bill's.
+    ("a_transparent_recipient_gets_no_memo",
+     [pay("ana", 4500), pay("tom", 1500)],
+     [ANA, CAI, who("tom", "Tom", "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs")],
+     True, True),
+    ("one_payer_to_one_recipient_twice_is_one_payer",
+     [pay("ana", 4500), pay("ana", 1500)], [ANA, CAI], True, True),
+]
+
+
 def main():
     out = []
-    for name, settlements, participants, skip, fiat, *rest in CASES + [
+    for name, settlements, participants, skip, fiat, *rest in CASES + MIXED + [
             (n, s, ps, True, True, RATE, via)
             for n, s, ps, via in VIA_CASES]:
         rate = rest[0] if rest else RATE
         via = rest[1] if len(rest) > 1 else None
-        case = {"name": name, "settlements": settlements,
+        case = {"name": name, "billId": BILL_ID, "settlements": settlements,
                 "participants": participants, "rate": rate,
                 "currency": "MXN", "skipUnpayable": skip, "includeFiat": fiat}
         if via is not None:
@@ -181,7 +205,8 @@ def main():
             chosen = participants if via is None else \
                 choose_payouts(participants, via)
             result = render_obligation(settlements, chosen, rate, "MXN",
-                                       skip_unpayable=skip, include_fiat=fiat)
+                                       skip_unpayable=skip, include_fiat=fiat,
+                                       bill_id=BILL_ID)
             if via is not None:
                 # What the choice did to each participant it names.
                 result["payouts"] = {

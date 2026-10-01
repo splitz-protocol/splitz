@@ -1,6 +1,6 @@
 {
   "description": "Invite URIs. SPEC.md section 11.1.",
-  "count": 79,
+  "count": 81,
   "cases": [
     {
       "name": "a_plain_invite",
@@ -257,6 +257,16 @@
     {
       "name": "an_empty_key",
       "uri": "splitz://join?v=1&b=Ab3-_xyz&k=",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "a_sixteen_byte_key",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=AAAAAAAAAAAAAAAAAAAAAA",
+      "error": "invite_missing_key"
+    },
+    {
+      "name": "a_thirty_three_byte_key",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB",
       "error": "invite_missing_key"
     },
     {

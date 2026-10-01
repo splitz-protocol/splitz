@@ -21,7 +21,7 @@ nobody mistakes them for missing features.
 | **the plumbing** | `splitz_host/`, `rust/splitz-host` | signing entries, sealing them, storing them, syncing through a relay, swaps, activity |
 | **the binding** | `rust/splitz-ffi` | using the Rust crate from Kotlin, Swift, Dart or JavaScript |
 | **the seam** | `SPEC.md` §15 | the seven things a wallet has to provide |
-| **the test cases** | `vectors/` | 880 cases in 22 files any implementation can run, in no particular language |
+| **the test cases** | `vectors/` | 915 cases in 22 files any implementation can run, in no particular language |
 | **the extra checks** | `tools/` | everything a fixed set of test cases can't catch |
 
 Screens are the wallet's own. This repository ships none: a wallet draws its
@@ -113,8 +113,8 @@ who have seen different parts of the history still see the same bill.
 
 ## Verify it yourself
 
-Needs Dart 3.11.4 or later and a Rust toolchain; the crates declare 1.82 as
-their minimum. Run each command from the repository root; the comment beside
+Needs Dart 3.11.4 or later and Rust 1.88 or later, the minimum the crates
+declare and CI builds them with from the lockfile. Run each command from the repository root; the comment beside
 it says what a pass looks like.
 
 ```
@@ -180,7 +180,7 @@ An implementation conforms when it reproduces every case in `vectors/` and
 follows §14, which is about what the wallet has to do rather than what goes
 over the wire.
 
-`SPEC.md` §12 lists 87 reasons the library can refuse something. Every one has
+`SPEC.md` §12 lists 89 reasons the library can refuse something. Every one has
 a test case except the one the spec excuses by name, `bill_not_scalar_values`:
 its input is a document any correct JSON reader rejects, so a test case holding
 it would break the whole file rather than test anything. Each implementation

@@ -1,6 +1,9 @@
 /// One payer's obligation as a payment request (SPEC.md §8.5).
 library;
 
+import 'dart:convert';
+
+import 'address.dart';
 import 'errors.dart';
 import 'model.dart';
 import 'ordering.dart';
@@ -79,6 +82,13 @@ Obligation renderObligation(
   var carried = 0;
   var withheld = 0;
 
+  // §8.5: a request carries one payer's debts. Built from a whole plan it
+  // would ask this payer to send every other payer's too.
+  if (settlements.map((s) => s.from).toSet().length > 1) {
+    raise(SplitCode.obligationMixedPayers,
+        'These settlements are owed by more than one payer');
+  }
+
   for (final s in settlements) {
     final who = bill.participant(s.to);
     if (who == null) {
@@ -129,6 +139,8 @@ Obligation renderObligation(
       address: address,
       zatoshi: zatoshi,
       fiat: FiatPrice(bill.currency, s.amount),
+      // §8.5: what ties the send to this bill, where the address takes one.
+      memo: _takesMemo(address) ? billMemo(bill.id) : null,
       label: who.name,
     ));
     recipients.add(s.to);
@@ -277,4 +289,21 @@ Withholdings withholdings(
     }
   }
   return Withholdings(carried: carried, awaiting: awaiting);
+}
+
+/// The memo a request carries to every output that takes one (§8.5): the
+/// UTF-8 bytes of `splitz:` and the bill's id. The payee's wallet reads it
+/// back to tell a payment for this bill from one sent for anything else
+/// (§14.7).
+List<int> billMemo(String billId) => utf8.encode('splitz:$billId');
+
+/// Whether [address] decodes (§8.6) to one that can receive a memo. One that
+/// does not decode carries none: §8.3 admits strings no reader decodes, and
+/// a request to one still renders.
+bool _takesMemo(String address) {
+  try {
+    return parseAddress(address).canReceiveMemo;
+  } on SplitError {
+    return false;
+  }
 }

@@ -1,6 +1,6 @@
 {
   "description": "The five split methods. SPEC.md section 4.",
-  "count": 40,
+  "count": 41,
   "cases": [
     {
       "name": "equal_two_ways",
@@ -329,6 +329,34 @@
       "expect": {
         "ana": 500,
         "ben": 500
+      }
+    },
+    {
+      "name": "itemized_tip_on_a_large_subtotal",
+      "total": 10200000000,
+      "split": {
+        "type": "itemized",
+        "extraMinorUnits": 1020000000,
+        "items": [
+          {
+            "description": "set menu",
+            "minorUnits": 9180000000,
+            "sharedBy": [
+              "ana"
+            ]
+          },
+          {
+            "description": "water",
+            "minorUnits": 0,
+            "sharedBy": [
+              "ben"
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "ana": 10200000000,
+        "ben": 0
       }
     },
     {

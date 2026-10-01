@@ -182,7 +182,10 @@ fn scan() {
     run_cases("scan.json", |c| {
         match splitz_core::host::read_scan(c["text"].as_str().expect("text")) {
             splitz_core::host::Scanned::Bill(bill) => {
-                Ok(serde_json::json!({"kind": "bill", "entryCount": bill.entries.len()}))
+                // An item that is not an object is carried on so `accept_scan`
+                // refuses it (§10.1); it is not an entry.
+                let entries = bill.entries.iter().filter(|e| e.is_object()).count();
+                Ok(serde_json::json!({"kind": "bill", "entryCount": entries}))
             }
             splitz_core::host::Scanned::Refused(code) => {
                 Err(splitz_core::SplitError::new(code, "refused"))
@@ -285,7 +288,7 @@ fn obligations() {
     run_cases("obligations.json", |c| {
         let bill = splitz_core::decode_bill(&json!({
             "v": splitz_core::BILL_VERSION,
-            "id": "b",
+            "id": c["billId"],
             "name": "",
             "currency": c["currency"],
             "participants": c["participants"],
@@ -350,6 +353,12 @@ fn obligations() {
 #[test]
 fn log() {
     run_cases("log.json", |c| {
+        if let Some(text) = c.get("entryText").and_then(Value::as_str) {
+            // Read as a peer's text is read, so the spelling reaches it.
+            let entry = splitz_core::parse_json(text).expect("the text is JSON");
+            splitz_core::check_entry(&entry)?;
+            return Ok(json!({"accepted": true}));
+        }
         if let Some(entry) = c.get("entry") {
             splitz_core::check_entry(entry)?;
             return Ok(json!({"accepted": true}));

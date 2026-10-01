@@ -123,22 +123,54 @@ void main() {
     expect(totalsAcross([x.log.fold()], 'ana').standings, isEmpty);
   });
 
-  test('a bill that would carry a sum past 64 bits is left out whole', () {
+  test(
+      'a bill whose part would carry a sum past 64 bits is a row of its '
+      'own, not left out', () {
     // Payments carry no cap (§2.2), so two unconfirmed records of 2^63 - 1
-    // on two bills cannot both be counted.
+    // on two bills cannot be one sum.
     const most = 9223372036854775807;
     final x = _bill('X');
     final y = _bill('Y');
     _record(x, 'p1', most);
     _record(y, 'p1', most);
-    final fx = x.log.fold();
-    final fy = y.log.fold();
-    final totals = totalsAcross([fx, fy], 'ana');
-    expect(totals.uncounted.values, ['amount_overflow']);
-    final kept = totals.standings.single;
-    expect(kept.receivedAwaiting, most);
-    expect(kept.owedToMe, 4500, reason: 'the left-out bill adds nothing');
-    expect(kept.billIds, hasLength(1));
+    final totals = totalsAcross([x.log.fold(), y.log.fold()], 'ana');
+    expect(totals.uncounted, isEmpty);
+    expect(totals.standings, hasLength(2));
+    for (final s in totals.standings) {
+      expect(s.withId, 'ben');
+      expect(s.receivedAwaiting, most);
+      expect(s.owedToMe, 4500);
+      expect(s.billIds, hasLength(1));
+    }
+    expect({for (final s in totals.standings) ...s.billIds}, hasLength(2));
+  });
+
+  test(
+      'a bill stating an absurd figure takes no other bill out of the '
+      'totals', () {
+    const most = 9223372036854775807;
+    // Bills sort by id; whichever sorts first, the other is still counted.
+    for (final (first, second) in [('H', 'B'), ('B', 'H')]) {
+      final hostile = _bill(first);
+      final honest = _bill(second);
+      _record(hostile, 'p1', most);
+      _record(honest, 'p1', 1);
+      final totals =
+          totalsAcross([hostile.log.fold(), honest.log.fold()], 'ana');
+      expect(totals.uncounted, isEmpty);
+      final owed = totals.standings.fold<int>(0, (n, s) => n + s.owedToMe);
+      expect(owed, 9000, reason: 'both bills\' 45.00 is still owed to Ana');
+    }
+  });
+
+  test('bills that fit are still one row', () {
+    final x = _bill('X');
+    final y = _bill('Y');
+    _record(x, 'p1', 100);
+    _record(y, 'p1', 200);
+    final s = totalsAcross([x.log.fold(), y.log.fold()], 'ana').standings;
+    expect(s.single.receivedAwaiting, 300);
+    expect(s.single.billIds, hasLength(2));
   });
 
   test('somebody on no bill with this device is not a standing', () {

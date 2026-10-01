@@ -190,11 +190,12 @@ pub fn parse_invite(text: &str) -> Result<Invite> {
 
     let key = field("k").unwrap_or("");
     // §11.1: `k` decodes as unpadded base64url, not merely draws from its
-    // alphabet.
-    if key.is_empty() || unbase64url(key).is_none() {
+    // alphabet, to the 32 bytes of a bill key (§11.3): a key of any other
+    // length passes every check until the first one that seals with it.
+    if key.is_empty() || unbase64url(key).is_none_or(|raw| raw.len() != 32) {
         return Err(SplitError::new(
             code::INVITE_MISSING_KEY,
-            "An invite carries a base64url key",
+            "An invite carries a 32-byte base64url key",
         ));
     }
 
@@ -291,10 +292,10 @@ pub fn render_invite(invite: &Invite) -> Result<String> {
             format!("Not a bill id: \"{}\"", invite.bill_id),
         ));
     }
-    if invite.key.is_empty() || unbase64url(&invite.key).is_none() {
+    if invite.key.is_empty() || unbase64url(&invite.key).is_none_or(|raw| raw.len() != 32) {
         return Err(SplitError::new(
             code::INVITE_MISSING_KEY,
-            "An invite carries a base64url key",
+            "An invite carries a 32-byte base64url key",
         ));
     }
     let mut parts = vec![

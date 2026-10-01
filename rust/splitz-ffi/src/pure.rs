@@ -648,6 +648,7 @@ pub fn arrivals_of(
         .map(|t| splitz_core::host::IncomingTransaction {
             txid: t.txid,
             zatoshi: t.zatoshi,
+            memos: t.memos,
         })
         .collect();
     let found = splitz_core::host::arrivals_for(&folded, &facts.me, &received);
@@ -666,6 +667,8 @@ pub fn arrivals_of(
         short: each(found.short),
         unstated: each(found.unstated),
         disputed: each(found.disputed),
+        underpriced: each(found.underpriced),
+        unbound: each(found.unbound),
     })
 }
 

@@ -108,7 +108,7 @@
         "kind": "addExpense",
         "at": "2026-10-28T19:30:00.000Z",
         "expense": {
-          "id": "x1",
+          "id": "ana:x1",
           "description": "dinner",
           "paidBy": "ana",
           "amount": 480000,
@@ -123,7 +123,7 @@
           }
         }
       },
-      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"expense\":{\"amount\":480000,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"description\":\"dinner\",\"id\":\"x1\",\"paidBy\":\"ana\",\"split\":{\"among\":[\"ana\",\"ben\"],\"type\":\"equal\"}},\"id\":\"e1\",\"kind\":\"addExpense\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"expense\":{\"amount\":480000,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"description\":\"dinner\",\"id\":\"ana:x1\",\"paidBy\":\"ana\",\"split\":{\"among\":[\"ana\",\"ben\"],\"type\":\"equal\"}},\"id\":\"e1\",\"kind\":\"addExpense\"}}"
     },
     {
       "name": "a_payment_naming_an_address",
@@ -135,7 +135,7 @@
         "kind": "recordPayment",
         "at": "2026-10-28T19:30:00.000Z",
         "payment": {
-          "id": "y1",
+          "id": "ben:y1",
           "from": "ben",
           "to": "ana",
           "amount": 4500,
@@ -145,7 +145,7 @@
           "reference": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
         }
       },
-      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ben\",\"id\":\"p1\",\"kind\":\"recordPayment\",\"payment\":{\"amount\":4500,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"from\":\"ben\",\"id\":\"y1\",\"method\":\"shieldedZec\",\"reference\":\"u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx\",\"to\":\"ana\"}}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ben\",\"id\":\"p1\",\"kind\":\"recordPayment\",\"payment\":{\"amount\":4500,\"at\":\"2026-10-28T19:30:00.000Z\",\"currency\":\"MXN\",\"from\":\"ben\",\"id\":\"ben:y1\",\"method\":\"shieldedZec\",\"reference\":\"u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx\",\"to\":\"ana\"}}}"
     },
     {
       "name": "a_name_outside_the_basic_multilingual_plane",
@@ -206,13 +206,13 @@
         "kind": "confirmPayment",
         "at": "2026-10-28T19:30:00.000Z",
         "confirmation": {
-          "paymentId": "y1",
+          "paymentId": "ben:y1",
           "method": "onChain",
           "reference": "tx:abc",
           "record": "cmVjb3JkZGlnZXN0MDAwMA"
         }
       },
-      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"confirmation\":{\"method\":\"onChain\",\"paymentId\":\"y1\",\"record\":\"cmVjb3JkZGlnZXN0MDAwMA\",\"reference\":\"tx:abc\"},\"id\":\"c1\",\"kind\":\"confirmPayment\"}}"
+      "expect": "splitz-entry-v2{\"bill\":\"g0a5mrH6D5nx5bJ7KrgwVA\",\"entry\":{\"at\":\"2026-10-28T19:30:00.000Z\",\"author\":\"ana\",\"confirmation\":{\"method\":\"onChain\",\"paymentId\":\"ben:y1\",\"record\":\"cmVjb3JkZGlnZXN0MDAwMA\",\"reference\":\"tx:abc\"},\"id\":\"c1\",\"kind\":\"confirmPayment\"}}"
     },
     {
       "name": "a_withdrawal",

@@ -154,6 +154,55 @@ void main() {
       expect((await quote(answering(bound))).minAmountOut, '$bound');
     });
 
+    test(
+      'amounts are decimal digits, and echoes are the values sent',
+      () async {
+        final raw = fixture('quote.json') as Map<String, dynamic>;
+        final issued = raw['quote'] as Map<String, dynamic>;
+        final out = BigInt.parse(issued['amountOut'] as String);
+        final bound = out * BigInt.from(9900) ~/ BigInt.from(10000);
+        OneClickSwaps answering(
+          Map<String, dynamic> quoteChanges, [
+          Map<String, dynamic> echoChanges = const {},
+        ]) => OneClickSwaps(
+          origin: Uri.parse('https://1click.chaindefuser.com'),
+          zecAssetId: 'nep141:zec.omft.near',
+          deadline: () => '2026-10-28T19:40:00.000Z',
+          post: (url, body) async => jsonEncode({
+            ...raw,
+            'quote': {...issued, 'minAmountOut': '$bound', ...quoteChanges},
+            'quoteRequest': {
+              ...raw['quoteRequest'] as Map<String, dynamic>,
+              ...jsonDecode(body) as Map<String, dynamic>,
+              ...echoChanges,
+            },
+          }),
+          get: (url) async => fixtureText('tokens.json'),
+        );
+        for (final floor in [
+          '0x${bound.toRadixString(16)}',
+          ' $bound ',
+          '+$bound',
+          '1${'0' * 39}',
+        ]) {
+          await expectLater(
+            quote(answering({'minAmountOut': floor})),
+            throwsA(isA<SwapException>()),
+            reason: floor,
+          );
+        }
+        await expectLater(
+          quote(answering({'amountIn': 1000000})),
+          throwsA(isA<SwapException>()),
+          reason: 'a number where the schema has a string',
+        );
+        final sent =
+            jsonDecode(jsonEncode((await quote(answering({}))).amountInZatoshi))
+                as int;
+        expect(sent, 1000000, reason: 'the honest answer still reads');
+      },
+    );
+
     test('a live quote reads into the quote the provider issued', () async {
       final q = await quote(live().swaps);
       final raw = fixture('quote.json') as Map<String, dynamic>;

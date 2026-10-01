@@ -117,7 +117,10 @@ bool _decodesAsB64Url(String value) {
   }
   try {
     final raw = base64Url.decode(value.padRight((value.length + 3) & ~3, '='));
-    return base64UrlEncode(raw).replaceAll('=', '') == value;
+    // §11.1: a bill key is 32 bytes (§11.3). A key of any other length
+    // passes every check until the first one that seals with it.
+    return raw.length == 32 &&
+        base64UrlEncode(raw).replaceAll('=', '') == value;
   } on FormatException {
     // Dart's decoder refuses an unused bit set, where others decode it.
     return false;
@@ -197,7 +200,8 @@ Invite parseInvite(String text) {
 
   final key = fields['k'] ?? '';
   if (key.isEmpty || !_decodesAsB64Url(key)) {
-    raise(SplitCode.inviteMissingKey, 'An invite carries a base64url key');
+    raise(SplitCode.inviteMissingKey,
+        'An invite carries a 32-byte base64url key');
   }
 
   int? expiry;
@@ -252,7 +256,8 @@ String renderInvite(Invite invite) {
     raise(SplitCode.inviteBadBillId, 'Not a bill id: "${invite.billId}"');
   }
   if (invite.key.isEmpty || !_decodesAsB64Url(invite.key)) {
-    raise(SplitCode.inviteMissingKey, 'An invite carries a base64url key');
+    raise(SplitCode.inviteMissingKey,
+        'An invite carries a 32-byte base64url key');
   }
   final parts = <String>[
     'v=$inviteVersion',

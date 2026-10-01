@@ -204,3 +204,37 @@ fn a_floor_below_the_tolerance_asked_for_is_refused() {
     )
     .is_ok());
 }
+
+#[test]
+fn amounts_are_decimal_digits_and_echoes_are_the_values_sent() {
+    let raw = fixture("quote.json");
+    let out: u128 = raw["quote"]["amountOut"].as_str().unwrap().parse().unwrap();
+    let bound = out * 9_900 / 10_000;
+    let read = |quote_changes: Value| {
+        let mut r = raw.clone();
+        r["quote"]["minAmountOut"] = json!(bound.to_string());
+        for (k, v) in quote_changes.as_object().unwrap() {
+            r["quote"][k] = v.clone();
+        }
+        quote_from_response(
+            &r.to_string(),
+            &raw["quoteRequest"].to_string(),
+            &usdc_on_base(),
+            1_000_000,
+            "2026-10-28T19:40:00.000Z",
+        )
+    };
+    for floor in [
+        format!("0x{bound:x}"),
+        format!(" {bound} "),
+        format!("+{bound}"),
+        format!("1{}", "0".repeat(39)),
+    ] {
+        assert!(read(json!({"minAmountOut": floor})).is_err(), "{floor:?}");
+    }
+    assert!(
+        read(json!({"amountIn": 1_000_000})).is_err(),
+        "a number where the schema has a string"
+    );
+    assert!(read(json!({})).is_ok(), "the honest answer still reads");
+}

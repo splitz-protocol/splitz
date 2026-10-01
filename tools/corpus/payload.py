@@ -42,7 +42,7 @@ def signed_bill(ids, names, addresses, expenses, bill_name="Dinner"):
                         "participant": p})
     for k in range(expenses):
         entries.append({"v": 1, "author": ids[0], "kind": "addExpense", "at": AT,
-                        "expense": {"id": f"x{k}", "description": "dinner",
+                        "expense": {"id": f"{ids[0]}:x{k}", "description": "dinner",
                                     "paidBy": ids[0], "amount": 9000, "at": AT,
                                     "split": {"type": "equal", "among": ids}}})
     log = seal_log(entries)
@@ -187,6 +187,10 @@ def payload_cases():
          "splitz1:" + b64url(b'{"v":1,"log":[{"description":"\\ud800"}]}')),
         ("a_body_holding_a_number_no_double_holds",
          "splitz1:" + b64url(b'{"v":1,"log":[{"tip":1e400}]}')),
+        ("a_body_holding_an_integer_no_double_holds",
+         "splitz1:" + b64url(b'{"v":1,"log":[{"tip":1' + b"0" * 400 + b'}]}')),
+        ("a_body_holding_a_twenty_digit_integer",
+         "splitz1:" + b64url(b'{"v":1,"log":[{"tip":10000000000000000000}]}')),
     ]:
         case = {"name": name, "payload": text}
         try:

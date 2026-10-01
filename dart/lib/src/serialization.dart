@@ -134,8 +134,9 @@ Participant decodeParticipant(Object? raw) {
   final p = _object(raw);
   final id = _string(p['id']);
   // §9.1. An empty id is not a name anyone can be settled to, and two
-  // readers disagreeing about it fold different bills from one log.
-  if (id.isEmpty) {
+  // readers disagreeing about it fold different bills from one log. One
+  // holding `:` mints no expense or payment id (§10.3).
+  if (id.isEmpty || id.contains(':')) {
     raise(SplitCode.billBadParticipantId, 'A participant states an id');
   }
   return Participant(

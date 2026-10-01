@@ -64,8 +64,10 @@ class Totals {
   final List<Standing> standings;
 
   /// Bills left out whole, by id, with the §12 code that kept each out: one
-  /// that cannot be settled, or one whose amounts would carry a standing past
-  /// what an amount can hold. Never partly counted.
+  /// that cannot be settled, or one whose own amounts to one person pass
+  /// what an amount can hold. Never partly counted. A bill whose part would
+  /// carry a total over other bills past that bound is counted on a row of
+  /// its own instead, so no bill is left out for what another states.
   final Map<String, String> uncounted;
 }
 
@@ -121,9 +123,20 @@ Totals totalsAcross(List<FoldedBill> bills, String me) {
       final merged = <String, List<int>>{};
       for (final e in adds.entries) {
         final held = sums[e.key] ?? const [0, 0, 0, 0];
-        merged[e.key] = [
-          for (var i = 0; i < 4; i++) splitz.checkedAdd(held[i], e.value[i]),
-        ];
+        try {
+          merged[e.key] = [
+            for (var i = 0; i < 4; i++) splitz.checkedAdd(held[i], e.value[i]),
+          ];
+        } on splitz.SplitError catch (err) {
+          if (err.code != splitz.SplitCode.amountOverflow) rethrow;
+          // What other bills already hold for this person would carry the
+          // row past what an amount can hold. This bill's part is kept as a
+          // row of its own rather than the bill left out: one bill stating
+          // an absurd figure cannot take another bill out of the totals.
+          final apart = '${e.key}\u0000${bill.id}';
+          named[apart] = named[e.key]!;
+          merged[apart] = e.value;
+        }
       }
       for (final e in merged.entries) {
         sums[e.key] = e.value;

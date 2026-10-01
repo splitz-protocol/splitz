@@ -1,9 +1,10 @@
 {
   "description": "One payer's obligation as a payment request. SPEC.md section 8.5.",
-  "count": 36,
+  "count": 40,
   "cases": [
     {
       "name": "one_recipient",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -32,7 +33,7 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -47,6 +48,7 @@
     },
     {
       "name": "two_recipients_one_transaction",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -85,7 +87,7 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00737264&fiat=MXN:7004&label=Ana&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00973264&fiat.1=MXN:9246&label.1=Ben",
+        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00973264&fiat.1=MXN:9246&memo.1=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label.1=Ben",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -104,6 +106,7 @@
     },
     {
       "name": "fiat_is_off_unless_asked_for",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -132,7 +135,7 @@
       "skipUnpayable": false,
       "includeFiat": false,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -147,6 +150,7 @@
     },
     {
       "name": "a_payout_preference_overrides_pay_to",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -180,7 +184,7 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl?amount=0.00737264&fiat=MXN:7004&label=Gus",
+        "uri": "zcash:u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Gus",
         "payments": [
           {
             "address": "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl",
@@ -195,6 +199,7 @@
     },
     {
       "name": "a_recipient_with_no_address_refuses_the_whole_request",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -235,6 +240,7 @@
     },
     {
       "name": "or_is_reported_alongside_the_uri",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -272,7 +278,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -293,6 +299,7 @@
     },
     {
       "name": "a_cash_payout_cannot_become_an_output",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -336,7 +343,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -357,6 +364,7 @@
     },
     {
       "name": "a_swap_payout_cannot_either",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -403,7 +411,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -424,6 +432,7 @@
     },
     {
       "name": "every_recipient_unpayable_carries_no_uri",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -487,6 +496,7 @@
     },
     {
       "name": "an_empty_pay_to_is_not_an_address",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -525,7 +535,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -546,6 +556,7 @@
     },
     {
       "name": "and_refuses_the_request_when_not_skipping",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -587,6 +598,7 @@
     },
     {
       "name": "an_address_no_request_can_carry_is_reported",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -625,7 +637,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -646,6 +658,7 @@
     },
     {
       "name": "and_refuses_the_request_as_a_bad_address_when_not_skipping",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -687,6 +700,7 @@
     },
     {
       "name": "a_zec_payout_whose_address_no_request_can_carry",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -730,7 +744,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -751,6 +765,7 @@
     },
     {
       "name": "a_zec_payout_with_no_address",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -793,7 +808,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -814,6 +829,7 @@
     },
     {
       "name": "a_recipient_who_is_not_on_the_bill",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -845,6 +861,7 @@
     },
     {
       "name": "a_withheld_total_that_overflows",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -890,6 +907,7 @@
     },
     {
       "name": "two_withheld_amounts_that_still_fit",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -953,6 +971,7 @@
     },
     {
       "name": "a_debt_section_7_cannot_price_is_reported_alongside",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -991,7 +1010,7 @@
       "skipUnpayable": true,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1012,6 +1031,7 @@
     },
     {
       "name": "and_an_unpriceable_debt_refuses_the_request_when_not_skipping",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1053,6 +1073,7 @@
     },
     {
       "name": "a_debt_past_the_largest_request_is_reported_alongside",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1091,7 +1112,7 @@
       "skipUnpayable": true,
       "includeFiat": false,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=2.33466667&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=2.33466667&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1112,6 +1133,7 @@
     },
     {
       "name": "an_amount_that_rounds_up",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1140,7 +1162,7 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843&fiat=MXN:350&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00036843&fiat=MXN:350&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1155,6 +1177,7 @@
     },
     {
       "name": "an_amount_that_divides_exactly",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1183,7 +1206,7 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&fiat=MXN:950000&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&fiat=MXN:950000&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1197,7 +1220,203 @@
       }
     },
     {
+      "name": "settlements_from_two_payers_are_refused",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
+      "settlements": [
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 4500
+        },
+        {
+          "from": "ben",
+          "to": "ana",
+          "amount": 1500
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "ben",
+          "name": "Ben",
+          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": true,
+      "includeFiat": true,
+      "error": "obligation_mixed_payers"
+    },
+    {
+      "name": "and_refused_without_skipping_too",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
+      "settlements": [
+        {
+          "from": "ben",
+          "to": "ana",
+          "amount": 1500
+        },
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 4500
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "ben",
+          "name": "Ben",
+          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": false,
+      "includeFiat": false,
+      "error": "obligation_mixed_payers"
+    },
+    {
+      "name": "a_transparent_recipient_gets_no_memo",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
+      "settlements": [
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 4500
+        },
+        {
+          "from": "cai",
+          "to": "tom",
+          "amount": 1500
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        },
+        {
+          "id": "tom",
+          "name": "Tom",
+          "payTo": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": true,
+      "includeFiat": true,
+      "expect": {
+        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00473685&fiat=MXN:4500&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana&address.1=t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs&amount.1=0.00157895&fiat.1=MXN:1500&label.1=Tom",
+        "payments": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 473685
+          },
+          {
+            "address": "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs",
+            "zatoshi": 157895
+          }
+        ],
+        "unpayable": [],
+        "carriedMinorUnits": 6000,
+        "withheldMinorUnits": 0,
+        "isComplete": true
+      }
+    },
+    {
+      "name": "one_payer_to_one_recipient_twice_is_one_payer",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
+      "settlements": [
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 4500
+        },
+        {
+          "from": "cai",
+          "to": "ana",
+          "amount": 1500
+        }
+      ],
+      "participants": [
+        {
+          "id": "ana",
+          "name": "Ana",
+          "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+        },
+        {
+          "id": "cai",
+          "name": "Cai",
+          "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+        }
+      ],
+      "rate": {
+        "currency": "MXN",
+        "minorUnitsPerZec": 950000,
+        "at": "2026-10-28T19:30:00.000Z"
+      },
+      "currency": "MXN",
+      "skipUnpayable": true,
+      "includeFiat": true,
+      "expect": {
+        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00473685&fiat=MXN:4500&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana&address.1=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount.1=0.00157895&fiat.1=MXN:1500&memo.1=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label.1=Ana",
+        "payments": [
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 473685
+          },
+          {
+            "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
+            "zatoshi": 157895
+          }
+        ],
+        "unpayable": [],
+        "carriedMinorUnits": 6000,
+        "withheldMinorUnits": 0,
+        "isComplete": true
+      }
+    },
+    {
       "name": "a_second_zec_payout_is_carried_when_chosen",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1250,7 +1469,7 @@
         "hal": 1
       },
       "expect": {
-        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00737264&fiat=MXN:7004&label=Ana&address.1=u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl&amount.1=0.00973264&fiat.1=MXN:9246&label.1=Hal",
+        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana&address.1=u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl&amount.1=0.00973264&fiat.1=MXN:9246&memo.1=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label.1=Hal",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1283,6 +1502,7 @@
     },
     {
       "name": "and_the_first_is_withheld_without_the_choice",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1333,7 +1553,7 @@
       "includeFiat": true,
       "via": {},
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1355,6 +1575,7 @@
     },
     {
       "name": "a_choice_past_an_address_no_request_can_carry",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1395,7 +1616,7 @@
         "jon": 1
       },
       "expect": {
-        "uri": "zcash:u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl?amount=0.00973264&fiat=MXN:9246&label=Jon",
+        "uri": "zcash:u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl?amount=0.00973264&fiat=MXN:9246&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Jon",
         "payments": [
           {
             "address": "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl",
@@ -1422,6 +1643,7 @@
     },
     {
       "name": "the_chosen_payout_moves_first_and_the_rest_keep_their_order",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1467,7 +1689,7 @@
         "ivy": 2
       },
       "expect": {
-        "uri": "zcash:u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl?amount=0.00973264&fiat=MXN:9246&label=Ivy",
+        "uri": "zcash:u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl?amount=0.00973264&fiat=MXN:9246&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ivy",
         "payments": [
           {
             "address": "u1qpatys4zruk99pg59gcscrt7y6akvl9vrhcfyhm9yxvxz7h87q6n8cgrzzpe9zru68uq39uhmlpp5uefxu0su5uqyqfe5zp3tycn0ecl",
@@ -1499,6 +1721,7 @@
     },
     {
       "name": "a_chosen_swap_is_reported_for_its_own_lane",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1577,6 +1800,7 @@
     },
     {
       "name": "choosing_the_first_changes_nothing",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1649,6 +1873,7 @@
     },
     {
       "name": "a_choice_for_somebody_not_owed_changes_nothing",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1696,7 +1921,7 @@
         "hal": 1
       },
       "expect": {
-        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&label=Ana",
+        "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
@@ -1725,6 +1950,7 @@
     },
     {
       "name": "an_index_past_what_they_declared_is_refused",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1770,6 +1996,7 @@
     },
     {
       "name": "a_negative_index_is_refused",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1815,6 +2042,7 @@
     },
     {
       "name": "pay_to_alone_declares_no_payout_to_choose",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1849,6 +2077,7 @@
     },
     {
       "name": "a_choice_for_somebody_not_on_the_bill_is_refused",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1883,6 +2112,7 @@
     },
     {
       "name": "the_first_refusal_in_id_order_names_a_payout",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",
@@ -1929,6 +2159,7 @@
     },
     {
       "name": "and_names_a_participant_when_that_id_sorts_first",
+      "billId": "tTxV6g2Sx7CcGd0rq8zO4Q",
       "settlements": [
         {
           "from": "cai",

@@ -8,18 +8,23 @@ const _t1 = 'aa00000000000000000000000000000000000000000000000000000000000001';
 const _t2 = 'bb00000000000000000000000000000000000000000000000000000000000002';
 
 /// Ana and Ben on one bill named [name]; Ben owes Ana.
-({BillLog log, FakeHost ana, FakeHost ben}) _bill(String name) {
+({BillLog log, FakeHost ana, FakeHost ben}) _bill(String name,
+    {bool priced = true}) {
   final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
   final ben = FakeHost(me: 'ben', payToAddress: 'u1ben');
   final create = createBill(
       host: ana, name: name, currency: 'EUR', creatorKey: fakeKey('ana'));
   ana.tick();
   final joinAna = joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
+  ana.tick();
+  // 1,000,000.00 EUR a ZEC: 1000 zatoshi pays for the 10.00 EUR each record
+  // settles.
+  final rate = setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 100000000);
   ben.tick();
   ben.tick();
   final joinBen = joinBill(host: ben, name: 'Ben', payTo: 'u1ben');
   final log = BillLog(ana);
-  expect(log.add([create, joinAna, joinBen]), isEmpty);
+  expect(log.add([create, joinAna, if (priced) rate, joinBen]), isEmpty);
   ben.tick();
   ben.tick();
   return (log: log, ana: ana, ben: ben);
@@ -356,5 +361,81 @@ void main() {
     expect(found.disputed, isEmpty);
     expect(found.arrived.map((a) => a.payment.id), ['ben:p1']);
     expect(found.short.map((a) => a.payment.id), ['ben:p2']);
+  });
+
+  group('a record its ZEC does not pay for (§14.7)', () {
+    /// One 10.00 EUR record on a bill priced at [rate], paid with [zatoshi].
+    Arrivals priced(int? rate, int zatoshi) {
+      final b = _bill('priced', priced: false);
+      if (rate != null) {
+        b.ana.tick();
+        expect(
+            b.log.add([
+              setRate(host: b.ana, currency: 'EUR', minorUnitsPerZec: rate),
+            ]),
+            isEmpty);
+      }
+      _paid(b, 'p1', _t1, zatoshi: zatoshi);
+      return arrivalsFor(
+          [b.log.fold()], 'ana', [IncomingTransaction(_t1, zatoshi)]);
+    }
+
+    List<String> paymentIds(List<Arrival> a) =>
+        [for (final x in a) x.payment.id];
+
+    test('one zatoshi for 10.00 EUR is not proposed', () {
+      final found = priced(100000000, 1);
+      expect(paymentIds(found.underpriced), ['ben:p1']);
+      expect(found.arrived, isEmpty);
+    });
+
+    test('95% of the amount pays for it, one zatoshi less does not', () {
+      // 950 x 100000000 x 100 = 9.5e12 = 1000 x 95 x 10^8.
+      expect(paymentIds(priced(100000000, 950).arrived), ['ben:p1']);
+      expect(paymentIds(priced(100000000, 949).underpriced), ['ben:p1']);
+    });
+
+    test('a bill with no rate vouches for no record', () {
+      final found = priced(null, 20000);
+      expect(paymentIds(found.underpriced), ['ben:p1']);
+      expect(found.arrived, isEmpty);
+    });
+  });
+
+  group('a transaction whose memos the wallet read (§8.5, §14.7)', () {
+    Arrivals withMemos(List<String>? memos) {
+      final b = _bill('memo');
+      _paid(b, 'p1', _t1);
+      final folded = b.log.fold();
+      return arrivalsFor(
+          [folded],
+          'ana',
+          [
+            IncomingTransaction(_t1, 20000,
+                memos: memos
+                    ?.map((m) => m.replaceAll('<bill>', folded.bill.id))
+                    .toList()),
+          ]);
+    }
+
+    List<String> ids(List<Arrival> a) => [for (final x in a) x.payment.id];
+
+    test('a memo naming the bill is proposed', () {
+      expect(ids(withMemos(['splitz:<bill>']).arrived), ['ben:p1']);
+    });
+
+    test("another bill's memo is not", () {
+      final found = withMemos(['splitz:SomeOtherBill00000000']);
+      expect(ids(found.unbound), ['ben:p1']);
+      expect(found.arrived, isEmpty);
+    });
+
+    test('no memo at all is not', () {
+      expect(ids(withMemos(const []).unbound), ['ben:p1']);
+    });
+
+    test('memos the wallet could not read decide nothing', () {
+      expect(ids(withMemos(null).arrived), ['ben:p1']);
+    });
   });
 }

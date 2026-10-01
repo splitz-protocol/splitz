@@ -9,6 +9,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::PaymentRecord;
 use crate::ordering::compare_utf8;
+use crate::rate::ExchangeRate;
+use crate::rate::ZATOSHI_PER_ZEC;
 use crate::zip321::MAX_ZATOSHI;
 
 use super::bill_log::FoldedBill;
@@ -30,6 +32,9 @@ pub fn txid_key(txid: &str) -> String {
 pub struct IncomingTransaction {
     pub txid: String,
     pub zatoshi: i64,
+    /// The text memos the transaction carried to this account, or `None`
+    /// when the wallet cannot say. Empty is an answer: it carried none.
+    pub memos: Option<Vec<String>>,
 }
 
 /// A payment record to this device, and the transaction it names.
@@ -64,6 +69,31 @@ pub struct Arrivals {
     /// sent it, and any participant can copy a reference they have seen, so
     /// the payee has to settle which record it pays before confirming any.
     pub disputed: Vec<Arrival>,
+    /// Records whose ZEC, at the bill's own rate, is worth less than 95% of
+    /// the amount they settle, or whose bill has no rate in their currency to
+    /// say. Not proposed: a transaction that brought what a record states
+    /// proves the ZEC arrived, not that it pays the debt.
+    pub underpriced: Vec<Arrival>,
+    /// Records naming a transaction whose memos the wallet read, none of them
+    /// the record's bill's (§8.5). Not proposed: the transaction was sent,
+    /// but nothing says it was sent for this bill.
+    pub unbound: Vec<Arrival>,
+}
+
+/// Whether `zatoshi`, at the bill's `rate`, is worth at least 95% of what
+/// `payment` settles (§14.7): `zatoshi × rate × 100 ≥ amount × 95 × 10^8`,
+/// compared exactly. No rate in the payment's currency vouches for nothing.
+fn pays_for(zatoshi: i64, payment: &PaymentRecord, rate: Option<&ExchangeRate>) -> bool {
+    let Some(rate) = rate.filter(|r| r.currency == payment.currency) else {
+        return false;
+    };
+    let needed = i128::from(payment.amount) * 95 * i128::from(ZATOSHI_PER_ZEC);
+    // Each factor fits i64, so the product of two fits i128; past i128 the
+    // worth is beyond any amount.
+    match (i128::from(zatoshi) * i128::from(rate.minor_units_per_zec)).checked_mul(100) {
+        Some(worth) => worth >= needed,
+        None => true,
+    }
 }
 
 fn clamp(zatoshi: i64) -> i64 {
@@ -98,17 +128,30 @@ enum Payer<'a> {
 /// recorded on two bills is evidence for both.
 ///
 /// A transaction named by records from more than one payer is evidence for
-/// none of them: every such record is [`Arrivals::disputed`].
+/// none of them: every such record is [`Arrivals::disputed`]. A record its
+/// ZEC does not pay for at the bill's rate is [`Arrivals::underpriced`]. A
+/// record naming a transaction whose memos do not name its bill is
+/// [`Arrivals::unbound`].
 ///
 /// Amounts are held inside [0, 21000000 ZEC]: no transaction brings more than
 /// exists, and a record's `zatoshi` may be as large as §2.2 allows, so using
 /// it up floors at zero rather than wrapping.
 pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransaction]) -> Arrivals {
     let mut left: BTreeMap<String, i64> = BTreeMap::new();
+    // What each transaction's memos say, where the wallet read them; a
+    // transaction listed twice carries every memo either listing gives.
+    let mut memos: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut unread: BTreeSet<String> = BTreeSet::new();
     for t in received {
         let id = txid_key(&t.txid);
         let sum = left.get(&id).copied().unwrap_or(0);
-        left.insert(id, clamp(clamp(sum) + clamp(t.zatoshi)));
+        left.insert(id.clone(), clamp(clamp(sum) + clamp(t.zatoshi)));
+        match &t.memos {
+            None => {
+                unread.insert(id);
+            }
+            Some(said) => memos.entry(id).or_default().extend(said.iter().cloned()),
+        }
     }
 
     let mut ordered: Vec<&FoldedBill> = bills.iter().collect();
@@ -135,8 +178,12 @@ pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransact
             }
         }
     }
+    let rates: BTreeMap<&str, Option<&ExchangeRate>> = ordered
+        .iter()
+        .map(|f| (f.bill.id.as_str(), f.bill.rate.as_ref()))
+        .collect();
     let mut candidates = Vec::new();
-    for folded in ordered {
+    for folded in &ordered {
         let mut payments: Vec<&PaymentRecord> = folded.bill.payments.iter().collect();
         payments.sort_by(|a, b| compare_utf8(&a.id, &b.id));
         for p in payments {
@@ -171,9 +218,19 @@ pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransact
             out.disputed.push(a);
             continue;
         }
+        let bound_by_memo = memos
+            .get(&a.txid)
+            .is_some_and(|m| m.contains(&format!("splitz:{}", a.bill_id)));
+        if !unread.contains(&a.txid) && !bound_by_memo {
+            out.unbound.push(a);
+            continue;
+        }
         let available = left[&a.txid];
         match a.payment.zatoshi {
             None => out.unstated.push(a),
+            Some(stated) if !pays_for(stated, &a.payment, rates[a.bill_id.as_str()]) => {
+                out.underpriced.push(a)
+            }
             Some(stated) if stated <= available => {
                 left.insert(a.txid.clone(), use_up(available, stated));
                 out.arrived.push(a);

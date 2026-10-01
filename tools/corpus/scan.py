@@ -65,6 +65,13 @@ def cases():
          code(bid, entries + [forged], OWN))
     case("and_the_bills_own_create_still_refuses_another_key_beside_it",
          code(bid, entries + [forged], STRANGER))
+    # Section 11.1 refuses a key whose bytes encode another way; such an
+    # invite carries no key, and the bill reads without one.
+    case("a_bill_code_whose_key_is_not_canonical_reads_without_it",
+         code(bid, entries, "A" * 42 + "B"))
+    # Only objects are entries.
+    case("a_number_in_the_log_is_not_an_entry",
+         code(bid, entries + [5], OWN))
     bid, entries = bill(commits=False)
     case("a_create_committing_to_no_key_reads_with_any",
          code(bid, entries, STRANGER))

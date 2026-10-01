@@ -326,6 +326,9 @@ const arrival = arrivals.arrived[0];
 check("the payment is proposed for confirmation",
       arrivals.arrived.length === 1 && arrival.payment.id === afterPayment.bill.payments[0].id,
       `arrived=${arrivals.arrived.length} short=${arrivals.short.length}`);
+check("and nothing is held back as disputed, underpriced or unbound",
+  arrivals.disputed.length === 0 && arrivals.underpriced.length === 0 && arrivals.unbound.length === 0,
+  `disputed=${arrivals.disputed.length} underpriced=${arrivals.underpriced.length}`);
 
 // A payee confirms a payment they can see, by the id the bill carries. One
 // transaction paying several people writes one record each, so the id is not

@@ -34,10 +34,14 @@ String txidKey(String txid) {
 /// Money this wallet received in one transaction: the sum of that
 /// transaction's outputs to this account, in zatoshi.
 class IncomingTransaction {
-  const IncomingTransaction(this.txid, this.zatoshi);
+  const IncomingTransaction(this.txid, this.zatoshi, {this.memos});
 
   final String txid;
   final int zatoshi;
+
+  /// The text memos the transaction carried to this account, or null when
+  /// the wallet cannot say. Empty is an answer: it carried none.
+  final List<String>? memos;
 }
 
 /// A payment record to this device, and the transaction it names.
@@ -69,6 +73,8 @@ class Arrivals {
     required this.short,
     required this.unstated,
     this.disputed = const [],
+    this.underpriced = const [],
+    this.unbound = const [],
   });
 
   /// Records whose transaction arrived carrying at least the ZEC they state.
@@ -90,6 +96,17 @@ class Arrivals {
   /// it, and any participant can copy a reference they have seen, so the
   /// payee has to settle which record it pays before confirming any.
   final List<Arrival> disputed;
+
+  /// Records whose ZEC, at the bill's own rate, is worth less than 95% of the
+  /// amount they settle, or whose bill has no rate in their currency to say.
+  /// Not proposed: a transaction that brought what a record states proves the
+  /// ZEC arrived, not that it pays the debt.
+  final List<Arrival> underpriced;
+
+  /// Records naming a transaction whose memos the wallet read, none of them
+  /// the record's bill's (§8.5). Not proposed: the transaction was sent, but
+  /// nothing says it was sent for this bill.
+  final List<Arrival> unbound;
 }
 
 /// Matches unconfirmed ZEC payment records to [me] against the transactions
@@ -102,7 +119,10 @@ class Arrivals {
 /// recorded on two bills is evidence for both.
 ///
 /// A transaction named by records from more than one payer is evidence for
-/// none of them: every such record is [Arrivals.disputed].
+/// none of them: every such record is [Arrivals.disputed]. A record its ZEC
+/// does not pay for at the bill's rate is [Arrivals.underpriced]. A record
+/// naming a transaction whose memos do not name its bill is
+/// [Arrivals.unbound].
 Arrivals arrivalsFor(
   List<FoldedBill> bills,
   String me,
@@ -113,9 +133,19 @@ Arrivals arrivalsFor(
   // and a record's `zatoshi` may be as large as §2.2 allows, so subtracting
   // floors at zero rather than wrapping.
   final left = <String, int>{};
+  // What each transaction's memos say, where the wallet read them; a
+  // transaction listed twice carries every memo either listing gives.
+  final memos = <String, Set<String>>{};
+  final unread = <String>{};
   for (final t in received) {
     final id = txidKey(t.txid);
     left[id] = _add(left[id] ?? 0, t.zatoshi);
+    final said = t.memos;
+    if (said == null) {
+      unread.add(id);
+    } else {
+      memos.putIfAbsent(id, () => {}).addAll(said);
+    }
   }
 
   final ordered = [...bills]
@@ -139,6 +169,9 @@ Arrivals arrivalsFor(
     }
   }
   final candidates = <Arrival>[];
+  final rates = <String, splitz.ExchangeRate?>{
+    for (final folded in ordered) folded.bill.id: folded.bill.rate,
+  };
   for (final folded in ordered) {
     final payments = [...folded.bill.payments]
       ..sort((a, b) => splitz.compareUtf8(a.id, b.id));
@@ -166,12 +199,19 @@ Arrivals arrivalsFor(
   final short = <Arrival>[];
   final unstated = <Arrival>[];
   final disputed = <Arrival>[];
+  final underpriced = <Arrival>[];
+  final unbound = <Arrival>[];
   for (final a in candidates) {
     final stated = a.payment.zatoshi;
     if (payers[a.txid]!.length > 1) {
       disputed.add(a);
+    } else if (!unread.contains(a.txid) &&
+        !(memos[a.txid]?.contains('splitz:${a.billId}') ?? false)) {
+      unbound.add(a);
     } else if (stated == null) {
       unstated.add(a);
+    } else if (!_paysFor(stated, a.payment, rates[a.billId])) {
+      underpriced.add(a);
     } else if (stated <= left[a.txid]!) {
       left[a.txid] = _use(left[a.txid]!, stated);
       arrived.add(a);
@@ -184,7 +224,26 @@ Arrivals arrivalsFor(
     short: short,
     unstated: unstated,
     disputed: disputed,
+    underpriced: underpriced,
+    unbound: unbound,
   );
+}
+
+/// Whether [zatoshi], at the bill's [rate], is worth at least 95% of what
+/// [payment] settles (§14.7): `zatoshi × rate × 100 ≥ amount × 95 × 10^8`,
+/// compared exactly. No rate in the payment's currency vouches for nothing.
+bool _paysFor(
+  int zatoshi,
+  splitz.PaymentRecord payment,
+  splitz.ExchangeRate? rate,
+) {
+  if (rate == null || rate.currency != payment.currency) return false;
+  return BigInt.from(zatoshi) *
+          BigInt.from(rate.minorUnitsPerZec) *
+          BigInt.from(100) >=
+      BigInt.from(payment.amount) *
+          BigInt.from(95) *
+          BigInt.from(splitz.zatoshiPerZec);
 }
 
 int _clamp(int zatoshi) => zatoshi < 0

@@ -1,6 +1,6 @@
 {
   "description": "Largest-remainder allocation. SPEC.md section 3.",
-  "count": 18,
+  "count": 20,
   "cases": [
     {
       "name": "splits_evenly",
@@ -220,13 +220,38 @@
       "error": "weight_sum_overflow"
     },
     {
-      "name": "product_overflows",
+      "name": "a_product_past_64_bits_still_allocates",
       "total": 9223372036854775807,
       "weights": [
         2,
         1
       ],
-      "error": "allocation_overflow"
+      "expect": [
+        6148914691236517205,
+        3074457345618258602
+      ]
+    },
+    {
+      "name": "a_tip_on_a_large_subtotal",
+      "total": 1020000000,
+      "weights": [
+        9180000000
+      ],
+      "expect": [
+        1020000000
+      ]
+    },
+    {
+      "name": "products_past_64_bits_across_two",
+      "total": 1020000000,
+      "weights": [
+        9180000000,
+        1020000000
+      ],
+      "expect": [
+        918000000,
+        102000000
+      ]
     },
     {
       "name": "most_negative_total",

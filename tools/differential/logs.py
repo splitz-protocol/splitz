@@ -63,9 +63,22 @@ def _join(rng, pid, minute):
 CAP = _spec.MAX_ENTRY_AMOUNT
 
 
+def _payload_id(rng, author, local, among):
+    """Mostly an id `author` minted (section 10.3 step 5); otherwise one under
+    another participant's prefix, one with no prefix, the author's own id, or
+    one several entries share, so the minting check and the uniqueness check
+    after it are both reached."""
+    return rng.choice([
+        f"{author}:{local}", f"{author}:{local}", f"{author}:{local}",
+        f"{author}:{local}", f"{rng.choice(among)}:{local}", local, author,
+        f"{rng.choice(among)}:shared",
+    ])
+
+
 def _expense(rng, author, n, among):
     return {"v": 1, "author": author, "kind": "addExpense", "at": at(n),
-            "expense": {"id": f"x{n}", "description": "dinner",
+            "expense": {"id": _payload_id(rng, author, f"x{n}", among),
+                        "description": "dinner",
                         "paidBy": rng.choice(among), "amount": rng.choice(
                             [1, 2, 9000, 10 ** 9, 0, -1, CAP, CAP + 1,
                              -CAP, -CAP - 1]),
@@ -76,7 +89,8 @@ def _expense(rng, author, n, among):
 def _payment(rng, n, among):
     a, b = rng.sample(among, 2)
     return {"v": 1, "author": a, "kind": "recordPayment", "at": at(n),
-            "payment": {"id": f"y{n}", "from": a, "to": b,
+            "payment": {"id": _payload_id(rng, a, f"y{n}", among),
+                        "from": a, "to": b,
                         "amount": rng.choice([1, 4500, 0, CAP, CAP + 1]),
                         "method": rng.choice(["cash", "shieldedZec", "swap"]),
                         "at": at(n)}}

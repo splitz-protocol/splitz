@@ -50,6 +50,9 @@ DECODE = [
     ("a_bill_id_one_over_the_cap",   f"splitz://join?v=1&b={'A' * (MAX_BILL_ID + 1)}&k={K}"),
     ("no_key",                      f"splitz://join?v=1&b={T}"),
     ("an_empty_key",                f"splitz://join?v=1&b={T}&k="),
+    # Section 11.1: a bill key is 32 bytes (section 11.3).
+    ("a_sixteen_byte_key",          f"splitz://join?v=1&b={T}&k=AAAAAAAAAAAAAAAAAAAAAA"),
+    ("a_thirty_three_byte_key",     f"splitz://join?v=1&b={T}&k=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"),
     ("a_key_in_the_standard_alphabet", f"splitz://join?v=1&b={T}&k=ab%2Bcd%2Fef%3D"),
     # Section 11.1: `k` decodes as unpadded base64url, not merely draws from
     # its alphabet. Five characters hold no whole number of bytes, and a last

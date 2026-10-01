@@ -173,22 +173,50 @@ fn a_confirmed_payment_is_neither_owed_nor_awaiting() {
 }
 
 #[test]
-fn a_bill_that_would_carry_a_sum_past_64_bits_is_left_out_whole() {
+fn a_bill_whose_part_would_carry_a_sum_past_64_bits_is_a_row_of_its_own() {
     // Payments carry no cap (§2.2), so two unconfirmed records of 2^63 - 1 on
-    // two bills cannot both be counted.
+    // two bills cannot be one sum.
     let mut x = Bill::new("X", "EUR");
     let mut y = Bill::new("Y", "EUR");
     x.record("p1", i64::MAX);
     y.record("p1", i64::MAX);
     let totals = totals_across(&[x.folded(), y.folded()], "ana");
-    assert_eq!(
-        totals.uncounted.values().cloned().collect::<Vec<_>>(),
-        ["amount_overflow"]
-    );
-    let kept = &totals.standings[0];
-    assert_eq!(kept.received_awaiting, i64::MAX);
-    assert_eq!(kept.owed_to_me, 4500, "the left-out bill adds nothing");
-    assert_eq!(kept.bill_ids.len(), 1);
+    assert!(totals.uncounted.is_empty());
+    assert_eq!(totals.standings.len(), 2);
+    for s in &totals.standings {
+        assert_eq!(s.with_id, "ben");
+        assert_eq!(s.received_awaiting, i64::MAX);
+        assert_eq!(s.owed_to_me, 4500);
+        assert_eq!(s.bill_ids.len(), 1);
+    }
+    assert_ne!(totals.standings[0].bill_ids, totals.standings[1].bill_ids);
+}
+
+#[test]
+fn a_bill_stating_an_absurd_figure_takes_no_other_bill_out_of_the_totals() {
+    // Bills sort by id; whichever sorts first, the other is still counted.
+    for (first, second) in [("H", "B"), ("B", "H")] {
+        let mut hostile = Bill::new(first, "EUR");
+        let mut honest = Bill::new(second, "EUR");
+        hostile.record("p1", i64::MAX);
+        honest.record("p1", 1);
+        let totals = totals_across(&[hostile.folded(), honest.folded()], "ana");
+        assert!(totals.uncounted.is_empty());
+        let owed: i64 = totals.standings.iter().map(|s| s.owed_to_me).sum();
+        assert_eq!(owed, 9000, "both bills' 45.00 is still owed to Ana");
+    }
+}
+
+#[test]
+fn bills_that_fit_are_still_one_row() {
+    let mut x = Bill::new("X", "EUR");
+    let mut y = Bill::new("Y", "EUR");
+    x.record("p1", 100);
+    y.record("p1", 200);
+    let totals = totals_across(&[x.folded(), y.folded()], "ana");
+    assert_eq!(totals.standings.len(), 1);
+    assert_eq!(totals.standings[0].received_awaiting, 300);
+    assert_eq!(totals.standings[0].bill_ids.len(), 2);
 }
 
 #[test]

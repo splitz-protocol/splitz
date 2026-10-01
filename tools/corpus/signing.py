@@ -46,13 +46,13 @@ CASES = [
 
     ("an_expense", {
         "v": 1, "id": "e1", "author": "ana", "kind": "addExpense", "at": AT,
-        "expense": {"id": "x1", "description": "dinner", "paidBy": "ana",
+        "expense": {"id": "ana:x1", "description": "dinner", "paidBy": "ana",
                     "amount": 480000, "currency": "MXN", "at": AT,
                     "split": {"type": "equal", "among": ["ana", "ben"]}}}),
 
     ("a_payment_naming_an_address", {
         "v": 1, "id": "p1", "author": "ben", "kind": "recordPayment", "at": AT,
-        "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
+        "payment": {"id": "ben:y1", "from": "ben", "to": "ana", "amount": 4500,
                     "currency": "MXN", "method": "shieldedZec", "at": AT,
                     "reference": ADDRESSES[0]}}),
 
@@ -71,7 +71,7 @@ CASES = [
 
     ("a_confirmation", {
         "v": 1, "id": "c1", "author": "ana", "kind": "confirmPayment", "at": AT,
-        "confirmation": {"paymentId": "y1", "method": "onChain",
+        "confirmation": {"paymentId": "ben:y1", "method": "onChain",
                          "reference": "tx:abc",
                          "record": "cmVjb3JkZGlnZXN0MDAwMA"}}),
 

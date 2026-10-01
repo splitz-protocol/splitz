@@ -70,6 +70,7 @@ abstract final class SplitCode {
   static const createIdNotDerived = 'create_id_not_derived';
   static const unauthorizedEntry = 'unauthorized_entry';
   static const unauthorizedPayment = 'unauthorized_payment';
+  static const idNotMinted = 'id_not_minted';
   static const unauthorizedConfirmation = 'unauthorized_confirmation';
   static const confirmationMissingReference = 'confirmation_missing_reference';
   static const unknownPayment = 'unknown_payment';
@@ -108,6 +109,9 @@ abstract final class SplitCode {
   static const zip321NoAddress = 'zip321_no_address';
   static const zip321NotCanonical = 'zip321_not_canonical';
   static const zip321MemoUndeliverable = 'zip321_memo_undeliverable';
+
+  // §8.5 one payer's obligation
+  static const obligationMixedPayers = 'obligation_mixed_payers';
 
   // §8.6 addresses
   static const addressInvalid = 'address_invalid';
@@ -178,6 +182,7 @@ const Map<String, String> _plainMessages = {
   'entry_id_not_derived': 'Part of this bill is damaged.',
   'exact_limit_too_large': 'This bill has too many people to settle exactly.',
   'exact_total_mismatch': 'The amounts don\'t add up to the total.',
+  'id_not_minted': 'This was written under an id its author did not make.',
   'invite_bad_bill_id': 'This invite is damaged. Ask for a new one.',
   'invite_bad_expiry': 'This invite is damaged. Ask for a new one.',
   'invite_bad_link': 'This invite link can\'t be made from that address.',
@@ -196,6 +201,7 @@ const Map<String, String> _plainMessages = {
   'negative_amount': 'An amount can\'t be negative.',
   'negative_share': 'A share can\'t be negative.',
   'negative_weight': 'A share can\'t be negative.',
+  'obligation_mixed_payers': 'This asks you to pay what someone else owes.',
   'participant_id_not_derived': 'This person\'s id doesn\'t match their key.',
   'participant_still_named':
       'This person still has costs or payments on the bill.',

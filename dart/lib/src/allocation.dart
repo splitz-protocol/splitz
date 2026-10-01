@@ -42,11 +42,20 @@ List<int> allocate(int total, List<int> weights) {
   var distributed = 0;
 
   for (var i = 0; i < weights.length; i++) {
-    // 4. Every product must fit.
-    final scaled =
-        checkedMultiply(magnitude, weights[i], SplitCode.allocationOverflow);
-    parts[i] = scaled ~/ weightSum;
-    remainders[i] = scaled % weightSum;
+    // 4. Every product is exact: each factor is below 2^63, so the product is
+    //    below 2^126. The part is at most `magnitude` and the remainder below
+    //    `weightSum`, so both fit back in 64 bits.
+    final w = weights[i];
+    if (w == 0 || magnitude <= maxAmount ~/ w) {
+      final scaled = magnitude * w;
+      parts[i] = scaled ~/ weightSum;
+      remainders[i] = scaled % weightSum;
+    } else {
+      final scaled = BigInt.from(magnitude) * BigInt.from(w);
+      final sum = BigInt.from(weightSum);
+      parts[i] = (scaled ~/ sum).toInt();
+      remainders[i] = (scaled % sum).toInt();
+    }
     distributed += parts[i];
   }
 

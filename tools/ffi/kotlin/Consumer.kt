@@ -309,6 +309,9 @@ fun main(args: Array<String>) {
     check("the payment is proposed for confirmation",
           arrival?.payment?.id == afterPayment.bill.payments.single().id,
           "arrived=${arrivals.arrived.size} short=${arrivals.short.size}")
+    check("and nothing is held back as disputed, underpriced or unbound",
+          arrivals.disputed.isEmpty() && arrivals.underpriced.isEmpty() && arrivals.unbound.isEmpty(),
+          "disputed=${arrivals.disputed.size} underpriced=${arrivals.underpriced.size}")
 
     // A payee confirms a payment they can see, by the id the bill carries. One
     // transaction paying several people writes one record each, so the id is

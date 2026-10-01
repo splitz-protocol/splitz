@@ -6,8 +6,8 @@ use serde_json::Value;
 use splitz_core::compare_utf8;
 use splitz_core::host::{
     arrivals_for, base64url_no_pad, confirm_payment, create_bill, join_bill, record_payment,
-    Arrival, Arrivals, BillHost, BillLog, FoldedBill, IncomingTransaction, Sent, SignEntry,
-    VerifyEntry,
+    set_rate, Arrival, Arrivals, BillHost, BillLog, FoldedBill, IncomingTransaction, Sent,
+    SignEntry, VerifyEntry,
 };
 
 const T1: &str = "aa00000000000000000000000000000000000000000000000000000000000001";
@@ -77,6 +77,10 @@ impl Bill {
         let create = create_bill(&ana, name, "EUR", "equal", &fake_key("ana"), None).unwrap();
         ana.tick();
         let join_ana = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
+        ana.tick();
+        // 1,000,000.00 EUR a ZEC: 1000 zatoshi pays for the 10.00 EUR each
+        // record settles.
+        let rate = set_rate(&ana, "EUR", 100_000_000, None).unwrap();
         ben.tick();
         ben.tick();
         let join_ben = join_bill(&ben, Some("Ben"), Some("u1ben"), None, None).unwrap();
@@ -85,7 +89,7 @@ impl Bill {
         Self {
             ana,
             ben,
-            entries: vec![create, join_ana, join_ben],
+            entries: vec![create, join_ana, rate, join_ben],
         }
     }
 
@@ -126,6 +130,7 @@ fn received(txid: &str, zatoshi: i64) -> IncomingTransaction {
     IncomingTransaction {
         txid: txid.to_owned(),
         zatoshi,
+        memos: None,
     }
 }
 
@@ -398,4 +403,96 @@ fn one_payer_naming_a_transaction_twice_is_still_counted_once() {
     assert!(found.disputed.is_empty());
     assert_eq!(payment_ids(&found.arrived), ["ben:p1"]);
     assert_eq!(payment_ids(&found.short), ["ben:p2"]);
+}
+
+/// One record of 10.00 EUR on a bill priced at `rate`, paid with `zatoshi`.
+fn priced(rate: Option<i64>, zatoshi: i64) -> Arrivals {
+    let mut b = Bill::new("priced");
+    if let Some(rate) = rate {
+        b.ana.tick();
+        b.entries.push(set_rate(&b.ana, "EUR", rate, None).unwrap());
+    } else {
+        b.entries.retain(|e| e["kind"] != "setRate");
+    }
+    b.paid("p1", T1, Some(zatoshi), "shieldedZec");
+    arrivals_for(&[b.folded()], "ana", &[received(T1, zatoshi)])
+}
+
+#[test]
+fn a_record_whose_zec_pays_for_a_fraction_of_its_amount_is_not_proposed() {
+    // 1 zatoshi at 1,000,000.00 EUR a ZEC is worth 1 cent, not 10.00 EUR.
+    let found = priced(Some(100_000_000), 1);
+    assert_eq!(payment_ids(&found.underpriced), vec!["ben:p1"]);
+    assert!(found.arrived.is_empty());
+}
+
+#[test]
+fn ninety_five_percent_of_the_amount_pays_for_it_and_one_zatoshi_less_does_not() {
+    // 950 zatoshi x 100,000,000 x 100 = 9.5e12 = 1000 x 95 x 10^8.
+    assert_eq!(
+        payment_ids(&priced(Some(100_000_000), 950).arrived),
+        vec!["ben:p1"]
+    );
+    assert_eq!(
+        payment_ids(&priced(Some(100_000_000), 949).underpriced),
+        vec!["ben:p1"]
+    );
+}
+
+#[test]
+fn a_bill_with_no_rate_vouches_for_no_record() {
+    let found = priced(None, 20_000);
+    assert_eq!(payment_ids(&found.underpriced), vec!["ben:p1"]);
+    assert!(found.arrived.is_empty());
+}
+
+#[test]
+fn a_worth_past_every_integer_still_pays() {
+    // i64::MAX zatoshi at i64::MAX a ZEC: the product passes i128 x 100.
+    let found = priced(Some(i64::MAX), i64::MAX);
+    assert!(
+        found.underpriced.is_empty(),
+        "{:?}",
+        payment_ids(&found.underpriced)
+    );
+}
+
+/// One record on a bill, paid in a transaction whose memos are `memos`,
+/// `<bill>` standing for the bill's id.
+fn with_memos(memos: Option<&[&str]>) -> Arrivals {
+    let mut b = Bill::new("memo");
+    b.paid("p1", T1, Some(20_000), "shieldedZec");
+    let folded = b.folded();
+    let id = folded.bill.id.clone();
+    let tx = IncomingTransaction {
+        txid: T1.to_owned(),
+        zatoshi: 20_000,
+        memos: memos.map(|m| m.iter().map(|s| s.replace("<bill>", &id)).collect()),
+    };
+    arrivals_for(&[folded], "ana", &[tx])
+}
+
+#[test]
+fn a_memo_naming_the_bill_is_proposed() {
+    assert_eq!(
+        payment_ids(&with_memos(Some(&["splitz:<bill>"])).arrived),
+        ["ben:p1"]
+    );
+}
+
+#[test]
+fn another_bills_memo_is_not() {
+    let found = with_memos(Some(&["splitz:SomeOtherBill00000000"]));
+    assert_eq!(payment_ids(&found.unbound), ["ben:p1"]);
+    assert!(found.arrived.is_empty());
+}
+
+#[test]
+fn no_memo_at_all_is_not() {
+    assert_eq!(payment_ids(&with_memos(Some(&[])).unbound), ["ben:p1"]);
+}
+
+#[test]
+fn memos_the_wallet_could_not_read_decide_nothing() {
+    assert_eq!(payment_ids(&with_memos(None).arrived), ["ben:p1"]);
 }

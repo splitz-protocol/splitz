@@ -67,6 +67,7 @@ MESSAGES = {
     "create_id_not_derived": "This bill's start is damaged.",
     "unauthorized_entry": "Only the person who wrote this can change it.",
     "unauthorized_payment": "Only the payer can record this payment.",
+    "id_not_minted": "This was written under an id its author did not make.",
     "unauthorized_confirmation": "Only the person paid can confirm this.",
     "confirmation_missing_reference": "Add the transaction to confirm this.",
     "unknown_payment": "That payment isn't on this bill.",
@@ -103,6 +104,8 @@ MESSAGES = {
     "zip321_no_address": "Someone on this bill has no address to be paid at.",
     "zip321_not_canonical": "This payment request wasn't made by this bill.",
     "zip321_memo_undeliverable": "A note can't be sent to this address.",
+    # §8.5 one payer's obligation
+    "obligation_mixed_payers": "This asks you to pay what someone else owes.",
     # §8.6 addresses
     "address_invalid": "This isn't a Zcash address.",
     # §14.8 paying by a lower preference

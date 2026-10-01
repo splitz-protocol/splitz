@@ -41,6 +41,10 @@ CASES = [
     ("itemized_all_zero_items_share_extra_evenly", 1000, {"type": "itemized", "extraMinorUnits": 1000, "items": [
         {"description": "water", "minorUnits": 0, "sharedBy": ["ana"]},
         {"description": "bread", "minorUnits": 0, "sharedBy": ["ben"]}]}),
+    # Section 3 step 4: |extra| x subtotal passes 2^63-1, every share fits.
+    ("itemized_tip_on_a_large_subtotal", 10200000000, {"type": "itemized", "extraMinorUnits": 1020000000, "items": [
+        {"description": "set menu", "minorUnits": 9180000000, "sharedBy": ["ana"]},
+        {"description": "water", "minorUnits": 0, "sharedBy": ["ben"]}]}),
     ("itemized_needs_items",    1000,  {"type": "itemized", "extraMinorUnits": 1000, "items": []}),
     ("itemized_item_needs_an_eater", 1000, {"type": "itemized", "extraMinorUnits": 0, "items": [
         {"description": "tacos", "minorUnits": 1000, "sharedBy": []}]}),

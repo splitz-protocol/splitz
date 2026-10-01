@@ -349,8 +349,14 @@ pub fn quote_from_response(
     // asked for lets the provider keep more than the payer agreed to lose, and
     // the record still says the whole debt was paid.
     if let Some(floor) = optional(quote, "minAmountOut") {
-        let out = required(quote, "amountOut")?.parse::<u128>().ok();
-        let least = floor.parse::<u128>().ok();
+        // Base units are decimal digits and nothing else: `parse::<u128>`
+        // alone takes `+15`, which no other reader does.
+        let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+        let amount_out = required(quote, "amountOut")?;
+        let out = digits(&amount_out)
+            .then(|| amount_out.parse::<u128>().ok())
+            .flatten();
+        let least = digits(&floor).then(|| floor.parse::<u128>().ok()).flatten();
         let (Some(out), Some(least)) = (out, least) else {
             return Err(swap_error(
                 "The provider quoted amounts out of shape",

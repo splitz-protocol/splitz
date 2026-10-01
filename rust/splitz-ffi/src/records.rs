@@ -229,6 +229,10 @@ pub struct HeldBill {
 pub struct IncomingTransaction {
     pub txid: String,
     pub zatoshi: i64,
+    /// The text memos it carried to this account; `None` when the wallet
+    /// cannot say. Empty is an answer: it carried none (§14.7).
+    #[uniffi(default = None)]
+    pub memos: Option<Vec<String>>,
 }
 
 /// A payment record to this device, and the transaction it names (§14.7).
@@ -255,6 +259,12 @@ pub struct Arrivals {
     /// Records naming a transaction that records from another payer also
     /// name. None is proposed; the payee settles which it pays first.
     pub disputed: Vec<Arrival>,
+    /// Their ZEC, at the bill's rate, is worth under 95% of what they settle,
+    /// or the bill has no rate in their currency. None is proposed.
+    pub underpriced: Vec<Arrival>,
+    /// Their transaction's memos, read by the wallet, name another bill or
+    /// none. None is proposed (§14.7).
+    pub unbound: Vec<Arrival>,
 }
 
 /// What this device and one other participant owe each other in one

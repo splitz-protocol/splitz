@@ -284,6 +284,11 @@ typedef ZecAssetId = String;
 ///
 /// No credential is held here. A deployment needing one puts it behind its
 /// own origin, which is why [origin] is required and has no default.
+/// An amount in an asset's base units, as the provider's schema writes one.
+final RegExp _baseUnits = RegExp(r'^[0-9]+$');
+
+final BigInt _u128Max = (BigInt.one << 128) - BigInt.one;
+
 class OneClickSwaps implements SwapProvider {
   OneClickSwaps({
     required this.origin,
@@ -423,11 +428,12 @@ class OneClickSwaps implements SwapProvider {
       'refundTo',
       'swapType',
     ]) {
-      if ('${echoed[field]}' != '${request[field]}') {
+      // Compared as JSON values: the number 12345 is not the string '12345'.
+      if (jsonEncode(echoed[field]) != jsonEncode(request[field])) {
         throw SwapException('The provider quoted a different $field');
       }
     }
-    if ('${quote['amountIn']}' != '$amountInZatoshi') {
+    if (quote['amountIn'] != '$amountInZatoshi') {
       throw const SwapException('The provider quoted a different amount in');
     }
     // The floor is what the recipient is guaranteed. One below the tolerance
@@ -435,17 +441,23 @@ class OneClickSwaps implements SwapProvider {
     // and the record still says the whole debt was paid.
     final floor = _optional(quote, 'minAmountOut');
     if (floor != null) {
-      final out = BigInt.tryParse(_string(quote, 'amountOut'));
-      final least = BigInt.tryParse(floor);
-      if (out == null || least == null || least.isNegative) {
+      // Base units are decimal digits and nothing else: `BigInt.tryParse`
+      // alone takes `0x10`, ` 15 ` and `+15`, which no other reader does.
+      final amountOut = _string(quote, 'amountOut');
+      if (!_baseUnits.hasMatch(amountOut) || !_baseUnits.hasMatch(floor)) {
+        throw const SwapException('The provider quoted amounts out of shape');
+      }
+      final out = BigInt.parse(amountOut);
+      final least = BigInt.parse(floor);
+      if (out > _u128Max || least > _u128Max) {
         throw const SwapException('The provider quoted amounts out of shape');
       }
       // The provider rounds its floor down, so the bound is the product
-      // rounded down too: 15150548 at 1% is 14999042.52, stated 14999042.
-      if (least <
-          out *
-              BigInt.from(10000 - slippageBasisPoints) ~/
-              BigInt.from(10000)) {
+      // rounded down too: 15150548 at 1% is 14999042.52, stated 14999042. A
+      // product past 2^128 - 1 is refused as short, as an unsigned 128-bit
+      // reader refuses it.
+      final product = out * BigInt.from(10000 - slippageBasisPoints);
+      if (product > _u128Max || least < product ~/ BigInt.from(10000)) {
         throw const SwapException(
           'The provider guarantees less than the tolerance asked for',
         );

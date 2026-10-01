@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
-  "count": 87,
+  "count": 89,
   "cases": [
     {
       "name": "address_invalid",
@@ -178,6 +178,11 @@
       "expect": "The amounts don't add up to the total."
     },
     {
+      "name": "id_not_minted",
+      "code": "id_not_minted",
+      "expect": "This was written under an id its author did not make."
+    },
+    {
       "name": "invite_bad_bill_id",
       "code": "invite_bad_bill_id",
       "expect": "This invite is damaged. Ask for a new one."
@@ -261,6 +266,11 @@
       "name": "negative_weight",
       "code": "negative_weight",
       "expect": "A share can't be negative."
+    },
+    {
+      "name": "obligation_mixed_payers",
+      "code": "obligation_mixed_payers",
+      "expect": "This asks you to pay what someone else owes."
     },
     {
       "name": "participant_id_not_derived",

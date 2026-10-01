@@ -108,9 +108,7 @@ def allocate(total, weights):
         raise Refused("allocation_overflow")
     s = -1 if total < 0 else 1
     m = abs(total)
-    for w in weights:
-        if m * w > I64_MAX:
-            raise Refused("allocation_overflow")
+    # Step 4: products are exact (Python integers are unbounded).
     parts = [(m * w) // W for w in weights]
     rems = [(m * w) % W for w in weights]
     leftover = m - sum(parts)
@@ -854,7 +852,8 @@ def parse_invite(text):
     key = fields.get("k", "")
     if not key:
         raise Refused("invite_missing_key")
-    if not _b64url_decodes(key):
+    # Section 11.1: the 32 bytes of a bill key (section 11.3).
+    if not _b64url_len(key, KEY_BYTES):
         raise Refused("invite_missing_key")
 
     out = {"version": version, "billId": bill_id, "key": key,
@@ -912,7 +911,7 @@ def render_invite(bill_id, key, name="", expiry=None):
     if not bill_id or len(bill_id) > MAX_BILL_ID \
             or any(c not in B64URL_ALPHABET for c in bill_id):
         raise Refused("invite_bad_bill_id")
-    if not key or not _b64url_decodes(key):
+    if not key or not _b64url_len(key, KEY_BYTES):
         raise Refused("invite_missing_key")
     parts = [f"v={INVITE_VERSION}", f"b={invite_escape(bill_id)}",
              f"k={invite_escape(key)}"]
@@ -1014,7 +1013,15 @@ def _strict_json(text):
             raise ValueError(f"out of range: {text}")
         return value
 
-    return _json.loads(text, parse_constant=constant, parse_float=number)
+    def integer(text):
+        # An integer literal is held as one when it can be, but one past what
+        # a double holds is refused like `1e400`: no reader holds it.
+        if not math.isfinite(float(text)):
+            raise ValueError(f"out of range: {text}")
+        return int(text)
+
+    return _json.loads(text, parse_constant=constant, parse_float=number,
+                       parse_int=integer)
 
 
 
@@ -1045,6 +1052,13 @@ def read_scan(text):
     entries = [e for e in payload["log"] if isinstance(e, dict)]
     if isinstance(invite, dict):
         b, k = invite.get("b"), invite.get("k")
+        # Section 11.1 decides whether it is an invite at all: one it refuses
+        # (a key that is not its bytes' canonical encoding, say) carries no
+        # key, and the bill is read without one.
+        try:
+            parse_invite(render_invite(b, k))
+        except (Refused, TypeError):
+            b = k = None
         if isinstance(b, str) and isinstance(k, str):
             for e in entries:
                 # Only the bill's own create, whose id derives, speaks for
@@ -1310,8 +1324,9 @@ def decode_participant(raw):
     if not isinstance(raw, dict):
         raise Refused("bill_type_error")
     pid = _str(raw.get("id"))
-    # Section 9.1. An empty id is not a name anyone can be settled to.
-    if not pid:
+    # Section 9.1. An empty id is not a name anyone can be settled to, and
+    # one holding `:` mints no expense or payment id (section 10.3).
+    if not pid or ":" in pid:
         raise Refused("bill_bad_participant_id")
     p = {"id": pid, "name": _str(raw.get("name", ""))}
     if "payTo" in raw:
@@ -2132,10 +2147,9 @@ def _destination(participant):
 def owns_id(author, value):
     """SPEC.md 10.3 step 5: whether `value` is an id its `author` minted.
 
-    The author's participant id, `:`, then anything. Only the author writes
-    entries under such an id, so a copy of it in anybody else's entry is set
-    aside whatever `at` either states. An author whose id holds `:` mints
-    nothing.
+    The author's participant id, `:`, then anything. Every expense and payment
+    id is minted by its entry's author, so exactly one author can write under
+    a given id. An author whose id holds `:` mints nothing.
     """
     return (isinstance(author, str) and ":" not in author
             and isinstance(value, str) and value.startswith(author + ":"))
@@ -2469,6 +2483,10 @@ def fold(entries, bill_id=None, verify=None):
                 raise Refused("unauthorized_entry")
             payload = version.get("rate")
             decode_rate(payload)
+            # Section 10.1: a rate prices this bill's amounts, so it is in
+            # this bill's currency. Another one would refuse every request.
+            if payload["currency"] != currency:
+                raise Refused("rate_currency_mismatch")
             return payload
 
         result = applied(e, set_rate)
@@ -2500,18 +2518,6 @@ def fold(entries, bill_id=None, verify=None):
     # 14.4 sums a payer's own records, so the bound is per author: a record
     # the other party wrote cannot carry the payer's out of range.
     pair_total = {}
-    # SPEC.md 10.3 step 5: the ids some entry's own author minted.
-    owned = {"expense": set(), "payment": set()}
-    for e in live:
-        member = {"addExpense": "expense", "recordPayment": "payment"}.get(e["kind"])
-        if member is None:
-            continue
-        for version in (amendments.get(e["id"]), e):
-            if version is None or not isinstance(version.get(member), dict):
-                continue
-            if owns_id(e["author"], version[member].get("id")):
-                owned[member].add(version[member]["id"])
-
     def _fits(v):
         # Section 2.2. A balance has a magnitude, so the range is symmetric:
         # the most negative 64-bit value has no positive counterpart.
@@ -2535,12 +2541,14 @@ def fold(entries, bill_id=None, verify=None):
                 if ex.get("paidBy") not in participants:
                     raise Refused("unknown_participant")
                 decode_expense(ex, currency, set(participants))
+                # SPEC.md 10.3 step 5: an expense id is its author's own, so
+                # a copy by anybody else never competes with it by `at`.
+                if not owns_id(e["author"], ex["id"]):
+                    raise Refused("id_not_minted")
                 # One id names one expense. An amendment or a withdrawal is
                 # written against the expense a reader shows, and two under
-                # one id leave it to guess which. An id its author minted is
-                # theirs whatever the order; otherwise the first stands.
-                if ex["id"] in owned["expense"] and not owns_id(e["author"], ex["id"]):
-                    raise Refused("duplicate_expense")
+                # one id leave it to guess which. Both are one author's, and
+                # the first stands.
                 if ex["id"] in expense_entries:
                     raise Refused("duplicate_expense")
                 # Section 4 is what turns an expense into what each person
@@ -2589,10 +2597,11 @@ def fold(entries, bill_id=None, verify=None):
                 # that speaks for the payment's `to` is checked against that
                 # record's `to`. Two records under one id name a payee
                 # ambiguously, so one recipient's confirmation would settle a
-                # debt another never vouched for. A record under an id its
-                # author minted stands; otherwise the first does.
-                if pay["id"] in owned["payment"] and not owns_id(e["author"], pay["id"]):
-                    raise Refused("duplicate_payment")
+                # debt another never vouched for. The id is its author's own
+                # (10.3 step 5), so two records under it are one author's, and
+                # the first stands.
+                if not owns_id(e["author"], pay["id"]):
+                    raise Refused("id_not_minted")
                 if any(p["id"] == pay["id"] for p in payments):
                     raise Refused("duplicate_payment")
                 # What one participant has recorded paying another, confirmed
@@ -2899,8 +2908,20 @@ def choose_payouts(participants, via):
     return out
 
 
+def bill_memo(bill_id):
+    """Section 8.5: what a request carries to every output that takes a memo."""
+    return f"splitz:{bill_id}".encode("utf-8")
+
+
+def _takes_memo(address):
+    try:
+        return parse_address(address)["canReceiveMemo"]
+    except Refused:
+        return False
+
+
 def render_obligation(settlements, participants, rate, currency,
-                      skip_unpayable=False, include_fiat=False):
+                      skip_unpayable=False, include_fiat=False, bill_id="b"):
     """Section 8.5. One payer's whole obligation as a payment request.
 
     Reports three groups: the outputs the URI carries, the recipients it
@@ -2908,6 +2929,8 @@ def render_obligation(settlements, participants, rate, currency,
     covers three of a payer's four debts is indistinguishable, to the payer who
     sends it, from one that settles all four.
     """
+    if len({s["from"] for s in settlements}) > 1:
+        raise Refused("obligation_mixed_payers")
     by_id = {p["id"]: p for p in participants}
     payments, unpayable = [], []
     carried = withheld = 0
@@ -2954,6 +2977,8 @@ def render_obligation(settlements, participants, rate, currency,
             "address": address,
             "zatoshi": zatoshi,
             "fiat": (currency, s["amount"]),
+            # Section 8.5: what ties the send to this bill.
+            "memo": bill_memo(bill_id) if _takes_memo(address) else None,
             "label": who.get("name"),
         })
         carried = _exact_i64(carried + s["amount"])

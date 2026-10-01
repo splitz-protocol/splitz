@@ -200,7 +200,7 @@ void main() {
   runCases('obligations.json', (c, produce) {
     final raw = (c['rate'] as Map).cast<String, dynamic>();
     final bill = Bill(
-      id: 'b',
+      id: c['billId'] as String,
       name: '',
       currency: c['currency'] as String,
       participants: [
@@ -260,6 +260,12 @@ void main() {
   });
 
   runCases('log.json', (c, produce) {
+    if (c.containsKey('entryText')) {
+      // Read as decodePayload reads a body, so the spelling reaches it.
+      checkEntry(jsonDecode(c['entryText'] as String));
+      produce({'accepted': true});
+      return;
+    }
     if (c.containsKey('entry')) {
       checkEntry(c['entry']);
       produce({'accepted': true});
@@ -588,7 +594,7 @@ void loneSurrogateTests() {
       'kind': 'addExpense',
       'at': '2026-10-28T19:30:00.000Z',
       'expense': {
-        'id': 'x1',
+        'id': 'ana:x1',
         'paidBy': 'ana',
         'amount': 1,
         'at': '2026-10-28T19:30:00.000Z',

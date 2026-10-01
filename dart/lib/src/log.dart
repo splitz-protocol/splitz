@@ -189,10 +189,10 @@ Map<String, dynamic> _mapOf(Object? value) =>
 /// §10.3 step 5. Whether [id] is one its [author] minted: the author's
 /// participant id, `:`, then anything.
 ///
-/// Only the author writes entries under such an id, so a copy of it in
-/// anybody else's entry is set aside whatever `at` either states. §10.2's
-/// order is each author's to write, and deciding whose id it is by that order
-/// hands it to whoever backdates furthest.
+/// Every expense and payment id is minted by its entry's author, and an entry
+/// whose id is not is set aside with [SplitCode.idNotMinted]. §10.2's order is
+/// each author's to write, and deciding between authors by that order hands an
+/// id to whoever backdates furthest.
 ///
 /// An author whose id holds `:` mints nothing: `<payer>:<txid>` as a
 /// participant id would otherwise own `<payer>:<txid>:<recipient>`, the id the
@@ -352,24 +352,37 @@ Map<String, dynamic> checkEntry(Object? raw) {
 /// instant. It never depends on arrival order or on local state.
 List<Map<String, dynamic>> orderEntries(List<Map<String, dynamic>> entries) {
   final keyed = [
-    for (final e in entries) (_instantKey(e['at'] as String), e),
+    for (final e in entries) (_instantKey(_text(e['at'])), e),
   ];
   keyed.sort((x, y) {
     final (ka, a) = x;
     final (kb, b) = y;
     final byInstant = compareUtf8(ka, kb);
     if (byInstant != 0) return byInstant;
-    final byAt = compareUtf8(a['at'] as String, b['at'] as String);
+    final byAt = compareUtf8(_text(a['at']), _text(b['at']));
     if (byAt != 0) return byAt;
-    final byAuthor = compareUtf8(a['author'] as String, b['author'] as String);
+    final byAuthor = compareUtf8(_text(a['author']), _text(b['author']));
     if (byAuthor != 0) return byAuthor;
-    final byId = compareUtf8(a['id'] as String, b['id'] as String);
+    final byId = compareUtf8(_text(a['id']), _text(b['id']));
     if (byId != 0) return byId;
     // §10.2. The order is total: a comparator that calls two unequal rows
     // equal leaves them to the host's sort, and Dart's is not stable.
-    return compareUtf8(canonicalJson(a), canonicalJson(b));
+    return compareUtf8(_encoded(a), _encoded(b));
   });
   return [for (final (_, e) in keyed) e];
+}
+
+/// [value] when it is a string, and empty otherwise: an entry that reached
+/// the order unchecked still sorts, as every reader sorts it.
+String _text(Object? value) => value is String ? value : '';
+
+/// [entry]'s canonical encoding, or empty for one §9.3 cannot encode.
+String _encoded(Map<String, dynamic> entry) {
+  try {
+    return canonicalJson(entry);
+  } on SplitError {
+    return '';
+  }
 }
 
 /// The canonical instant [at] names, or [at] itself when it names none: an
@@ -986,7 +999,13 @@ FoldResult foldLog(List<Object?> rawEntries,
       }
       final payload = version['rate'];
       decodeRate(payload);
-      return (payload as Map).cast<String, dynamic>();
+      // §10.1: a rate prices this bill's amounts, so it is in this bill's
+      // currency. Another one would refuse every request.
+      if ((payload as Map)['currency'] != currency) {
+        raise(SplitCode.rateCurrencyMismatch,
+            'A rate in ${payload['currency']} on a $currency bill');
+      }
+      return payload.cast<String, dynamic>();
     });
     if (result == null) continue;
     // §10.1. The creator's latest rate stands over anybody else's, which
@@ -1020,25 +1039,6 @@ FoldResult foldLog(List<Object?> rawEntries,
   // a payer's own records, so the bound is per author: a record the other
   // party wrote cannot carry the payer's out of range.
   final pairTotal = <(String, String, String), int>{};
-  // §10.3 step 5: the ids some entry's own author minted (see [ownsId]).
-  final ownedExpenseIds = <String>{};
-  final ownedPaymentIds = <String>{};
-  for (final e in live) {
-    final member = switch (e['kind']) {
-      'addExpense' => 'expense',
-      'recordPayment' => 'payment',
-      _ => null,
-    };
-    if (member == null) continue;
-    final owned = member == 'expense' ? ownedExpenseIds : ownedPaymentIds;
-    for (final version in [
-      e,
-      if (amendments[e['id']] != null) amendments[e['id']]!
-    ]) {
-      final id = _mapOf(version[member])['id'];
-      if (id is String && ownsId(e['author'] as String, id)) owned.add(id);
-    }
-  }
   for (final e in live) {
     if (e['kind'] == 'addExpense') {
       final result = applied(e, (version) {
@@ -1062,15 +1062,14 @@ FoldResult foldLog(List<Object?> rawEntries,
         }
         final decoded =
             decodeExpense(ex, billCurrency, participants.keys.toSet());
+        // §10.3 step 5: an expense id is its author's own, so a copy by
+        // anybody else never competes with it by `at`.
+        if (!ownsId(e['author'] as String, decoded.id)) {
+          raise(SplitCode.idNotMinted, 'Its author did not mint ${decoded.id}');
+        }
         // One id names one expense. An amendment or a withdrawal is written
         // against the expense a reader shows, and two under one id leave it to
-        // guess which. An id its author minted is theirs whatever the order;
-        // otherwise the first stands.
-        if (ownedExpenseIds.contains(decoded.id) &&
-            !ownsId(e['author'] as String, decoded.id)) {
-          raise(SplitCode.duplicateExpense,
-              'Copies ${decoded.id}, which its author minted');
-        }
+        // guess which. Both are one author's, and the first stands.
         if (expenseEntries.containsKey(decoded.id)) {
           raise(SplitCode.duplicateExpense, 'Two expenses share ${decoded.id}');
         }
@@ -1119,14 +1118,12 @@ FoldResult foldLog(List<Object?> rawEntries,
         // §10.5: a confirmation names one record, and a method that speaks for
         // the payment's `to` is checked against that record's `to`. Two
         // records under one id name a payee ambiguously, so one recipient's
-        // confirmation would settle a debt another never vouched for. A record
-        // under an id its author minted stands; otherwise the first does. One
-        // transaction paying several people carries the transaction in
-        // `reference`, not in the id.
-        if (ownedPaymentIds.contains(pay['id']) &&
-            !ownsId(e['author'] as String, pay['id'] as String)) {
-          raise(SplitCode.duplicatePayment,
-              'Copies ${pay['id']}, which its author minted');
+        // confirmation would settle a debt another never vouched for. The id
+        // is its author's own (§10.3 step 5), so two records under it are one
+        // author's, and the first stands. One transaction paying several
+        // people carries the transaction in `reference`, not in the id.
+        if (!ownsId(e['author'] as String, pay['id'] as String)) {
+          raise(SplitCode.idNotMinted, 'Its author did not mint ${pay['id']}');
         }
         if (payments.any((p) => p['id'] == pay['id'])) {
           raise(SplitCode.duplicatePayment, 'Two payments share an id');

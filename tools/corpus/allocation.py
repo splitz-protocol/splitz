@@ -39,10 +39,7 @@ def allocate(total, weights):
     s = -1 if total < 0 else 1
     m = abs(total)
 
-    # 4. every product fits.
-    for w in weights:
-        if m * w > I64_MAX:
-            raise Refused("allocation_overflow")
+    # 4. every product is exact; Python integers are unbounded.
 
     # 5. floor division and remainders.
     parts = [(m * w) // W for w in weights]
@@ -86,7 +83,9 @@ CASES = [
     ("a_negative_weight",             100, [1, -1]),
     ("every_weight_is_zero",          100, [0, 0]),
     ("weight_sum_overflows",          100, [I64_MAX, 1]),
-    ("product_overflows",         I64_MAX, [2, 1]),
+    ("a_product_past_64_bits_still_allocates", I64_MAX, [2, 1]),
+    ("a_tip_on_a_large_subtotal", 1020000000, [9180000000]),
+    ("products_past_64_bits_across_two", 1020000000, [9180000000, 1020000000]),
     ("most_negative_total",       I64_MIN, [1, 1]),
 ]
 

@@ -5,7 +5,7 @@ SPEC.md sections 9.4, 10 and 10.5.
 """
 import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import (MAX_ENTRY_AMOUNT, ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
+from _spec import (_strict_json, MAX_ENTRY_AMOUNT, ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
                    payment_digest, participant_id,
                    seal_log, merge, order, fold, balances,
                    canonical_json, b64url, Refused, stand_in,
@@ -33,21 +33,31 @@ def create(author="ana", name="Dinner", currency="EUR", nonce=NONCE):
 
 
 C = create()
+
+
+def _with_digest():
+    e = {k: v for k, v in create().items() if k != "id"}
+    e["keyDigest"] = b64url(b"d" * 32)
+    e["id"] = derive_bill_id(e)
+    return e
+
+
+KD = _with_digest()
 J_ANA = {"v": 1, "id": "j1", "author": "ana", "kind": "joinBill", "at": AT(1),
          "participant": {"id": "ana", "name": "Ana", "payTo": ADDRESSES[0]}}
 J_BEN = {"v": 1, "id": "j2", "author": "ben", "kind": "joinBill", "at": AT(2),
          "participant": {"id": "ben", "name": "Ben", "payTo": ADDRESSES[1]}}
 E1 = {"v": 1, "id": "e1", "author": "ana", "kind": "addExpense", "at": AT(3),
-      "expense": {"id": "x1", "description": "dinner", "paidBy": "ana",
+      "expense": {"id": "ana:x1", "description": "dinner", "paidBy": "ana",
                   "amount": 9000, "at": AT(3),
                   "split": {"type": "equal", "among": ["ana", "ben"]}}}
 P1 = {"v": 1, "id": "p1", "author": "ben", "kind": "recordPayment", "at": AT(4),
-      "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
+      "payment": {"id": "ben:y1", "from": "ben", "to": "ana", "amount": 4500,
                   "method": "cash", "at": AT(4)}}
 # A payment of one cent under the id the bill's payment uses.
 P_CENT = {"v": 1, "id": "p9", "author": "ben", "kind": "recordPayment",
           "at": AT(4),
-          "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 1,
+          "payment": {"id": "ben:y1", "from": "ben", "to": "ana", "amount": 1,
                       "method": "cash", "at": AT(4)}}
 J_DEE = {"v": 1, "id": "j3", "author": "dee", "kind": "joinBill", "at": AT(2),
          "participant": {"id": "dee", "name": "Dee"}}
@@ -59,7 +69,7 @@ BASE = [C, J_ANA, J_BEN, E1, P1]
 NO_RECORD = object()
 
 
-def conf(eid, author, method, minute, ref=None, pid="y1", record=None):
+def conf(eid, author, method, minute, ref=None, pid="ben:y1", record=None):
     c = {"paymentId": pid, "method": method}
     if ref:
         c["reference"] = ref
@@ -103,7 +113,7 @@ def lane_expense(eid, who, minute):
     """`who` covers 20.00 shared with ana, so ana owes them 10.00."""
     return {"v": 1, "id": eid, "author": who, "kind": "addExpense",
             "at": AT(minute),
-            "expense": {"id": f"x-{who}", "paidBy": who, "amount": 2000,
+            "expense": {"id": f"{who}:x", "paidBy": who, "amount": 2000,
                         "at": AT(minute),
                         "split": {"type": "equal",
                                   "among": sorted(["ana", who])}}}
@@ -138,58 +148,58 @@ LANE_CASES = [
                        "payouts": [{"type": "giftCard", "address": "g1"}]}}],
      C["id"]),
     ("a_swap_payout_states_the_asset_and_the_chain",
-     LANES + [paid("l9", "s1", "cara", 8, "swap",
+     LANES + [paid("l9", "ana:s1", "cara", 8, "swap",
                    ref="near-intent-7f3a", zatoshi=100000)],
      C["id"]),
     ("a_shielded_payment_carries_its_transaction",
-     LANES + [paid("l10", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9")],
+     LANES + [paid("l10", "ana:tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9")],
      C["id"]),
     # §10.5: one transaction paying two people is two records, each with its
     # own id. Under one id the second is set aside and the payment it records
     # is lost, so its payee is still owed and cannot confirm.
     ("one_transaction_paying_two_people",
-     LANES + [paid("l11", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
-              paid("l12", "tx-9:cara", "cara", 8, "shieldedZec", ref="tx-9")],
+     LANES + [paid("l11", "ana:tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              paid("l12", "ana:tx-9:cara", "cara", 8, "shieldedZec", ref="tx-9")],
      C["id"]),
     ("two_recipients_of_one_transaction_under_one_id",
-     LANES + [paid("l13", "tx-9", "ben", 8, "shieldedZec", ref="tx-9"),
-              paid("l14", "tx-9", "cara", 8, "shieldedZec", ref="tx-9")],
+     LANES + [paid("l13", "ana:tx-9", "ben", 8, "shieldedZec", ref="tx-9"),
+              paid("l14", "ana:tx-9", "cara", 8, "shieldedZec", ref="tx-9")],
      C["id"]),
     # Each payee vouches for the record addressed to them, in a method §10.5
     # lets them author. The three lanes clear independently.
     ("each_payee_confirms_the_record_addressed_to_them",
-     LANES + [paid("l15", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
-              paid("l16", "s2", "cara", 8, "swap",
+     LANES + [paid("l15", "ana:tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              paid("l16", "ana:s2", "cara", 8, "swap",
                    ref="near-intent-7f3a", zatoshi=100000),
-              paid("l17", "c-dan-1", "dan", 8, "cash"),
-              conf("l18", "ben", "walletReceived", 9, pid="tx-9:ben"),
-              conf("l19", "cara", "recipientConfirmed", 9, pid="s2"),
-              conf("l20", "dan", "recipientConfirmed", 9, pid="c-dan-1")],
+              paid("l17", "ana:c-dan-1", "dan", 8, "cash"),
+              conf("l18", "ben", "walletReceived", 9, pid="ana:tx-9:ben"),
+              conf("l19", "cara", "recipientConfirmed", 9, pid="ana:s2"),
+              conf("l20", "dan", "recipientConfirmed", 9, pid="ana:c-dan-1")],
      C["id"]),
     # A confirmation's whole weight is in who gave it, so one payee cannot
     # clear another's debt.
     ("a_payee_confirms_a_record_addressed_to_somebody_else",
-     LANES + [paid("l21", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
-              conf("l22", "cara", "recipientConfirmed", 9, pid="tx-9:ben")],
+     LANES + [paid("l21", "ana:tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              conf("l22", "cara", "recipientConfirmed", 9, pid="ana:tx-9:ben")],
      C["id"]),
     # `onChain` is the recipient's, like every method that settles: a
     # shielded payment is visible to nobody else, and a payer or a third party
     # naming a transaction proves nothing about it.
     ("a_third_party_may_not_say_a_transaction_landed",
-     LANES + [paid("l23", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
-              conf("l24", "dan", "onChain", 9, "tx-9", pid="tx-9:ben")],
+     LANES + [paid("l23", "ana:tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              conf("l24", "dan", "onChain", 9, "tx-9", pid="ana:tx-9:ben")],
      C["id"]),
     ("the_recipient_says_a_transaction_landed",
-     LANES + [paid("l23", "tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
-              conf("l24", "ben", "onChain", 9, "tx-9", pid="tx-9:ben")],
+     LANES + [paid("l23", "ana:tx-9:ben", "ben", 8, "shieldedZec", ref="tx-9"),
+              conf("l24", "ben", "onChain", 9, "tx-9", pid="ana:tx-9:ben")],
      C["id"]),
     # A swap's ZEC leg is advisory and must still be a real amount.
     ("a_swap_payment_whose_zec_leg_is_zero",
-     LANES + [paid("l25", "s3", "cara", 8, "swap",
+     LANES + [paid("l25", "ana:s3", "cara", 8, "swap",
                    ref="near-intent-7f3a", zatoshi=0)],
      C["id"]),
     ("a_settlement_method_nobody_defines",
-     LANES + [paid("l26", "g1", "dan", 8, "giftCard")],
+     LANES + [paid("l26", "ana:g1", "dan", 8, "giftCard")],
      C["id"]),
 ]
 
@@ -214,7 +224,7 @@ FOLD_CASES = [
       conf("c14", "ana", "recipientConfirmed", 5),
       {"v": 1, "id": "a7", "author": "ben", "kind": "amendEntry",
        "at": AT(6), "targetId": "p9",
-       "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
+       "payment": {"id": "ben:y1", "from": "ben", "to": "ana", "amount": 4500,
                    "method": "cash", "at": AT(4)}}],
      C["id"]),
     # The same, by withdrawing the record and writing a larger one under the
@@ -225,7 +235,7 @@ FOLD_CASES = [
       void("v10", "ben", "p9", 6),
       {"v": 1, "id": "p10", "author": "ben", "kind": "recordPayment",
        "at": AT(7),
-       "payment": {"id": "y1", "from": "ben", "to": "ana", "amount": 4500,
+       "payment": {"id": "ben:y1", "from": "ben", "to": "ana", "amount": 4500,
                    "method": "cash", "at": AT(7)}}],
      C["id"]),
     ("the_payer_may_not_confirm_his_own_debt",
@@ -251,27 +261,27 @@ FOLD_CASES = [
      [C, J_ANA, J_BEN, J_DEE, E1,
       {"v": 1, "id": "p4", "author": "ben", "kind": "recordPayment",
        "at": AT(4),
-       "payment": {"id": "tx9", "from": "ben", "to": "ana", "amount": 4500,
+       "payment": {"id": "ben:tx9", "from": "ben", "to": "ana", "amount": 4500,
                    "method": "cash", "at": AT(4)}},
       {"v": 1, "id": "p5", "author": "ben", "kind": "recordPayment",
        "at": AT(5),
-       "payment": {"id": "tx9", "from": "ben", "to": "dee", "amount": 10,
+       "payment": {"id": "ben:tx9", "from": "ben", "to": "dee", "amount": 10,
                    "method": "cash", "at": AT(5)}}], C["id"]),
 
     ("a_payment_neither_party_wrote",
      BASE + [{"v": 1, "id": "p2", "author": "ana", "kind": "recordPayment",
               "at": AT(6),
-              "payment": {"id": "y2", "from": "ben", "to": "cai", "amount": 10,
+              "payment": {"id": "ana:y2", "from": "ben", "to": "cai", "amount": 10,
                           "method": "cash", "at": AT(6)}}], C["id"]),
     ("an_expense_paid_by_a_stranger",
      BASE + [{"v": 1, "id": "e2", "author": "ana", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x2", "paidBy": "zed", "amount": 10, "at": AT(6),
+              "expense": {"id": "ana:x2", "paidBy": "zed", "amount": 10, "at": AT(6),
                           "split": {"type": "equal", "among": ["ana"]}}}], C["id"]),
     ("an_expense_in_another_currency",
      BASE + [{"v": 1, "id": "e3", "author": "ana", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x3", "paidBy": "ana", "amount": 10,
+              "expense": {"id": "ana:x3", "paidBy": "ana", "amount": 10,
                           "currency": "USD", "at": AT(6),
                           "split": {"type": "equal", "among": ["ana"]}}}], C["id"]),
     ("an_amount_that_states_no_currency_is_denominated_by_the_fold",
@@ -283,34 +293,34 @@ FOLD_CASES = [
     ("an_expense_whose_amount_is_a_string",
      BASE + [{"v": 1, "id": "e4", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x4", "paidBy": "ben", "amount": "9999",
+              "expense": {"id": "ben:x4", "paidBy": "ben", "amount": "9999",
                           "at": AT(6),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
     ("an_expense_that_states_no_amount",
      BASE + [{"v": 1, "id": "e5", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x5", "paidBy": "ben", "at": AT(6),
+              "expense": {"id": "ben:x5", "paidBy": "ben", "at": AT(6),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
     ("an_expense_whose_at_is_not_an_instant",
      BASE + [{"v": 1, "id": "e6", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x6", "paidBy": "ben", "amount": 10,
+              "expense": {"id": "ben:x6", "paidBy": "ben", "amount": 10,
                           "at": "soon",
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
     ("an_expense_whose_currency_is_not_a_string",
      BASE + [{"v": 1, "id": "e7", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x7", "paidBy": "ben", "amount": 10,
+              "expense": {"id": "ben:x7", "paidBy": "ben", "amount": 10,
                           "currency": 5, "at": AT(6),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
     ("an_expense_whose_currency_is_lower_case",
      BASE + [{"v": 1, "id": "e8", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x8", "paidBy": "ben", "amount": 10,
+              "expense": {"id": "ben:x8", "paidBy": "ben", "amount": 10,
                           "currency": "eur", "at": AT(6),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
@@ -362,17 +372,17 @@ FOLD_CASES = [
     ("an_on_chain_reference_that_is_a_number",
      BASE + [{"v": 1, "id": "c10", "author": "ana", "kind": "confirmPayment",
               "at": AT(6),
-              "confirmation": {"paymentId": "y1", "method": "onChain",
+              "confirmation": {"paymentId": "ben:y1", "method": "onChain",
                                "reference": 5}}], C["id"]),
     ("an_on_chain_reference_that_is_a_list",
      BASE + [{"v": 1, "id": "c11", "author": "ana", "kind": "confirmPayment",
               "at": AT(6),
-              "confirmation": {"paymentId": "y1", "method": "onChain",
+              "confirmation": {"paymentId": "ben:y1", "method": "onChain",
                                "reference": []}}], C["id"]),
     ("a_confirmation_method_that_is_a_list",
      BASE + [{"v": 1, "id": "c12", "author": "ana", "kind": "confirmPayment",
               "at": AT(6),
-              "confirmation": {"paymentId": "y1", "method": []}}], C["id"]),
+              "confirmation": {"paymentId": "ben:y1", "method": []}}], C["id"]),
     # A payout names the address money is sent to.
     ("a_payout_whose_address_is_a_number",
      [C, J_ANA,
@@ -386,6 +396,10 @@ FOLD_CASES = [
      [dict(create(), name=7)] + BASE[1:], None),
     ("a_bill_whose_split_mode_is_a_number",
      [dict(create(), splitMode=7)] + BASE[1:], None),
+    # Section 9.4's keyDigest, checked after the create is bound and before
+    # its id derives.
+    ("a_bill_stating_a_key_digest",
+     [KD] + BASE[1:], KD["id"]),
 
     # §10.1 types a payload; it does not type inside one. The pass that
     # decides whether a withdrawn participant is still named reads `split`
@@ -393,7 +407,7 @@ FOLD_CASES = [
     ("a_split_that_is_a_list_while_a_participant_is_withdrawn",
      BASE + [{"v": 1, "id": "e9", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x9", "paidBy": "ben", "amount": 10,
+              "expense": {"id": "ben:x9", "paidBy": "ben", "amount": 10,
                           "at": AT(6), "split": ["ana", "ben"]}},
              void("v30", "ana", "j2", 7)], C["id"]),
     # Section 10.8 rests on the fold being unable to apply an entry naming
@@ -403,14 +417,14 @@ FOLD_CASES = [
     ("an_expense_splits_to_somebody_who_never_joined",
      BASE + [{"v": 1, "id": "e11", "author": "ana", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x11", "paidBy": "ana", "amount": 10,
+              "expense": {"id": "ana:x11", "paidBy": "ana", "amount": 10,
                           "at": AT(6),
                           "split": {"type": "equal",
                                     "among": ["ana", "nobody"]}}}], C["id"]),
     ("an_itemized_share_names_somebody_who_never_joined",
      BASE + [{"v": 1, "id": "e12", "author": "ana", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x12", "paidBy": "ana", "amount": 10,
+              "expense": {"id": "ana:x12", "paidBy": "ana", "amount": 10,
                           "at": AT(6),
                           "split": {"type": "itemized", "items": [
                               {"minorUnits": 10,
@@ -418,7 +432,7 @@ FOLD_CASES = [
     ("a_split_whose_items_are_scalars",
      BASE + [{"v": 1, "id": "e10", "author": "ben", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x10", "paidBy": "ben", "amount": 10,
+              "expense": {"id": "ben:x10", "paidBy": "ben", "amount": 10,
                           "at": AT(6),
                           "split": {"type": "itemized", "items": [7]}}},
              void("v31", "ana", "j2", 7)], C["id"]),
@@ -439,7 +453,7 @@ FOLD_CASES = [
     ("an_amendment_by_somebody_else",
      BASE + [{"v": 1, "id": "a1", "author": "ben", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": 1, "at": AT(3),
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 1, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
     ("an_amendment_carrying_no_payload_of_its_target_kind",
@@ -448,7 +462,7 @@ FOLD_CASES = [
     ("an_amendment_replaces_its_target",
      BASE + [{"v": 1, "id": "a3", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
     # §10.4. An amendment keeps the id its target is about. Ben renaming his
@@ -473,7 +487,7 @@ FOLD_CASES = [
     ("a_payment_amended_to_another_id",
      BASE + [{"v": 1, "id": "a6", "author": "ben", "kind": "amendEntry",
               "at": AT(6), "targetId": "p1",
-              "payment": {"id": "y2", "from": "ben", "to": "ana",
+              "payment": {"id": "ben:y2", "from": "ben", "to": "ana",
                           "amount": 4500, "method": "cash", "at": AT(4)}}],
      C["id"]),
     ("a_rejoin_replaces_the_record_and_reports_the_address",
@@ -515,25 +529,25 @@ FOLD_CASES = [
     ("an_amendment_may_be_withdrawn",
      BASE + [{"v": 1, "id": "a9", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}},
              void("v22", "ana", "a9", 7)], C["id"]),
     ("withdrawing_the_withdrawal_restores_the_amendment",
      BASE + [{"v": 1, "id": "a9", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}},
              void("v22", "ana", "a9", 7), void("v23", "ana", "v22", 8)], C["id"]),
     ("a_stranger_may_not_withdraw_an_amendment",
      BASE + [{"v": 1, "id": "a9", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 6000, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}},
              void("v22", "ben", "a9", 7)], C["id"]),
     ("an_amendment_naming_an_entry_the_log_lacks",
      BASE + [{"v": 1, "id": "a9", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "ghost",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": 1, "at": AT(3),
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 1, "at": AT(3),
                           "split": {"type": "equal", "among": ["ana"]}}}], C["id"]),
     ("a_withdrawal_naming_an_entry_the_log_lacks",
      BASE + [void("v24", "ana", "ghost", 6)], C["id"]),
@@ -545,12 +559,12 @@ FOLD_CASES = [
     ("a_withdrawn_amendment_does_not_let_a_participant_go",
      [C, J_ANA, J_BEN, J_DEE,
       {"v": 1, "id": "e9", "author": "ana", "kind": "addExpense", "at": AT(3),
-       "expense": {"id": "x9", "paidBy": "ana", "amount": 900, "at": AT(3),
+       "expense": {"id": "ana:x9", "paidBy": "ana", "amount": 900, "at": AT(3),
                    "split": {"type": "equal",
                              "among": ["ana", "ben", "dee"]}}},
       {"v": 1, "id": "a1", "author": "ana", "kind": "amendEntry", "at": AT(4),
        "targetId": "e9",
-       "expense": {"id": "x9", "paidBy": "ana", "amount": 900, "at": AT(3),
+       "expense": {"id": "ana:x9", "paidBy": "ana", "amount": 900, "at": AT(3),
                    "split": {"type": "equal", "among": ["ana", "ben"]}}},
       void("v1", "ana", "a1", 5),
       void("v2", "ana", "j3", 6)], C["id"]),
@@ -639,7 +653,7 @@ def at_depth(total):
     for _ in range(total - 3):
         value = [value]
     e = {"v": 1, "author": "ana", "kind": "addExpense", "at": AT(3),
-         "expense": {"id": "x1", "paidBy": "ana", "amount": 1, "at": AT(3),
+         "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 1, "at": AT(3),
                      "split": {"type": "equal", "among": ["ana"]},
                      "note": value}}
     # Too deep to encode is too deep to derive an id for, so the over-limit
@@ -671,6 +685,13 @@ ENTRY_CASES = [
     ("an_entry_one_level_too_deep", at_depth(63)),
     ("a_create_entry_with_no_key", {k: v for k, v in C.items() if k != "creatorKey"}),
     ("a_create_entry_with_a_short_nonce", dict(C, nonce=b64url(b"n" * 8))),
+    # §9.4's keyDigest: after the create is bound, before its id derives.
+    ("a_create_entry_whose_key_digest_is_a_number", dict(C, keyDigest=7)),
+    ("a_create_entry_whose_key_digest_is_31_bytes",
+     dict(C, keyDigest=b64url(b"k" * 31))),
+    ("a_create_entry_unbound_and_with_a_bad_key_digest",
+     dict(C, nonce="", keyDigest=7)),
+    ("a_create_entry_stating_a_key_digest", KD),
     # §9.4. A key that is not its bytes' canonical encoding is refused, so one
     # bill has one creatorKey spelling on every reader.
     ("a_create_entry_whose_key_is_not_canonical",
@@ -713,14 +734,14 @@ ENTRY_CASES += [
       "participant": {"id": 7, "name": "Seven"}}),
     ("a_payment_naming_a_non_string_payer",
      {"v": 1, "id": "s3", "author": "ben", "kind": "recordPayment", "at": AT(6),
-      "payment": {"id": "y9", "from": 7, "to": "ana", "amount": 10,
+      "payment": {"id": "ben:y9", "from": 7, "to": "ana", "amount": 10,
                   "method": "cash", "at": AT(6)}}),
     ("a_target_id_that_is_not_a_string",
      {"v": 1, "id": "s4", "author": "ana", "kind": "voidEntry", "at": AT(6),
       "targetId": 7}),
     ("an_expense_whose_among_holds_a_non_string",
      {"v": 1, "id": "s5", "author": "ana", "kind": "addExpense", "at": AT(6),
-      "expense": {"id": "x9", "paidBy": "ana", "amount": 9000, "at": AT(6),
+      "expense": {"id": "ana:x9", "paidBy": "ana", "amount": 9000, "at": AT(6),
                   "split": {"type": "equal", "among": ["ana", 7, "ben"]}}}),
 
     # §10.1. `v` is bounded as every other integer is: 2^63 is past it, and a
@@ -733,11 +754,11 @@ ENTRY_CASES += [
     # refuses it.
     ("a_payment_of_two_to_the_sixty_third",
      {"v": 1, "id": "s6", "author": "ben", "kind": "recordPayment", "at": AT(6),
-      "payment": {"id": "y6", "from": "ben", "to": "ana", "amount": 2**63,
+      "payment": {"id": "ben:y6", "from": "ben", "to": "ana", "amount": 2**63,
                   "method": "cash", "at": AT(6)}}),
     ("a_payment_whose_amount_is_a_fraction",
      {"v": 1, "id": "s7", "author": "ben", "kind": "recordPayment", "at": AT(6),
-      "payment": {"id": "y7", "from": "ben", "to": "ana", "amount": 1.5,
+      "payment": {"id": "ben:y7", "from": "ben", "to": "ana", "amount": 1.5,
                   "method": "cash", "at": AT(6)}}),
 
     # §10.1's checks run in the order it states, so an entry wrong in two
@@ -771,7 +792,7 @@ E1_K = dict(E1, expense=dict(E1["expense"], split={"type": "equal",
                                                    "among": ["ana", BEN_K]}))
 CONFIRM_AS_ANA = {"v": 1, "id": "c1", "author": "ana",
                   "kind": "confirmPayment", "at": AT(5),
-                  "confirmation": {"paymentId": "y1",
+                  "confirmation": {"paymentId": "ben:y1",
                                    "method": "recipientConfirmed"}}
 
 FOLD_CASES += [
@@ -826,16 +847,16 @@ FOLD_CASES += [
       {"v": 1, "id": "jm", "author": "mal", "kind": "joinBill", "at": AT(2),
        "participant": {"id": "mal", "name": "Mal"}},
       {"v": 1, "id": "eb", "author": BEN_K, "kind": "addExpense", "at": AT(3),
-       "expense": {"id": "xb", "paidBy": BEN_K, "amount": 6000, "at": AT(3),
+       "expense": {"id": f"{BEN_K}:xb", "paidBy": BEN_K, "amount": 6000, "at": AT(3),
                    "split": {"type": "equal", "among": [BEN_K, "mal"]}}},
       {"v": 1, "id": "qm", "author": "mal", "kind": "recordPayment",
        "at": AT(4),
-       "payment": {"id": "ym", "from": "mal", "to": BEN_K, "amount": 3000,
+       "payment": {"id": "mal:ym", "from": "mal", "to": BEN_K, "amount": 3000,
                    "method": "cash", "at": AT(4)}},
       {"v": 1, "id": "jr", "author": BEN_K, "kind": "joinBill", "at": AT(5),
        "participant": {"id": BEN_K, "name": "Ben",
                        "identityKey": KEY_RIVAL}},
-      conf("cf", BEN_K, "recipientConfirmed", 6, pid="ym")],
+      conf("cf", BEN_K, "recipientConfirmed", 6, pid="mal:ym")],
      C["id"], [0, 1, 2, 3, 4, 5, 6]),
 
     # §10.3. An entry by a bound participant applies only from a copy that
@@ -844,13 +865,13 @@ FOLD_CASES += [
     ("an_entry_verifies_against_its_own_authors_key",
      [C, J_ANA, J_BEN_KEYED, E1_K,
       {"v": 1, "id": "eb", "author": BEN_K, "kind": "addExpense", "at": AT(5),
-       "expense": {"id": "xb", "paidBy": BEN_K, "amount": 600, "at": AT(5),
+       "expense": {"id": f"{BEN_K}:xb", "paidBy": BEN_K, "amount": 600, "at": AT(5),
                    "split": {"type": "equal", "among": ["ana", BEN_K]}}}],
      C["id"], [0, 1, ("key", 2, KEY_B), 3, ("key", 4, KEY_B)]),
     ("and_one_verifying_only_against_another_key_is_set_aside",
      [C, J_ANA, J_BEN_KEYED, E1_K,
       {"v": 1, "id": "eb", "author": BEN_K, "kind": "addExpense", "at": AT(5),
-       "expense": {"id": "xb", "paidBy": BEN_K, "amount": 600, "at": AT(5),
+       "expense": {"id": f"{BEN_K}:xb", "paidBy": BEN_K, "amount": 600, "at": AT(5),
                    "split": {"type": "equal", "among": ["ana", BEN_K]}}}],
      C["id"], [0, 1, ("key", 2, KEY_B), 3, ("key", 4, KEY)]),
 
@@ -880,7 +901,7 @@ I64_MAX = 2**63 - 1
 def expense(eid, author, paid_by, amount, amounts, minute):
     return {"v": 1, "id": eid, "author": author, "kind": "addExpense",
             "at": AT(minute),
-            "expense": {"id": "x" + eid, "description": "big",
+            "expense": {"id": f"{author}:x{eid}", "description": "big",
                         "paidBy": paid_by, "amount": amount, "at": AT(minute),
                         "split": {"type": "exact", "amounts": amounts}}}
 
@@ -904,24 +925,24 @@ FOLD_CASES += [
      BASE + [expense("big", "ben", "ana", -CAP - 1, {"ben": -CAP - 1}, 9)],
      C["id"]),
     ("a_payment_past_the_expense_cap_is_applied",
-     BASE + [payment("q1", "ben", "ben", "ana", CAP + 1, 9, "ycap")],
+     BASE + [payment("q1", "ben", "ben", "ana", CAP + 1, 9, "ben:ycap")],
      C["id"]),
     ("a_payment_that_would_carry_a_pair_total_out_of_range_is_set_aside",
      [C, J_ANA, J_BEN,
-      payment("q1", "ben", "ben", "ana", I64_MAX, 9, "y1"),
-      payment("q2", "ben", "ben", "ana", 1, 10, "y2")], C["id"]),
+      payment("q1", "ben", "ben", "ana", I64_MAX, 9, "ben:y1"),
+      payment("q2", "ben", "ben", "ana", 1, 10, "ben:y2")], C["id"]),
     # §5.1. After E1 ana is owed 4500, so confirming a payment from her moves
     # her balance up by its amount. One that would pass the 64-bit bound stays
     # unconfirmed and its confirmation is set aside; one landing exactly on it
     # applies.
     ("a_confirmation_that_would_carry_a_balance_out_of_range_is_set_aside",
      [C, J_ANA, J_BEN, E1,
-      payment("q1", "ana", "ana", "ben", I64_MAX, 9, "y2"),
-      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+      payment("q1", "ana", "ana", "ben", I64_MAX, 9, "ana:y2"),
+      conf("k1", "ben", "recipientConfirmed", 10, pid="ana:y2")], C["id"]),
     ("and_one_landing_on_the_bound_applies",
      [C, J_ANA, J_BEN, E1,
-      payment("q1", "ana", "ana", "ben", I64_MAX - 4500, 9, "y2"),
-      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+      payment("q1", "ana", "ana", "ben", I64_MAX - 4500, 9, "ana:y2"),
+      conf("k1", "ben", "recipientConfirmed", 10, pid="ana:y2")], C["id"]),
 ]
 
 
@@ -949,9 +970,10 @@ FOLD_CASES += [
 ]
 
 
-# §10.3 step 5. An id its author minted (the author's id, `:`, anything) is
-# theirs whatever `at` another entry states; a copy of it in somebody else's
-# entry is set aside. An id nobody minted still goes to the first by §10.2.
+# §10.3 step 5. Every expense and payment id is minted by its entry's author:
+# the author's id, `:`, then anything. An entry whose id is not is set aside
+# with id_not_minted, so a copy of somebody's id never competes with theirs by
+# `at`.
 def owned_expense(eid, author, xid, amount, minute):
     return {"v": 1, "id": eid, "author": author, "kind": "addExpense",
             "at": AT(minute),
@@ -961,24 +983,59 @@ def owned_expense(eid, author, xid, amount, minute):
                                                                "ben": amount - amount // 2}}}}
 
 
+def amend_expense(eid, author, target, xid, amount, minute):
+    return {"v": 1, "id": eid, "author": author, "kind": "amendEntry",
+            "at": AT(minute), "targetId": target,
+            "expense": owned_expense(target, author, xid, amount, minute)["expense"]}
+
+
 FOLD_CASES += [
+    ("an_expense_id_its_author_did_not_mint_is_set_aside",
+     BASE + [owned_expense("xa", "ana", "hotel", 30000, 20)], C["id"]),
+    ("a_payment_id_its_author_did_not_mint_is_set_aside",
+     BASE + [payment("q1", "ben", "ben", "ana", 4500, 20, "t1")], C["id"]),
+    ("an_id_that_is_its_authors_own_id_is_not_minted",
+     BASE + [owned_expense("xa", "ana", "ana", 30000, 20)], C["id"]),
+    ("an_id_with_nothing_after_the_colon_is_minted",
+     BASE + [owned_expense("xa", "ana", "ana:", 30000, 20)], C["id"]),
+    ("an_id_under_another_participants_prefix_is_not_minted",
+     BASE + [owned_expense("xa", "ana", "ben:hotel", 30000, 20)], C["id"]),
+    ("an_id_that_only_begins_with_the_authors_id_is_not_minted",
+     BASE + [owned_expense("xa", "ana", "anabel:hotel", 30000, 20)], C["id"]),
     ("an_expense_id_its_author_minted_stands_over_a_backdated_copy",
      BASE + [owned_expense("xa", "ana", "ana:hotel", 30000, 20),
              owned_expense("xb", "ben", "ana:hotel", 2, 8)], C["id"]),
-    ("and_an_expense_id_nobody_minted_goes_to_the_first",
-     BASE + [owned_expense("xa", "ana", "hotel", 30000, 20),
-             owned_expense("xb", "ben", "hotel", 2, 8)], C["id"]),
     ("a_payment_id_its_author_minted_stands_over_a_backdated_copy",
      BASE + [payment("q1", "ben", "ben", "ana", 4500, 20, "ben:t1:ana"),
              payment("q2", "ana", "ben", "ana", 1, 8, "ben:t1:ana")], C["id"]),
+    # An owner's entry the fold cannot apply leaves the id unused: the copy is
+    # set aside for its id, and neither stands.
+    ("an_owners_inapplicable_expense_still_keeps_its_id",
+     BASE + [dict(owned_expense("xa", "ben", "ben:x", 3000, 20),
+                  expense=dict(owned_expense("xa", "ben", "ben:x", 3000, 20)
+                               ["expense"], paidBy="zed")),
+             owned_expense("xb", "ana", "ben:x", 3000, 8)], C["id"]),
     ("a_pair_total_is_bounded_per_author",
      BASE + [payment("q1", "ana", "ben", "ana", I64_MAX, 8, "ana:big"),
              payment("q2", "ben", "ben", "ana", 4500, 20, "ben:t1:ana")], C["id"]),
+    # §10.4. An amendment keeps its target's id, so one naming an unminted id
+    # is refused for renaming its target and the target applies as written.
+    ("an_amendment_to_an_unminted_id_is_set_aside",
+     BASE + [amend_expense("am", "ana", "e1", "x1", 6000, 6)], C["id"]),
+    # An amendment of an entry whose id was never minted is set aside for its
+    # id, and so is the entry it corrects.
+    ("an_amendment_of_an_unminted_expense_is_set_aside_with_it",
+     BASE + [owned_expense("xa", "ana", "hotel", 30000, 20),
+             amend_expense("am", "ana", "xa", "hotel", 3000, 21)], C["id"]),
+    ("an_amendment_of_a_minted_expense_applies",
+     BASE + [owned_expense("xa", "ana", "ana:hotel", 30000, 20),
+             amend_expense("am", "ana", "xa", "ana:hotel", 3000, 21)], C["id"]),
 ]
 
 # An author whose id holds `:` mints nothing: `ben:t1` would otherwise mint
 # `ben:t1:ana`, the id of Ben's own send record, and its backdated copy would
-# set Ben's aside.
+# set Ben's aside. Such an author can therefore add no expense and record no
+# payment.
 def colon_join(eid, pid):
     return {"v": 1, "id": eid, "author": pid, "kind": "joinBill", "at": AT(2),
             "participant": {"id": pid, "name": "Mal"}}
@@ -994,17 +1051,17 @@ FOLD_CASES += [
      BASE + [colon_join("jm", "ana:x"),
              owned_expense("xa", "ana", "ana:x:hotel", 30000, 20),
              owned_expense("xb", "ana:x", "ana:x:hotel", 2, 8)], C["id"]),
-    ("and_still_records_a_payment_under_an_id_nobody_minted",
+    ("and_so_records_no_payment_under_any_id",
      BASE + [colon_join("jm", "ben:t1"),
              payment("q2", "ben:t1", "ben:t1", "ana", 1, 8, "ben:t1:own")],
      C["id"]),
 ]
 
 
-def rate(eid, author, per, minute, at=None):
+def rate(eid, author, per, minute, at=None, currency="EUR"):
     return {"v": 1, "id": eid, "author": author, "kind": "setRate",
             "at": at or AT(minute),
-            "rate": {"currency": "EUR", "minorUnitsPerZec": per,
+            "rate": {"currency": currency, "minorUnitsPerZec": per,
                      "at": AT(minute)}}
 
 
@@ -1036,6 +1093,15 @@ FOLD_CASES += [
      BASE + [rate("ra", "ana", 950000, 6),
              rate("rf", "ben", 1, 7, at="2036-10-28T19:07:00.000Z"),
              rate("rb", "ana", 960000, 8)], C["id"]),
+    # §10.1. A rate in another currency is set aside, however far ahead it
+    # is dated; the bill's own rate before it still stands.
+    ("a_rate_in_another_currency_is_set_aside",
+     BASE + [rate("ra", "ana", 950000, 6),
+             rate("rx", "ben", 1, 7, at="2036-10-28T19:07:00.000Z",
+                  currency="USD")], C["id"]),
+    ("and_one_alone_leaves_the_bill_unpriced",
+     BASE + [rate("rx", "ben", 1, 7, at="2036-10-28T19:07:00.000Z",
+                  currency="USD")], C["id"]),
     ("a_stranger_may_not_withdraw_a_rate",
      BASE + [J_DEE, rate("ra", "ana", 950000, 6), void("vr", "dee", "ra", 8)],
      C["id"]),
@@ -1060,7 +1126,7 @@ FOLD_CASES += [
     ("an_expense_amended_into_one_that_cannot_be_applied_stands",
      BASE + [{"v": 1, "id": "am", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": "9000",
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": "9000",
                           "at": AT(3),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
@@ -1071,7 +1137,7 @@ FOLD_CASES += [
      BASE + [void("vp", "ben", "p1", 5),
              {"v": 1, "id": "am", "author": "ana", "kind": "amendEntry",
               "at": AT(6), "targetId": "e1",
-              "expense": {"id": "x1", "paidBy": "ana", "amount": "9000",
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": "9000",
                           "at": AT(3),
                           "split": {"type": "equal", "among": ["ana"]}}},
              void("vj", "ana", "j2", 7)], C["id"]),
@@ -1084,16 +1150,16 @@ FOLD_CASES += [
      [C, J_ANA, J_BEN, J_CY, E1,
       {"v": 1, "id": "q1", "author": "ben", "kind": "recordPayment",
        "at": AT(9),
-       "payment": {"id": "y2", "from": "cy", "to": "ben",
+       "payment": {"id": "ben:y2", "from": "cy", "to": "ben",
                    "amount": I64_MAX - 4499, "method": "cash", "at": AT(9)}},
-      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+      conf("k1", "ben", "recipientConfirmed", 10, pid="ben:y2")], C["id"]),
     ("and_one_leaving_it_one_above_applies",
      [C, J_ANA, J_BEN, J_CY, E1,
       {"v": 1, "id": "q1", "author": "ben", "kind": "recordPayment",
        "at": AT(9),
-       "payment": {"id": "y2", "from": "cy", "to": "ben",
+       "payment": {"id": "ben:y2", "from": "cy", "to": "ben",
                    "amount": I64_MAX - 4500, "method": "cash", "at": AT(9)}},
-      conf("k1", "ben", "recipientConfirmed", 10, pid="y2")], C["id"]),
+      conf("k1", "ben", "recipientConfirmed", 10, pid="ben:y2")], C["id"]),
 
     # §10.8. A member the target leaves out names nobody. The record below was
     # written with no `from` and amended to name ben; a withdrawal authored as
@@ -1101,15 +1167,15 @@ FOLD_CASES += [
     ("a_withdrawal_authored_as_nobody_takes_nothing_off",
      BASE + [{"v": 1, "id": "pn", "author": "ben", "kind": "recordPayment",
               "at": AT(5),
-              "payment": {"id": "y5", "to": "ana", "amount": 100,
+              "payment": {"id": "ben:y5", "to": "ana", "amount": 100,
                           "method": "cash", "at": AT(5)}},
              {"v": 1, "id": "an", "author": "ben", "kind": "amendEntry",
               "at": AT(6), "targetId": "pn",
-              "payment": {"id": "y5", "from": "ben", "to": "ana", "amount": 100,
+              "payment": {"id": "ben:y5", "from": "ben", "to": "ana", "amount": 100,
                           "method": "cash", "at": AT(5)}},
-             conf("cn", "ana", "recipientConfirmed", 7, pid="y5",
+             conf("cn", "ana", "recipientConfirmed", 7, pid="ben:y5",
                   record=payment_digest(
-                      {"id": "y5", "from": "ben", "to": "ana", "amount": 100,
+                      {"id": "ben:y5", "from": "ben", "to": "ana", "amount": 100,
                        "method": "cash", "at": AT(5)})),
              void("vn", "", "pn", 8)], C["id"]),
 
@@ -1117,9 +1183,9 @@ FOLD_CASES += [
     # against the expense a reader shows, and two under one id leave it to
     # guess which.
     ("two_expenses_sharing_one_id",
-     BASE + [{"v": 1, "id": "e2", "author": "ben", "kind": "addExpense",
+     BASE + [{"v": 1, "id": "e2", "author": "ana", "kind": "addExpense",
               "at": AT(6),
-              "expense": {"id": "x1", "paidBy": "ben", "amount": 100,
+              "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 100,
                           "at": AT(6),
                           "split": {"type": "equal", "among": ["ana", "ben"]}}}],
      C["id"]),
@@ -1254,6 +1320,29 @@ def main():
             r = fold(entries, bill_id, verify)
             r["balances"] = balances(r["bill"])
             case["expect"] = r
+        except Refused as e:
+            case["error"] = e.code
+        out.append(case)
+
+    # §9.3: an integer is decided from the number as written. These carry the
+    # entry as text, so the spelling reaches each reader's own parser; a JSON
+    # vector would be respelled by whatever wrote it.
+    sealed_e1 = sealed([E1])[0]
+    plain = json.dumps(sealed_e1, separators=(",", ":"))
+    assert '"amount":9000,' in plain
+    for name, text in [
+        ("an_entry_as_written_reads", plain),
+        ("an_amount_written_with_an_exponent_is_a_float",
+         plain.replace('"amount":9000,', '"amount":9e3,')),
+        ("an_amount_written_with_a_capital_exponent_is_a_float",
+         plain.replace('"amount":9000,', '"amount":9E+3,')),
+        ("an_amount_written_with_a_fraction_is_a_float",
+         plain.replace('"amount":9000,', '"amount":9000.0,')),
+    ]:
+        case = {"name": name, "entryText": text}
+        try:
+            check_entry(_strict_json(text))
+            case["expect"] = {"accepted": True}
         except Refused as e:
             case["error"] = e.code
         out.append(case)

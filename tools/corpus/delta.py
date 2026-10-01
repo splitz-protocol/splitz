@@ -36,7 +36,7 @@ def log(joins=1, expenses=0):
     for k in range(expenses):
         entries.append({"v": 1, "author": ids[0], "kind": "addExpense",
                         "at": at(joins + k + 1),
-                        "expense": {"id": f"x{k}", "description": "dinner",
+                        "expense": {"id": f"{ids[0]}:x{k}", "description": "dinner",
                                     "paidBy": ids[0], "amount": 9000,
                                     "at": at(joins + k + 1),
                                     "split": {"type": "equal", "among": ids}}})

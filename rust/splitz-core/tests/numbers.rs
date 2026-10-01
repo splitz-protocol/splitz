@@ -7,7 +7,7 @@ use splitz_core::{canonical_json, check_entry, code, derive_entry_id};
 /// number reaches the reader as a peer wrote it.
 fn entry_with_note(note: &str) -> Value {
     let text = format!(
-        r#"{{"v":1,"id":"x","author":"ana","kind":"addExpense","at":"2026-10-28T19:03:00.000Z","expense":{{"id":"x1","paidBy":"ana","amount":1,"at":"2026-10-28T19:03:00.000Z","split":{{"type":"equal","among":["ana"]}},"note":{note}}}}}"#
+        r#"{{"v":1,"id":"x","author":"ana","kind":"addExpense","at":"2026-10-28T19:03:00.000Z","expense":{{"id":"ana:x1","paidBy":"ana","amount":1,"at":"2026-10-28T19:03:00.000Z","split":{{"type":"equal","among":["ana"]}},"note":{note}}}}}"#
     );
     let mut entry: Value = splitz_core::parse_json(&text).expect("the text is JSON");
     // A number §9.3 cannot encode has no id to derive; §10.1 refuses it before

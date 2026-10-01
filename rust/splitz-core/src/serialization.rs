@@ -146,8 +146,9 @@ pub fn decode_participant(raw: &Value) -> Result<Participant> {
         return Err(type_error("an object"));
     }
     let id = string(raw.get("id").unwrap_or(&Value::Null))?;
-    // §9.1. An empty id is not a name anyone can be settled to.
-    if id.is_empty() {
+    // §9.1. An empty id is not a name anyone can be settled to, and one
+    // holding `:` mints no expense or payment id (§10.3).
+    if id.is_empty() || id.contains(':') {
         return Err(SplitError::new(
             code::BILL_BAD_PARTICIPANT_ID,
             "A participant states an id",

@@ -89,8 +89,8 @@ void main() {
   // One transaction paying two people is two records, and §10.5 requires each
   // to carry its own id: under one id the second is set aside and its payee
   // asked to be paid again. Each id is `<payer>:<txid>:<payee>`: §10.3 step 5
-  // keeps an id that begins with its author's id for that author, so a copy
-  // somebody else backdates is the one set aside, not the payer's record.
+  // sets aside every payment whose id does not begin with its author's id and
+  // `:`, so only the payer can write a record under it.
   // `paymentIdForSend` in `package:splitz_core/host.dart` writes the same
   // id. The transaction goes in `reference`, and each
   // record states what it sent in ZEC and the rate it was priced at, so the

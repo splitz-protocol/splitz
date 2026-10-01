@@ -111,8 +111,8 @@ void main() {
   // One transaction paying two people is two records, and §10.5 requires each
   // to carry its own id: under one id the second is set aside and its payee
   // asked to be paid again. Each id is `<payer>:<txid>:<payee>`: §10.3 step 5
-  // keeps an id that begins with its author's id for that author, so a copy
-  // somebody else backdates is the one set aside, not the payer's record.
+  // sets aside every payment whose id does not begin with its author's id and
+  // `:`, so only the payer can write a record under it.
   // `paymentIdForSend` in `package:splitz_core/host.dart` writes the same
   // id. The transaction goes in `reference`, and each
   // record states what it sent in ZEC and the rate it was priced at, so the
@@ -1110,8 +1110,21 @@ parsed as a quote reads an error object as a price.
 your wallet received against the unconfirmed ZEC records to you, across every
 bill at once, so one transaction is evidence once (§14.7). Show the payee each
 `arrived` record — its ZEC, its rate, its reference — and on their word write
-`walletReceived` confirmations from it. `short` and `unstated` are records the
-money does not back.
+`walletReceived` confirmations from it. Nothing else is proposed, and each of
+the rest is something to tell the payee:
+
+- `short`: the transaction brought less ZEC than the record states.
+- `unstated`: the record states no ZEC, so nothing can be checked.
+- `underpriced`: the ZEC arrived, but at the bill's rate it is worth under 95%
+  of what the record settles, or the bill has no rate to say.
+- `unbound`: the transaction's memos, which your wallet read, do not name the
+  record's bill. Pass each transaction's text memos as `memos` where your
+  wallet can read them; a request this library renders carries
+  `splitz:<billId>` to every output that takes a memo, and without the list
+  a payer can name a transaction they sent you for something else.
+- `disputed`: records from more than one payer name the same transaction.
+  A shielded transaction does not say who sent it, so the payee decides which
+  record it pays before confirming any.
 
 **Say a refusal in words.** `describeCode(code)` / `describe_code` answers a
 short sentence for every §12 code, from `vectors/messages.json`, and nothing

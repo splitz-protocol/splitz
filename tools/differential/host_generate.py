@@ -134,12 +134,13 @@ def a_history_entry(rng: random.Random) -> dict:
     elif kind == "voidEntry":
         base["void"] = {"target": "e-gone"}
     elif kind == "recordPayment":
-        base["payment"] = {"id": rng.choice(["p0", "p1", "p9"]), "to": who,
+        base["payment"] = {"id": rng.choice([f"{who}:p0", f"{who}:p1",
+                                             f"{who}:p9"]), "to": who,
                            "amount": rng.randrange(1, 5000),
                            "method": rng.choice(["shieldedZec", "swap", "cash"]),
                            "reference": rng.choice(["ref-1", None])}
     elif kind == "confirmPayment":
-        base["confirmation"] = {"paymentId": rng.choice(["p0", "p1"]),
+        base["confirmation"] = {"paymentId": rng.choice(["ana:p0", "ben:p1"]),
                                 "method": "shieldedZec", "reference": "tx-1"}
     elif kind == "setRate":
         base["rate"] = {"minorUnitsPerZec": rng.randrange(1, 10**6),

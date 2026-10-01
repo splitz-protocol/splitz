@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::address::parse_address;
 use crate::error::{code, Result, SplitError};
 use crate::model::Bill;
 use crate::money::{checked_add, checked_sum};
@@ -91,6 +92,15 @@ pub(crate) fn render_reading(
     let mut carried: i64 = 0;
     let mut withheld: i64 = 0;
 
+    // §8.5: a request carries one payer's debts. Built from a whole plan it
+    // would ask this payer to send every other payer's too.
+    if settlements.iter().any(|s| s.from != settlements[0].from) {
+        return Err(SplitError::new(
+            code::OBLIGATION_MIXED_PAYERS,
+            "These settlements are owed by more than one payer",
+        ));
+    }
+
     for settlement in settlements {
         let Some(who) = bill.participant(&settlement.to) else {
             // A merge or storage fault, needing a different remedy from a
@@ -176,6 +186,9 @@ pub(crate) fn render_reading(
                     address: address.to_owned(),
                     zatoshi,
                     fiat: Some(fiat),
+                    // §8.5: what ties the send to this bill, where the address
+                    // takes one.
+                    memo: takes_memo(address).then(|| bill_memo(&bill.id)),
                     label: Some(who.name.clone()),
                     ..Default::default()
                 });
@@ -320,4 +333,19 @@ pub fn withholdings(
         }
     }
     Ok(Withholdings { carried, awaiting })
+}
+
+/// The memo a request carries to every output that takes one (§8.5): the
+/// UTF-8 bytes of `splitz:` and the bill's id. The payee's wallet reads it
+/// back to tell a payment for this bill from one sent for anything else
+/// (§14.7).
+pub fn bill_memo(bill_id: &str) -> Vec<u8> {
+    format!("splitz:{bill_id}").into_bytes()
+}
+
+/// Whether `address` decodes (§8.6) to one that can receive a memo. One that
+/// does not decode carries none: §8.3 admits strings no reader decodes, and a
+/// request to one still renders.
+fn takes_memo(address: &str) -> bool {
+    parse_address(address).is_ok_and(|a| a.can_receive_memo)
 }

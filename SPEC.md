@@ -173,9 +173,12 @@ Let `W = Σwᵢ`, `s = sign(total)` and `m = |total|`.
    `allocation_overflow`. That value has no positive counterpart: taking its
    magnitude is the identity, so every part comes back with the wrong sign.
 
-4. **Each product `m · wᵢ` MUST fit a signed 64-bit integer**, refused with
-   `allocation_overflow` otherwise. A wrapped product allocates a plausible
-   wrong number, which passes every check downstream of it.
+4. **Each product `m · wᵢ` MUST be formed exactly**, in at least 126 bits:
+   `m` and `wᵢ` are each below 2^63, so their product is below 2^126. A
+   wrapped product allocates a plausible wrong number, which passes every
+   check downstream of it; one refused at 64 bits turns away ordinary
+   amounts whose every part fits — a 10% tip on 10,200,000,000 minor units
+   is a product of 9.36 × 10^18. `pᵢ ≤ m` and `rᵢ < W`, so both fit 64 bits.
 
 5. `pᵢ = ⌊m · wᵢ / W⌋` and `rᵢ = (m · wᵢ) mod W`.
 
@@ -635,6 +638,17 @@ the recipient's `payTo`, and the label is the recipient's display name — a
 payer asked to send money to someone they never ate with (§6.3) needs to
 recognise the name on their wallet's confirmation screen.
 
+**Each output to an address that can receive a memo (§8.6) carries one: the
+UTF-8 bytes of `splitz:` and the bill's id**, as ZIP 321's `memo`. It is what
+ties a send to the bill (§14.7): a transaction id proves money arrived, not
+what it was sent for. An output to an address that takes no memo carries none,
+and an address no reader decodes is taken as one that takes none.
+
+**An obligation is one payer's.** Settlements naming more than one `from` are
+refused whole with `obligation_mixed_payers`, before any output is rendered: a
+request built from a whole plan asks the payer holding it to send every other
+payer's debts too, and nothing on the payer's screen shows that it does.
+
 A recipient the plan names who is not on the bill at all is refused with
 `unknown_participant`. That is a merge or storage fault and needs a different
 remedy from a missing address.
@@ -786,13 +800,13 @@ it (§14.6).
   "splitMode": "equal",
   "participants": [{"id": "ana", "name": "Ana", "payTo": "u1…"}],
   "expenses": [{
-    "id": "dinner", "description": "dinner", "paidBy": "ana",
+    "id": "ana:dinner", "description": "dinner", "paidBy": "ana",
     "amount": 480000, "currency": "MXN",
     "at": "2026-10-28T19:30:00.000Z",
     "split": {"type": "equal", "among": ["ana", "ben"]}
   }],
   "payments": [{
-    "id": "p1", "from": "ben", "to": "ana",
+    "id": "ben:p1", "from": "ben", "to": "ana",
     "amount": 350, "currency": "MXN",
     "method": "shieldedZec", "at": "2026-10-28T19:30:00.000Z",
     "zatoshi": 36843,
@@ -849,7 +863,10 @@ to hand over cash — is the wallet's. A payer MAY settle one debt by a lower
 preference the recipient declared, as its own choice for that payment and
 never by rewriting the order (§14.8).
 
-**A participant id MUST be a non-empty string** (`bill_bad_participant_id`).
+**A participant id MUST be a non-empty string holding no `:`**
+(`bill_bad_participant_id`). `:` ends the part of an expense or payment id
+that names its author (§10.3): an author whose id holds one mints nothing, so
+could join a bill and never write to it.
 An empty id is not a name anyone can be settled to: §8.5 would render its
 `payTo` into a payment request like any other, and two readers disagreeing
 about whether to admit it fold different bills from one log. §8.3 already
@@ -1225,6 +1242,11 @@ by the creator's next one. A `setRate` may be amended and withdrawn like
 any other entry; when none survives, the bill has no rate and §7's conversions
 are unavailable rather than guessed at.
 
+**A `setRate` MUST be in the bill's currency**, and one that is not is set
+aside with `rate_currency_mismatch`. Every amount on the bill is in that
+currency, so a rate in another refuses every request priced against it, and
+one dated ahead would hold that refusal over every later correction.
+
 **A `setRate` MUST be authored by a participant on the bill**, and one that is
 not is set aside with `unknown_participant`. The rate decides how much ZEC
 every request carries, so a rate written by somebody who owes nothing and is
@@ -1268,8 +1290,9 @@ every id inside that payload is a string; a `voidEntry` or `amendEntry` names
 a non-empty target; `at`, `id` and `author` are well formed; and last, the
 `createBill` members and the id's derivation (§9.4, §9.5) — a create's `name`
 is a string, its `currency` is one (§2.1), its `splitMode` is a string and one
-§4 defines, then `creatorKey` and `nonce` bind it (`create_unbound`), then its
-id derives.
+§4 defines, then `creatorKey` and `nonce` bind it (`create_unbound`), then a
+stated `keyDigest` is 32 bytes as unpadded base64url (`bill_type_error`), then
+its id derives.
 
 **An entry naming a target the log does not hold is set aside with
 `unknown_entry`.** This applies to `amendEntry` and `voidEntry` alike: a
@@ -1394,16 +1417,21 @@ spellings of one instant.
    expense a reader shows, a confirmation names one record, and two under one
    id leave the reader to guess which.
 
-   **An id its author minted is theirs.** An id is *minted by* an entry's
-   author when it is that author's participant id, `:`, and anything after,
-   and **an author whose participant id contains `:` mints nothing**: the id
-   `<payer>:<txid>` would otherwise mint `<payer>:<txid>:<recipient>`, the id
-   of the payer's own send record.
-   When any applied candidate's own author minted an id, an entry by anybody
-   else carrying the same id is set aside with the code above, whatever `at`
-   either states. Among the rest the first by §10.2 stands.
+   **Every expense and payment id is minted by the entry's author.** An id
+   is *minted by* an author when it is that author's participant id, `:`, and
+   anything after, and **an author whose participant id contains `:` mints
+   nothing**: the id `<payer>:<txid>` would otherwise mint
+   `<payer>:<txid>:<recipient>`, the id of the payer's own send record. An
+   `addExpense` or `recordPayment` whose payload id its author did not mint is
+   set aside with `id_not_minted`, and so is an amendment whose payload id its
+   author did not mint (§10.4: the entry it corrects then applies as written).
+   The check runs once the payload decodes and before the uniqueness check
+   above; for a payment, after `unauthorized_payment`, `unknown_participant`,
+   `self_payment` and the currency checks.
 
-   §10.2's order is each author's to write, so deciding by it hands an id to
+   Exactly one author mints a given id, so two entries under one id are by one
+   author, and among them the first by §10.2 stands. §10.2's order is each
+   author's to write, so letting it decide between authors hands an id to
    whoever backdates furthest: a copy of somebody's expense dated a minute
    earlier would replace it, and a copy of a payer's record written by the
    payee would set the payer's aside and ask them to pay again. A builder
@@ -1589,7 +1617,7 @@ entry carries the second kind.
   "v": 1, "id": "c1", "author": "ana", "kind": "confirmPayment",
   "at": "2026-10-28T19:34:00.000Z",
   "confirmation": {
-    "paymentId": "p1", "method": "recipientConfirmed",
+    "paymentId": "ben:p1", "method": "recipientConfirmed",
     "reference": "…", "note": "counted it"
   }
 }
@@ -2031,7 +2059,8 @@ invite states no version it can read, never that it states none.
 
 Missing `v` is `invite_missing_version`; a version above the reader's is
 `invite_future_version`; missing or empty `b` is `invite_missing_bill_id`;
-missing or empty `k` is `invite_missing_key`; an unparseable `x` is
+missing or empty `k`, or one that is not the 32 bytes of a bill key (§11.3) as
+unpadded base64url, is `invite_missing_key`; an unparseable `x` is
 `invite_bad_expiry`. Anything that is not this scheme and host is
 `invite_not_an_invite`.
 
@@ -2137,12 +2166,12 @@ is six characters.
 |---|---|---|
 | one `createBill`, two `joinBill`, no expenses, its invite, single-character ids, no display names, the joiner publishing an identity key | `the_smallest_signed_bill` | **1268** |
 | the same with the ids and names a wallet would write | `…_a_wallet_would_write` | **1323** |
-| two participants with payout addresses, one expense | `two_payable_participants_and_one_expense` | **2106** |
+| two participants with payout addresses, one expense | `two_payable_participants_and_one_expense` | **2111** |
 | three participants with payout addresses, no expenses | `three_payable_participants_and_no_expenses` | **2188** |
 | three participants with payout addresses, one expense | `three_payable_participants_and_one_expense` | refused |
 
-The headroom on the third row is 225 characters, so the free text on an
-expense is part of the budget: the same bill with a 176-character description
+The headroom on the third row is 220 characters, so the free text on an
+expense is part of the budget: the same bill with a 172-character description
 is refused.
 
 **The second half of that table is the number a wallet plans against.** A
@@ -2249,7 +2278,7 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `duplicate_payment`, `duplicate_expense`, `participant_id_not_derived`,
 `self_payment`, `bill_bad_participant_id`,
 `unknown_payment`, `unauthorized_confirmation`,
-`confirmation_missing_reference`, `unauthorized_payment`,
+`confirmation_missing_reference`, `unauthorized_payment`, `id_not_minted`,
 `participant_still_named`, `ambiguous_create`,
 `bill_unknown_confirmation_method`, `canonical_json_float`,
 `rate_currency_mismatch`, `rate_not_positive`, `negative_amount`,
@@ -2272,7 +2301,7 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `zip321_bad_currency_code`, `zip321_fiat_not_positive`,
 `zip321_fiat_too_many_digits`, `zip321_no_address`,
 `zip321_not_canonical`, `zip321_memo_undeliverable`, `address_invalid`,
-`payout_not_declared`.
+`payout_not_declared`, `obligation_mixed_payers`.
 
 **The code is part of the protocol; the message that accompanies it is prose
 and is not.** A user-facing string MUST be derived from the code.
@@ -2523,6 +2552,21 @@ transaction paid this account.
   participant can copy a reference they have read off the bill: matching in
   any fixed order hands the payment to whoever sorts first, and the payee
   confirms a debt as settled by money somebody else sent.
+- **A record's ZEC must pay for what it settles.** A candidate stating
+  `zatoshi` is `underpriced`, and uses none of the transaction, unless its
+  bill has a rate (§7) in the record's currency and
+  `zatoshi × minorUnitsPerZec × 100 ≥ amount × 95 × 10^8`, compared exactly.
+  A transaction bringing what a record states proves the ZEC arrived, not
+  that it pays the debt: a payer who sends 1 zatoshi and records it as
+  settling 100.00 EUR names a transaction that did arrive. The 5% leaves room
+  for rounding and a rate set between pricing and sending.
+- **A transaction's memos, where the wallet read them, must name the
+  record's bill.** Each received transaction MAY carry the text memos it
+  brought this account; a list, even an empty one, is what the wallet read,
+  and no list is a wallet that cannot say. A candidate naming a transaction
+  with a list that does not hold `splitz:` and the record's bill id (§8.5) is
+  `unbound`, and uses none of the transaction: a payer may name one they sent
+  the payee for something else. With no list, nothing is decided by memo.
 - **A transaction's zatoshi is counted once, across every bill.** Records
   already confirmed that name it use their stated `zatoshi` first; the
   candidates then use theirs in order of bill id and payment id (§2.3). A
@@ -2534,7 +2578,10 @@ transaction paid this account.
   brings more than exists, and using up a share floors at zero.
 
 §14.2 still applies: a proposal is shown to the payee — its ZEC, its rate and
-its reference — before a confirmation is written. A host MAY write every
+its reference — before a confirmation is written. A host SHOULD also show
+when the transaction arrived: a payment sent from a wallet that wrote no
+memo, or one whose memos the host cannot read, is told apart from one made
+before the debt existed by that alone. A host MAY write every
 `arrived` confirmation on one acceptance.
 
 ### 14.8 Paying by a lower preference

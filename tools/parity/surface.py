@@ -98,6 +98,7 @@ RENAMES = {
     "signingMessage": "signing_message",
     "resolveIdentities": "resolve_identities",
     "renderObligation": "render_obligation",
+    "billMemo": "bill_memo",
     "choosePayouts": "choose_payouts",
     "decodeRate": "decode_rate",
     "billSplitModes": "SPLIT_MODES",

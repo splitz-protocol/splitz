@@ -415,10 +415,10 @@ pub fn check_entry(entry: &Value) -> Result<()> {
 /// §10.3 step 5. Whether `id` is one its `author` minted: the author's
 /// participant id, `:`, then anything.
 ///
-/// Only the author writes entries under such an id, so a copy of it in
-/// anybody else's entry is set aside whatever `at` either states. §10.2's
-/// order is each author's to write, and deciding whose id it is by that order
-/// hands it to whoever backdates furthest.
+/// Every expense and payment id is minted by its entry's author, and an entry
+/// whose id is not is set aside with `id_not_minted`. §10.2's order is each
+/// author's to write, and deciding between authors by that order hands an id
+/// to whoever backdates furthest.
 ///
 /// An author whose id holds `:` mints nothing: `<payer>:<txid>` as a
 /// participant id would otherwise own `<payer>:<txid>:<recipient>`, the id the
@@ -1158,6 +1158,17 @@ pub fn fold_log_verified(
             }
             let payload = version.get("rate").cloned().unwrap_or(Value::Null);
             crate::serialization::decode_rate(&payload)?;
+            // §10.1: a rate prices this bill's amounts, so it is in this
+            // bill's currency. Another one would refuse every request.
+            if field(&payload, "currency") != currency {
+                return Err(SplitError::new(
+                    code::RATE_CURRENCY_MISMATCH,
+                    format!(
+                        "A rate in {} on a {currency} bill",
+                        field(&payload, "currency")
+                    ),
+                ));
+            }
             Ok(payload)
         });
         if let Some((payload, _)) = applied {
@@ -1195,22 +1206,6 @@ pub fn fold_log_verified(
     // other party wrote cannot carry the payer's out of range.
     let mut pair_total: BTreeMap<(String, String, String), i64> = BTreeMap::new();
     let ids: BTreeSet<String> = participants.keys().cloned().collect();
-    // §10.3 step 5: the ids some entry's own author minted (see `owns_id`).
-    let mut owned_expense_ids: BTreeSet<String> = BTreeSet::new();
-    let mut owned_payment_ids: BTreeSet<String> = BTreeSet::new();
-    for entry in &live {
-        let (member, owned) = match field(entry, "kind") {
-            "addExpense" => ("expense", &mut owned_expense_ids),
-            "recordPayment" => ("payment", &mut owned_payment_ids),
-            _ => continue,
-        };
-        for version in versions(entry) {
-            let id = version[member]["id"].as_str().unwrap_or_default();
-            if owns_id(field(entry, "author"), id) {
-                owned.insert(id.to_owned());
-            }
-        }
-    }
     for entry in &live {
         match field(entry, "kind") {
             "addExpense" => {
@@ -1253,17 +1248,18 @@ pub fn fold_log_verified(
                         ));
                     }
                     let d = crate::serialization::decode_expense(&ex, &currency, &ids)?;
-                    // One id names one expense. An amendment or a withdrawal is
-                    // written against the expense a reader shows, and two under
-                    // one id leave it to guess which. An id its author minted
-                    // is theirs whatever the order; otherwise the first stands.
-                    if owned_expense_ids.contains(&d.id) && !owns_id(field(entry, "author"), &d.id)
-                    {
+                    // §10.3 step 5: an expense id is its author's own, so a
+                    // copy by anybody else never competes with it by `at`.
+                    if !owns_id(field(entry, "author"), &d.id) {
                         return Err(SplitError::new(
-                            code::DUPLICATE_EXPENSE,
-                            format!("Copies {}, which its author minted", d.id),
+                            code::ID_NOT_MINTED,
+                            format!("Its author did not mint {}", d.id),
                         ));
                     }
+                    // One id names one expense. An amendment or a withdrawal is
+                    // written against the expense a reader shows, and two under
+                    // one id leave it to guess which. Both are one author's, and
+                    // the first stands.
                     if expense_entries.contains_key(&d.id) {
                         return Err(SplitError::new(
                             code::DUPLICATE_EXPENSE,
@@ -1351,15 +1347,15 @@ pub fn fold_log_verified(
                     // that speaks for the payment's `to` is checked against
                     // that record's `to`. Two records under one id name a payee
                     // ambiguously, so one recipient's confirmation would settle
-                    // a debt another never vouched for. A record under an id its
-                    // author minted stands; otherwise the first does. One
-                    // transaction paying several people carries the
-                    // transaction in `reference`.
+                    // a debt another never vouched for. The id is its author's
+                    // own (§10.3 step 5), so two records under it are one
+                    // author's, and the first stands. One transaction paying
+                    // several people carries the transaction in `reference`.
                     let pay_id = field(&pay, "id");
-                    if owned_payment_ids.contains(pay_id) && !owns_id(author, pay_id) {
+                    if !owns_id(author, pay_id) {
                         return Err(SplitError::new(
-                            code::DUPLICATE_PAYMENT,
-                            format!("Copies {pay_id}, which its author minted"),
+                            code::ID_NOT_MINTED,
+                            format!("Its author did not mint {pay_id}"),
                         ));
                     }
                     if payments.iter().any(|p| field(p, "id") == pay_id) {

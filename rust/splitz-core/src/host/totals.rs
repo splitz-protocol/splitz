@@ -129,17 +129,36 @@ pub fn totals_across(bills: &[FoldedBill], me: &str) -> Totals {
         .flat_map(|f| f.identities.bound.keys().cloned())
         .collect();
     for folded in ordered {
-        let merged = adds_of(folded, me, &bound_somewhere).and_then(|adds| {
+        let merged = adds_of(folded, me, &bound_somewhere).map(|adds| {
             let mut merged = Vec::with_capacity(adds.len());
             for (key, row) in adds {
                 let held = sums.get(&key).copied().unwrap_or([0; 4]);
                 let mut next = [0; 4];
+                let mut fits = true;
                 for i in 0..4 {
-                    next[i] = checked_add(held[i], row[i], code::AMOUNT_OVERFLOW)?;
+                    match held[i].checked_add(row[i]) {
+                        Some(v) => next[i] = v,
+                        None => fits = false,
+                    }
                 }
-                merged.push((key, next));
+                if fits {
+                    merged.push((key, next));
+                } else {
+                    // What other bills already hold for this person would
+                    // carry the row past what an amount can hold. This bill's
+                    // part is kept as a row of its own rather than the bill
+                    // left out: one bill stating an absurd figure cannot take
+                    // another bill out of the totals.
+                    let (with, currency, whose) = key;
+                    let apart = if whose.is_empty() {
+                        folded.bill.id.clone()
+                    } else {
+                        format!("{whose}\u{0}{}", folded.bill.id)
+                    };
+                    merged.push(((with, currency, apart), row));
+                }
             }
-            Ok(merged)
+            merged
         });
         match merged {
             Ok(merged) => {

@@ -1,7 +1,7 @@
 //! Largest-remainder allocation (SPEC.md §3).
 
 use crate::error::{code, Result, SplitError};
-use crate::money::{checked_mul, checked_sum, MIN_AMOUNT};
+use crate::money::{checked_sum, MIN_AMOUNT};
 
 /// Distributes `total` across `weights` so the parts sum to it exactly.
 ///
@@ -50,10 +50,12 @@ pub fn allocate(total: i64, weights: &[i64]) -> Result<Vec<i64>> {
     let mut distributed: i64 = 0;
 
     for (i, &weight) in weights.iter().enumerate() {
-        // 4. Every product must fit.
-        let scaled = checked_mul(magnitude, weight, code::ALLOCATION_OVERFLOW)?;
-        parts[i] = scaled / weight_sum;
-        remainders[i] = scaled % weight_sum;
+        // 4. Every product is exact: each factor is below 2^63, so the
+        //    product is below 2^126. The part is at most `magnitude` and the
+        //    remainder below `weight_sum`, so both fit back in 64 bits.
+        let scaled = i128::from(magnitude) * i128::from(weight);
+        parts[i] = (scaled / i128::from(weight_sum)) as i64;
+        remainders[i] = (scaled % i128::from(weight_sum)) as i64;
         distributed += parts[i];
     }
 

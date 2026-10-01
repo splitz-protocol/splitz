@@ -359,6 +359,9 @@ func run(origin: String, downOrigin: String) async throws {
           arrivals.arrived.count == 1
             && arrivals.arrived[0].payment.id == afterPayment.bill.payments[0].id,
           "arrived=\(arrivals.arrived.count) short=\(arrivals.short.count)")
+    check("and nothing is held back as disputed, underpriced or unbound",
+          arrivals.disputed.isEmpty && arrivals.underpriced.isEmpty && arrivals.unbound.isEmpty,
+          "disputed=\(arrivals.disputed.count) underpriced=\(arrivals.underpriced.count)")
     let arrival = arrivals.arrived[0]
     try ana.add(try confirmPaymentEntry(facts: ana.facts(), billId: billId,
                                         paymentId: arrival.payment.id,
