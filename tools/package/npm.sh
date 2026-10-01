@@ -127,6 +127,7 @@ done
 # silently.
 PKG_FILE="$out/package.json" PKG_VERSION="$version" PKG_DESCRIPTION="$description" \
 PKG_LICENSE="$license" PKG_REPOSITORY="$repository" \
+PKG_KOFFI="$(tr -d '[:space:]' < "$root/tools/ffi/node/koffi.version")" \
 node -e '
 const fs = require("node:fs");
 const path = require("node:path");
@@ -134,6 +135,12 @@ const file = process.env.PKG_FILE;
 const dir = path.dirname(file);
 const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
 pkg.version = process.env.PKG_VERSION;
+// One exact version of the one dependency, from tools/ffi/node/koffi.version:
+// a range resolves to whatever was published that morning.
+if (!pkg.dependencies || !("koffi" in pkg.dependencies)) {
+  throw new Error("the generated package no longer depends on koffi");
+}
+pkg.dependencies.koffi = process.env.PKG_KOFFI;
 pkg.description = process.env.PKG_DESCRIPTION;
 pkg.license = process.env.PKG_LICENSE;
 // npm rewrites a bare string into this shape on publish and warns about it;

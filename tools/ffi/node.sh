@@ -46,7 +46,10 @@ rm -rf "$work/node"
 (cd "$root/rust" && "$generator" generate --out-dir "$work/node" "$library")
 cp "$root/tools/ffi/node/consumer.mjs" "$root/tools/ffi/node/doc.mjs" \
   "$root/tools/package/relay/splitz_relay.js" "$work/node/"
-(cd "$work/node" && npm install --silent --no-fund --no-audit)
+# One exact version of the generated package's one dependency: a range
+# resolves to whatever was published that morning.
+(cd "$work/node" && npm pkg set "dependencies.koffi=$(tr -d '[:space:]' < "$root/tools/ffi/node/koffi.version")" \
+  && npm install --silent --no-fund --no-audit)
 
 # shellcheck source=relay.sh
 . "$root/tools/ffi/relay.sh"

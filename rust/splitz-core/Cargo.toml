@@ -2,7 +2,7 @@
 name = "splitz-core"
 version = "1.0.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.88"
 description = "A shared-bill protocol for Zcash wallets. Exact integer money, deterministic settlement, ZIP 321 output."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/KamaIOps/Splitz-Protocol"

@@ -2,7 +2,7 @@
 name = "splitz-host"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.88"
 description = "What a Zcash wallet needs around the splitz protocol: the seam it plugs into, entry signing, sealing, the log, the sync, and where keys live."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/KamaIOps/Splitz-Protocol"

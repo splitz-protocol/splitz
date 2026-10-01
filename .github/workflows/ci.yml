@@ -65,6 +65,16 @@ jobs:
       - run: cargo test --release
         working-directory: rust
 
+  rust-minimum:
+    # The `rust-version` every crate declares, built from the lockfile a
+    # consumer resolves: a minimum nothing builds with is a guess.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88
+      - run: cargo build --locked -p splitz-core -p splitz-host -p splitz-ffi
+        working-directory: rust
+
   differential:
     # The corpus is generated from one reference, so it cannot hold a case
     # that reference is self-consistently wrong about. This lane invents

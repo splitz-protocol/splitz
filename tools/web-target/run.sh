@@ -14,12 +14,12 @@
 #
 # What refuses is dart2js itself, on the integer literals it cannot represent:
 # 9223372036854775807, i64::MAX, which bounds every amount (§2.2). Nothing else
-# in the package keeps the refusal, so the lane requires that literal among
-# the ones refused: a bound rewritten as arithmetic would compile, and this
-# lane would then say so rather than pass on some other literal.
+# in the package keeps the refusal, so the lane requires dart2js to refuse it
+# at `maxAmount`'s own declaration: the same digits elsewhere would keep the
+# lane green after the bound was rewritten as arithmetic.
 #
-# Exit status is 1 when the package compiles, or when it fails for a reason
-# other than that literal.
+# Exit status is 1 when the package compiles, or when it fails anywhere but
+# that declaration.
 
 set -uo pipefail
 
@@ -61,8 +61,12 @@ if [ "$literals" -eq 0 ]; then
 fi
 
 named="$(grep -oE "integer literal -?[0-9x]+ can't" "$work/log" | sort -u || true)"
-if ! printf '%s\n' "$named" | grep -q "literal 9223372036854775807 can't"; then
-  echo "refused for $literals literal(s), but not for i64::MAX, which bounds every amount:"
+# dart2js quotes the source line under each refusal. The one that matters is
+# the declaration of the bound itself: the same digits elsewhere in the
+# package would keep the lane green after maxAmount became arithmetic.
+if ! grep -qx "const int maxAmount = 9223372036854775807;" "$work/log"; then
+  echo "refused for $literals literal(s), but not at maxAmount's declaration,"
+  echo "which bounds every amount:"
   printf '%s\n' "$named" | sed 's/^/  /'
   exit 1
 fi

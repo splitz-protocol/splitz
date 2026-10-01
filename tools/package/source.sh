@@ -54,7 +54,12 @@ build_env_stamp() {
   local root="$1" pkg="$2" dir ndk sdk
   {
     (cd "$root/rust" && "${CARGO:-cargo}" -V && rustc -vV)
-    env | LC_ALL=C sort | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|RUSTC|RUSTC_WRAPPER|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_[A-Z_]+|CARGO_PROFILE_[A-Z_]+|CARGO_TARGET_[A-Z0-9_]+|ANDROID_API_LEVEL|ANDROID_NDK_HOME|ANDROID_HOME|IPHONEOS_DEPLOYMENT_TARGET|MACOSX_DEPLOYMENT_TARGET)=' || true
+    env | LC_ALL=C sort | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|RUSTC|RUSTC_WRAPPER|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_[A-Z_]+|CARGO_PROFILE_[A-Z_]+|CARGO_TARGET_[A-Z0-9_]+|ANDROID_API_LEVEL|ANDROID_NDK_HOME|ANDROID_HOME|IPHONEOS_DEPLOYMENT_TARGET|MACOSX_DEPLOYMENT_TARGET|UNIFFI_BINDGEN_[A-Z_]+)=' || true
+    # A generator named by path is the bytes at that path: the same path
+    # holding another build writes other bindings.
+    env | LC_ALL=C sort | sed -n 's/^UNIFFI_BINDGEN_[A-Z_]*=//p' | while read -r gen; do
+      [ -f "$gen" ] && shasum -a 256 "$gen"
+    done
     dir="$(cd "$root/rust" && pwd -P)"
     while :; do
       for f in "$dir/.cargo/config.toml" "$dir/.cargo/config"; do
