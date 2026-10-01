@@ -26,6 +26,12 @@ reach loopback; without the token it is answered 403, so a phrase goes only to
 the run that was handed the URL. The token is worthless once this process
 stops, so it may sit in that run's defines.
 
+A command line is readable by every process on the machine (`ps`), so a URL
+passed as `--dart-define` hands the token to all of them for the length of the
+run. With `--define-file PATH` the URL is written to PATH, readable by its
+owner only, and the run is given `--dart-define-from-file=PATH` instead; the
+file is deleted when this process stops.
+
 It binds to 127.0.0.1 only. A simulator reaches loopback on the host; a
 physical device does not, and that is the intended limit — a driver reachable
 off the machine is a seed phrase on a network.
@@ -35,6 +41,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -173,23 +180,41 @@ def main() -> int:
     # 0 asks the OS for a free port; the line printed at start names the one
     # bound.
     parser.add_argument("--port", type=int, default=39200)
+    parser.add_argument("--define-file", type=Path,
+                        help="write the URL here, mode 0600, for "
+                             "--dart-define-from-file")
     args = parser.parse_args()
 
     Driver.phrases = load(args.seed_file)
     Driver.token = secrets.token_urlsafe(24)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Driver)
-    print(
-        f"seed-driver: {len(Driver.phrases)} wallets on "
-        f"http://127.0.0.1:{server.server_address[1]}/{Driver.token} "
-        "— stop it when the run ends",
-        file=sys.stderr,
-    )
+    url = f"http://127.0.0.1:{server.server_address[1]}/{Driver.token}"
+    if args.define_file is not None:
+        # Created here, owner-only, and refused if something is already at
+        # the path: a file another process made could be read by it.
+        fd = os.open(args.define_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump({"SPLITS_SEED_DRIVER_URL": url}, f)
+        print(
+            f"seed-driver: {len(Driver.phrases)} wallets; run with "
+            f"--dart-define-from-file={args.define_file} "
+            "— stop it when the run ends",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"seed-driver: {len(Driver.phrases)} wallets on {url} "
+            "— stop it when the run ends",
+            file=sys.stderr,
+        )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
+        if args.define_file is not None:
+            args.define_file.unlink(missing_ok=True)
     return 0
 
 

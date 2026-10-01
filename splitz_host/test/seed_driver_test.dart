@@ -219,4 +219,67 @@ void main() {
       }
     }
   });
+
+  group('a define file', () {
+    Future<(Process, Directory, File)> start(File define) async {
+      final dir = await Directory.systemTemp.createTemp('seed-driver-define');
+      final seeds = File('${dir.path}/seeds')
+        ..writeAsStringSync('${twelveWords('zero')}\n');
+      await Process.run('chmod', ['600', seeds.path]);
+      final process = await Process.start('python3', [
+        'tool/seed-driver.py',
+        seeds.path,
+        '--port',
+        '0',
+        '--define-file',
+        define.path,
+      ]);
+      process.stdout.drain<void>();
+      process.stderr.drain<void>();
+      return (process, dir, seeds);
+    }
+
+    Future<void> until(bool Function() ready) async {
+      for (var i = 0; i < 300 && !ready(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+
+    test(
+      'holds the URL, owner-only, and is gone when the driver stops',
+      () async {
+        final home = await Directory.systemTemp.createTemp('define');
+        final define = File('${home.path}/driver.json');
+        final (process, dir, _) = await start(define);
+        await until(() => define.existsSync() && define.lengthSync() > 0);
+        final mode = await Process.run('stat', ['-f', '%Lp', define.path]);
+        expect((mode.stdout as String).trim(), '600');
+        final url =
+            (jsonDecode(define.readAsStringSync())
+                    as Map)['SPLITS_SEED_DRIVER_URL']
+                as String;
+        expect(url, startsWith('http://127.0.0.1:'));
+        final health = await ioFetch()(Uri.parse('$url/health'));
+        final answer = jsonDecode(health) as Map;
+        expect(answer['ok'], isTrue);
+        expect(answer['wallets'], 1);
+
+        process.kill(ProcessSignal.sigint);
+        await process.exitCode;
+        expect(define.existsSync(), isFalse);
+        await dir.delete(recursive: true);
+        await home.delete(recursive: true);
+      },
+    );
+
+    test('is never written over a file already at its path', () async {
+      final home = await Directory.systemTemp.createTemp('define');
+      final define = File('${home.path}/driver.json')..writeAsStringSync('x');
+      final (process, dir, _) = await start(define);
+      expect(await process.exitCode, isNot(0));
+      expect(define.readAsStringSync(), 'x');
+      await dir.delete(recursive: true);
+      await home.delete(recursive: true);
+    });
+  });
 }
