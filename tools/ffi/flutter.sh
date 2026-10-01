@@ -44,7 +44,7 @@ fi
 generator="${UNIFFI_BINDGEN_DART:-$work/tools/bin/uniffi-bindgen-dart}"
 if [ ! -x "$generator" ]; then
   "${CARGO:-cargo}" install uniffi-bindgen-dart \
-    --version "$generator_version" --root "$work/tools" --quiet
+    --version "$generator_version" --locked --root "$work/tools" --quiet
 fi
 
 pkg="$work/flutter-consumer"

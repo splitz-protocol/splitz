@@ -125,6 +125,13 @@ for pkg in ios android npm; do
          bad "" "dist/$pkg is stale: built by scripts ${built:-(unrecorded)}, now $scripts — rerun tools/package/$pkg.sh"
        fi ;;
   esac
+  build="$(build_env_stamp "$root" "$pkg")"
+  built="$(sed -n 's/^build //p' "dist/$pkg/SOURCE")"
+  if [ "$built" = "$build" ]; then
+    ok "" "dist/$pkg built with this toolchain, flags and cargo config"
+  else
+    bad "" "dist/$pkg was built with ${built:+another }${built:-an unrecorded} toolchain, flags or cargo config — rerun tools/package/$pkg.sh"
+  fi
   # The stamps name what the package was built from; this checks that what
   # is in dist/ is still what was built. A file edited or replaced after the
   # build leaves every stamp above matching.

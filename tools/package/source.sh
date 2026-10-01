@@ -43,6 +43,45 @@ script_source_stamp() {
   fi
 }
 
+# One SHA-256 over what compiles <pkg> besides its sources: the Rust
+# toolchain, every environment variable cargo reads flags, profiles or linkers
+# from, each cargo config file that applies to rust/, and the platform
+# toolchain the package script builds with. Two builds of one tree under a
+# different compiler or `RUSTFLAGS` are different binaries, so neither stamp
+# above can tell them apart. The files are hashed and never printed: a cargo
+# config may carry a registry token.
+build_env_stamp() {
+  local root="$1" pkg="$2" dir ndk sdk
+  {
+    (cd "$root/rust" && "${CARGO:-cargo}" -V && rustc -vV)
+    env | LC_ALL=C sort | grep -E '^(RUSTFLAGS|RUSTDOCFLAGS|RUSTC|RUSTC_WRAPPER|CARGO_ENCODED_RUSTFLAGS|CARGO_BUILD_[A-Z_]+|CARGO_PROFILE_[A-Z_]+|CARGO_TARGET_[A-Z0-9_]+|ANDROID_API_LEVEL|ANDROID_NDK_HOME|ANDROID_HOME|IPHONEOS_DEPLOYMENT_TARGET|MACOSX_DEPLOYMENT_TARGET)=' || true
+    dir="$(cd "$root/rust" && pwd -P)"
+    while :; do
+      for f in "$dir/.cargo/config.toml" "$dir/.cargo/config"; do
+        [ -f "$f" ] && { echo "== $f"; cat "$f"; }
+      done
+      [ "$dir" = / ] && break
+      dir="$(dirname "$dir")"
+    done
+    for f in "${CARGO_HOME:-$HOME/.cargo}/config.toml" "${CARGO_HOME:-$HOME/.cargo}/config"; do
+      [ -f "$f" ] && { echo "== $f"; cat "$f"; }
+    done
+    case "$pkg" in
+      ios) xcodebuild -version 2>/dev/null || true ;;
+      android)
+        ndk="${ANDROID_NDK_HOME:-}"
+        if [ -z "$ndk" ]; then
+          sdk="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+          ndk="$(ls -d "$sdk"/ndk/* 2>/dev/null | sort -V | tail -1 || true)"
+        fi
+        echo "ndk $ndk"
+        [ -f "$ndk/source.properties" ] && cat "$ndk/source.properties"
+        ;;
+      npm) node --version 2>/dev/null || true ;;
+    esac
+  } | shasum -a 256 | cut -d' ' -f1
+}
+
 # One SHA-256 over what <dir> holds: each file's path and its own SHA-256, in
 # byte order of path. SOURCE itself is left out, and so is what a later tool
 # run adds beside the package — build/, .gradle/, node_modules/ — so building
@@ -54,11 +93,11 @@ dist_digest() {
     LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -d' ' -f1
 }
 
-# Records both stamps, taken before the build, and the digest of what the
+# Records the three stamps, taken before the build, and the digest of what the
 # build left, into <dir>/SOURCE. Called last, so a build that fails leaves no
 # stamp claiming it finished.
 write_source_stamp() {
-  local dir="$1" stamp="$2" root="$3" scripts="$4"
-  printf 'rust-tree %s\nscripts %s\ncommit %s\nfiles %s\n' "$stamp" "$scripts" \
-    "$(git -C "$root" rev-parse HEAD)" "$(dist_digest "$dir")" >"$dir/SOURCE"
+  local dir="$1" stamp="$2" root="$3" scripts="$4" build="$5"
+  printf 'rust-tree %s\nscripts %s\nbuild %s\ncommit %s\nfiles %s\n' "$stamp" "$scripts" \
+    "$build" "$(git -C "$root" rev-parse HEAD)" "$(dist_digest "$dir")" >"$dir/SOURCE"
 }

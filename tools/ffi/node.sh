@@ -37,7 +37,7 @@ fi
 generator="${UNIFFI_BINDGEN_NODE_JS:-$work/tools/bin/uniffi-bindgen-node-js}"
 if [ ! -x "$generator" ]; then
   "${CARGO:-cargo}" install uniffi-bindgen-node-js \
-    --version "$generator_version" --root "$work/tools" --quiet
+    --version "$generator_version" --locked --root "$work/tools" --quiet
 fi
 
 rm -rf "$work/node"

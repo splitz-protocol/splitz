@@ -22,6 +22,7 @@ out="$root/dist/ios"
 target_dir="$(cargo_target_dir "$root")"
 stamp="$(rust_source_stamp "$root")"
 scripts="$(script_source_stamp "$root" ios)"
+build="$(build_env_stamp "$root" ios)"
 DEVICE=aarch64-apple-ios
 SIMS=(aarch64-apple-ios-sim x86_64-apple-ios)
 # macOS too: this wallet ships a desktop build, and a package that declares
@@ -141,5 +142,5 @@ lipo -info "$out/mac/libsplitz_ffi.a" | sed 's/^/  mac:    /'
 echo "  a consumer depends on it with:"
 echo "    .package(path: \"$pkg\")"
 
-write_source_stamp "$out" "$stamp" "$root" "$scripts"
+write_source_stamp "$out" "$stamp" "$root" "$scripts" "$build"
 echo "  source:    rust tree $stamp, scripts $scripts (dist/ios/SOURCE)"

@@ -12,8 +12,14 @@
 # build is the correct behaviour, and this lane exists to notice if that ever
 # stops happening.
 #
+# What refuses is dart2js itself, on the integer literals it cannot represent:
+# 9223372036854775807, i64::MAX, which bounds every amount (§2.2). Nothing else
+# in the package keeps the refusal, so the lane requires that literal among
+# the ones refused: a bound rewritten as arithmetic would compile, and this
+# lane would then say so rather than pass on some other literal.
+#
 # Exit status is 1 when the package compiles, or when it fails for a reason
-# other than the integer literals.
+# other than that literal.
 
 set -uo pipefail
 
@@ -54,6 +60,12 @@ if [ "$literals" -eq 0 ]; then
   exit 1
 fi
 
+named="$(grep -oE "integer literal -?[0-9x]+ can't" "$work/log" | sort -u || true)"
+if ! printf '%s\n' "$named" | grep -q "literal 9223372036854775807 can't"; then
+  echo "refused for $literals literal(s), but not for i64::MAX, which bounds every amount:"
+  printf '%s\n' "$named" | sed 's/^/  /'
+  exit 1
+fi
 echo "refused, as expected: $literals integer literal(s) a JS number cannot hold"
-grep -o "The integer literal [0-9]* can't" "$work/log" | sort -u | sed 's/^/  /'
+printf '%s\n' "$named" | sed 's/^/  /'
 exit 0

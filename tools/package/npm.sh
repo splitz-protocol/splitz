@@ -33,6 +33,7 @@ out="$root/dist/npm"
 . "$root/tools/package/source.sh"
 stamp="$(rust_source_stamp "$root")"
 scripts="$(script_source_stamp "$root" npm)"
+build="$(build_env_stamp "$root" npm)"
 work="${NPM_WORK:-$(mktemp -d)}"
 # Pinned with tools/ffi/node.sh: every generator outside the uniffi tree
 # targets uniffi 0.31, which is the version this crate pins.
@@ -79,7 +80,7 @@ generator="${UNIFFI_BINDGEN_NODE_JS:-$work/tools/bin/uniffi-bindgen-node-js}"
 if [ ! -x "$generator" ]; then
   echo "installing uniffi-bindgen-node-js $generator_version"
   "${CARGO:-cargo}" install uniffi-bindgen-node-js \
-    --version "$generator_version" --root "$work/tools" --quiet
+    --version "$generator_version" --locked --root "$work/tools" --quiet
 fi
 
 rm -rf "$out"
@@ -175,5 +176,5 @@ echo "  platform:  $target only — no other prebuild is in this package"
 echo "  a consumer depends on it with:"
 echo "    npm install $out/$tarball"
 
-write_source_stamp "$out" "$stamp" "$root" "$scripts"
+write_source_stamp "$out" "$stamp" "$root" "$scripts" "$build"
 echo "  source:    rust tree $stamp, scripts $scripts (dist/npm/SOURCE)"
