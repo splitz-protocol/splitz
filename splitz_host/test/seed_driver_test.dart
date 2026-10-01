@@ -252,8 +252,9 @@ void main() {
         final define = File('${home.path}/driver.json');
         final (process, dir, _) = await start(define);
         await until(() => define.existsSync() && define.lengthSync() > 0);
-        final mode = await Process.run('stat', ['-f', '%Lp', define.path]);
-        expect((mode.stdout as String).trim(), '600');
+        // The permission bits, read through Dart rather than `stat`, whose
+        // flags differ between BSD and GNU.
+        expect(define.statSync().mode & 0x1ff, 0x180, reason: 'mode 0600');
         final url =
             (jsonDecode(define.readAsStringSync())
                     as Map)['SPLITS_SEED_DRIVER_URL']
