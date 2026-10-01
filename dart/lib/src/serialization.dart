@@ -331,12 +331,7 @@ String _string(Object? value) {
   return value;
 }
 
-int _integer(Object? value) {
-  if (value is! int) {
-    raise(SplitCode.billTypeError, 'Expected an integer, got $value');
-  }
-  return value;
-}
+int _integer(Object? value) => documentInteger(value);
 
 /// §10.7. A key a participant id is derived from, so it is one: 32 bytes,
 /// canonical unpadded base64url.

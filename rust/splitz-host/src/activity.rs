@@ -96,7 +96,15 @@ pub fn activity_of(
     // rather than inside `event`.
     let mut joined: BTreeSet<String> = BTreeSet::new();
     let mut events = Vec::with_capacity(entries.len());
+    // One line per entry, not per copy: section 10.2's union keeps copies of
+    // an id under different signatures, and section 9.5 makes them agree in
+    // every member a line shows. A copy read twice doubles an expense and
+    // turns a join into a changed address.
+    let mut seen: HashSet<&str> = HashSet::new();
     for entry in entries {
+        if !seen.insert(entry.get("id").and_then(Value::as_str).unwrap_or_default()) {
+            continue;
+        }
         let mut rejoined = false;
         if entry.get("kind").and_then(Value::as_str) == Some("joinBill") {
             let participant = entry.get("participant");

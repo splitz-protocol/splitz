@@ -20,10 +20,10 @@ publish = false
 include = ["src/**", "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE"]
 
 [dependencies]
-# `arbitrary_precision` keeps a number's text, so `-0` reads as the integer
-# 0 it is to every other reader, and a number no double holds reaches
-# §10.1's refusal instead of failing the parse (§2.2, §9.3).
-serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }
+# No `arbitrary_precision`: Cargo unifies features, so it would change how
+# every crate a wallet builds with this one parses numbers. `parse_json`
+# reads `-0` and numbers no double holds as §2.2 and §9.3 do, on the text.
+serde_json = { version = "1", features = ["preserve_order"] }
 
 [dev-dependencies]
 # The canonical ZIP 321 implementation, used only as an external oracle in

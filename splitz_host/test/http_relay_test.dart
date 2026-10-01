@@ -272,6 +272,26 @@ void main() {
     },
   );
 
+  test('a push past one body is split into bodies that each fit', () {
+    // 600 blobs at the per-blob cap are about 39 MB of JSON: past one body.
+    final blobs = [
+      for (var i = 0; i < 600; i++)
+        '${i.toString().padLeft(5, '0')}${'b' * (HttpSplitsRelay.maxBlobChars - 5)}',
+    ];
+    final bodies = HttpSplitsRelay.pushBodies(blobs);
+    expect(bodies.length, greaterThan(1));
+    for (final body in bodies) {
+      expect(
+        utf8.encode(body).length,
+        lessThanOrEqualTo(HttpSplitsRelay.maxBodyBytes),
+      );
+    }
+    expect([
+      for (final body in bodies) ...(jsonDecode(body)['blobs'] as List),
+    ], blobs);
+    expect(HttpSplitsRelay.pushBodies(const []), isEmpty);
+  });
+
   test('a blob over the cap is refused before it is sent', () async {
     await expectLater(
       () => relay.push(SplitsChannel.forBill('b1'), [

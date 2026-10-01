@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::Result;
 use crate::obligation::{
-    choose_payouts, render_obligation, withholdings, Awaiting, Obligation, Unpayable,
+    choose_payouts, render_reading, withholdings, Awaiting, Obligation, Unpayable,
 };
 use crate::rate::ExchangeRate;
 use crate::serialization::rate_to_json;
@@ -179,7 +179,9 @@ pub fn obligation_via(
     // Checked before anything is rendered, so a choice that names nobody is
     // refused whether or not this device owes anything.
     let chosen = choose_payouts(&folded.bill, via)?;
-    let request = render_obligation(&split.carried, &chosen, rate, true, false)?;
+    let request = render_reading(&split.carried, &chosen, rate, true, false, &|a| {
+        host.reads_address(a)
+    })?;
 
     Ok(Some(PayerObligation {
         settlements: split.carried,
@@ -197,8 +199,11 @@ pub fn obligation_via(
 /// vouched for, and the fold sets the second aside as `duplicate_payment` —
 /// losing the record of a payment that was made. The transaction itself goes
 /// in the record's `reference`, which is what `onChain` reads.
-pub fn payment_id_for_send(txid: &str, to: &str) -> String {
-    format!("{txid}:{to}")
+///
+/// `from` is the payer who writes the record, and the id is theirs under
+/// [`authored_id`](super::entries::authored_id).
+pub fn payment_id_for_send(from: &str, txid: &str, to: &str) -> String {
+    super::entries::authored_id(from, &format!("{txid}:{to}"))
 }
 
 /// Sends `obligation` and records that it was sent.
@@ -306,7 +311,7 @@ pub fn record_send(
     let bill_id = log.bill_id()?;
     let mut records = Vec::new();
     for (to, amount) in carried {
-        let payment_id = payment_id_for_send(txid, to);
+        let payment_id = payment_id_for_send(host.me(), txid, to);
         let unsigned = record_payment(
             host,
             &payment_id,

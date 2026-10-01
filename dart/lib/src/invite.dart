@@ -7,7 +7,10 @@ library;
 
 import 'dart:convert';
 
+import 'authority.dart' show canonicalBytes;
 import 'errors.dart';
+import 'log.dart' show deriveBillId;
+import 'sha256.dart';
 
 const String _prefix = 'splitz://join';
 const String _linkScheme = 'https://';
@@ -74,19 +77,28 @@ String _percentDecode(String value) {
   final raw = utf8.encode(value);
   var i = 0;
   while (i < raw.length) {
-    if (raw[i] == 0x25 && i + 2 < raw.length) {
-      final hex = String.fromCharCodes(raw.sublist(i + 1, i + 3));
-      final byte = int.tryParse(hex, radix: 16);
-      if (byte != null) {
-        out.add(byte);
-        i += 3;
-        continue;
-      }
+    // §11.1: `%` then exactly two hexadecimal digits. Anything else stays
+    // literal; a parser that accepts a sign or a space reads `% 4` as a byte.
+    if (raw[i] == 0x25 &&
+        i + 2 < raw.length &&
+        _hexDigit(raw[i + 1]) != null &&
+        _hexDigit(raw[i + 2]) != null) {
+      out.add(_hexDigit(raw[i + 1])! * 16 + _hexDigit(raw[i + 2])!);
+      i += 3;
+      continue;
     }
     out.add(raw[i]);
     i++;
   }
   return utf8.decode(out, allowMalformed: true);
+}
+
+/// The value of one ASCII hexadecimal digit, or null.
+int? _hexDigit(int byte) {
+  if (byte >= 0x30 && byte <= 0x39) return byte - 0x30;
+  if (byte >= 0x41 && byte <= 0x46) return byte - 0x41 + 10;
+  if (byte >= 0x61 && byte <= 0x66) return byte - 0x61 + 10;
+  return null;
 }
 
 bool _isB64Url(String value) {
@@ -282,4 +294,47 @@ String renderInviteLink(Invite invite, String base) {
 bool isInviteExpired(Invite invite, int nowUnixSeconds) {
   final expiry = invite.expiry;
   return expiry != null && expiry < nowUnixSeconds;
+}
+
+/// The domain [billKeyDigest] hashes under (§9.4).
+const String billKeyDigestDomain = 'splitz-bill-key-v1';
+
+/// What a `createBill` states as `keyDigest` for [key] (§9.4): SHA-256 of
+/// [billKeyDigestDomain] then the key's 32 bytes, as unpadded base64url.
+/// Null when [key] is not a bill key.
+///
+/// The bill id is the digest of the create entry, so the key an invite
+/// carries is checked against the bill it names: a key somebody else made,
+/// handed over with a real bill's id, opens a version of the bill only its
+/// holder sees.
+String? billKeyDigest(String key) {
+  final bytes = canonicalBytes(key, 32);
+  if (bytes == null) return null;
+  final digest = sha256([...utf8.encode(billKeyDigestDomain), ...bytes]);
+  return base64Url.encode(digest).replaceAll('=', '');
+}
+
+/// Whether [key] is the one [create] was made with: null when [create]
+/// states no `keyDigest`, and so commits to none.
+bool? keyFitsBill(Map<String, dynamic> create, String key) {
+  final stated = create['keyDigest'];
+  if (stated is! String) return null;
+  return billKeyDigest(key) == stated;
+}
+
+/// §9.4. Whether [entry] is [billId]'s own create and commits to a key other
+/// than [key].
+///
+/// Its own: a `createBill` whose id is [billId] **and derives from it**. The
+/// id member is whatever its writer typed, so a create that merely states
+/// [billId] proves nothing, and anybody holding the key could otherwise seal
+/// one with another `keyDigest` and have every device refuse the real bill.
+bool createRefusesKey(Map<String, dynamic> entry, String billId, String key) {
+  if (entry['kind'] != 'createBill' || entry['id'] != billId) return false;
+  try {
+    if (deriveBillId(entry) != billId) return false;
+  } on SplitError {
+    return false;
+  }
+  return keyFitsBill(entry, key) == false;
 }

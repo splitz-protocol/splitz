@@ -136,6 +136,23 @@ void main() {
         SettleLane.none,
       );
     });
+
+    test('a swap payout missing its address, asset or chain is nobody to pay',
+        () {
+      SettleLane swap({String? asset, String? chain, String? address}) =>
+          laneFor(splitz.Participant(id: 'cara', name: 'Cara', payouts: [
+            splitz.Payout(
+                type: 'swap', asset: asset, chain: chain, address: address),
+          ]));
+      expect(swap(asset: 'USDC', chain: 'near', address: ''), SettleLane.none);
+      expect(
+          swap(asset: 'USDC', chain: 'near', address: '  '), SettleLane.none);
+      expect(swap(asset: 'USDC', chain: 'near'), SettleLane.none);
+      expect(swap(asset: 'USDC', address: 'cai.near'), SettleLane.none);
+      expect(swap(chain: 'near', address: 'cai.near'), SettleLane.none);
+      expect(swap(asset: 'USDC', chain: 'near', address: 'cai.near'),
+          SettleLane.swap);
+    });
   });
 
   group('the request carries the zec lane and reports the rest (§8.5)', () {
@@ -208,7 +225,7 @@ void main() {
           .map((r) => r['payment'] as Map<String, dynamic>)
           .singleWhere((p) => p['to'] == 'cara');
       expect(cara['method'], 'shieldedZec');
-      expect(cara['id'], paymentIdForSend(settled.txid!, 'cara'));
+      expect(cara['id'], paymentIdForSend(b.ana.me, settled.txid!, 'cara'));
       expect(cara['reference'], settled.txid);
       // No entry rewrote her preferences: every device still reads USDC first.
       final after = b.log.fold().bill.participant('cara')!;
@@ -234,7 +251,8 @@ void main() {
       expect(settled.result, SendResult.sent);
       final payment = settled.records.single['payment'] as Map<String, dynamic>;
       expect(payment['method'], 'shieldedZec');
-      expect(payment['id'], paymentIdForSend(settled.txid!, 'ben'));
+      expect(
+          payment['id'], paymentIdForSend(bill.ana.me, settled.txid!, 'ben'));
       expect(payment['to'], 'ben');
       // §10.5: the record carries its own id and the transaction is the
       // reference, which is what an `onChain` confirmation is checked against.
@@ -261,8 +279,8 @@ void main() {
 
       // It is on the bill, and §10.5 has not settled it: a record is a claim.
       final folded = bill.log.fold();
-      expect(folded.bill.payments.map((p) => p.id), contains('cash-dan-1'));
-      expect(folded.bill.confirmedPayments, isNot(contains('cash-dan-1')));
+      expect(folded.bill.payments.map((p) => p.id), contains('ana:cash-dan-1'));
+      expect(folded.bill.confirmedPayments, isNot(contains('ana:cash-dan-1')));
     });
 
     test('a swap settlement records the intent id, not a txid', () {
@@ -286,21 +304,21 @@ void main() {
       // §9.2: the reference identifies the swap. A reader that renders it as
       // a Zcash transaction is wrong for every swap.
       expect(payment['reference'], 'near-intent-7f3a');
-      expect(payment['id'], 'near-intent-7f3a');
+      expect(payment['id'], 'ana:near-intent-7f3a');
       // Verifiable only in half: the ZEC leg is recorded, the delivery is not.
       expect(payment['zatoshi'], 1000000);
       expect(payment['note'], 'USDC on base');
 
       final folded = bill.log.fold();
-      final paid =
-          folded.bill.payments.firstWhere((p) => p.id == 'near-intent-7f3a');
+      final paid = folded.bill.payments
+          .firstWhere((p) => p.id == 'ana:near-intent-7f3a');
       expect(paid.method, 'swap');
       expect(paid.reference, 'near-intent-7f3a');
       expect(paid.zatoshi, 1000000);
       // The ZEC leg leaving is not the recipient being paid. Only Cara can
       // say that, and she has not.
-      expect(
-          folded.bill.confirmedPayments, isNot(contains('near-intent-7f3a')));
+      expect(folded.bill.confirmedPayments,
+          isNot(contains('ana:near-intent-7f3a')));
     });
 
     test('all three methods coexist on one bill and net the same way', () {

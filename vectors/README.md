@@ -1,6 +1,6 @@
 # Conformance vectors
 
-855 cases across 21 files. An implementation is conformant when it reproduces
+880 cases across 22 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape
@@ -53,6 +53,7 @@ Objects keyed by participant id are compared by content, not by key order.
 | `seal.json` | `entry`, or `billId` | the plaintext and nonce it seals under, or the channel |
 | `withholdings.json` | `plan`, `bill`, `payer`, `contested`, `payAnyway` | what a request carries, and what is held back |
 | `delta.json` | `log`, `theyHave` | nothing missing, one square, or past the cap |
+| `scan.json` | `text` | a bill code read, or refused when its key is not the bill's (§9.4) |
 | `messages.json` | `code` | the sentence a host may show for it |
 
 Two cases in `zip321.json` carry `repeatPayment` and `paymentCount` instead of

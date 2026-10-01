@@ -24,11 +24,11 @@ pub mod settle_flow;
 pub mod sharing;
 pub mod totals;
 
-pub use arrivals::{arrivals_for, Arrival, Arrivals, IncomingTransaction};
+pub use arrivals::{arrivals_for, txid_key, Arrival, Arrivals, IncomingTransaction};
 pub use bill_log::{BillLog, FoldedBill};
 pub use entries::{
-    add_expense, amend_entry, base64url_no_pad, confirm_payment, create_bill, join_bill,
-    record_payment, set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION,
+    add_expense, amend_entry, authored_id, base64url_no_pad, confirm_payment, create_bill,
+    join_bill, record_payment, set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION,
     NONCE_BYTES,
 };
 pub use host::{BillHost, SendResult, Sent, SignEntry, VerifyEntry};

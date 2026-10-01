@@ -568,7 +568,7 @@ FOLD_CASES = [
               "at": AT(6),
               "rate": {"currency": "EUR", "minorUnitsPerZec": 950000,
                        "at": AT(6)}},
-             {"v": 1, "id": "r2", "author": "ben", "kind": "setRate",
+             {"v": 1, "id": "r2", "author": "ana", "kind": "setRate",
               "at": AT(7),
               "rate": {"currency": "EUR", "minorUnitsPerZec": 990000,
                        "at": AT(7)}}], C["id"]),
@@ -667,8 +667,8 @@ ENTRY_CASES = [
     # would fail to parse and take the whole corpus down rather than test one
     # rule, which is the same reason §12 gives for `bill_not_scalar_values`.
     # Each suite carries that case itself.
-    ("an_entry_at_the_depth_limit", at_depth(64)),
-    ("an_entry_one_level_too_deep", at_depth(65)),
+    ("an_entry_at_the_depth_limit", at_depth(62)),
+    ("an_entry_one_level_too_deep", at_depth(63)),
     ("a_create_entry_with_no_key", {k: v for k, v in C.items() if k != "creatorKey"}),
     ("a_create_entry_with_a_short_nonce", dict(C, nonce=b64url(b"n" * 8))),
     # §9.4. A key that is not its bytes' canonical encoding is refused, so one
@@ -699,6 +699,12 @@ for _kind, _member in (("joinBill", "participant"), ("addExpense", "expense"),
                          "at": AT(6), _member: 5}))
 
 ENTRY_CASES += [
+    # §10.1's order among a create's members: its currency is decided before
+    # whether it is bound, so a create wrong in both ways is refused the same
+    # way by every reader.
+    ("a_create_with_a_bad_currency_and_no_nonce",
+     (lambda e: dict(e, id=derive_bill_id(e)))(
+         {k: v for k, v in dict(create(), currency="eur").items() if k not in ("id", "nonce")})),
     # §9.5. An id anyone may choose is an id anyone may take.
     ("an_entry_whose_id_is_chosen_rather_than_derived", dict(J_ANA, id="j1")),
 
@@ -943,6 +949,58 @@ FOLD_CASES += [
 ]
 
 
+# §10.3 step 5. An id its author minted (the author's id, `:`, anything) is
+# theirs whatever `at` another entry states; a copy of it in somebody else's
+# entry is set aside. An id nobody minted still goes to the first by §10.2.
+def owned_expense(eid, author, xid, amount, minute):
+    return {"v": 1, "id": eid, "author": author, "kind": "addExpense",
+            "at": AT(minute),
+            "expense": {"id": xid, "paidBy": author, "amount": amount,
+                        "at": AT(minute),
+                        "split": {"type": "exact", "amounts": {"ana": amount // 2,
+                                                               "ben": amount - amount // 2}}}}
+
+
+FOLD_CASES += [
+    ("an_expense_id_its_author_minted_stands_over_a_backdated_copy",
+     BASE + [owned_expense("xa", "ana", "ana:hotel", 30000, 20),
+             owned_expense("xb", "ben", "ana:hotel", 2, 8)], C["id"]),
+    ("and_an_expense_id_nobody_minted_goes_to_the_first",
+     BASE + [owned_expense("xa", "ana", "hotel", 30000, 20),
+             owned_expense("xb", "ben", "hotel", 2, 8)], C["id"]),
+    ("a_payment_id_its_author_minted_stands_over_a_backdated_copy",
+     BASE + [payment("q1", "ben", "ben", "ana", 4500, 20, "ben:t1:ana"),
+             payment("q2", "ana", "ben", "ana", 1, 8, "ben:t1:ana")], C["id"]),
+    ("a_pair_total_is_bounded_per_author",
+     BASE + [payment("q1", "ana", "ben", "ana", I64_MAX, 8, "ana:big"),
+             payment("q2", "ben", "ben", "ana", 4500, 20, "ben:t1:ana")], C["id"]),
+]
+
+# An author whose id holds `:` mints nothing: `ben:t1` would otherwise mint
+# `ben:t1:ana`, the id of Ben's own send record, and its backdated copy would
+# set Ben's aside.
+def colon_join(eid, pid):
+    return {"v": 1, "id": eid, "author": pid, "kind": "joinBill", "at": AT(2),
+            "participant": {"id": pid, "name": "Mal"}}
+
+
+FOLD_CASES += [
+    ("a_participant_id_holding_a_colon_mints_no_payment_id",
+     BASE + [colon_join("jm", "ben:t1"),
+             payment("q1", "ben", "ben", "ana", 4500, 20, "ben:t1:ana"),
+             payment("q2", "ben:t1", "ben:t1", "ana", 1, 8, "ben:t1:ana")],
+     C["id"]),
+    ("and_mints_no_expense_id",
+     BASE + [colon_join("jm", "ana:x"),
+             owned_expense("xa", "ana", "ana:x:hotel", 30000, 20),
+             owned_expense("xb", "ana:x", "ana:x:hotel", 2, 8)], C["id"]),
+    ("and_still_records_a_payment_under_an_id_nobody_minted",
+     BASE + [colon_join("jm", "ben:t1"),
+             payment("q2", "ben:t1", "ben:t1", "ana", 1, 8, "ben:t1:own")],
+     C["id"]),
+]
+
+
 def rate(eid, author, per, minute, at=None):
     return {"v": 1, "id": eid, "author": author, "kind": "setRate",
             "at": at or AT(minute),
@@ -969,6 +1027,15 @@ FOLD_CASES += [
      BASE + [rate("ra", "ana", 950000, 6),
              rate("rf", "ben", 1, 7, at="2036-10-28T19:07:00.000Z"),
              void("vr", "ana", "rf", 8)], C["id"]),
+    # §10.1. The creator's rate stands over one anybody else dates ahead of
+    # it; anybody else's decides only while the creator has set none.
+    ("the_creators_rate_stands_over_one_dated_ahead_by_somebody_else",
+     BASE + [rate("ra", "ana", 950000, 6),
+             rate("rf", "ben", 1, 7, at="2036-10-28T19:07:00.000Z")], C["id"]),
+    ("and_the_creators_next_rate_replaces_it",
+     BASE + [rate("ra", "ana", 950000, 6),
+             rate("rf", "ben", 1, 7, at="2036-10-28T19:07:00.000Z"),
+             rate("rb", "ana", 960000, 8)], C["id"]),
     ("a_stranger_may_not_withdraw_a_rate",
      BASE + [J_DEE, rate("ra", "ana", 950000, 6), void("vr", "dee", "ra", 8)],
      C["id"]),
@@ -979,7 +1046,7 @@ FOLD_CASES += [
      BASE + [rate("rl", "ben", 1, 6, at="2026-10-28t19:06:00.000Z"),
              rate("ru", "ana", 950000, 7)], C["id"]),
     ("two_spellings_of_one_instant_are_ordered_by_their_text",
-     BASE + [rate("rl", "ben", 1, 6, at="2026-10-28t19:06:00.000z"),
+     BASE + [rate("rl", "ana", 1, 6, at="2026-10-28t19:06:00.000z"),
              rate("ru", "ana", 950000, 6)], C["id"]),
 
     # §10.4. An amendment that cannot be applied is set aside and its target

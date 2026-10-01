@@ -16,8 +16,9 @@ import 'support/process_port.dart';
 /// against a server written in the same file would prove they agree with each
 /// other, so this runs the server this repository ships, as a process, over a
 /// socket.
-Future<({Process process, int port})> _relay([List<String> extra = const []]) =>
-    startOnFreePort('../tools/relay/server.py', extra);
+Future<({Process process, int port, String url})> _relay([
+  List<String> extra = const [],
+]) => startOnFreePort('../tools/relay/server.py', extra);
 
 ({JsonPost post, JsonGet get}) _io() {
   final client = HttpClient();

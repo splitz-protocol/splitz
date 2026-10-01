@@ -226,10 +226,7 @@ Map<String, int> _intMap(Object? value) {
   return {for (final e in value.entries) e.key as String: _int(e.value)};
 }
 
-int _int(Object? value) {
-  if (value is int) return value;
-  raise(SplitCode.billTypeError, 'An amount is an integer, got $value');
-}
+int _int(Object? value) => documentInteger(value);
 
 Map<String, int> _zip(List<String> ids, List<int> parts) =>
     {for (var i = 0; i < ids.length; i++) ids[i]: parts[i]};

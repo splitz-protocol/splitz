@@ -65,14 +65,45 @@ void main(List<String> args) {
   final ana = Device(1);
   final ben = Device(90);
 
+  // Top-level bytes cross in a record: one generator writes a bare byte
+  // string without its length, and the same mnemonic would then derive
+  // another identity here than in Kotlin or Swift. Pinned in Rust.
+  check(
+    'a seed derived from a secret is the one the protocol pins',
+    identitySeedFromSecret(SecretBytes(bytes: Uint8List.fromList([1, 2, 3]))) ==
+        'MNp3HJmtVUpkGFp2KXoi4ysYoDqKi9Sf4upQw5qvOps',
+    'MNp3…',
+  );
+  check(
+    'and a long secret whose first byte is high crosses whole',
+    identitySeedFromSecret(
+          SecretBytes(bytes: Uint8List.fromList(List.filled(64, 0xAB))),
+        ) ==
+        'zHlJI6Xb7tQXjLuwAoEwVjjVEB8jPs5DA_NhM50W1YM',
+    'zHlJ…',
+  );
+
   print('ana opens a bill and joins it');
   final anaKey = ana.key;
+  final random = Random.secure();
+  final billKey = newBillKey(
+    RandomBytes(
+      bytes: Uint8List.fromList(List.generate(32, (_) => random.nextInt(256))),
+    ),
+  );
+  check(
+    'that key is one the cipher can use',
+    billKeyProblem(billKey) == null,
+    billKey,
+  );
+  // The key is minted first: the create entry commits to it (§9.4).
   final create = createBillEntry(
     ana.facts(),
     'Dinner',
     'EUR',
     'equal',
     anaKey,
+    billKey,
     ana.signingSeed(),
   );
   ana.add(create);
@@ -105,10 +136,8 @@ void main(List<String> args) {
       ben.signingSeed(),
     ),
   );
-  // What ana holds, as she would report it: the ids of her entries.
-  final anaHolds = [
-    for (final e in historyOf(ana.facts(), billId, ana.entries)) e.entryId,
-  ];
+  // What ana holds, as she would report it: one key per copy (§14.5).
+  final anaHolds = [for (final e in ana.entries) copyKey(e)];
   final behind = deltaForPeer(ben.facts(), billId, ben.entries, anaHolds);
   check(
     'ana lacks only ben\'s join, and it fits one code',
@@ -117,17 +146,6 @@ void main(List<String> args) {
   );
 
   print('the bill key is minted from the platform\'s entropy, and invites');
-  final random = Random.secure();
-  final billKey = newBillKey(
-    RandomBytes(
-      bytes: Uint8List.fromList(List.generate(32, (_) => random.nextInt(256))),
-    ),
-  );
-  check(
-    'that key is one the cipher can use',
-    billKeyProblem(billKey) == null,
-    billKey,
-  );
   final invite = inviteForBill(
     ana.facts(),
     billId,
@@ -137,6 +155,19 @@ void main(List<String> args) {
     1800000000,
   );
   final link = renderInviteLink(invite, 'https://example.org/join');
+  final stranger = newBillKey(
+    RandomBytes(
+      bytes: Uint8List.fromList(List.generate(32, (_) => random.nextInt(256))),
+    ),
+  );
+  check(
+    'a bill code carrying some other key is refused',
+    readScanned(
+          shareableBillPayload(ana.facts(), billId, ana.entries, stranger)!,
+        ).refusedCode ==
+        'invite_key_mismatch',
+    'invite_key_mismatch',
+  );
   check(
     'the invite reads back from an https link',
     readScanned(link).billId == billId,
@@ -293,6 +324,17 @@ void main(List<String> args) {
     '${afterPayment.bill.confirmedPayments}',
   );
   final paid = afterPayment.bill.payments.single;
+  final mine = awaitingMyConfirmation(ana.facts(), billId, ana.entries);
+  check(
+    'ana is shown it as hers to confirm',
+    mine.map((p) => p.id).toList().toString() == [paid.id].toString(),
+    '${mine.map((p) => p.id).toList()}',
+  );
+  check(
+    'and ben, who paid it, is shown nothing to confirm',
+    awaitingMyConfirmation(ben.facts(), billId, ben.entries).isEmpty,
+    'none',
+  );
   // This record was written by hand, with no ZEC figure, rate or reference:
   // the screen says so in the wallet's own words.
   final zatoshi = paid.zatoshi;
@@ -361,6 +403,56 @@ void main(List<String> args) {
     'once confirmed, the debt is gone',
     settled.settlements.isEmpty && settled.awaiting.isEmpty,
     'settlements=${settled.settlements.length} awaiting=${settled.awaiting.length}',
+  );
+
+  print('before signing, the wallet holds what it read against the request');
+  final ask = owed.request.payments.single;
+  final anaAddress = folded.bill.participants
+      .firstWhere((p) => p.id == ana.me)
+      .payTo!;
+  check(
+    'a reading that matches has nothing to say',
+    proposalProblem(owed.request.uri!, [
+          ProposedOutput(address: anaAddress, zatoshi: ask.zatoshi),
+        ]) ==
+        null,
+    'none',
+  );
+  final problem = proposalProblem(owed.request.uri!, const []);
+  check(
+    'one that dropped the payment is a sentence, so nothing is built',
+    problem != null && problem.isNotEmpty,
+    '$problem',
+  );
+
+  print('a swap provider\'s answer is read by its status first');
+  check(
+    'a 2xx body is the answer',
+    swapAnswer(200, '{"quote":1}') == '{"quote":1}',
+    'read',
+  );
+  SplitzErrorExceptionHost? refusedBy(void Function() call) {
+    try {
+      call();
+      return null;
+    } on SplitzErrorExceptionHost catch (e) {
+      return e;
+    }
+  }
+
+  final noRoute = refusedBy(() => swapAnswer(400, '{"message":"no route"}'));
+  check(
+    'a 4xx is refused with the provider\'s own words, and waiting will not help',
+    noRoute != null &&
+        noRoute.detail.contains('no route') &&
+        !noRoute.transient,
+    '${noRoute?.detail}',
+  );
+  final upstream = refusedBy(() => swapAnswer(503, 'upstream down'));
+  check(
+    'a 5xx is refused as one to try again',
+    upstream?.transient == true,
+    '${upstream?.detail}',
   );
 
   print('the log reads as a history');

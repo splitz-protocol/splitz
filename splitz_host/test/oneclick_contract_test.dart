@@ -126,6 +126,34 @@ void main() {
       expect(declares('GetExecutionStatusResponse.destinationTxHash'), isFalse);
     });
 
+    test('a floor below the tolerance asked for is refused', () async {
+      // The captured answer at its own floor reads; one unit under the bound
+      // it rounds to does not.
+      final raw = fixture('quote.json') as Map<String, dynamic>;
+      final issued = raw['quote'] as Map<String, dynamic>;
+      final out = BigInt.parse(issued['amountOut'] as String);
+      final bound = out * BigInt.from(9900) ~/ BigInt.from(10000);
+      OneClickSwaps answering(BigInt floor) => OneClickSwaps(
+        origin: Uri.parse('https://1click.chaindefuser.com'),
+        zecAssetId: 'nep141:zec.omft.near',
+        deadline: () => '2026-10-28T19:40:00.000Z',
+        post: (url, body) async => jsonEncode({
+          ...raw,
+          'quote': {...issued, 'minAmountOut': '$floor'},
+          'quoteRequest': {
+            ...raw['quoteRequest'] as Map<String, dynamic>,
+            ...jsonDecode(body) as Map<String, dynamic>,
+          },
+        }),
+        get: (url) async => fixtureText('tokens.json'),
+      );
+      await expectLater(
+        quote(answering(bound - BigInt.one)),
+        throwsA(isA<SwapException>()),
+      );
+      expect((await quote(answering(bound))).minAmountOut, '$bound');
+    });
+
     test('a live quote reads into the quote the provider issued', () async {
       final q = await quote(live().swaps);
       final raw = fixture('quote.json') as Map<String, dynamic>;

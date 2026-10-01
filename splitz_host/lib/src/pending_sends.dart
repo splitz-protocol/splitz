@@ -95,6 +95,12 @@ class PendingSend {
   /// a person records what they paid by hand, then [PendingSends.resolve]s.
   bool get damaged => uri.isEmpty;
 
+  /// Whether [other] is the note of this same send: one [PendingSends.begin]
+  /// wrote once, however its transaction was filled in since. A damaged note
+  /// is nobody's.
+  bool isSameSend(PendingSend other) =>
+      !damaged && !other.damaged && at == other.at && uri == other.uri;
+
   /// This send, with the transaction [id] it went out as.
   PendingSend sentAs(String? id) => PendingSend(
     billId: billId,
@@ -216,7 +222,16 @@ class PendingSends {
   PendingSends(this._storage);
 
   final BillStorage _storage;
-  final Set<String> _underWay = {};
+
+  /// Bills with a send between [begin] and [end], per storage and for the
+  /// whole process: two instances over one storage — a feature closed and
+  /// opened again while the wallet is still proving — are one wallet
+  /// sending, and each on its own would let the other clear the note and
+  /// send the debt again. [FileBillStorage] is one object per directory, so
+  /// one directory is one set.
+  static final Expando<Set<String>> _underWayOf = Expando();
+
+  Set<String> get _underWay => _underWayOf[_storage] ??= <String>{};
 
   /// Namespaced away from bills so a sweep of one never reaches the other.
   static const String _prefix = 'pendingsend/';
@@ -271,6 +286,11 @@ class PendingSends {
 
   /// Settles what the note says once the wallet has answered (§14.3).
   ///
+  /// [wrote] is the note [begin] was given. When it is, only that note is
+  /// changed: one a later send wrote is neither deleted nor rewritten, and
+  /// when the note is gone an unresolved send with a [txid] writes it back,
+  /// so a transaction the wallet built always has a note naming it.
+  ///
   /// - [SendEnded.reachedNetwork] and [recorded]: the bill holds the records,
   ///   so the note goes.
   /// - [SendEnded.reachedNetwork] and not [recorded] — the bill was forgotten
@@ -286,21 +306,25 @@ class PendingSends {
     SendEnded how, {
     String? txid,
     bool recorded = false,
+    PendingSend? wrote,
   }) async {
     try {
+      final held = await of(billId);
+      final ours = wrote == null || held == null || held.isSameSend(wrote);
+      if (!ours) return;
       final clear =
           how == SendEnded.refused ||
           (how == SendEnded.reachedNetwork && recorded);
       if (clear) {
-        await _storage.delete(_key(billId));
+        if (held != null) await _storage.delete(_key(billId));
         return;
       }
       if (txid == null) return;
-      final held = await of(billId);
-      if (held != null && !held.damaged) {
+      final kept = held ?? (how == SendEnded.unresolved ? wrote : null);
+      if (kept != null && !kept.damaged) {
         await _storage.write(
           _key(billId),
-          jsonEncode(held.sentAs(txid).toJson()),
+          jsonEncode(kept.sentAs(txid).toJson()),
         );
       }
     } finally {
@@ -308,9 +332,28 @@ class PendingSends {
     }
   }
 
+  /// Whether a send from [billId] is between [begin] and [end] in this
+  /// process.
+  bool underWay(String billId) => _underWay.contains(billId);
+
   /// Removes the note for [billId]: its records are on the bill, or a person
   /// has said nothing left the wallet.
-  Future<void> resolve(String billId) => _storage.delete(_key(billId));
+  ///
+  /// Throws [SendInFlight] while a send from [billId] is under way: until the
+  /// wallet answers, nobody knows that nothing left it. When [seen] is given,
+  /// only that note is removed, never one a later send wrote.
+  Future<void> resolve(String billId, {PendingSend? seen}) async {
+    if (_underWay.contains(billId)) throw const SendInFlight(null);
+    if (seen != null) {
+      final held = await of(billId);
+      // A note that will not read names no send, so it is nobody's to keep:
+      // a person who records what they paid by hand clears it.
+      if (held != null && !held.damaged && !held.isSameSend(seen)) {
+        throw SendInFlight(held);
+      }
+    }
+    await _storage.delete(_key(billId));
+  }
 
   /// The payment records for [send] having gone out as the transaction
   /// [txid], signed and appended to [log] — to merge into the bill before
@@ -340,7 +383,8 @@ class PendingSends {
     final recorded = {for (final p in log.fold().bill.payments) p.id};
     final carried = {
       for (final e in send.carried.entries)
-        if (!recorded.contains(paymentIdForSend(id, e.key))) e.key: e.value,
+        if (!recorded.contains(paymentIdForSend(host.me, id, e.key)))
+          e.key: e.value,
     };
     return recordSend(
       host,

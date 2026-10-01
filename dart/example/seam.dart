@@ -38,6 +38,11 @@ Future<void> main() async {
     List<int>.generate(creatorKeyBytes, (i) => i),
   );
 
+  // The key the bill's entries are sealed under, which its create commits to
+  // (§9.4): a key handed over with this bill's id and any other key is then
+  // refused rather than opening a copy only its holder sees.
+  final billKey = base64UrlNoPad(host.randomBytes(32));
+
   final log = BillLog(host)
     ..add([
       createBill(
@@ -45,6 +50,7 @@ Future<void> main() async {
         name: 'Dinner',
         currency: 'EUR',
         creatorKey: myEd25519PublicKeyBase64Url,
+        billKey: billKey,
       ),
     ]);
 

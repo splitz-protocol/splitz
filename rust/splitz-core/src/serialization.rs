@@ -33,8 +33,7 @@ fn string(value: &Value) -> Result<String> {
 }
 
 fn integer(value: &Value) -> Result<i64> {
-    // A float is not an integer, and `as_i64` already refuses one.
-    value.as_i64().ok_or_else(|| type_error("an integer"))
+    crate::money::document_integer(value)
 }
 
 fn array<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>> {

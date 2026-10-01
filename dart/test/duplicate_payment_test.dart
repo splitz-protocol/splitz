@@ -72,7 +72,7 @@ void main() {
     // Ben confirms the record addressed to him, which is the one that stands.
     entries.add(splitz.confirmPayment(
         host: _Host('ben'),
-        paymentId: txid,
+        paymentId: 'ana:$txid',
         method: 'recipientConfirmed',
         record: core.paymentDigest(
             (records.first['payment'] as Map).cast<String, dynamic>())));
@@ -103,7 +103,7 @@ void main() {
     entries.addAll(records);
     entries.add(splitz.confirmPayment(
         host: _Host('ben'),
-        paymentId: '$txid:ben',
+        paymentId: 'ana:$txid:ben',
         method: 'recipientConfirmed',
         record: core.paymentDigest(
             (records.first['payment'] as Map).cast<String, dynamic>())));

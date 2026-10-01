@@ -73,7 +73,7 @@ fn bill_via(via: &BTreeMap<String, i64>) -> (PayerObligation, FoldedBill) {
         add_expense(who, id, who.me, amount, split, None).unwrap()
     };
     let entries = vec![
-        create_bill(&ana, "Trip", "EUR", "equal", &key).unwrap(),
+        create_bill(&ana, "Trip", "EUR", "equal", &key, None).unwrap(),
         join_bill(&ana, Some("Ana"), Some("u1ana0000000000000"), None, None).unwrap(),
         join_bill(&ben, Some("Ben"), Some(BEN_OLD), None, None).unwrap(),
         join_bill(&cat, Some("Cat"), None, None, None).unwrap(),
@@ -429,4 +429,39 @@ fn a_zec_record_missing_a_figure_must_say_so_in_the_wallets_words() {
 fn a_cash_record_needs_nothing_shown() {
     let cash = record("cash", None, false, None);
     assert_eq!(payee(&cash, &[], ""), []);
+}
+
+/// What a swap record with no ZEC or rate says in their place.
+const NONE: &str = "ZEC and rate: not recorded";
+
+#[test]
+fn a_reference_prefix_counts_characters_not_bytes() {
+    let fifteen = "é".repeat(15);
+    let swap = record("swap", None, false, Some(&fifteen));
+    let five = vec![format!("ref {}… ok", "é".repeat(5)), NONE.to_owned()];
+    assert_eq!(
+        payee(&swap, &five, "not recorded"),
+        [(ReviewRule::PayeeReference, fifteen.clone())]
+    );
+    let ten = vec![format!("ref {}… ok", "é".repeat(10)), NONE.to_owned()];
+    assert_eq!(payee(&swap, &ten, "not recorded"), []);
+    let mixed = record("swap", None, false, Some("abcdefghiéxyzxyz"));
+    assert_eq!(
+        payee(
+            &mixed,
+            &["ref abcdefghié…".to_owned(), NONE.to_owned()],
+            "not recorded"
+        ),
+        []
+    );
+    let emoji_ref = format!("{}x", "😀".repeat(12));
+    let emoji = record("swap", None, false, Some(&emoji_ref));
+    assert_eq!(
+        payee(
+            &emoji,
+            &[format!("ref {}…", "😀".repeat(5)), NONE.to_owned()],
+            "not recorded"
+        ),
+        [(ReviewRule::PayeeReference, emoji_ref.clone())]
+    );
 }

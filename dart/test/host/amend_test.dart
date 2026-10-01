@@ -72,7 +72,7 @@ void main() {
           targetId: b.expense['id'] as String,
           member: 'expense',
           payload: <String, dynamic>{
-            'id': 'x1',
+            'id': 'ana:x1',
             'paidBy': 'ana',
             'amount': 6000,
             'currency': 'USD',

@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
-  "count": 86,
+  "count": 87,
   "cases": [
     {
       "name": "address_invalid",
@@ -196,6 +196,11 @@
       "name": "invite_future_version",
       "code": "invite_future_version",
       "expect": "This invite needs a newer app. Update to join."
+    },
+    {
+      "name": "invite_key_mismatch",
+      "code": "invite_key_mismatch",
+      "expect": "This invite doesn't fit this bill. Ask its organiser for a new one."
     },
     {
       "name": "invite_missing_bill_id",

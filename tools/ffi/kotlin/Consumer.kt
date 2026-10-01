@@ -70,29 +70,39 @@ fun main(args: Array<String>) {
           anaKey.length == 43, anaKey)
     val secret = "mnemonic words".toByteArray()
     check("a seed derived from a spending secret survives a reinstall",
-          identitySeedFromSecret(secret) == identitySeedFromSecret(secret),
-          identitySeedFromSecret(secret))
+          identitySeedFromSecret(SecretBytes(secret)) == identitySeedFromSecret(SecretBytes(secret)),
+          identitySeedFromSecret(SecretBytes(secret)))
     check("and is the one the protocol pins",
-          identitySeedFromSecret(byteArrayOf(1, 2, 3)) ==
+          identitySeedFromSecret(SecretBytes(byteArrayOf(1, 2, 3))) ==
               "MNp3HJmtVUpkGFp2KXoi4ysYoDqKi9Sf4upQw5qvOps",
-          identitySeedFromSecret(byteArrayOf(1, 2, 3)))
+          identitySeedFromSecret(SecretBytes(byteArrayOf(1, 2, 3))))
+    check("and a long secret whose first byte is high crosses whole",
+          identitySeedFromSecret(SecretBytes(ByteArray(64) { 0xAB.toByte() })) ==
+              "zHlJI6Xb7tQXjLuwAoEwVjjVEB8jPs5DA_NhM50W1YM",
+          "zHlJ…")
     check("a key of the wrong length is named, not accepted",
           billKeyProblem("AAAA") == "wrong_length" && billKeyProblem(anaKey) == null,
           "${billKeyProblem("AAAA")}")
 
     println("ana opens a bill and joins it")
-    val create = createBillEntry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed)
+    // The bill key is the wallet's to keep, minted from the platform's own
+    // entropy; §9.4's id is public.
+    val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
+    check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
+    // The key is minted first: the create entry commits to it (§9.4).
+    val create = createBillEntry(ana.facts(), "Dinner", "EUR", "equal", anaKey, billKey, ana.seed)
     ana.add(create)
     val billId = Regex("\"id\":\"([^\"]+)\"").find(create)!!.groupValues[1]
     ana.add(joinBillEntry(ana.facts(), billId, "Ana", "u1ana", anaKey, listOf(), ana.seed))
 
     println("ana shares it, and ben takes it from the code")
-    // The bill key is the wallet's to keep, minted from the platform's own
-    // entropy; §9.4's id is public.
-    val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
-    check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
     val invite = inviteForBill(ana.facts(), billId, ana.entries, billKey, "Dinner", 1_800_000_000L)
     val link = renderInviteLink(invite, "https://example.org/join")
+    val stranger = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
+    check("a bill code carrying some other key is refused",
+          readScanned(shareableBillPayload(ana.facts(), billId, ana.entries, stranger)!!).refusedCode
+              == "invite_key_mismatch",
+          "invite_key_mismatch")
     check("the invite reads back from an https link", readScanned(link).billId == billId, link)
     check("and expires by the wallet's clock",
           !inviteExpiry(invite, 1_799_999_999L).expired && inviteExpiry(invite, 1_800_000_001L).expired,
@@ -104,8 +114,8 @@ fun main(args: Array<String>) {
     check("and carries the key", scanned.billKey == billKey, "${scanned.billKey}")
     ben.entries = mergeEntries(ben.entries, scanned.entries).entries
     ben.add(joinBillEntry(ben.facts(), billId, "Ben", "u1ben", benKey, listOf(), ben.seed))
-    // What ana holds, as she would report it: the ids of her entries.
-    val anaHolds = historyOf(ana.facts(), billId, ana.entries).map { it.entryId }
+    // What ana holds, as she would report it: one key per copy (§14.5).
+    val anaHolds = ana.entries.map { copyKey(it) }
     val behind = deltaForPeer(ben.facts(), billId, ben.entries, anaHolds)
     check("ana lacks only ben's join, and it fits one code",
           behind.missing == 1uL && behind.uri != null && behind.tooBigCode == null, "$behind")
@@ -124,7 +134,7 @@ fun main(args: Array<String>) {
     val fetched = anaRelay.fetch(channel)
     check("another client fetches every blob pushed, once, though it was pushed twice",
           fetched.sorted() == pushed.sorted(), "${fetched.size} of ${pushed.size}")
-    val opened = openBlobs(fetched, billKey)
+    val opened = openBlobs(fetched, billId, billKey)
     check("every blob opened", opened.unopenable == 0u, "unopenable=${opened.unopenable}")
     // Merged by entry id: what a blob opens to is the entry, not necessarily
     // the same text, so a round trip adds no entry to the log it came from.
@@ -216,9 +226,9 @@ fun main(args: Array<String>) {
     check("one record, for what the request carried", records.size == 1,
           "${records.size} record(s)")
     check("under the payment id a send that succeeded records",
-          records.single().contains("\"$txid:${ana.me}\"") &&
+          records.single().contains("\"${ben.me}:$txid:${ana.me}\"") &&
               paymentEntriesForSend(ben.facts(), billId, owed, txid, ben.seed)
-                  .single().contains("\"$txid:${ana.me}\""),
+                  .single().contains("\"${ben.me}:$txid:${ana.me}\""),
           "$txid:${ana.me.take(8)}…")
     check("and it states the ZEC it sent and the rate it was priced at",
           records.single().contains("\"zatoshi\":${owed.request.payments.single().zatoshi}") &&
@@ -239,6 +249,11 @@ fun main(args: Array<String>) {
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty(),
           "${afterPayment.bill.confirmedPayments}")
     val paid = afterPayment.bill.payments.single()
+    val toConfirm = awaitingMyConfirmation(ana.facts(), billId, ana.entries)
+    check("ana is shown it as hers to confirm", toConfirm.map { it.id } == listOf(paid.id),
+          "${toConfirm.map { it.id }}")
+    check("and ben, who paid it, is shown nothing to confirm",
+          awaitingMyConfirmation(ben.facts(), billId, ben.entries).isEmpty(), "none")
     val confirmScreen = listOf("Ben says he paid you",
                                "${renderAmount(paid.zatoshi!!)} ZEC",
                                "priced at ${rateFigure(paid.paidAtRate!!)} EUR a ZEC",
@@ -269,6 +284,23 @@ fun main(args: Array<String>) {
     val dropped = checkProposal(owed.request.uri!!, emptyList())
     check("a reader that dropped the payment is caught",
           dropped.missing.map { it.address } == listOf(anaAddress), "$dropped")
+    check("as the sentence to show, the same reading has nothing to say",
+          proposalProblem(owed.request.uri!!, listOf(ProposedOutput(anaAddress, sent))) == null,
+          "none")
+    val problem = proposalProblem(owed.request.uri!!, emptyList())
+    check("and the dropped one is a sentence, so nothing is built",
+          problem?.isNotEmpty() == true, "$problem")
+
+    println("a swap provider's answer is read by its status first")
+    check("a 2xx body is the answer", swapAnswer(200.toUShort(), "{\"quote\":1}") == "{\"quote\":1}",
+          "read")
+    val noRoute = refusal { swapAnswer(400.toUShort(), "{\"message\":\"no route\"}") }
+    check("a 4xx is refused with the provider's own words, and waiting will not help",
+          noRoute?.detail?.contains("no route") == true && noRoute.transient == false,
+          "${noRoute?.detail}")
+    val upstream = refusal { swapAnswer(503.toUShort(), "upstream down") }
+    check("a 5xx is refused as one to try again", upstream?.transient == true,
+          "${upstream?.detail}")
 
     println("ana's wallet saw the transaction arrive")
     val arrivals = arrivalsOf(ana.facts(), listOf(HeldBill(billId, ana.entries)),

@@ -28,8 +28,9 @@ pub enum HostError {
     /// swallowed: a bill works with no relay, so a transport that quietly does
     /// nothing looks exactly like one that is working.
     Relay { message: String, transient: bool },
-    /// A bill cannot be synced.
-    Sync(String),
+    /// A bill cannot be synced. `kind` is why, for a wallet to put in its own
+    /// words; `message` names the bill, for a developer.
+    Sync { kind: SyncFailure, message: String },
     /// An invite carries a different key for the named bill than the one this
     /// device already holds.
     KeyConflict(String),
@@ -49,6 +50,22 @@ pub enum HostError {
         bill_id: String,
         pending: Option<Box<crate::pending_sends::PendingSend>>,
     },
+    /// The bill's own create commits to a key other than the one held for it
+    /// (§9.4, `invite_key_mismatch`): what opened under the held key is a
+    /// version of the bill somebody else made.
+    ForeignKey(String),
+}
+
+/// Why a bill could not be synced. A key that is not the bill's own is
+/// [`HostError::ForeignKey`], which carries its §12 code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncFailure {
+    /// This device holds no key for the bill.
+    NoKey,
+    /// The keychain refused to read the key, as it does while locked.
+    KeyLocked,
+    /// The bill was forgotten on this device while the sync ran.
+    Forgotten,
 }
 
 impl fmt::Display for HostError {
@@ -59,7 +76,7 @@ impl fmt::Display for HostError {
             HostError::Unreadable(name) => write!(f, "{name} is stored and does not decode"),
             HostError::Sealing(why) => write!(f, "{why}"),
             HostError::Relay { message, .. } => write!(f, "{message}"),
-            HostError::Sync(why) => write!(f, "{why}"),
+            HostError::Sync { message, .. } => write!(f, "{message}"),
             HostError::KeyConflict(bill) => {
                 write!(f, "this device already holds a different key for {bill}")
             }
@@ -68,6 +85,10 @@ impl fmt::Display for HostError {
             HostError::SendInFlight { bill_id, .. } => {
                 write!(f, "an earlier send from {bill_id} is not resolved")
             }
+            HostError::ForeignKey(bill) => write!(
+                f,
+                "invite_key_mismatch: the key held for {bill} is not the one it was made with"
+            ),
         }
     }
 }

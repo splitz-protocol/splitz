@@ -52,7 +52,20 @@ pub fn lane_for(participant: &Participant) -> SettleLane {
             Some(address) if !address.is_empty() => SettleLane::Zec,
             _ => SettleLane::None,
         },
-        "swap" => SettleLane::Swap,
+        // A swap delivers an asset on a chain to an address; without all
+        // three there is nowhere to deliver, as with a Zcash payout's empty
+        // address.
+        "swap" => {
+            let blank = |s: Option<&str>| s.is_none_or(|s| s.trim().is_empty());
+            if blank(first.asset.as_deref())
+                || blank(first.chain.as_deref())
+                || blank(first.address.as_deref())
+            {
+                SettleLane::None
+            } else {
+                SettleLane::Swap
+            }
+        }
         "cash" => SettleLane::Cash,
         // Unreachable through a decoded bill: §9.1 makes a reader refuse a
         // payout type it does not define rather than admit it, so no other

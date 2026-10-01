@@ -83,6 +83,8 @@ String fakeKey(String who) => splitz.base64UrlNoPad(
 /// order a log and §9.4 derives a bill id from a nonce, so a log that moved
 /// between runs could not be asserted against a fixed expectation.
 class FakeHost implements splitz.BillHost {
+  @override
+  splitz.ReadsAddress? get readsAddress => null;
   FakeHost({required this.me, this.payToAddress, this.sign, this.verify});
 
   @override

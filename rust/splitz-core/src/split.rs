@@ -27,17 +27,8 @@ fn against(value: i64, total: i64) -> bool {
     }
 }
 
-fn type_error(what: &str, value: &Value) -> SplitError {
-    SplitError::new(
-        code::BILL_TYPE_ERROR,
-        format!("Expected {what}, got {value}"),
-    )
-}
-
 fn integer(value: &Value) -> Result<i64> {
-    value
-        .as_i64()
-        .ok_or_else(|| type_error("an integer", value))
+    crate::money::document_integer(value)
 }
 
 fn id_list(value: &Value) -> Vec<String> {

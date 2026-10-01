@@ -84,7 +84,7 @@ fn three_lane_bill_with<'a>(
     })];
     cara.extend(cara_also);
     let mut entries = vec![
-        create_bill(ana, "Dinner", "USD", "equal", &fake_key("ana")).unwrap(),
+        create_bill(ana, "Dinner", "USD", "equal", &fake_key("ana"), None).unwrap(),
         join_bill(ana, Some("Ana"), Some("u1ana"), None, None).unwrap(),
         join_bill(
             &FakeHost::new("ben"),
@@ -190,7 +190,7 @@ fn the_send_records_her_payment_like_any_other_and_her_order_stands() {
         .find(|p| p["to"] == "cara")
         .unwrap();
     assert_eq!(cara["method"], "shieldedZec");
-    assert_eq!(cara["id"], json!(payment_id_for_send(&txid, "cara")));
+    assert_eq!(cara["id"], json!(payment_id_for_send("ana", &txid, "cara")));
     assert_eq!(cara["reference"], json!(txid));
     // No entry rewrote her preferences: every device still reads USDC first.
     let after = log.fold().unwrap();
@@ -273,6 +273,31 @@ fn the_first_preference_decides_not_the_most_convenient_one() {
     assert_eq!(lane_for(&cara), SettleLane::Cash);
 }
 
+#[test]
+fn a_swap_payout_missing_its_address_asset_or_chain_is_nobody_to_pay() {
+    let swap = |asset: Option<&str>, chain: Option<&str>, address: Option<&str>| {
+        lane_for(&splitz_core::model::Participant {
+            id: "cara".to_owned(),
+            name: "Cara".to_owned(),
+            pay_to: None,
+            identity_key: None,
+            payouts: vec![splitz_core::model::Payout {
+                kind: "swap".to_owned(),
+                address: address.map(str::to_owned),
+                asset: asset.map(str::to_owned),
+                chain: chain.map(str::to_owned),
+            }],
+        })
+    };
+    let (usdc, near) = (Some("USDC"), Some("near"));
+    assert_eq!(swap(usdc, near, Some("")), SettleLane::None);
+    assert_eq!(swap(usdc, near, Some("  ")), SettleLane::None);
+    assert_eq!(swap(usdc, near, None), SettleLane::None);
+    assert_eq!(swap(usdc, None, Some("cai.near")), SettleLane::None);
+    assert_eq!(swap(None, near, Some("cai.near")), SettleLane::None);
+    assert_eq!(swap(usdc, near, Some("cai.near")), SettleLane::Swap);
+}
+
 // --- the request carries the zec lane and reports the rest (§8.5) -----------
 
 #[test]
@@ -327,7 +352,10 @@ fn a_settle_records_only_what_the_request_carried() {
     assert_eq!(payment["to"], "ben");
     assert_eq!(payment["method"], "shieldedZec");
     let txid = settled.txid.clone().unwrap();
-    assert_eq!(payment["id"], json!(payment_id_for_send(&txid, "ben")));
+    assert_eq!(
+        payment["id"],
+        json!(payment_id_for_send("ana", &txid, "ben"))
+    );
     // §10.5: the record carries its own id and the transaction is the
     // reference, which is what an `onChain` confirmation is checked against.
     assert_eq!(payment["reference"], json!(txid));
@@ -359,8 +387,12 @@ fn a_cash_settlement_records_cash_sends_nothing_and_is_folded() {
 
     // It is on the bill, and §10.5 has not settled it: a record is a claim.
     let folded = log.fold().unwrap();
-    assert!(folded.bill.payments.iter().any(|p| p.id == "cash-dan-1"));
-    assert!(!folded.bill.confirmed_payments.contains("cash-dan-1"));
+    assert!(folded
+        .bill
+        .payments
+        .iter()
+        .any(|p| p.id == "ana:cash-dan-1"));
+    assert!(!folded.bill.confirmed_payments.contains("ana:cash-dan-1"));
 }
 
 #[test]
@@ -388,7 +420,7 @@ fn a_swap_settlement_records_the_intent_id_not_a_txid() {
     // §9.2: the reference identifies the swap. A reader that renders it as a
     // Zcash transaction is wrong for every swap.
     assert_eq!(payment["reference"], "near-intent-7f3a");
-    assert_eq!(payment["id"], "near-intent-7f3a");
+    assert_eq!(payment["id"], "ana:near-intent-7f3a");
     // Verifiable only in half: the ZEC leg is recorded, the delivery is not.
     assert_eq!(payment["zatoshi"], 1000000);
 
@@ -397,14 +429,17 @@ fn a_swap_settlement_records_the_intent_id_not_a_txid() {
         .bill
         .payments
         .iter()
-        .find(|p| p.id == "near-intent-7f3a")
+        .find(|p| p.id == "ana:near-intent-7f3a")
         .unwrap();
     assert_eq!(paid.method, "swap");
     assert_eq!(paid.reference.as_deref(), Some("near-intent-7f3a"));
     assert_eq!(paid.zatoshi, Some(1000000));
     // The ZEC leg leaving is not the recipient being paid. Only Cara can say
     // that, and she has not.
-    assert!(!folded.bill.confirmed_payments.contains("near-intent-7f3a"));
+    assert!(!folded
+        .bill
+        .confirmed_payments
+        .contains("ana:near-intent-7f3a"));
 }
 
 #[test]
@@ -474,7 +509,7 @@ fn a_method_the_protocol_does_not_define_is_set_aside_at_the_fold() {
         .set_aside
         .iter()
         .any(|s| s.code == "bill_unknown_settlement_method"));
-    assert!(!folded.bill.payments.iter().any(|p| p.id == "p1"));
+    assert!(!folded.bill.payments.iter().any(|p| p.id == "ana:p1"));
 }
 
 #[test]
@@ -535,7 +570,7 @@ fn a_request_that_can_carry_nothing_sends_nothing() {
     let ana = FakeHost::new("ana");
     let mut log = BillLog::new(&ana);
     log.add(vec![
-        create_bill(&ana, "D", "USD", "equal", &fake_key("ana")).unwrap(),
+        create_bill(&ana, "D", "USD", "equal", &fake_key("ana"), None).unwrap(),
         join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap(),
         join_bill(
             &FakeHost::new("dan"),

@@ -63,12 +63,29 @@ type Row = [i64; 4];
 
 /// What one bill adds, by (other participant, currency), before any of it is
 /// kept.
-fn adds_of(folded: &FoldedBill, me: &str) -> Result<BTreeMap<(String, String), Row>> {
+/// A standing's key: who, the currency, and the bill when §10.7 says the id
+/// there is not the person another bill binds it to (empty otherwise).
+type Key = (String, String, String);
+
+fn adds_of(
+    folded: &FoldedBill,
+    me: &str,
+    bound_somewhere: &BTreeSet<String>,
+) -> Result<BTreeMap<Key, Row>> {
     let bill = &folded.bill;
-    let mut adds: BTreeMap<(String, String), Row> = BTreeMap::new();
+    let mut adds: BTreeMap<Key, Row> = BTreeMap::new();
     let mut add = |with: &str, slot: usize, amount: i64| -> Result<()> {
+        // §10.7: an id is one person across bills only when one key binds it.
+        // Where this bill binds it, it is that key's; an id some bill binds
+        // and this one does not is, here, whoever wrote a join under it, so
+        // it is summed on its own rather than netted against the bound one.
+        let whose = match folded.identities.bound.get(with) {
+            Some(key) => format!("key:{key}"),
+            None if bound_somewhere.contains(with) => bill.id.clone(),
+            None => String::new(),
+        };
         let row = adds
-            .entry((with.to_owned(), bill.currency.clone()))
+            .entry((with.to_owned(), bill.currency.clone(), whose))
             .or_insert([0; 4]);
         row[slot] = checked_add(row[slot], amount, code::AMOUNT_OVERFLOW)?;
         Ok(())
@@ -85,6 +102,10 @@ fn adds_of(folded: &FoldedBill, me: &str) -> Result<BTreeMap<(String, String), R
         if bill.confirmed_payments.contains(&p.id) {
             continue;
         }
+        // §14.4: what is on its way is what its payer recorded.
+        if folded.payment_authors.get(&p.id) != Some(&p.from) {
+            continue;
+        }
         if p.from == me && p.to != me {
             add(&p.to, 2, p.amount)?;
         }
@@ -97,14 +118,18 @@ fn adds_of(folded: &FoldedBill, me: &str) -> Result<BTreeMap<(String, String), R
 
 /// Sums what `me` owes and is owed across `bills` (§6, §10.5).
 pub fn totals_across(bills: &[FoldedBill], me: &str) -> Totals {
-    let mut sums: BTreeMap<(String, String), Row> = BTreeMap::new();
-    let mut bills_of: BTreeMap<(String, String), BTreeSet<String>> = BTreeMap::new();
+    let mut sums: BTreeMap<Key, Row> = BTreeMap::new();
+    let mut bills_of: BTreeMap<Key, BTreeSet<String>> = BTreeMap::new();
     let mut uncounted = BTreeMap::new();
 
     let mut ordered: Vec<&FoldedBill> = bills.iter().collect();
     ordered.sort_by(|a, b| compare_utf8(&a.bill.id, &b.bill.id));
+    let bound_somewhere: BTreeSet<String> = ordered
+        .iter()
+        .flat_map(|f| f.identities.bound.keys().cloned())
+        .collect();
     for folded in ordered {
-        let merged = adds_of(folded, me).and_then(|adds| {
+        let merged = adds_of(folded, me, &bound_somewhere).and_then(|adds| {
             let mut merged = Vec::with_capacity(adds.len());
             for (key, row) in adds {
                 let held = sums.get(&key).copied().unwrap_or([0; 4]);
@@ -132,8 +157,12 @@ pub fn totals_across(bills: &[FoldedBill], me: &str) -> Totals {
         }
     }
 
-    let mut keys: Vec<&(String, String)> = sums.keys().collect();
-    keys.sort_by(|a, b| compare_utf8(&a.0, &b.0).then_with(|| compare_utf8(&a.1, &b.1)));
+    let mut keys: Vec<&Key> = sums.keys().collect();
+    keys.sort_by(|a, b| {
+        compare_utf8(&a.0, &b.0)
+            .then_with(|| compare_utf8(&a.1, &b.1))
+            .then_with(|| compare_utf8(&a.2, &b.2))
+    });
     let standings = keys
         .into_iter()
         .filter(|k| sums[*k].iter().any(|v| *v != 0))

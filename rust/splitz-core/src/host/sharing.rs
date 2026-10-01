@@ -10,7 +10,7 @@
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 
-use crate::error::Result;
+use crate::error::{code, Result};
 use crate::invite::{
     decode_payload, delta_for as protocol_delta_for, encode_payload, parse_invite, render_invite,
     strip_scan_padding, Delta, Invite, BILL_PREFIX, DELTA_PREFIX, PAYLOAD_VERSION,
@@ -56,6 +56,17 @@ pub fn read_scan(text: &str) -> Scanned {
     match decode_payload(text) {
         Ok(payload) => {
             let invite = payload.invite.as_ref().and_then(reparse_invite);
+            // §9.4: a key handed over with a bill it was not made for opens a
+            // version of the bill only its holder sees.
+            if let Some(invite) = &invite {
+                let mismatched = payload
+                    .log
+                    .iter()
+                    .any(|e| crate::invite::create_refuses_key(e, &invite.bill_id, &invite.key));
+                if mismatched {
+                    return Scanned::Refused(code::INVITE_KEY_MISMATCH);
+                }
+            }
             Scanned::Bill(ScannedBill {
                 entries: payload.log,
                 invite,

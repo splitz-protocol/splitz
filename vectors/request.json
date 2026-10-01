@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §8.7 and §14.6: a request read back, and the payments a wallet is about to sign checked against it.",
-  "count": 61,
+  "count": 62,
   "cases": [
     {
       "name": "one_payment",
@@ -320,6 +320,11 @@
     {
       "name": "a_memo_with_stray_bits",
       "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=1&memo=AB",
+      "error": "zip321_not_canonical"
+    },
+    {
+      "name": "a_memo_with_stray_bits_on_a_zero_amount",
+      "uri": "zcash:u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx?amount=0&memo=AB",
       "error": "zip321_not_canonical"
     },
     {

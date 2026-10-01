@@ -52,6 +52,7 @@ pub fn create_bill(
     currency: &str,
     split_mode: &str,
     creator_key: &str,
+    bill_key: Option<&str>,
 ) -> Result<Value> {
     let mut entry = Map::new();
     entry.insert("v".to_owned(), Value::from(ENTRY_VERSION));
@@ -66,6 +67,14 @@ pub fn create_bill(
         "nonce".to_owned(),
         Value::from(base64url_no_pad(&host.random_bytes(NONCE_BYTES))),
     );
+    // §9.4: the bill key it will be sealed under, so a joiner can tell an
+    // invite's key belongs to this bill.
+    if let Some(key) = bill_key {
+        let digest = crate::invite::bill_key_digest(key).ok_or_else(|| {
+            crate::error::SplitError::new(crate::error::code::BILL_TYPE_ERROR, "Not a bill key")
+        })?;
+        entry.insert("keyDigest".to_owned(), Value::from(digest));
+    }
     let value = Value::Object(entry);
     let id = derive_bill_id(&value)?;
     Ok(with_id(value, id))
@@ -106,7 +115,25 @@ pub fn join_bill(
     sealed(host, body)
 }
 
+/// `local` as an id `author` minted: `<author>:<local>`, or `local` itself
+/// when it already begins that way.
+///
+/// §10.3 step 5 keeps such an id for its author whatever `at` another entry
+/// states, so every expense and payment written here carries one.
+pub fn authored_id(author: &str, local: &str) -> String {
+    if local
+        .strip_prefix(author)
+        .is_some_and(|rest| rest.starts_with(':'))
+    {
+        local.to_owned()
+    } else {
+        format!("{author}:{local}")
+    }
+}
+
 /// Adds an expense. `amount` is minor units of the bill's currency (§2.1).
+///
+/// The expense's id is `expense_id` under [`authored_id`].
 ///
 /// `split` is §4's own shape and is passed through untouched: nothing here
 /// invents a split method the specification does not define.
@@ -119,7 +146,10 @@ pub fn add_expense(
     description: Option<&str>,
 ) -> Result<Value> {
     let mut expense = Map::new();
-    expense.insert("id".to_owned(), Value::from(expense_id));
+    expense.insert(
+        "id".to_owned(),
+        Value::from(authored_id(host.me(), expense_id)),
+    );
     expense.insert("paidBy".to_owned(), Value::from(paid_by));
     expense.insert("amount".to_owned(), Value::from(amount));
     expense.insert("at".to_owned(), Value::from(at(host)?));
@@ -137,7 +167,8 @@ pub fn add_expense(
 /// settles it (§10.5) — a record is a claim, not a settlement.
 ///
 /// `payment_id` is the transaction id, so the record and the transaction carry
-/// one identifier and a reader can check the second from the first.
+/// one identifier and a reader can check the second from the first. The
+/// record's id is `payment_id` under [`authored_id`].
 ///
 /// `amount` is minor units of the bill's currency and is what settles the
 /// debt. `zatoshi` and `paid_at_rate` record what actually left the wallet and
@@ -160,7 +191,10 @@ pub fn record_payment(
     note: Option<&str>,
 ) -> Result<Value> {
     let mut payment = Map::new();
-    payment.insert("id".to_owned(), Value::from(payment_id));
+    payment.insert(
+        "id".to_owned(),
+        Value::from(authored_id(host.me(), payment_id)),
+    );
     payment.insert("from".to_owned(), Value::from(host.me()));
     payment.insert("to".to_owned(), Value::from(to));
     payment.insert("amount".to_owned(), Value::from(amount));

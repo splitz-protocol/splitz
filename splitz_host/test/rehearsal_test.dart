@@ -48,6 +48,8 @@ SplitsRelay _relayClient(Uri origin) {
 
 /// One participant's phone: its own log, its own keys, its own clock.
 class Device implements splitz.BillHost {
+  @override
+  splitz.ReadsAddress? get readsAddress => null;
   Device._(this.name, this.me, Uri relayOrigin)
     : store = BillStore(InMemoryBillStorage()),
       keys = SplitsKeys(store: InMemorySecretStore()) {
@@ -394,6 +396,8 @@ void main() {
 /// The only way to forge: an entry's `author` is whatever its writer put
 /// there, and §10.7 is what decides whether the log believes it.
 class _Claiming implements splitz.BillHost {
+  @override
+  splitz.ReadsAddress? get readsAddress => null;
   _Claiming(this._device, this.me);
 
   final Device _device;

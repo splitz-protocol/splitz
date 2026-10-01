@@ -304,6 +304,7 @@ fn settle_records(op: &Value) -> Value {
         "EUR",
         "equal",
         op["creatorKey"].as_str().unwrap(),
+        None,
     ) {
         Ok(entry) => entries.push(entry),
         Err(e) => return json!({ "folded": false, "error": e.code }),

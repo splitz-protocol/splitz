@@ -16,6 +16,7 @@ class FakeHost implements BillHost {
     DateTime? at,
     this.sign,
     this.verify,
+    this.readsAddress,
   }) : _at = at ?? DateTime.utc(2026, 10, 28, 19, 30);
 
   @override
@@ -27,6 +28,8 @@ class FakeHost implements BillHost {
   final SignEntry? sign;
   @override
   final VerifyEntry? verify;
+  @override
+  final ReadsAddress? readsAddress;
 
   DateTime _at;
   int _counter = 0;

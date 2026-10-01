@@ -70,7 +70,7 @@ impl Bill {
     fn new(name: &str, currency: &str) -> Self {
         let ana = FakeHost::new("ana");
         let ben = FakeHost::new("ben");
-        let create = create_bill(&ana, name, currency, "equal", &fake_key("ana")).unwrap();
+        let create = create_bill(&ana, name, currency, "equal", &fake_key("ana"), None).unwrap();
         ana.tick();
         let join_ana = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
         ben.tick();
@@ -166,8 +166,8 @@ fn a_confirmed_payment_is_neither_owed_nor_awaiting() {
     let mut x = Bill::new("X", "EUR");
     x.record("p1", 4500);
     x.ana.tick();
-    let record = x.folded().payment_digests["p1"].clone();
-    let confirm = confirm_payment(&x.ana, "p1", "recipientConfirmed", None, &record).unwrap();
+    let record = x.folded().payment_digests["ben:p1"].clone();
+    let confirm = confirm_payment(&x.ana, "ben:p1", "recipientConfirmed", None, &record).unwrap();
     x.entries.push(confirm);
     assert!(totals_across(&[x.folded()], "ana").standings.is_empty());
 }
@@ -196,4 +196,71 @@ fn somebody_on_no_bill_with_this_device_is_not_a_standing() {
     assert!(totals_across(&[Bill::new("X", "EUR").folded()], "cat")
         .standings
         .is_empty());
+}
+
+/// `f` with `bound` as the ids section 10.7 bound, as a verifying fold reports
+/// it.
+fn bound_to(mut f: FoldedBill, bound: &[&str]) -> FoldedBill {
+    f.identities.bound = bound
+        .iter()
+        .map(|id| ((*id).to_owned(), format!("key-{id}")))
+        .collect();
+    f
+}
+
+#[test]
+fn an_id_bound_on_one_bill_and_not_on_another_is_two_standings() {
+    let x = bound_to(Bill::new("X", "EUR").folded(), &["ana", "ben"]);
+    let y = Bill::new("Y", "EUR").folded();
+    let apart = totals_across(&[x.clone(), y.clone()], "ana").standings;
+    let rows: Vec<(&str, i64, usize)> = apart
+        .iter()
+        .map(|s| (s.with_id.as_str(), s.owed_to_me, s.bill_ids.len()))
+        .collect();
+    assert_eq!(rows, [("ben", 4500, 1), ("ben", 4500, 1)]);
+    let one = totals_across(&[x, bound_to(y, &["ana", "ben"])], "ana").standings;
+    assert_eq!(one.len(), 1);
+    assert_eq!(one[0].owed_to_me, 9000);
+}
+
+#[test]
+fn an_id_bound_to_two_keys_on_two_bills_is_two_standings() {
+    // Y's creator binds `ben` to a key of their own: the same string, and
+    // somebody else.
+    let x = bound_to(Bill::new("X", "EUR").folded(), &["ana", "ben"]);
+    let mut y = bound_to(Bill::new("Y", "EUR").folded(), &["ana", "ben"]);
+    y.identities
+        .bound
+        .insert("ben".to_owned(), "key-mal".to_owned());
+    let rows: Vec<(String, i64, usize)> = totals_across(&[x, y], "ana")
+        .standings
+        .iter()
+        .map(|s| (s.with_id.clone(), s.owed_to_me, s.bill_ids.len()))
+        .collect();
+    assert_eq!(
+        rows,
+        [("ben".to_owned(), 4500, 1), ("ben".to_owned(), 4500, 1)]
+    );
+}
+
+#[test]
+fn a_record_the_payee_wrote_in_the_payers_name_is_not_on_its_way() {
+    let mut x = Bill::new("X", "EUR");
+    x.ana.tick();
+    // Ana, the payee, records Ben paying her: section 10.4 lets either party
+    // write a payment, but section 14.4 counts as sent only what its payer
+    // recorded.
+    let mut in_bens_name =
+        record_payment(&x.ana, "p1", "ana", 4500, "cash", None, None, None, None).unwrap();
+    in_bens_name["payment"]["from"] = json!("ben");
+    in_bens_name["id"] = json!(splitz_core::derive_entry_id(&in_bens_name).unwrap());
+    x.entries.push(in_bens_name);
+    let for_ben = totals_across(&[x.folded()], "ben").standings;
+    assert_eq!(for_ben[0].sent_awaiting, 0);
+    assert_eq!(for_ben[0].owed_by_me, 4500);
+    x.record("p2", 4500);
+    assert_eq!(
+        totals_across(&[x.folded()], "ben").standings[0].sent_awaiting,
+        4500
+    );
 }

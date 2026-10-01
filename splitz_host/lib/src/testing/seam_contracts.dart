@@ -75,6 +75,23 @@ Future<List<SeamFinding>> checkSecretStore(
     final got = await store.read(key);
     return got == 'second' ? null : 'read "$got"';
   });
+  await _run(out, seam, 'two keys hold two values', () async {
+    final other = 'splitz-contract/$runId/other';
+    await store.write(key, 'one');
+    await store.write(other, 'two');
+    final one = await store.read(key);
+    final two = await store.read(other);
+    await store.delete(other);
+    return one == 'one' && two == 'two' ? null : 'read "$one" and "$two"';
+  });
+  await _run(out, seam, 'a value reads back whole', () async {
+    // Longer than any secret this layer writes: a 43-character bill key, an
+    // identity seed, a pending send's note.
+    final whole = List.generate(512, (i) => 'abcdefghij'[i % 10]).join();
+    await store.write(key, whole);
+    final got = await store.read(key);
+    return got == whole ? null : 'read ${got?.length ?? 0} of 512 characters';
+  });
   await _run(out, seam, 'a deleted key reads as empty', () async {
     await store.delete(key);
     final got = await store.read(key);

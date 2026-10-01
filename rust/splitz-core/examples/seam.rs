@@ -39,8 +39,20 @@ fn main() -> splitz_core::Result<()> {
     let host = MyWallet;
     let my_key = base64url_no_pad(&[0u8; CREATOR_KEY_BYTES]);
 
+    // The key the bill's entries are sealed under, which its create commits
+    // to (§9.4): a key handed over with this bill's id and any other key is
+    // then refused rather than opening a copy only its holder sees.
+    let bill_key = base64url_no_pad(&host.random_bytes(32));
+
     let mut log = BillLog::new(&host);
-    log.add(vec![create_bill(&host, "Dinner", "EUR", "equal", &my_key)?])?;
+    log.add(vec![create_bill(
+        &host,
+        "Dinner",
+        "EUR",
+        "equal",
+        &my_key,
+        Some(&bill_key),
+    )?])?;
     log.add(vec![join_bill(
         &host,
         Some("Ana"),

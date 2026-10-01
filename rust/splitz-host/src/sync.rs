@@ -1,9 +1,11 @@
 //! Moving a bill between devices through a relay that holds only ciphertext.
 
+use std::collections::BTreeSet;
+
 use serde_json::Value;
 use splitz_core::SetAside;
 
-use crate::error::{HostError, Result};
+use crate::error::{HostError, Result, SyncFailure};
 use crate::keys::SplitsKeys;
 use crate::relay::channel_for_bill;
 use crate::sealing::Sealing;
@@ -47,14 +49,19 @@ impl<'a> SplitsSync<'a> {
         Self { store, keys, relay }
     }
 
-    /// Pushes what this device holds, then pulls what it does not.
+    /// Pulls what this device does not hold, then pushes what the channel
+    /// does not.
     ///
-    /// Push first, so a participant syncing right after us sees our entries;
-    /// then pull, so we see theirs. Both directions merge by entry id, so
-    /// running this twice, or on two devices at once, converges.
+    /// Pull first, so a push the relay refuses — a store that is full, a log
+    /// that has outgrown what one request carries — never stops this device
+    /// seeing what the others wrote. The push then sends only blobs the fetch
+    /// did not return: sealing is deterministic, so a blob the channel holds
+    /// is an entry it holds. Both directions merge by content, so running this
+    /// twice, or on two devices at once, converges.
     pub fn sync(&self, bill_id: &str) -> Result<SyncResult> {
-        self.push(bill_id)?;
-        self.pull(bill_id)
+        let (result, fetched) = self.pull_blobs(bill_id)?;
+        self.push_except(bill_id, &fetched)?;
+        Ok(result)
     }
 
     /// Seals every entry this device holds, as it holds it, and pushes it to
@@ -68,16 +75,26 @@ impl<'a> SplitsSync<'a> {
     /// pushing the whole log every time is safe: the relay stores each entry
     /// once however often it is sent.
     pub fn push(&self, bill_id: &str) -> Result<Vec<Value>> {
+        self.push_except(bill_id, &BTreeSet::new())
+    }
+
+    /// [`Self::push`], leaving out the blobs in `held` — what the channel is
+    /// known to hold.
+    fn push_except(&self, bill_id: &str, held: &BTreeSet<String>) -> Result<Vec<Value>> {
         let entries = self.store.read(bill_id)?;
         if entries.is_empty() {
             return Ok(entries);
         }
         let key = self.require_key(bill_id)?;
+        refuse_foreign_key(bill_id, &key, &entries)?;
         let blobs = entries
             .iter()
             .map(|entry| Sealing.seal(entry, &key))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        self.relay.push(&channel_for_bill(bill_id), &blobs)?;
+        let fresh: Vec<String> = blobs.into_iter().filter(|b| !held.contains(b)).collect();
+        if !fresh.is_empty() {
+            self.relay.push(&channel_for_bill(bill_id), &fresh)?;
+        }
         Ok(entries)
     }
 
@@ -92,6 +109,11 @@ impl<'a> SplitsSync<'a> {
     /// fold time, where the answer is the same on every device and a locally
     /// written entry faces exactly the rules a synced one does.
     pub fn pull(&self, bill_id: &str) -> Result<SyncResult> {
+        Ok(self.pull_blobs(bill_id)?.0)
+    }
+
+    /// [`Self::pull`], and the blobs the channel returned.
+    fn pull_blobs(&self, bill_id: &str) -> Result<(SyncResult, BTreeSet<String>)> {
         let key = self.require_key(bill_id)?;
         let blobs = self.relay.fetch(&channel_for_bill(bill_id))?;
 
@@ -106,6 +128,8 @@ impl<'a> SplitsSync<'a> {
             }
         }
 
+        refuse_foreign_key(bill_id, &key, &entries)?;
+
         // Merged only while this device still holds the bill's key. A bill
         // forgotten while the fetch was in flight is not written back: it
         // would return with no key, and the next Share would mint a key
@@ -115,16 +139,20 @@ impl<'a> SplitsSync<'a> {
             .read_bill_key(bill_id)?
             .is_some_and(|k| !k.is_empty());
         if !still_held {
-            return Err(HostError::Sync(format!(
-                "{bill_id} was forgotten while it synced"
-            )));
+            return Err(HostError::Sync {
+                kind: SyncFailure::Forgotten,
+                message: format!("{bill_id} was forgotten while it synced"),
+            });
         }
         let merged = self.store.merge(bill_id, entries)?;
-        Ok(SyncResult {
-            entries: merged.entries,
-            refused: merged.refused,
-            unopenable,
-        })
+        Ok((
+            SyncResult {
+                entries: merged.entries,
+                refused: merged.refused,
+                unopenable,
+            },
+            blobs.into_iter().collect(),
+        ))
     }
 
     fn require_key(&self, bill_id: &str) -> Result<String> {
@@ -133,12 +161,34 @@ impl<'a> SplitsSync<'a> {
         let key = self
             .keys
             .read_bill_key(bill_id)
-            .map_err(|e| HostError::Sync(format!("Cannot read the key for {bill_id}: {e}")))?;
+            .map_err(|e| HostError::Sync {
+                kind: SyncFailure::KeyLocked,
+                message: format!("Cannot read the key for {bill_id}: {e}"),
+            })?;
         match key {
             Some(key) if !key.is_empty() => Ok(key),
-            _ => Err(HostError::Sync(format!(
-                "No key for {bill_id}; it cannot be synced"
-            ))),
+            _ => Err(HostError::Sync {
+                kind: SyncFailure::NoKey,
+                message: format!("No key for {bill_id}; it cannot be synced"),
+            }),
         }
     }
+}
+
+/// §9.4. Refuses `entries` when they hold `bill_id`'s create and it commits to
+/// a key other than `key`.
+///
+/// A key handed over with a real bill's id opens whatever its maker sealed
+/// under it: a copy of the bill with an entry only this device sees, and
+/// everything this device writes then reaches nobody else. The bill's own
+/// create names the key it was made with, so a log that disagrees is not
+/// merged and a held log is not sealed under a key that is not its own.
+fn refuse_foreign_key(bill_id: &str, key: &str, entries: &[Value]) -> Result<()> {
+    let foreign = entries
+        .iter()
+        .any(|e| splitz_core::create_refuses_key(e, bill_id, key));
+    if foreign {
+        return Err(HostError::ForeignKey(bill_id.to_owned()));
+    }
+    Ok(())
 }

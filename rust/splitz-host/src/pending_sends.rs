@@ -97,6 +97,13 @@ impl PendingSend {
         self.uri.is_empty()
     }
 
+    /// Whether `other` is the note of this same send: one
+    /// [`PendingSends::begin`] wrote once, however its transaction was filled
+    /// in since. A damaged note is nobody's.
+    pub fn is_same_send(&self, other: &PendingSend) -> bool {
+        !self.is_damaged() && !other.is_damaged() && self.at == other.at && self.uri == other.uri
+    }
+
     /// The note stored for `bill_id` as `raw` holds it.
     ///
     /// **A note that will not read still blocks.** Treating it as absent
@@ -169,7 +176,7 @@ impl PendingSend {
         let carried: BTreeMap<String, i64> = self
             .carried
             .iter()
-            .filter(|(to, _)| !recorded.contains(&payment_id_for_send(&id, to)))
+            .filter(|(to, _)| !recorded.contains(&payment_id_for_send(host.me(), &id, to)))
             .map(|(to, amount)| (to.clone(), *amount))
             .collect();
         record_send(host, log, &carried, &id, &self.sent, self.rate.as_ref())
@@ -274,15 +281,51 @@ const PREFIX: &str = "pendingsend/";
 /// way in this process is held by the instance.
 pub struct PendingSends<'a> {
     storage: &'a dyn BillStorage,
-    under_way: Mutex<BTreeSet<String>>,
+    /// The bills this instance began a send from and has not ended, released
+    /// from the registry when it is dropped: the registry names a storage by
+    /// its address, which a later storage may reuse.
+    began: Mutex<BTreeSet<String>>,
+}
+
+impl Drop for PendingSends<'_> {
+    fn drop(&mut self) {
+        let began = std::mem::take(&mut *self.began.lock().unwrap());
+        let mut registry = under_way().lock().unwrap();
+        for bill_id in began {
+            registry.remove(&self.slot(&bill_id));
+        }
+    }
+}
+
+/// Bills with a send between `begin` and `end`, per storage and for the whole
+/// process: two instances over one storage are one wallet sending, and each
+/// on its own would let the other clear the note and send the debt again.
+fn under_way() -> &'static Mutex<BTreeSet<(usize, String)>> {
+    static UNDER_WAY: std::sync::OnceLock<Mutex<BTreeSet<(usize, String)>>> =
+        std::sync::OnceLock::new();
+    UNDER_WAY.get_or_init(|| Mutex::new(BTreeSet::new()))
 }
 
 impl<'a> PendingSends<'a> {
     pub fn new(storage: &'a dyn BillStorage) -> Self {
         Self {
             storage,
-            under_way: Mutex::new(BTreeSet::new()),
+            began: Mutex::new(BTreeSet::new()),
         }
+    }
+
+    /// This instance's storage, as the registry names it.
+    fn slot(&self, bill_id: &str) -> (usize, String) {
+        (
+            self.storage as *const dyn BillStorage as *const () as usize,
+            bill_id.to_owned(),
+        )
+    }
+
+    /// Whether a send from `bill_id` is between `begin` and `end` in this
+    /// process.
+    pub fn under_way(&self, bill_id: &str) -> bool {
+        under_way().lock().unwrap().contains(&self.slot(bill_id))
     }
 
     fn key(bill_id: &str) -> String {
@@ -316,7 +359,7 @@ impl<'a> PendingSends<'a> {
                 "a pending send carries its request".to_owned(),
             ));
         }
-        if !self.under_way.lock().unwrap().insert(send.bill_id.clone()) {
+        if !under_way().lock().unwrap().insert(self.slot(&send.bill_id)) {
             return Err(HostError::SendInFlight {
                 bill_id: send.bill_id.clone(),
                 pending: None,
@@ -333,44 +376,93 @@ impl<'a> PendingSends<'a> {
             Err(e) => Err(e),
         };
         if written.is_err() {
-            self.under_way.lock().unwrap().remove(&send.bill_id);
+            under_way()
+                .lock()
+                .unwrap()
+                .remove(&self.slot(&send.bill_id));
+        } else {
+            self.began.lock().unwrap().insert(send.bill_id.clone());
         }
         written
     }
 
     /// Settles what the note says once the wallet has answered (§14.3), by
     /// [`PendingSend::after`]'s rules.
+    ///
+    /// `wrote` is the note `begin` was given. When it is, only that note is
+    /// changed: one a later send wrote is neither deleted nor rewritten, and
+    /// when the note is gone an unresolved send with a `txid` writes it back,
+    /// so a transaction the wallet built always has a note naming it.
     pub fn end(
         &self,
         bill_id: &str,
         how: SendEnded,
         txid: Option<&str>,
         recorded: bool,
+        wrote: Option<&PendingSend>,
     ) -> Result<()> {
         let outcome = (|| {
+            let held = self.of(bill_id)?;
+            if let (Some(held), Some(wrote)) = (&held, wrote) {
+                if !held.is_same_send(wrote) {
+                    return Ok(());
+                }
+            }
             if how.clears_note(recorded) {
-                return self.storage.delete(&Self::key(bill_id));
+                return match held {
+                    Some(_) => self.storage.delete(&Self::key(bill_id)),
+                    None => Ok(()),
+                };
             }
             if txid.is_none() {
                 return Ok(());
             }
-            let Some(held) = self.of(bill_id)? else {
+            let Some(held) = held.or_else(|| {
+                (how == SendEnded::Unresolved)
+                    .then(|| wrote.cloned())
+                    .flatten()
+            }) else {
                 return Ok(());
             };
             match held.after(how, txid, recorded) {
-                Some(kept) if kept != held => self
+                Some(kept) if self.of(bill_id)?.as_ref() != Some(&kept) => self
                     .storage
                     .write(&Self::key(bill_id), &kept.to_json().to_string()),
                 _ => Ok(()),
             }
         })();
-        self.under_way.lock().unwrap().remove(bill_id);
+        under_way().lock().unwrap().remove(&self.slot(bill_id));
+        self.began.lock().unwrap().remove(bill_id);
         outcome
     }
 
     /// Removes the note for `bill_id`: its records are on the bill, or a
     /// person has said nothing left the wallet.
-    pub fn resolve(&self, bill_id: &str) -> Result<()> {
+    ///
+    /// Refused with [`HostError::SendInFlight`] while a send from `bill_id` is
+    /// under way: until the wallet answers, nobody knows that nothing left it.
+    /// When `seen` is given, only that note is removed, never one a later
+    /// send wrote.
+    pub fn resolve(&self, bill_id: &str, seen: Option<&PendingSend>) -> Result<()> {
+        if self.under_way(bill_id) {
+            return Err(HostError::SendInFlight {
+                bill_id: bill_id.to_owned(),
+                pending: None,
+            });
+        }
+        if let Some(seen) = seen {
+            if let Some(held) = self.of(bill_id)? {
+                // A note that will not read names no send, so it is nobody's
+                // to keep: a person who records what they paid by hand
+                // clears it.
+                if !held.is_damaged() && !held.is_same_send(seen) {
+                    return Err(HostError::SendInFlight {
+                        bill_id: bill_id.to_owned(),
+                        pending: Some(Box::new(held)),
+                    });
+                }
+            }
+        }
         self.storage.delete(&Self::key(bill_id))
     }
 

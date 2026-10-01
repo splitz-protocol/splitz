@@ -71,6 +71,7 @@ Obligation renderObligation(
   required ExchangeRate rate,
   bool skipUnpayable = false,
   bool includeFiat = false,
+  bool Function(String address)? readsAddress,
 }) {
   final payments = <Zip321Payment>[];
   final recipients = <String>[];
@@ -86,7 +87,12 @@ Obligation renderObligation(
       raise(SplitCode.unknownParticipant,
           'The plan settles to ${s.to}, who is not on this bill');
     }
-    final address = who.payableAddress;
+    // §14.6: an address the payer's own reader cannot read is one the whole
+    // request fails on, so it is reported like any other it cannot carry.
+    final payable = who.payableAddress;
+    final address = payable != null && (readsAddress?.call(payable) ?? true)
+        ? payable
+        : null;
     if (address == null) {
       final published = who.publishedAddress;
       final bad = published != null && published.isNotEmpty;

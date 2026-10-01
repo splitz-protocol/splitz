@@ -187,8 +187,20 @@ class SplitsSigner {
   ///
   /// `sig` is part of it: §9.5's digest excludes the signature, so a signed
   /// entry and its unsigned twin share an id while giving opposite answers.
-  static String _pair(Map<String, dynamic> entry, String key) =>
-      '${entry['id']}\u0000${entry['sig']}\u0000$key';
+  /// One (copy, key) question. The copy is its whole canonical encoding: two
+  /// copies may share an id and a signature over different content, and an
+  /// answer filed under the id alone lets the copy that fails overwrite the
+  /// one that verifies. An entry §9.3 cannot encode is filed under its plain
+  /// encoding; ingress refuses it before any fold applies it.
+  static String _pair(Map<String, dynamic> entry, String key) {
+    String copy;
+    try {
+      copy = protocol.canonicalJson(entry);
+    } on protocol.SplitError {
+      copy = jsonEncode(entry);
+    }
+    return '$copy\u0000$key';
+  }
 
   /// Unpadded base64url, as §9.4 writes a key.
   static String encode(List<int> bytes) =>

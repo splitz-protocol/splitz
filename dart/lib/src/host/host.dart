@@ -108,4 +108,17 @@ abstract class BillHost {
   /// across `implements`.
   SignEntry? get sign => null;
   VerifyEntry? get verify => null;
+
+  /// Whether this wallet's own ZIP 321 reader reads [address], or null when
+  /// it reads every address the protocol admits.
+  ///
+  /// §14.6: the payer's wallet reads the request it is handed, and one that
+  /// cannot read one recipient's address refuses the whole request. A
+  /// recipient whose address this answers false for is reported unpayable
+  /// (`bad_address`) and left out of the request, so one participant's
+  /// unreadable `payTo` does not stop a payment to everybody else.
+  ReadsAddress? get readsAddress => null;
 }
+
+/// See [BillHost.readsAddress].
+typedef ReadsAddress = bool Function(String address);

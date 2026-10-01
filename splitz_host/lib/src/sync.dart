@@ -31,14 +31,43 @@ class SplitsSync {
   final SplitsRelay _relay;
   final SplitsSealing _sealing;
 
-  /// Pushes what this device holds, then pulls what it does not.
+  /// §9.4. Throws when [entries] hold [billId]'s create and it commits to a
+  /// key other than [key].
   ///
-  /// Push first, so a participant syncing right after us sees our entries; then
-  /// pull, so we see theirs. Both directions merge by entry id, so running this
+  /// A key handed over with a real bill's id opens whatever its maker sealed
+  /// under it: a copy of the bill with an entry only this device sees, and
+  /// everything this device writes then reaches nobody else. The bill's own
+  /// create names the key it was made with, so a log that disagrees is not
+  /// merged and a held log is not sealed under a key that is not its own.
+  void _refuseForeignKey(
+    String billId,
+    String key,
+    List<Map<String, dynamic>> entries,
+  ) {
+    for (final e in entries) {
+      if (protocol.createRefusesKey(e, billId, key)) {
+        throw SplitsSyncException(
+          protocol.describeCode(protocol.SplitCode.inviteKeyMismatch)!,
+          code: protocol.SplitCode.inviteKeyMismatch,
+          kind: SyncFailure.foreignKey,
+        );
+      }
+    }
+  }
+
+  /// Pulls what this device does not hold, then pushes what the channel does
+  /// not.
+  ///
+  /// Pull first, so a push the relay refuses — a store that is full, a log
+  /// that has outgrown what one request carries — never stops this device
+  /// seeing what the others wrote. The push then sends only blobs the fetch
+  /// did not return: sealing is deterministic, so a blob the channel holds is
+  /// an entry it holds. Both directions merge by content, so running this
   /// twice, or on two devices at once, converges.
   Future<SyncResult> sync(String billId) async {
-    await push(billId);
-    return pull(billId);
+    final (result, fetched) = await _pull(billId);
+    await push(billId, held: fetched);
+    return result;
   }
 
   /// Seals every entry this device holds, as it holds it, and pushes it to
@@ -50,15 +79,26 @@ class SplitsSync {
   /// signed with this device's key on the next push — a forged confirmation
   /// becoming a genuine one. A blob is keyed by its content, so pushing the
   /// whole log every time is safe: the relay stores each entry once however
-  /// often it is sent.
-  Future<List<Map<String, dynamic>>> push(String billId) async {
+  /// often it is sent. Blobs in [held] — what the channel is known to hold —
+  /// are not sent again.
+  Future<List<Map<String, dynamic>>> push(
+    String billId, {
+    Set<String> held = const {},
+  }) async {
     final entries = await _store.read(billId);
     if (entries.isEmpty) return entries;
     final key = await _requireKey(billId);
+    _refuseForeignKey(billId, key, entries);
     final blobs = [
       for (final entry in entries) await _sealing.seal(entry, key),
     ];
-    await _relay.push(SplitsChannel.forBill(billId), blobs);
+    final fresh = [
+      for (final blob in blobs)
+        if (!held.contains(blob)) blob,
+    ];
+    if (fresh.isNotEmpty) {
+      await _relay.push(SplitsChannel.forBill(billId), fresh);
+    }
     return entries;
   }
 
@@ -71,7 +111,10 @@ class SplitsSync {
   /// different bills. §10.7 decides authorship over the whole log at fold time,
   /// where the answer is the same on every device and a locally written entry
   /// faces exactly the rules a synced one does.
-  Future<SyncResult> pull(String billId) async {
+  Future<SyncResult> pull(String billId) async => (await _pull(billId)).$1;
+
+  /// [pull], and the blobs the channel returned.
+  Future<(SyncResult, Set<String>)> _pull(String billId) async {
     final key = await _requireKey(billId);
     final blobs = await _relay.fetch(SplitsChannel.forBill(billId));
 
@@ -87,6 +130,8 @@ class SplitsSync {
       }
     }
 
+    _refuseForeignKey(billId, key, entries);
+
     // Merged only while this device still holds the bill's key. A bill
     // forgotten while the fetch was in flight is not written back: it would
     // return with no key, and the next Share would mint a key nobody else
@@ -100,12 +145,18 @@ class SplitsSync {
       },
     );
     if (!merged.applied) {
-      throw SplitsSyncException('$billId was forgotten while it synced');
+      throw SplitsSyncException(
+        '$billId was forgotten while it synced',
+        kind: SyncFailure.forgotten,
+      );
     }
-    return SyncResult(
-      entries: merged.entries,
-      refused: merged.refused,
-      unopenable: unopenable,
+    return (
+      SyncResult(
+        entries: merged.entries,
+        refused: merged.refused,
+        unopenable: unopenable,
+      ),
+      blobs.toSet(),
     );
   }
 
@@ -118,10 +169,14 @@ class SplitsSync {
       // is a sync that could not run, and is reported as one.
       throw SplitsSyncException(
         'Cannot read the key for $billId: ${e.message}',
+        kind: SyncFailure.keyLocked,
       );
     }
     if (key == null || key.isEmpty) {
-      throw SplitsSyncException('No key for $billId; it cannot be synced');
+      throw SplitsSyncException(
+        'No key for $billId; it cannot be synced',
+        kind: SyncFailure.noKey,
+      );
     }
     return key;
   }
@@ -149,11 +204,32 @@ class SyncResult {
   final int unopenable;
 }
 
+/// Why a bill could not be synced, for a wallet to put in its own words.
+enum SyncFailure {
+  /// This device holds no key for the bill.
+  noKey,
+
+  /// The keychain refused to read the key, as it does while locked.
+  keyLocked,
+
+  /// The bill was forgotten on this device while the sync ran.
+  forgotten,
+
+  /// The key held is not the one the bill was made with (§9.4).
+  foreignKey,
+}
+
 /// Raised when a bill cannot be synced.
 class SplitsSyncException implements Exception {
-  const SplitsSyncException(this.message);
+  const SplitsSyncException(this.message, {this.code, required this.kind});
 
+  /// For a developer: names the bill and the cause.
   final String message;
+
+  /// The §12 code, when the refusal has one.
+  final String? code;
+
+  final SyncFailure kind;
 
   @override
   String toString() => 'SplitsSyncException: $message';

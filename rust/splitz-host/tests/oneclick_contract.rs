@@ -177,3 +177,30 @@ fn every_status_the_api_lists_maps_to_a_stated_answer() {
         );
     }
 }
+
+#[test]
+fn a_floor_below_the_tolerance_asked_for_is_refused() {
+    // The captured answer at its own floor reads; one unit under the bound it
+    // rounds to does not.
+    let mut raw = fixture("quote.json");
+    let out: u128 = raw["quote"]["amountOut"].as_str().unwrap().parse().unwrap();
+    let bound = out * 9_900 / 10_000;
+    raw["quote"]["minAmountOut"] = serde_json::json!((bound - 1).to_string());
+    let refused = quote_from_response(
+        &raw.to_string(),
+        &raw["quoteRequest"].to_string(),
+        &usdc_on_base(),
+        1_000_000,
+        "2026-10-28T19:40:00.000Z",
+    );
+    assert!(refused.is_err(), "{refused:?}");
+    raw["quote"]["minAmountOut"] = serde_json::json!(bound.to_string());
+    assert!(quote_from_response(
+        &raw.to_string(),
+        &raw["quoteRequest"].to_string(),
+        &usdc_on_base(),
+        1_000_000,
+        "2026-10-28T19:40:00.000Z",
+    )
+    .is_ok());
+}

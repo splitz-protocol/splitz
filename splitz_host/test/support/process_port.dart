@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// Starts a local server on port 0 and returns it with the port it bound.
+/// Starts a local server on port 0 and returns it with the port it bound and
+/// the URL it printed, which may carry a path.
 ///
 /// The OS picks a free port and the server prints the one it bound, so the
 /// port is read from its own output rather than chosen here and probed: a
@@ -11,7 +12,7 @@ import 'dart:io';
 ///
 /// Both output streams are drained to the end. A pipe nobody reads closes
 /// under the server, and the request that wrote the next log line fails.
-Future<({Process process, int port})> startOnFreePort(
+Future<({Process process, int port, String url})> startOnFreePort(
   String script,
   List<String> args,
 ) async {
@@ -22,11 +23,13 @@ Future<({Process process, int port})> startOnFreePort(
     '0',
   ]);
   final bound = Completer<int>();
+  String? url;
   final seen = StringBuffer();
   void read(String line) {
     seen.writeln(line);
-    final match = RegExp(r'http://127\.0\.0\.1:(\d+)').firstMatch(line);
+    final match = RegExp(r'http://127\.0\.0\.1:(\d+)\S*').firstMatch(line);
     if (match != null && !bound.isCompleted) {
+      url = match.group(0);
       bound.complete(int.parse(match.group(1)!));
     }
   }
@@ -50,7 +53,7 @@ Future<({Process process, int port})> startOnFreePort(
     final port = await bound.future.timeout(const Duration(seconds: 30));
     // Port 0 is what was asked for, not what was bound.
     if (port == 0) throw StateError('$script reported port 0:\n$seen');
-    return (process: process, port: port);
+    return (process: process, port: port, url: url!);
   } on Object {
     // Never left running: a caller that gets no port has nothing to kill.
     process.kill();

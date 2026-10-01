@@ -126,6 +126,26 @@ fn an_answer_that_is_not_a_channel_is_refused() {
 }
 
 #[test]
+fn a_push_past_one_body_is_split_into_bodies_that_each_fit() {
+    // 600 blobs at the per-blob cap are about 39 MB of JSON: past one body.
+    let blobs: Vec<String> = (0..600)
+        .map(|i| format!("{i:05}{}", "b".repeat(HttpSplitsRelay::MAX_BLOB_CHARS - 5)))
+        .collect();
+    let bodies = HttpSplitsRelay::push_bodies(&blobs).unwrap();
+    assert!(bodies.len() > 1);
+    let mut carried = Vec::new();
+    for body in &bodies {
+        assert!(body.len() <= HttpSplitsRelay::MAX_BODY_BYTES);
+        let v: serde_json::Value = serde_json::from_str(body).unwrap();
+        for b in v["blobs"].as_array().unwrap() {
+            carried.push(b.as_str().unwrap().to_owned());
+        }
+    }
+    assert_eq!(carried, blobs);
+    assert!(HttpSplitsRelay::push_bodies(&[]).unwrap().is_empty());
+}
+
+#[test]
 fn a_blob_over_the_cap_is_refused_before_it_is_sent() {
     let server = FakeServer::default();
     let relay = HttpSplitsRelay::new("https://relay.example", &server).unwrap();

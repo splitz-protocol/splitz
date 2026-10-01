@@ -136,4 +136,16 @@ pub trait BillHost {
     fn verifier(&self) -> Option<VerifyEntry<'_>> {
         None
     }
+
+    /// Whether this wallet's own ZIP 321 reader reads `address`.
+    ///
+    /// §14.6: the payer's wallet reads the request it is handed, and one that
+    /// cannot read one recipient's address refuses the whole request. A
+    /// recipient whose address this answers false for is reported unpayable
+    /// (`bad_address`) and left out of the request, so one participant's
+    /// unreadable `payTo` does not stop a payment to everybody else. The
+    /// default reads every address the protocol admits.
+    fn reads_address(&self, _address: &str) -> bool {
+        true
+    }
 }

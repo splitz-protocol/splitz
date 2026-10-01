@@ -214,7 +214,7 @@ void main() {
       ).recordsFor(b.ana, b.log, _send(), '  ${_txid.toUpperCase()} ');
       expect(records, hasLength(1));
       final payment = b.log.fold().bill.payments.single;
-      expect(payment.id, entries.paymentIdForSend(_txid, 'ben'));
+      expect(payment.id, entries.paymentIdForSend(b.ana.me, _txid, 'ben'));
       expect(payment.amount, 1000);
       expect(payment.to, 'ben');
     });

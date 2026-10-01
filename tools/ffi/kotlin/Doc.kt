@@ -13,13 +13,16 @@ fun facts(me: String, at: String, nonce: Int) =
     HostFacts(me, at, ByteArray(16) { (nonce + it).toByte() })
 
 /// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
-/// key: 32 bytes, unpadded base64url.
-fun seed(first: Int): String = java.util.Base64.getUrlEncoder().withoutPadding()
-    .encodeToString(ByteArray(32) { (first + it).toByte() })
+/// key: 32 bytes, unpadded base64url. Minted once from the platform's secure
+/// generator and kept; a wallet that holds a seed phrase derives it instead,
+/// with `identitySeedFromSecret`, so a restored wallet speaks as the same
+/// participant.
+fun seed(): String = java.util.Base64.getUrlEncoder().withoutPadding()
+    .encodeToString(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) })
 
 fun main() {
-    val anaSeed = seed(1)
-    val benSeed = seed(90)
+    val anaSeed = seed()
+    val benSeed = seed()
     // A wallet that publishes a key speaks as the participant id that key
     // derives (§10.7), or the key binds nothing.
     val anaKey = identityKeyFromSeed(anaSeed)
@@ -30,8 +33,12 @@ fun main() {
     // Ana's device writes four entries. Each comes back as the JSON §9.3
     // canonicalises, with §9.5's id already derived and signed; the wallet
     // stores the string and never inspects it.
+    // The bill's key is minted first, from the platform's entropy: the create
+    // entry commits to it (§9.4), so a joiner can tell an invite's key is
+    // this bill's.
+    val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
     val create = createBillEntry(facts(ana, "2026-10-28T19:31:00.000Z", 1),
-        "Dinner", "EUR", "equal", anaKey, anaSeed)
+        "Dinner", "EUR", "equal", anaKey, billKey, anaSeed)
 
     // The bill these entries belong to, read back from the entry that opened
     // it. Every other entry is signed on it (§10.6), and every fold names it,

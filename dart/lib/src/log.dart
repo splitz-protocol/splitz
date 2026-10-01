@@ -186,6 +186,20 @@ String paymentDigest(Map<String, dynamic> payment) =>
 Map<String, dynamic> _mapOf(Object? value) =>
     value is Map ? value.cast<String, dynamic>() : <String, dynamic>{};
 
+/// §10.3 step 5. Whether [id] is one its [author] minted: the author's
+/// participant id, `:`, then anything.
+///
+/// Only the author writes entries under such an id, so a copy of it in
+/// anybody else's entry is set aside whatever `at` either states. §10.2's
+/// order is each author's to write, and deciding whose id it is by that order
+/// hands it to whoever backdates furthest.
+///
+/// An author whose id holds `:` mints nothing: `<payer>:<txid>` as a
+/// participant id would otherwise own `<payer>:<txid>:<recipient>`, the id the
+/// payer's own send record carries.
+bool ownsId(String author, String id) =>
+    !author.contains(':') && id.startsWith('$author:');
+
 /// `value` as a list, or an empty one. See [_mapOf].
 List<Object?> _listOf(Object? value) => value is List ? value : const [];
 
@@ -207,9 +221,8 @@ Map<String, dynamic> checkEntry(Object? raw) {
   // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
   // and every pass below walks it — deriving its id encodes it. A depth
   // nobody bounded is a stack the peer chose.
-  if (!withinDepth(entry, maxDocumentDepth)) {
-    raise(SplitCode.billTypeError,
-        'An entry nests deeper than $maxDocumentDepth');
+  if (!withinDepth(entry, maxEntryDepth)) {
+    raise(SplitCode.billTypeError, 'An entry nests deeper than $maxEntryDepth');
   }
 
   final kind = entry['kind'];
@@ -311,6 +324,11 @@ Map<String, dynamic> checkEntry(Object? raw) {
       raise(SplitCode.createUnbound,
           'A create entry carries a 32-byte key and a 16-byte nonce');
     }
+    // §9.4: the digest of the bill key it was made with, when it states one.
+    if (entry.containsKey('keyDigest') &&
+        !_isB64UrlOfLength(entry['keyDigest'], 32)) {
+      raise(SplitCode.billTypeError, 'A key digest is 32 bytes');
+    }
     if (entry['id'] != deriveBillId(entry)) {
       raise(SplitCode.createIdNotDerived,
           'A create entry\'s id is the digest of the entry');
@@ -377,12 +395,20 @@ String _instantKey(String at) {
 /// (§10.3). Copies sharing a signature, or all unsigned, resolve to the one
 /// whose canonical encoding sorts higher. Every rule is a function of the
 /// copies alone, which is what makes union commutative.
-MergeResult mergeLogs(List<List<Map<String, dynamic>>> logs) {
+MergeResult mergeLogs(List<List<Object?>> logs) {
   // Id, then signature (null when unsigned), to the copy held.
   final copies = <String, Map<String?, Map<String, dynamic>>>{};
   final refused = <SetAside>[];
   for (final log in logs) {
-    for (final entry in log) {
+    for (final raw in log) {
+      // A log decoded from a peer is a list of whatever the peer sent (§11),
+      // and an element that is not an object is refused like any other
+      // malformed entry rather than failing the merge.
+      if (raw is! Map) {
+        refused.add(const SetAside('', SplitCode.billTypeError));
+        continue;
+      }
+      final entry = raw.cast<String, dynamic>();
       // §10.1 at ingress. Removing a payload member makes an entry sort
       // higher under §9.3, so without this the stripped copy wins rule 3 and
       // displaces the genuine entry on every device.
@@ -963,6 +989,11 @@ FoldResult foldLog(List<Object?> rawEntries,
       return (payload as Map).cast<String, dynamic>();
     });
     if (result == null) continue;
+    // §10.1. The creator's latest rate stands over anybody else's, which
+    // decides only while the creator has set none: the latest by `at` is
+    // whoever dates furthest ahead, and the creator is the one participant
+    // every reader can verify (§10.7).
+    if (rateAuthor == creator && e['author'] != creator) continue;
     rate = result.$1;
     rateEntry = e['id'] as String;
     rateAuthor = e['author'] as String;
@@ -985,7 +1016,29 @@ FoldResult foldLog(List<Object?> rawEntries,
   var running = {for (final id in participants.keys) id: 0};
   // Keyed by the pair itself: ids may hold any character, so no separator
   // joins two of them into one string without collisions.
-  final pairTotal = <(String, String), int>{};
+  // What each author has recorded one participant paying another. §14.4 sums
+  // a payer's own records, so the bound is per author: a record the other
+  // party wrote cannot carry the payer's out of range.
+  final pairTotal = <(String, String, String), int>{};
+  // §10.3 step 5: the ids some entry's own author minted (see [ownsId]).
+  final ownedExpenseIds = <String>{};
+  final ownedPaymentIds = <String>{};
+  for (final e in live) {
+    final member = switch (e['kind']) {
+      'addExpense' => 'expense',
+      'recordPayment' => 'payment',
+      _ => null,
+    };
+    if (member == null) continue;
+    final owned = member == 'expense' ? ownedExpenseIds : ownedPaymentIds;
+    for (final version in [
+      e,
+      if (amendments[e['id']] != null) amendments[e['id']]!
+    ]) {
+      final id = _mapOf(version[member])['id'];
+      if (id is String && ownsId(e['author'] as String, id)) owned.add(id);
+    }
+  }
   for (final e in live) {
     if (e['kind'] == 'addExpense') {
       final result = applied(e, (version) {
@@ -1011,7 +1064,13 @@ FoldResult foldLog(List<Object?> rawEntries,
             decodeExpense(ex, billCurrency, participants.keys.toSet());
         // One id names one expense. An amendment or a withdrawal is written
         // against the expense a reader shows, and two under one id leave it to
-        // guess which.
+        // guess which. An id its author minted is theirs whatever the order;
+        // otherwise the first stands.
+        if (ownedExpenseIds.contains(decoded.id) &&
+            !ownsId(e['author'] as String, decoded.id)) {
+          raise(SplitCode.duplicateExpense,
+              'Copies ${decoded.id}, which its author minted');
+        }
         if (expenseEntries.containsKey(decoded.id)) {
           raise(SplitCode.duplicateExpense, 'Two expenses share ${decoded.id}');
         }
@@ -1060,16 +1119,22 @@ FoldResult foldLog(List<Object?> rawEntries,
         // §10.5: a confirmation names one record, and a method that speaks for
         // the payment's `to` is checked against that record's `to`. Two
         // records under one id name a payee ambiguously, so one recipient's
-        // confirmation would settle a debt another never vouched for. The
-        // first record stands and the second is refused; one transaction
-        // paying several people carries the transaction in `reference`, not
-        // in the id.
+        // confirmation would settle a debt another never vouched for. A record
+        // under an id its author minted stands; otherwise the first does. One
+        // transaction paying several people carries the transaction in
+        // `reference`, not in the id.
+        if (ownedPaymentIds.contains(pay['id']) &&
+            !ownsId(e['author'] as String, pay['id'] as String)) {
+          raise(SplitCode.duplicatePayment,
+              'Copies ${pay['id']}, which its author minted');
+        }
         if (payments.any((p) => p['id'] == pay['id'])) {
           raise(SplitCode.duplicatePayment, 'Two payments share an id');
         }
         // What one participant has recorded paying another, confirmed or not,
         // stays in range: §14.4 sums the unconfirmed part of it.
-        final pair = (pay['from'] as String, pay['to'] as String);
+        final pair =
+            (pay['from'] as String, pay['to'] as String, e['author'] as String);
         final total = checkedAdd(pairTotal[pair] ?? 0, pay['amount'] as int);
         return (pay, pair, total);
       });

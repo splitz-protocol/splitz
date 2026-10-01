@@ -321,6 +321,25 @@ void main() {
       reference: txid,
     );
 
+    test('a reference prefix counts characters, not UTF-16 units or bytes', () {
+      const none = 'ZEC and rate: not recorded';
+      final fifteen = 'é' * 15;
+      final swap = record('swap', reference: fifteen);
+      expect(payee(swap, ['ref ${'é' * 5}… ok', none], 'not recorded'), [
+        (ReviewRule.payeeReference, fifteen),
+      ]);
+      expect(
+        payee(swap, ['ref ${'é' * 10}… ok', none], 'not recorded'),
+        isEmpty,
+      );
+      final mixed = record('swap', reference: 'abcdefghiéxyzxyz');
+      expect(payee(mixed, ['ref abcdefghié…', none], 'not recorded'), isEmpty);
+      final emoji = record('swap', reference: '${'😀' * 12}x');
+      expect(payee(emoji, ['ref ${'😀' * 5}…', none], 'not recorded'), [
+        (ReviewRule.payeeReference, '${'😀' * 12}x'),
+      ]);
+    });
+
     test(
       'a screen showing the record passes; each missing figure is named',
       () {
@@ -331,9 +350,13 @@ void main() {
           (ReviewRule.payeeReference, txid),
         ];
         for (var i = 0; i < payeeScreen.length; i++) {
-          expect(payee(zec, [...payeeScreen]..removeAt(i)), [
-            expected[i],
-          ], reason: 'without "${payeeScreen[i]}"');
+          final shown = [...payeeScreen]..removeAt(i);
+          final missing = [expected[i]];
+          expect(
+            payee(zec, shown),
+            missing,
+            reason: 'without "${payeeScreen[i]}"',
+          );
         }
       },
     );

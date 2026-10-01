@@ -21,6 +21,8 @@ What is checkable is checked here:
   figures-pinned   every number SPEC.md quotes beside a named case matches
                    what that case measures
   sections-resolve every §N cross-reference points at a section that exists
+  no-test-tallies  no tracked document quotes a test count, which no lane
+                   measures
   seam-declared    every interface §15 names is declared in the host package,
   seam-declared-rust  the same seven in the Rust host crate, its operation
                    names compared in snake case
@@ -38,6 +40,7 @@ Exit status is 1 when a claim fails, so it can gate a commit.
 import json
 import pathlib
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -102,8 +105,10 @@ def thrown() -> dict[str, set[str]]:
     Dart and Rust name a constant at the throw site, so the constant's own
     name is resolved back to its string; the reference names the string.
     """
+    # Every file of the package, the host kit in its subdirectory included:
+    # a code raised there is raised by this implementation.
     dart_src = "\n".join(p.read_text(encoding="utf-8")
-                         for p in (ROOT / "dart/lib/src").glob("*.dart"))
+                         for p in (ROOT / "dart/lib/src").rglob("*.dart"))
     dart_names = dict(re.findall(
         r"static const (\w+) =\s*'([a-z][a-z0-9_]+)';",
         (ROOT / "dart/lib/src/errors.dart").read_text(encoding="utf-8")))
@@ -111,7 +116,7 @@ def thrown() -> dict[str, set[str]]:
             if n in dart_names}
 
     rust_src = "\n".join(p.read_text(encoding="utf-8")
-                         for p in (ROOT / "rust/splitz-core/src").glob("*.rs"))
+                         for p in (ROOT / "rust/splitz-core/src").rglob("*.rs"))
     rust_names = dict(re.findall(
         r'pub const ([A-Z0-9_]+): &str = "([a-z][a-z0-9_]+)";',
         (ROOT / "rust/splitz-core/src/error.rs").read_text(encoding="utf-8")))
@@ -136,6 +141,11 @@ def corpus_codes() -> set[str]:
                 walk(item)
 
     for path in sorted((ROOT / "vectors").glob("*.json")):
+        # `messages.json` pairs every code with its sentence, so each `code`
+        # in it is a key of that table rather than a code any input
+        # produced. Counted, it would cover every code there is.
+        if path.name == "messages.json":
+            continue
         walk(json.loads(path.read_text(encoding="utf-8")))
     return found
 
@@ -380,6 +390,20 @@ def main() -> int:
                 bad_code_counts.append(
                     f"{name} says §12 lists {m.group(1)}, it lists {code_total}")
     check("code-count", code_counts, bad_code_counts)
+
+    # A test count in a tracked document is a figure no lane measures: the
+    # suites grow and the sentence goes on promising the old number.
+    tracked = subprocess.run(
+        ["git", "ls-files", "*.md"], cwd=ROOT, capture_output=True,
+        text=True, check=True).stdout.split()
+    bad_tallies: list[str] = []
+    for name in tracked:
+        body = (ROOT / name).read_text(encoding="utf-8")
+        for m in re.finditer(
+                r"\+\d+: All tests passed|\b\d+ in all\b|\b\d+ tests\b",
+                body):
+            bad_tallies.append(f"{name} quotes a test count: {m.group(0)!r}")
+    check("no-test-tallies", len(tracked), bad_tallies)
 
     # Every interface §15 names is declared in the host package, with every
     # operation §15 names on it. A seam written down is a contract, and a

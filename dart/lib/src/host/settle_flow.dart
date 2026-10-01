@@ -160,8 +160,13 @@ PayerObligation? obligationVia(
       settlements: const [],
       awaiting: awaiting,
       rate: rate,
-      request: splitz
-          .renderObligation(const [], chosen, rate: rate, skipUnpayable: true),
+      request: splitz.renderObligation(
+        const [],
+        chosen,
+        rate: rate,
+        skipUnpayable: true,
+        readsAddress: host.readsAddress,
+      ),
     );
   }
 
@@ -173,6 +178,7 @@ PayerObligation? obligationVia(
     chosen,
     rate: rate,
     skipUnpayable: true,
+    readsAddress: host.readsAddress,
   );
 
   return PayerObligation(
@@ -187,7 +193,11 @@ PayerObligation? obligationVia(
 /// vouched for, and the fold sets the second aside as `duplicate_payment` —
 /// losing the record of a payment that was made. The transaction itself goes
 /// in the record's `reference`, which is what `onChain` reads.
-String paymentIdForSend(String txid, String to) => '$txid:$to';
+///
+/// [from] is the payer who writes the record, and the id is theirs under
+/// [authoredId].
+String paymentIdForSend(String from, String txid, String to) =>
+    authoredId(from, '$txid:$to');
 
 /// Sends [obligation] and records that it was sent.
 ///
@@ -281,7 +291,7 @@ Future<List<Map<String, dynamic>>> recordSend(
       billId: billId,
       entry: recordPayment(
         host: host,
-        paymentId: paymentIdForSend(txid, entry.key),
+        paymentId: paymentIdForSend(host.me, txid, entry.key),
         to: entry.key,
         amount: entry.value,
         reference: txid,

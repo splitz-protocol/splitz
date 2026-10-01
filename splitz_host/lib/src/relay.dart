@@ -141,6 +141,35 @@ class HttpSplitsRelay implements SplitsRelay {
   /// server: a bound only one side keeps is not a bound.
   static const int maxBlobChars = 64 * 1024;
 
+  /// A push body longer than this, in UTF-8 bytes, is refused by the server,
+  /// so a push is split into requests that each fit. Mirrored by the server.
+  static const int maxBodyBytes = 32 * 1024 * 1024;
+
+  /// [blobs] as the push bodies that carry them, in order, each at most
+  /// [maxBodyBytes]. Every blob is at most [maxBlobChars], so every body
+  /// holds at least one.
+  static List<String> pushBodies(List<String> blobs) {
+    const open = '{"blobs":[', close = ']}';
+    const empty = open.length + close.length;
+    final bodies = <String>[];
+    var batch = <String>[];
+    var size = empty;
+    for (final blob in blobs) {
+      final encoded = jsonEncode(blob);
+      final bytes = utf8.encode(encoded).length;
+      // One more blob costs its bytes and, after the first, a comma.
+      if (batch.isNotEmpty && size + 1 + bytes > maxBodyBytes) {
+        bodies.add('$open${batch.join(',')}$close');
+        batch = [];
+        size = empty;
+      }
+      size += (batch.isEmpty ? 0 : 1) + bytes;
+      batch.add(encoded);
+    }
+    if (batch.isNotEmpty) bodies.add('$open${batch.join(',')}$close');
+    return bodies;
+  }
+
   Uri _channelUrl(String channel) =>
       origin.replace(path: '${origin.path}/c/$channel');
 
@@ -156,15 +185,17 @@ class HttpSplitsRelay implements SplitsRelay {
         );
       }
     }
-    final String body;
-    try {
-      body = await _post(_channelUrl(channel), jsonEncode({'blobs': blobs}));
-    } on Object catch (e) {
-      throw SplitsRelayException('Could not reach the relay: $e');
-    }
-    final decoded = _decode(body);
-    if (decoded['ok'] != true) {
-      throw SplitsRelayException('The relay refused the push: $body');
+    for (final request in pushBodies(blobs)) {
+      final String body;
+      try {
+        body = await _post(_channelUrl(channel), request);
+      } on Object catch (e) {
+        throw SplitsRelayException('Could not reach the relay: $e');
+      }
+      final decoded = _decode(body);
+      if (decoded['ok'] != true) {
+        throw SplitsRelayException('The relay refused the push: $body');
+      }
     }
   }
 

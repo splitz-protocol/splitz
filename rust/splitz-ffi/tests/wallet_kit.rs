@@ -147,6 +147,7 @@ fn bill() -> (Device, String, Vec<String>) {
         "EUR".into(),
         "equal".into(),
         ana.key.clone(),
+        None,
         ana.seed.clone(),
     )
     .unwrap();
@@ -205,14 +206,10 @@ fn an_invite_link_reads_back_and_its_expiry_is_compared_with_the_callers_clock()
 #[test]
 fn a_delta_carries_what_the_peer_lacks_and_nothing_when_it_lacks_nothing() {
     let (ana, bill_id, entries) = bill();
+    // §14.5: a peer names each copy it holds, the id and the signature.
     let ids: Vec<String> = entries
         .iter()
-        .map(|e| {
-            serde_json::from_str::<serde_json::Value>(e).unwrap()["id"]
-                .as_str()
-                .unwrap()
-                .to_owned()
-        })
+        .map(|e| splitz_ffi::copy_key(e.clone()).unwrap())
         .collect();
     let none = delta_for_peer(ana.facts(4), bill_id.clone(), entries.clone(), ids.clone()).unwrap();
     assert_eq!((none.missing, none.uri, none.too_big_code), (0, None, None));
@@ -260,11 +257,87 @@ fn only_the_payee_is_asked_to_confirm() {
         .unwrap();
     assert_eq!(
         mine.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
-        ["tx-1"]
+        [format!("{}:tx-1", ben.me)]
     );
     assert!(
         splitz_ffi::awaiting_my_confirmation(ben.facts(6), bill_id, entries)
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn blobs_sealed_under_a_key_the_bill_did_not_commit_to_are_not_kept() {
+    // §9.4: the create states its key's digest, so a log sealed for somebody
+    // under another key opens as foreign.
+    let ana = Device::new(1);
+    let own = new_bill_key(RandomBytes { bytes: vec![7; 32] }).unwrap();
+    let stranger = new_bill_key(RandomBytes { bytes: vec![9; 32] }).unwrap();
+    let create = create_bill_entry(
+        ana.facts(1),
+        "Dinner".into(),
+        "EUR".into(),
+        "equal".into(),
+        ana.key.clone(),
+        Some(own.clone()),
+        ana.seed.clone(),
+    )
+    .unwrap();
+    let bill_id = serde_json::from_str::<serde_json::Value>(&create).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let foreign = splitz_ffi::open_blobs(
+        splitz_ffi::blobs_to_push(vec![create.clone()], stranger.clone()).unwrap(),
+        bill_id.clone(),
+        stranger,
+    );
+    assert!(foreign.foreign_key);
+    assert!(foreign.entries.is_empty());
+    assert_eq!(foreign.unopenable, 1);
+    let honest = splitz_ffi::open_blobs(
+        splitz_ffi::blobs_to_push(vec![create], own.clone()).unwrap(),
+        bill_id,
+        own,
+    );
+    assert!(!honest.foreign_key);
+    assert_eq!(honest.entries.len(), 1);
+}
+
+#[test]
+fn a_create_that_only_states_the_bill_id_does_not_make_its_key_foreign() {
+    // §9.4: only the bill's own create, whose id derives, speaks for the key.
+    // Anybody holding the key can seal a create stating the bill's id with
+    // another keyDigest, or a real create for another bill.
+    let ana = Device::new(1);
+    let own = new_bill_key(RandomBytes { bytes: vec![7; 32] }).unwrap();
+    let stranger = new_bill_key(RandomBytes { bytes: vec![9; 32] }).unwrap();
+    let make = |key: &str| {
+        create_bill_entry(
+            ana.facts(1),
+            "Dinner".into(),
+            "EUR".into(),
+            "equal".into(),
+            ana.key.clone(),
+            Some(key.to_owned()),
+            ana.seed.clone(),
+        )
+        .unwrap()
+    };
+    let genuine = make(&own);
+    let bill_id = serde_json::from_str::<serde_json::Value>(&genuine).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The genuine create with its keyDigest swapped: it still states the id.
+    let mut swapped = serde_json::from_str::<serde_json::Value>(&make(&stranger)).unwrap();
+    swapped["id"] = serde_json::Value::from(bill_id.clone());
+    // A real create, for a bill of its own, committing to another key.
+    let other = make(&stranger);
+    let blobs =
+        splitz_ffi::blobs_to_push(vec![genuine, swapped.to_string(), other], own.clone()).unwrap();
+    let opened = splitz_ffi::open_blobs(blobs, bill_id, own);
+    assert!(!opened.foreign_key);
+    assert_eq!(opened.entries.len(), 3);
+    assert_eq!(opened.unopenable, 0);
 }

@@ -1,6 +1,6 @@
 {
   "description": "Invite URIs. SPEC.md section 11.1.",
-  "count": 76,
+  "count": 79,
   "cases": [
     {
       "name": "a_plain_invite",
@@ -30,6 +30,36 @@
         "billId": "Ab3-_xyz",
         "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
         "name": "Zcon7 d\u00eener"
+      }
+    },
+    {
+      "name": "a_percent_before_a_space_is_literal",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Rent% 4 July",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Rent% 4 July"
+      }
+    },
+    {
+      "name": "a_percent_before_a_sign_is_literal",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Rent%-1",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Rent%-1"
+      }
+    },
+    {
+      "name": "a_percent_before_a_plus_is_literal",
+      "uri": "splitz://join?v=1&b=Ab3-_xyz&k=kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk&n=Rent%+1",
+      "expect": {
+        "version": 1,
+        "billId": "Ab3-_xyz",
+        "key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+        "name": "Rent%+1"
       }
     },
     {

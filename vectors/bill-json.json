@@ -1,6 +1,6 @@
 {
   "description": "Decoding a bill. SPEC.md sections 2 and 9.",
-  "count": 48,
+  "count": 50,
   "cases": [
     {
       "name": "a_plain_bill",
@@ -1446,7 +1446,101 @@
         ],
         "payments": []
       },
-      "error": "bill_type_error"
+      "error": "canonical_json_float"
+    },
+    {
+      "name": "an_amount_of_two_to_the_63",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": 9223372036854775808,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": []
+      },
+      "error": "amount_overflow"
+    },
+    {
+      "name": "an_amount_of_minus_two_to_the_63",
+      "json": {
+        "v": 1,
+        "id": "weekend",
+        "name": "Zcon7 weekend",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [
+          {
+            "id": "e1",
+            "description": "dinner",
+            "paidBy": "ana",
+            "amount": -9223372036854775808,
+            "currency": "EUR",
+            "at": "2026-10-28T19:30:00.000Z",
+            "split": {
+              "type": "equal",
+              "among": [
+                "ana",
+                "ben",
+                "cai"
+              ]
+            }
+          }
+        ],
+        "payments": []
+      },
+      "error": "amount_overflow"
     },
     {
       "name": "a_leap_second",

@@ -197,7 +197,7 @@ void main() {
     final record = settled.records.single['payment'] as Map<String, dynamic>;
     expect(record['amount'], 4500,
         reason: 'the record is what was sent, not what is owed now');
-    expect(record['id'], '${settled.txid}:ana',
+    expect(record['id'], 'ben:${settled.txid}:ana',
         reason: 'a record carries its own id; the transaction is the '
             'reference');
     expect(record['reference'], settled.txid);
@@ -383,7 +383,7 @@ void main() {
     expect(records.map(payment).toList(), sent.records.map(payment).toList());
     expect(later.log.fold().setAside, isEmpty);
     expect(later.log.fold().bill.payments.map((p) => p.id).toSet(),
-        {'${sent.txid}:ben', '${sent.txid}:cat'});
+        {'ana:${sent.txid}:ben', 'ana:${sent.txid}:cat'});
   });
 
   test('what a request carries leaves out whom it cannot pay', () {
@@ -422,6 +422,28 @@ void main() {
     expect(owed.settlements.map((s) => s.to), ['ben', 'cat']);
     expect(owed.unpayable.map((u) => u.id), ['cat']);
     expect(owed.carriedTo, {'ben': 3000});
+  });
+
+  test('an address the payer cannot read is unpayable, and the rest is paid',
+      () {
+    // Ana owes ben 30.00 and cat 30.00. Cat's `payTo` passes §8.3's alphabet
+    // but this wallet's reader refuses it; a request naming it would be
+    // refused whole, so ben's share goes out alone.
+    final d = twoDebts();
+    final reading = FakeHost(
+      me: 'ana',
+      payToAddress: 'u1ana',
+      readsAddress: (a) => a != 'u1cat',
+    );
+    final owed = obligationFor(reading, d.log.fold())!;
+    expect(
+        owed.unpayable.map((u) => '${u.id}:${u.reason}'), ['cat:bad_address']);
+    expect(owed.carriedTo, {'ben': 3000});
+    expect(owed.uri, isNot(contains('u1cat')));
+
+    final everything = obligationFor(d.ana, d.log.fold())!;
+    expect(everything.unpayable, isEmpty);
+    expect(everything.carriedTo, {'ben': 3000, 'cat': 3000});
   });
 
   test('a send that failed records nothing and says why', () async {
@@ -483,15 +505,15 @@ void main() {
     // §10.5: `onChain` needs a reference, and is the payee's to state.
     final confirm = confirmPayment(
       host: d.ana,
-      paymentId: '${settled.txid}:ana',
+      paymentId: 'ben:${settled.txid}:ana',
       method: 'onChain',
       reference: settled.txid,
-      record: d.log.fold().paymentDigests['${settled.txid}:ana']!,
+      record: d.log.fold().paymentDigests['ben:${settled.txid}:ana']!,
     );
     d.log.add([confirm]);
 
     final after = d.log.fold();
-    expect(after.bill.confirmedPayments, contains('${settled.txid}:ana'));
+    expect(after.bill.confirmedPayments, contains('ben:${settled.txid}:ana'));
     expect(splitz.netBalances(after.bill)['ben'], 0);
     expect(splitz.netBalances(after.bill)['ana'], 0);
   });
@@ -565,7 +587,7 @@ void main() {
     expect(settled.records.length, 2);
     expect(
       settled.records.map((r) => (r['payment'] as Map<String, dynamic>)['id']),
-      ['$txid:ben', '$txid:cat'],
+      ['ana:$txid:ben', 'ana:$txid:cat'],
     );
     expect(
       settled.records
@@ -593,9 +615,9 @@ void main() {
       d.log.add([
         confirmPayment(
           host: ben,
-          paymentId: '$txid:ben',
+          paymentId: 'ana:$txid:ben',
           method: 'recipientConfirmed',
-          record: d.log.fold().paymentDigests['$txid:ben']!,
+          record: d.log.fold().paymentDigests['ana:$txid:ben']!,
         )
       ]),
       isEmpty,
@@ -603,7 +625,7 @@ void main() {
 
     final end = d.log.fold();
     expect(end.setAside, isEmpty);
-    expect(end.bill.confirmedPayments, {'$txid:ben'});
+    expect(end.bill.confirmedPayments, {'ana:$txid:ben'});
     expect(splitz.netBalances(end.bill)['ben'], 0);
     expect(splitz.netBalances(end.bill)['cat'], 3000);
     expect(splitz.netBalances(end.bill)['ana'], -3000);
@@ -613,6 +635,8 @@ void main() {
 /// A host whose send makes the world move: the wallet syncs while the
 /// transaction is in flight.
 class _HostThatSyncsOnSend implements BillHost {
+  @override
+  ReadsAddress? get readsAddress => null;
   _HostThatSyncsOnSend(this._inner, this._onSend);
   final BillHost _inner;
   final void Function() _onSend;
@@ -637,6 +661,8 @@ class _HostThatSyncsOnSend implements BillHost {
 
 /// A host whose every send ends the same way.
 class _FixedOutcome implements BillHost {
+  @override
+  ReadsAddress? get readsAddress => null;
   _FixedOutcome(this._inner, this._outcome);
 
   final BillHost _inner;

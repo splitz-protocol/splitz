@@ -90,7 +90,9 @@ fn the_next_send_from_the_bill_is_refused() {
     let storage = InMemoryBillStorage::default();
     let sends = PendingSends::new(&storage);
     sends.begin(&send("b1")).unwrap();
-    sends.end("b1", SendEnded::Unresolved, None, false).unwrap();
+    sends
+        .end("b1", SendEnded::Unresolved, None, false, None)
+        .unwrap();
     let held = sends.of("b1").unwrap().expect("written down");
     assert_eq!(held.uri, "zcash:u1ben?amount=0.1");
     assert_eq!(
@@ -146,7 +148,9 @@ fn started(storage: &InMemoryBillStorage) -> PendingSends<'_> {
 fn refused_the_note_goes_and_the_debt_can_be_sent_again() {
     let storage = InMemoryBillStorage::default();
     let sends = started(&storage);
-    sends.end("b1", SendEnded::Refused, None, false).unwrap();
+    sends
+        .end("b1", SendEnded::Refused, None, false, None)
+        .unwrap();
     assert!(sends.of("b1").unwrap().is_none());
     sends.begin(&send("b1")).unwrap();
 }
@@ -156,7 +160,7 @@ fn reached_the_network_and_recorded_the_note_goes() {
     let storage = InMemoryBillStorage::default();
     let sends = started(&storage);
     sends
-        .end("b1", SendEnded::ReachedNetwork, Some(TXID), true)
+        .end("b1", SendEnded::ReachedNetwork, Some(TXID), true, None)
         .unwrap();
     assert!(sends.of("b1").unwrap().is_none());
 }
@@ -166,7 +170,7 @@ fn reached_the_network_and_not_recorded_it_stays_with_the_transaction() {
     let storage = InMemoryBillStorage::default();
     let sends = started(&storage);
     sends
-        .end("b1", SendEnded::ReachedNetwork, Some(TXID), false)
+        .end("b1", SendEnded::ReachedNetwork, Some(TXID), false, None)
         .unwrap();
     assert_eq!(sends.of("b1").unwrap().unwrap().txid.as_deref(), Some(TXID));
     assert!(in_flight(sends.begin(&send("b1")).unwrap_err()).is_some());
@@ -177,7 +181,7 @@ fn unresolved_it_stays_with_the_transaction_the_wallet_built() {
     let storage = InMemoryBillStorage::default();
     let sends = started(&storage);
     sends
-        .end("b1", SendEnded::Unresolved, Some(TXID), false)
+        .end("b1", SendEnded::Unresolved, Some(TXID), false, None)
         .unwrap();
     assert_eq!(sends.of("b1").unwrap().unwrap().txid.as_deref(), Some(TXID));
 }
@@ -186,7 +190,9 @@ fn unresolved_it_stays_with_the_transaction_the_wallet_built() {
 fn unresolved_with_no_transaction_named_it_stays_as_written() {
     let storage = InMemoryBillStorage::default();
     let sends = started(&storage);
-    sends.end("b1", SendEnded::Unresolved, None, false).unwrap();
+    sends
+        .end("b1", SendEnded::Unresolved, None, false, None)
+        .unwrap();
     let held = sends.of("b1").unwrap().expect("kept");
     assert!(held.txid.is_none());
 }
@@ -195,8 +201,10 @@ fn unresolved_with_no_transaction_named_it_stays_as_written() {
 fn resolving_removes_it() {
     let storage = InMemoryBillStorage::default();
     let sends = started(&storage);
-    sends.end("b1", SendEnded::Unresolved, None, false).unwrap();
-    sends.resolve("b1").unwrap();
+    sends
+        .end("b1", SendEnded::Unresolved, None, false, None)
+        .unwrap();
+    sends.resolve("b1", None).unwrap();
     assert!(sends.of("b1").unwrap().is_none());
 }
 
@@ -240,14 +248,16 @@ fn a_note_the_storage_cannot_read_still_blocks() {
     let storage = Flaky::default();
     let sends = PendingSends::new(&storage);
     sends.begin(&send("b1")).unwrap();
-    sends.end("b1", SendEnded::Unresolved, None, false).unwrap();
+    sends
+        .end("b1", SendEnded::Unresolved, None, false, None)
+        .unwrap();
     storage.unreadable.set(true);
     assert!(sends.of("b1").unwrap().unwrap().is_damaged());
 }
 
 fn bill(ana: &FakeWallet, ben: &FakeWallet) -> Vec<serde_json::Value> {
     let host = WalletBillHost::new(ana);
-    let create = create_bill(&host, "D", "USD", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&host, "D", "USD", "equal", &fake_key("ana"), None).unwrap();
     let join_ana = join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap();
     let join_ben = join_bill(
         &WalletBillHost::new(ben),
@@ -279,7 +289,7 @@ fn records_each_recipient_under_the_transaction() {
     assert_eq!(records.len(), 1);
     let payments = log.fold().unwrap().bill.payments;
     assert_eq!(payments.len(), 1);
-    assert_eq!(payments[0].id, payment_id_for_send(TXID, "ben"));
+    assert_eq!(payments[0].id, payment_id_for_send("ana", TXID, "ben"));
     assert_eq!(payments[0].amount, 1000);
     assert_eq!(payments[0].to, "ben");
 }

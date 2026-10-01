@@ -345,6 +345,32 @@ pub fn quote_from_response(
             false,
         ));
     }
+    // The floor is what the recipient is guaranteed. One below the tolerance
+    // asked for lets the provider keep more than the payer agreed to lose, and
+    // the record still says the whole debt was paid.
+    if let Some(floor) = optional(quote, "minAmountOut") {
+        let out = required(quote, "amountOut")?.parse::<u128>().ok();
+        let least = floor.parse::<u128>().ok();
+        let (Some(out), Some(least)) = (out, least) else {
+            return Err(swap_error(
+                "The provider quoted amounts out of shape",
+                false,
+            ));
+        };
+        let tolerated = (10_000 - OneClickSwaps::SLIPPAGE_BASIS_POINTS).unsigned_abs() as u128;
+        // The provider rounds its floor down, so the bound is the product
+        // rounded down too: 15150548 at 1% is 14999042.52, stated 14999042.
+        let short = match out.checked_mul(tolerated) {
+            Some(o) => least < o / 10_000,
+            None => true,
+        };
+        if short {
+            return Err(swap_error(
+                "The provider guarantees less than the tolerance asked for",
+                false,
+            ));
+        }
+    }
     Ok(SwapQuote {
         deposit_address: required(quote, "depositAddress")?,
         recipient: asked

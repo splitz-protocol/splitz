@@ -621,7 +621,7 @@
           "ben": 2.5
         }
       },
-      "error": "bill_type_error"
+      "error": "canonical_json_float"
     },
     {
       "name": "an_item_whose_amount_is_a_string",

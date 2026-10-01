@@ -29,10 +29,11 @@ class SeedDriverException implements Exception {
 
 /// The development seed driver, as a build talks to it.
 ///
-/// Two routes:
+/// Two routes under [origin], which is the URL the driver printed when it
+/// started — its per-run token is the last segment of the path:
 ///
-///     GET /health        -> 200, so a script can wait for it
-///     GET /seed/<index>  -> {"seed": "<phrase>", "name": "<label>"}
+///     GET <origin>/health        -> 200, so a script can wait for it
+///     GET <origin>/seed/<index>  -> {"seed": "<phrase>", "name": "<label>"}
 class SeedDriver {
   const SeedDriver({required this.origin, required SeedFetch fetch})
     : _fetch = fetch;

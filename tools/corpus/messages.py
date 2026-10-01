@@ -82,6 +82,7 @@ MESSAGES = {
     "invite_missing_key": "This invite is incomplete. Ask for a new one.",
     "invite_bad_expiry": "This invite is damaged. Ask for a new one.",
     "invite_bad_link": "This invite link can't be made from that address.",
+    "invite_key_mismatch": "This invite doesn't fit this bill. Ask its organiser for a new one.",
     "payload_not_a_payload": "This isn't a bill code.",
     "payload_damaged": "This code is damaged. Scan it again.",
     "payload_missing_body": "This code is incomplete. Scan it again.",

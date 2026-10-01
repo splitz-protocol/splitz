@@ -36,6 +36,7 @@ Exit status is 1 when a block has drifted, so it can gate a commit.
 """
 import difflib
 import pathlib
+import subprocess
 import re
 import sys
 
@@ -66,8 +67,8 @@ def marked_sources() -> set[str]:
     """Every file in the tree that offers itself to a document."""
     out = set()
     me = pathlib.Path(__file__).resolve()
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or "target" in path.parts:
+    for path in tracked():
+        if not path.is_file() or "target" in path.parts:
             continue
         if path.resolve() == me:
             continue
@@ -81,11 +82,25 @@ def marked_sources() -> set[str]:
     return out
 
 
+def tracked() -> list[pathlib.Path]:
+    """The files the repository holds, and nothing a checkout merely has lying
+    around: a scratch copy of the tree under an ignored directory would
+    otherwise offer every sample twice."""
+    names = subprocess.run(
+        ["git", "-C", str(ROOT), "ls-files", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout.decode("utf-8").split("\0")
+    return [ROOT / n for n in names if n]
+
+
 def scripts_text() -> str:
     return "\n".join(
         p.read_text(encoding="utf-8")
-        for p in (ROOT / "tools").rglob("*")
-        if p.is_file() and p.suffix in {".sh", ".py", ".yml"}
+        for p in tracked()
+        if p.parts[len(ROOT.parts)] == "tools"
+        and p.is_file()
+        and p.suffix in {".sh", ".py", ".yml"}
     )
 
 

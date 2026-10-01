@@ -5,13 +5,24 @@
 //! names already holds the evidence, so it can propose the confirmation
 //! instead of asking the payee to find the payment by hand.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::model::PaymentRecord;
 use crate::ordering::compare_utf8;
 use crate::zip321::MAX_ZATOSHI;
 
 use super::bill_log::FoldedBill;
+
+/// A transaction id as section 14.7 compares it: ASCII space, tab, carriage
+/// return and line feed removed from both ends, and ASCII letters lower-cased.
+///
+/// Nothing wider: a txid is hexadecimal, and each language's own `trim` and
+/// lower-casing reach different sets of Unicode characters, so one record
+/// would match on one device and not on another.
+pub fn txid_key(txid: &str) -> String {
+    txid.trim_matches(|c| matches!(c, ' ' | '\t' | '\r' | '\n'))
+        .to_ascii_lowercase()
+}
 
 /// Money this wallet received in one transaction: the sum of that
 /// transaction's outputs to this account, in zatoshi.
@@ -48,6 +59,11 @@ pub struct Arrivals {
     /// Records whose transaction arrived and which state no ZEC, so nothing
     /// can be checked against it.
     pub unstated: Vec<Arrival>,
+    /// Records naming a transaction that records from another payer also
+    /// name. None of them is proposed: a shielded transaction does not say who
+    /// sent it, and any participant can copy a reference they have seen, so
+    /// the payee has to settle which record it pays before confirming any.
+    pub disputed: Vec<Arrival>,
 }
 
 fn clamp(zatoshi: i64) -> i64 {
@@ -63,6 +79,15 @@ fn use_up(left: i64, used: i64) -> i64 {
     }
 }
 
+/// Who a record says paid, for §14.7's "more than one payer".
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Payer<'a> {
+    /// The key §10.7 bound to the payer.
+    Bound(&'a str),
+    /// An unbound payer: the bill, and their id on it.
+    Unbound(&'a str, &'a str),
+}
+
 /// Matches unconfirmed ZEC payment records to `me` against the transactions
 /// `received`, across every one of `bills` at once (§14.7).
 ///
@@ -72,19 +97,44 @@ fn use_up(left: i64, used: i64) -> i64 {
 /// rest in order of bill id and payment id. Without that, one real payment
 /// recorded on two bills is evidence for both.
 ///
+/// A transaction named by records from more than one payer is evidence for
+/// none of them: every such record is [`Arrivals::disputed`].
+///
 /// Amounts are held inside [0, 21000000 ZEC]: no transaction brings more than
 /// exists, and a record's `zatoshi` may be as large as §2.2 allows, so using
 /// it up floors at zero rather than wrapping.
 pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransaction]) -> Arrivals {
     let mut left: BTreeMap<String, i64> = BTreeMap::new();
     for t in received {
-        let id = t.txid.trim().to_lowercase();
+        let id = txid_key(&t.txid);
         let sum = left.get(&id).copied().unwrap_or(0);
         left.insert(id, clamp(clamp(sum) + clamp(t.zatoshi)));
     }
 
     let mut ordered: Vec<&FoldedBill> = bills.iter().collect();
     ordered.sort_by(|a, b| compare_utf8(&a.bill.id, &b.bill.id));
+    // Who each received transaction is claimed to be from, over every record
+    // to `me` that names it, confirmed or not. A payer is the key §10.7 bound
+    // to them, or, unbound, their id on that one bill: an id is chosen by
+    // whoever joins, so the same string on two bills can be two people.
+    let mut payers: BTreeMap<String, BTreeSet<Payer<'_>>> = BTreeMap::new();
+    for folded in &ordered {
+        for p in &folded.bill.payments {
+            if p.to != me || p.method != "shieldedZec" {
+                continue;
+            }
+            let Some(txid) = p.reference.as_deref().map(txid_key) else {
+                continue;
+            };
+            if left.contains_key(&txid) {
+                let payer = match folded.identities.bound.get(&p.from) {
+                    Some(key) => Payer::Bound(key),
+                    None => Payer::Unbound(&folded.bill.id, &p.from),
+                };
+                payers.entry(txid).or_default().insert(payer);
+            }
+        }
+    }
     let mut candidates = Vec::new();
     for folded in ordered {
         let mut payments: Vec<&PaymentRecord> = folded.bill.payments.iter().collect();
@@ -93,7 +143,7 @@ pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransact
             if p.to != me || p.method != "shieldedZec" {
                 continue;
             }
-            let Some(txid) = p.reference.as_deref().map(|r| r.trim().to_lowercase()) else {
+            let Some(txid) = p.reference.as_deref().map(txid_key) else {
                 continue;
             };
             let Some(available) = left.get(&txid).copied() else {
@@ -117,6 +167,10 @@ pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransact
 
     let mut out = Arrivals::default();
     for a in candidates {
+        if payers[&a.txid].len() > 1 {
+            out.disputed.push(a);
+            continue;
+        }
         let available = left[&a.txid];
         match a.payment.zatoshi {
             None => out.unstated.push(a),

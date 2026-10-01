@@ -20,6 +20,7 @@ fn a_wallet_opens_a_bill_from_facts_alone() {
         "EUR".to_owned(),
         "equal".to_owned(),
         creator_key,
+        None,
         seed,
     )
     .expect("the entry is written");
@@ -48,6 +49,7 @@ fn a_seed_of_the_wrong_length_is_an_error_not_a_panic() {
             "EUR".to_owned(),
             "equal".to_owned(),
             key,
+            None,
             short,
         )
     });
@@ -78,6 +80,7 @@ fn a_nonce_shorter_than_sixteen_bytes_is_refused_not_padded() {
             "EUR".to_owned(),
             "equal".to_owned(),
             key.clone(),
+            None,
             seed.clone(),
         )
     };

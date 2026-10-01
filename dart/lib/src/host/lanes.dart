@@ -55,7 +55,13 @@ SettleLane laneFor(splitz.Participant participant) {
           ? SettleLane.none
           : SettleLane.zec;
     case 'swap':
-      return SettleLane.swap;
+      // A swap delivers an asset on a chain to an address; without all three
+      // there is nowhere to deliver, as with a Zcash payout's empty address.
+      final p = participant.payouts.first;
+      bool blank(String? s) => s == null || s.trim().isEmpty;
+      return (blank(p.asset) || blank(p.chain) || blank(p.address))
+          ? SettleLane.none
+          : SettleLane.swap;
     case 'cash':
       return SettleLane.cash;
   }

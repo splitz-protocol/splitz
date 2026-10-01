@@ -1010,6 +1010,16 @@ magnitude reaches 2^63 — or that no double holds, such as `1e400` — is
 `canonical_json_float`. `-0` is the integer 0: a reader whose parser keeps it
 as a negative float reads it as zero, as every other reader does.
 
+**Within range, a number written with a fraction or an exponent is not an
+integer**, whatever its value: `9000.0` and `9e3` are `canonical_json_float`,
+because §9.3's encoding writes an integer only as digits and a document holding
+either was not built by a conforming writer. A reader MUST decide this from the
+number as written — a parser that turns `9000.0` into the double 9000 before
+anything looks at it has lost the distinction and applies an amount every other
+reader refuses. This holds for the bill document as for an entry: one decoder
+refusing a float with `bill_type_error` and another with `canonical_json_float`
+names one fault two ways.
+
 ### 9.4 The bill id
 
 A bill's id is the id of the `createBill` entry that opens it, and it is printed
@@ -1057,6 +1067,24 @@ bill.
 Either field absent, not unpadded base64url, or the wrong length is
 `create_unbound`. An entry carrying both but whose `id` is not the derivation
 above is `create_id_not_derived`.
+
+A `createBill` entry MAY carry, and a writer SHOULD:
+
+- **`keyDigest`** — SHA-256 of the ASCII bytes `splitz-bill-key-v1` followed
+  by the 32 bytes of the bill key (§11.1), unpadded base64url. Anything else in
+  the member is `bill_type_error`.
+
+**It binds the bill's key to the bill.** The id is the digest of this entry, so
+an invite naming the bill names the key it was made with. Nothing else ties an
+invite's key to the bill it names: somebody handing over a real bill's id with
+a key of their own opens, on the joiner's device, whatever they seal under that
+key — the bill as it is, plus an expense only the joiner sees — and everything
+the joiner writes afterwards reaches nobody else. **A reader holding a key for a
+bill whose create states `keyDigest` MUST refuse the key when the digest is not
+its own** (`invite_key_mismatch`): a scanned bill code carrying such a key is
+refused, and a log opened under such a key is not merged, nor is a held log
+sealed under it. A create stating no digest commits to no key, and a reader can
+check nothing.
 
 ### 9.5 Every other entry's id
 
@@ -1186,9 +1214,14 @@ entry that carries one, every device folding the same log must find a rate of
 its own, which is the outcome §7 exists to prevent: two devices then price one
 settlement differently and the bill does not close.
 
-The **latest** live `setRate` decides, by §10.2's order — `at`, then `author`,
-then `id`, then canonical encoding — so the answer is a function of the log and
-not of which device last spoke. A `setRate` may be amended and withdrawn like
+**The creator's latest live `setRate` decides**, by §10.2's order — `at`, then
+`author`, then `id`, then canonical encoding — so the answer is a function of
+the log and not of which device last spoke. **Only while the creator has set
+none does the latest by anybody else decide.** `at` is whatever its author
+wrote, so "the latest by anybody" hands the rate to whoever dates furthest
+ahead, and every correction then loses to it; the creator is the one
+participant every reader can verify (§10.7), and a creator's rate is replaced
+by the creator's next one. A `setRate` may be amended and withdrawn like
 any other entry; when none survives, the bill has no rate and §7's conversions
 are unavailable rather than guessed at.
 
@@ -1201,9 +1234,7 @@ bound (§10.7)**, and sets aside a `setRate` from any other with
 `unauthorized_entry`: anybody holding the invite can put themselves on the
 bill with an unsigned join, so "a participant" alone admits them. A wallet
 MUST show a payer the rate a request was priced at and who set it (§14.2), and
-the bill's creator may withdraw any `setRate` (§10.8): the latest by `at`
-decides, and one dated far ahead outranks every later correction its author
-does not take back.
+the bill's creator may withdraw any `setRate` (§10.8).
 
 **`sig`** carries the author's signature when the transport provides one.
 When present it MUST be a string, and an entry whose `sig` is anything else is
@@ -1227,7 +1258,7 @@ MUST be their derivation (§9.4).
 
 **The checks of this section run in this order**, so that an entry wrong in
 two ways is refused for the same reason by every reader: the entry is an
-object; it nests no deeper than §11.2 allows; its kind is one of the eight;
+object; it nests no deeper than 62 levels (§11.2); its kind is one of the eight;
 its `sig`, when present, is a string; its `v`, when present, is in range;
 every string is Unicode scalar values (§2.3); every number is an integer a
 signed 64-bit value holds (§9.3); it carries at most one of `rate`, `expense`,
@@ -1235,7 +1266,10 @@ signed 64-bit value holds (§9.3); it carries at most one of `rate`, `expense`,
 `targetId`, when present, is a string; the payload its kind uses is present;
 every id inside that payload is a string; a `voidEntry` or `amendEntry` names
 a non-empty target; `at`, `id` and `author` are well formed; and last, the
-`createBill` members and the id's derivation (§9.4, §9.5).
+`createBill` members and the id's derivation (§9.4, §9.5) — a create's `name`
+is a string, its `currency` is one (§2.1), its `splitMode` is a string and one
+§4 defines, then `creatorKey` and `nonce` bind it (`create_unbound`), then its
+id derives.
 
 **An entry naming a target the log does not hold is set aside with
 `unknown_entry`.** This applies to `amendEntry` and `voidEntry` alike: a
@@ -1355,9 +1389,32 @@ spellings of one instant.
 
 5. Apply every non-voided `addExpense` and `recordPayment`, replaced by their
    amendments if any. **An expense id MUST be unique among the expenses
-   applied** (`duplicate_expense`): an amendment or a withdrawal is written
-   against the expense a reader shows, and two under one id leave the reader
-   to guess which. The first stands.
+   applied** (`duplicate_expense`), and a payment id among the payments
+   (`duplicate_payment`): an amendment or a withdrawal is written against the
+   expense a reader shows, a confirmation names one record, and two under one
+   id leave the reader to guess which.
+
+   **An id its author minted is theirs.** An id is *minted by* an entry's
+   author when it is that author's participant id, `:`, and anything after,
+   and **an author whose participant id contains `:` mints nothing**: the id
+   `<payer>:<txid>` would otherwise mint `<payer>:<txid>:<recipient>`, the id
+   of the payer's own send record.
+   When any applied candidate's own author minted an id, an entry by anybody
+   else carrying the same id is set aside with the code above, whatever `at`
+   either states. Among the rest the first by §10.2 stands.
+
+   §10.2's order is each author's to write, so deciding by it hands an id to
+   whoever backdates furthest: a copy of somebody's expense dated a minute
+   earlier would replace it, and a copy of a payer's record written by the
+   payee would set the payer's aside and ask them to pay again. A builder
+   therefore writes every expense and payment id as `<author>:<local>`
+   (`authoredId`), and a payment for one recipient of a send as
+   `<payer>:<txid>:<recipient>`.
+
+   **What one author has recorded one participant paying another stays in the
+   64-bit range** (`amount_overflow`), summed per author: §14.4 sums a payer's
+   own records, and a total shared by both parties lets a record the payee
+   wrote carry the payer's out of range.
 
 6. Apply every non-voided `confirmPayment` (§10.5), in a pass of its own once
    every payment is on the bill.
@@ -2042,9 +2099,11 @@ reader never chose. The member is carried verbatim for the caller to put
 through §11.1; this section does not validate what is inside it.
 
 **A body nests at most 64 levels deep**, and deeper is `payload_damaged`.
-§10.1 applies the same bound to a single entry, with `bill_type_error`,
-because an entry arriving over a relay (§11.3) never passes through this
-section at all — and every pass that touches it walks it, deriving its id by
+**§10.1 bounds a single entry at 62**, with `bill_type_error`: the two levels
+a payload wraps an entry in, the body and its `log`, put an entry of 62 at
+64, and one admitted any deeper would make every payload carrying the bill
+unreadable for good. The bound is applied at §10.1 because an entry arriving
+over a relay (§11.3) never passes through this section at all — and every pass that touches it walks it, deriving its id by
 encoding it. A limit at one door only is a limit on the door nobody uses.
 **The body itself is level 1, and every value occupies a level, scalars
 included** — a string inside an array inside the body is level 3. Counting
@@ -2204,7 +2263,8 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `bill_unknown_settlement_method`, `bill_unknown_payout_method`,
 `invite_not_an_invite`, `invite_missing_version`, `invite_future_version`,
 `invite_missing_bill_id`, `invite_bad_bill_id`, `invite_missing_key`,
-`invite_bad_expiry`, `invite_bad_link`, `payload_not_a_payload`, `payload_damaged`,
+`invite_bad_expiry`, `invite_bad_link`, `invite_key_mismatch`,
+`payload_not_a_payload`, `payload_damaged`,
 `payload_missing_body`, `payload_future_version`, `payload_too_large`,
 `sealed_malformed`, `sealed_future_version`, `zip321_no_payments`,
 `zip321_too_many_payments`, `zip321_amount_not_positive`,
@@ -2336,6 +2396,12 @@ pending payment is owed to or went to, every recipient the payer chose to pay
 by a lower preference with the wallet's words for it, the rate figure and who
 set it, and each output's ZEC amount and address.
 
+**An address or a reference counts as shown** when the text holds it whole,
+or holds its first 10 characters and then stops agreeing with it on a
+character that is not an ASCII letter or digit — an ellipsis, a space, the end
+of the line. A character is a Unicode scalar value (§2.3): counting UTF-8
+bytes or UTF-16 units gives two answers for one screen.
+
 `checkPayeeReview` / `check_payee_review` runs the payee's list against the
 text of the screen a payment is confirmed on. Each of the record's ZEC, rate
 and reference that it carries must be shown, written and matched as above. A
@@ -2403,6 +2469,12 @@ everything; the peer is missing entries that fit; the peer is missing entries
 that do not. Reporting the third as the first tells somebody their bill is up
 to date while entries on it have never reached them.
 
+**A peer names what it holds by copy, not by id**: an entry's `id`, and `|`
+and its `sig` when it carries one. §10.2's union keeps copies by id and
+signature, so a peer holding only a copy whose signature fails holds the id
+and still lacks the entry; asked by id, it is told nothing is missing and a
+delta never repairs it. An id is §9.5's digest and holds no `|`.
+
 ### 14.6 What is signed is what was shown
 
 A wallet reads a request with its own ZIP 321 reader, and a reader that keeps
@@ -2418,6 +2490,14 @@ payment cannot answer for two. The answer lists the requested payments nothing
 matched and the proposed payments that match nothing; a host MUST NOT sign
 unless both are empty.
 
+A reader refuses a request whole when it cannot read one of its addresses, and
+§8.3's alphabet admits strings no reader decodes. A host whose wallet reads
+fewer addresses than §8.3 admits SHOULD say which through `BillHost`'s
+`readsAddress` / `reads_address`. The obligation then reports a recipient whose
+address it refuses as unpayable with reason `bad_address` and carries the rest,
+so one participant's unreadable address does not stop a payment to everybody
+else. A host that says nothing is taken to read every address §8.3 admits.
+
 ### 14.7 A payment the payee's wallet has already seen
 
 A payee's wallet that received the transaction a `shieldedZec` record names
@@ -2429,7 +2509,20 @@ transaction paid this account.
 
 - A record is a candidate when it is to this participant, its method is
   `shieldedZec`, it is not confirmed, and its `reference` names a received
-  transaction. Transaction ids are compared trimmed and lower-cased.
+  transaction. Transaction ids are compared with ASCII space, tab, carriage
+  return and line feed removed from both ends and ASCII letters lower-cased,
+  and nothing wider: each language's own trim and lower-casing reach
+  different Unicode characters.
+- **A transaction named by records from more than one payer is evidence for
+  none of them.** Every such record is reported as disputed and none is
+  proposed. A payer is the key §10.7 bound to the record's `from` on its
+  bill, or, where none is bound, that bill and that participant id together:
+  an id is chosen by whoever joins, so one string on two bills can be two
+  people, and an unbound one on two bills counts as two payers. A shielded
+  transaction does not say who sent it, and any
+  participant can copy a reference they have read off the bill: matching in
+  any fixed order hands the payment to whoever sorts first, and the payee
+  confirms a debt as settled by money somebody else sent.
 - **A transaction's zatoshi is counted once, across every bill.** Records
   already confirmed that name it use their stated `zatoshi` first; the
   candidates then use theirs in order of bill id and payment id (§2.3). A
@@ -2561,6 +2654,11 @@ Where this layer's secrets live — a platform keychain in a shipped build.
   build ships.
 - Reading a key that was never written, or was deleted, MUST answer empty
   rather than raising.
+- **Each key holds its own value, whole.** Two keys written hold two values,
+  and a value reads back byte for byte at any length this layer writes. A
+  store with one slot for every key hands one bill's key to every bill and
+  makes the account's signing seed the bytes of some bill's key, which
+  anybody holding that bill's invite then holds.
 
 ### 15.4 `BillStorage`
 

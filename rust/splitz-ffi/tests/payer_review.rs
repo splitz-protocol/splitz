@@ -61,6 +61,7 @@ fn bill(cal_payouts: Vec<Payout>) -> (Device, String, Vec<String>) {
         "EUR".into(),
         "equal".into(),
         ana.key.clone(),
+        None,
         ana.seed.clone(),
     )
     .unwrap();

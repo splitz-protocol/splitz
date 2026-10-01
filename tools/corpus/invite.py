@@ -12,6 +12,10 @@ DECODE = [
     ("a_plain_invite",              f"splitz://join?v=1&b={T}&k={K}"),
     ("a_name_comes_along",          f"splitz://join?v=1&b={T}&k={K}&n=Zcon7"),
     ("a_percent_escaped_name",      f"splitz://join?v=1&b={T}&k={K}&n=Zcon7%20d%C3%AEner"),
+    # §11.1: `%` and exactly two hexadecimal digits; any other `%` is literal.
+    ("a_percent_before_a_space_is_literal", f"splitz://join?v=1&b={T}&k={K}&n=Rent% 4 July"),
+    ("a_percent_before_a_sign_is_literal", f"splitz://join?v=1&b={T}&k={K}&n=Rent%-1"),
+    ("a_percent_before_a_plus_is_literal", f"splitz://join?v=1&b={T}&k={K}&n=Rent%+1"),
     ("an_expiry",                   f"splitz://join?v=1&b={T}&k={K}&x=1793000000"),
     ("no_name_reads_as_empty",      f"splitz://join?v=1&b={T}&k={K}"),
     # `b` repeats: the first occurrence wins, so the second id is ignored. A

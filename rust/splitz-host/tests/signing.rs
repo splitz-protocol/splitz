@@ -43,7 +43,7 @@ fn a_public_key_is_32_bytes_which_is_what_9_4_asks_a_key_to_be() {
     // Long enough to be a creatorKey, which §9.4 refuses at any other length.
     let wallet = FakeWallet::ana();
     let host = WalletBillHost::new(&wallet);
-    let create = create_bill(&host, "Dinner", "EUR", "equal", &key).unwrap();
+    let create = create_bill(&host, "Dinner", "EUR", "equal", &key, None).unwrap();
     check_entry(&create).unwrap();
 }
 
@@ -77,7 +77,7 @@ fn a_real_signature_binds_a_key_to_a_participant_under_10_7() {
     let ben_wallet = FakeWallet::new(&ben_id, Some("u1ben"));
 
     let mut entries = vec![signed(&wallet, &ana_seed, None, |host| {
-        create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
+        create_bill(host, "Dinner", "EUR", "equal", &ana_key, None).unwrap()
     })];
     let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
@@ -104,7 +104,7 @@ fn a_host_that_signs_speaks_as_the_id_its_key_derives_not_its_account_handle() {
     let ana_key = Signer.public_key_from_seed(&ana_seed).unwrap();
     let ben_key = Signer.public_key_from_seed(&ben_seed).unwrap();
     let create = signed(&wallet, &ana_seed, None, |host| {
-        create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
+        create_bill(host, "Dinner", "EUR", "equal", &ana_key, None).unwrap()
     });
     let bill = create["id"].as_str().unwrap().to_owned();
 
@@ -144,7 +144,7 @@ fn a_create_signed_by_the_wrong_key_opens_no_bill_at_all() {
     let impostor = seed_for("zzz");
 
     let mut entries = vec![signed(&wallet, &impostor, None, |host| {
-        create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
+        create_bill(host, "Dinner", "EUR", "equal", &ana_key, None).unwrap()
     })];
     let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
@@ -186,7 +186,7 @@ fn a_second_key_claiming_a_bound_participant_binds_nothing() {
     let impostor_wallet = FakeWallet::new(&ben_id, Some("u1impostor"));
 
     let mut entries = vec![signed(&wallet, &ana_seed, None, |host| {
-        create_bill(host, "Dinner", "EUR", "equal", &ana_key).unwrap()
+        create_bill(host, "Dinner", "EUR", "equal", &ana_key, None).unwrap()
     })];
     let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
@@ -261,7 +261,7 @@ fn every_question_the_fold_asks_was_answered_in_advance() {
     let key = Signer.public_key_from_seed(&seed).unwrap();
 
     let mut entries = vec![signed(&wallet, &seed, None, |host| {
-        create_bill(host, "Dinner", "EUR", "equal", &key).unwrap()
+        create_bill(host, "Dinner", "EUR", "equal", &key, None).unwrap()
     })];
     let bill = entries[0]["id"].as_str().unwrap().to_owned();
     wallet.tick();
@@ -288,7 +288,7 @@ fn a_fold_that_asks_an_unanticipated_question_fails_loudly() {
     let seed = seed_for("ana");
     let key = Signer.public_key_from_seed(&seed).unwrap();
     let create = signed(&wallet, &seed, None, |host| {
-        create_bill(host, "Dinner", "EUR", "equal", &key).unwrap()
+        create_bill(host, "Dinner", "EUR", "equal", &key, None).unwrap()
     });
 
     let empty = Signer.prepare(std::iter::empty(), "b");

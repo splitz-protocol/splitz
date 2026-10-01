@@ -118,12 +118,18 @@ List<BillEvent> activityOf(
   // inside `_event`.
   final joined = <String>{};
   final events = <BillEvent>[];
+  // One line per entry, not per copy: §10.2's union keeps copies of an id
+  // under different signatures, and §9.5 makes them agree in every member a
+  // line shows. A copy read twice doubles an expense and turns a join into a
+  // changed address.
+  final seen = <Object?>{};
   for (final entry in entries) {
+    if (!seen.add(entry['id'])) continue;
     var rejoined = false;
     if (entry['kind'] == 'joinBill') {
       final participant = entry['participant'];
       final id = participant is Map<String, dynamic>
-          ? participant['id'] as String?
+          ? _text(participant['id'])
           : null;
       final carriesAddress =
           participant is Map<String, dynamic> && participant['payTo'] != null;
@@ -146,12 +152,12 @@ BillEvent _event(
   Set<String> confirmed, {
   bool rejoined = false,
 }) {
-  final id = (entry['id'] ?? '') as String;
+  final id = _text(entry['id']) ?? '';
   final refusal = refusals[id];
   final base = (
     entryId: id,
-    author: (entry['author'] ?? '') as String,
-    at: (entry['at'] ?? '') as String,
+    author: _text(entry['author']) ?? '',
+    at: _text(entry['at']) ?? '',
     withdrawn: withdrawn.contains(id),
     refusedCode: refusal?.code,
   );
@@ -188,7 +194,7 @@ BillEvent _event(
     case 'createBill':
       return make(
         BillEventKind.opened,
-        description: object('bill')?['name'] as String?,
+        description: _text(object('bill')?['name']),
       );
 
     case 'joinBill':
@@ -197,17 +203,17 @@ BillEvent _event(
       // it, so it is its own event rather than a second "joined".
       return make(
         rejoined ? BillEventKind.addressChanged : BillEventKind.joined,
-        subject: participant?['id'] as String?,
-        description: participant?['name'] as String?,
+        subject: _text(participant?['id']),
+        description: _text(participant?['name']),
       );
 
     case 'addExpense':
       final expense = object('expense');
       return make(
         BillEventKind.expenseAdded,
-        subject: expense?['paidBy'] as String?,
-        amount: expense?['amount'] as int?,
-        description: expense?['description'] as String?,
+        subject: _text(expense?['paidBy']),
+        amount: _whole(expense?['amount']),
+        description: _text(expense?['description']),
       );
 
     case 'amendEntry':
@@ -216,18 +222,18 @@ BillEvent _event(
     case 'voidEntry':
       return make(
         BillEventKind.entryWithdrawn,
-        subject: object('void')?['target'] as String?,
+        subject: _text(object('void')?['target']),
       );
 
     case 'recordPayment':
       final payment = object('payment');
-      final paymentId = payment?['id'] as String?;
+      final paymentId = _text(payment?['id']);
       return make(
         BillEventKind.paymentRecorded,
-        subject: payment?['to'] as String?,
-        amount: payment?['amount'] as int?,
-        method: payment?['method'] as String?,
-        reference: payment?['reference'] as String?,
+        subject: _text(payment?['to']),
+        amount: _whole(payment?['amount']),
+        method: _text(payment?['method']),
+        reference: _text(payment?['reference']),
         isConfirmed: paymentId != null && confirmed.contains(paymentId),
       );
 
@@ -235,17 +241,17 @@ BillEvent _event(
       final confirmation = object('confirmation');
       return make(
         BillEventKind.paymentConfirmed,
-        subject: confirmation?['paymentId'] as String?,
-        method: confirmation?['method'] as String?,
-        reference: confirmation?['reference'] as String?,
+        subject: _text(confirmation?['paymentId']),
+        method: _text(confirmation?['method']),
+        reference: _text(confirmation?['reference']),
       );
 
     case 'setRate':
       final rate = object('rate');
       return make(
         BillEventKind.priced,
-        amount: rate?['minorUnitsPerZec'] as int?,
-        description: rate?['source'] as String?,
+        amount: _whole(rate?['minorUnitsPerZec']),
+        description: _text(rate?['source']),
       );
 
     default:
@@ -266,3 +272,11 @@ List<splitz.PaymentRecord> awaitingConfirmationBy(
     if (payment.to == me && !bill.confirmedPayments.contains(payment.id))
       payment,
 ]..sort((a, b) => b.at.compareTo(a.at));
+
+/// [value] when it is a string. An entry's members are whatever its author
+/// wrote once ingress has checked the ids (§10.1), and the history reads what
+/// it can rather than failing the bill for a member the fold set aside.
+String? _text(Object? value) => value is String ? value : null;
+
+/// [value] when it is an integer; see [_text].
+int? _whole(Object? value) => value is int ? value : null;

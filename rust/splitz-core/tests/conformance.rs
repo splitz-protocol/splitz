@@ -178,6 +178,21 @@ fn authority() {
 }
 
 #[test]
+fn scan() {
+    run_cases("scan.json", |c| {
+        match splitz_core::host::read_scan(c["text"].as_str().expect("text")) {
+            splitz_core::host::Scanned::Bill(bill) => {
+                Ok(serde_json::json!({"kind": "bill", "entryCount": bill.entries.len()}))
+            }
+            splitz_core::host::Scanned::Refused(code) => {
+                Err(splitz_core::SplitError::new(code, "refused"))
+            }
+            splitz_core::host::Scanned::Invite(_) => Ok(serde_json::json!({"kind": "invite"})),
+        }
+    });
+}
+
+#[test]
 fn delta() {
     run_cases("delta.json", |c| {
         let entries: Vec<serde_json::Value> = c["log"].as_array().cloned().unwrap_or_default();

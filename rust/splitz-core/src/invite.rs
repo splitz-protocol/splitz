@@ -61,13 +61,17 @@ fn percent_decode(value: &str) -> String {
     let mut out: Vec<u8> = Vec::with_capacity(raw.len());
     let mut i = 0;
     while i < raw.len() {
-        if raw[i] == b'%' && i + 2 < raw.len() {
-            let hex = std::str::from_utf8(&raw[i + 1..i + 3]).ok();
-            if let Some(byte) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
-                out.push(byte);
-                i += 3;
-                continue;
-            }
+        // Section 11.1: `%` then exactly two hexadecimal digits. Anything else
+        // stays literal; `from_str_radix` alone accepts a leading `+`.
+        if raw[i] == b'%'
+            && i + 2 < raw.len()
+            && raw[i + 1].is_ascii_hexdigit()
+            && raw[i + 2].is_ascii_hexdigit()
+        {
+            let hex = std::str::from_utf8(&raw[i + 1..i + 3]).expect("ascii");
+            out.push(u8::from_str_radix(hex, 16).expect("two hex digits"));
+            i += 3;
+            continue;
         }
         out.push(raw[i]);
         i += 1;
@@ -327,6 +331,14 @@ pub const PAYLOAD_VERSION: i64 = 1;
 /// reaches is the `sharedBy` array inside an itemised split, at eight.
 pub const MAX_DOCUMENT_DEPTH: usize = 64;
 
+/// How deep one entry may nest (section 10.1): `MAX_DOCUMENT_DEPTH` less the
+/// two levels a payload wraps it in, the body and its `log`.
+///
+/// An entry admitted at the document limit would sit at 66 inside the payload
+/// that carries it, which every reader refuses, so one entry would leave the
+/// bill unsendable by code for good.
+pub const MAX_ENTRY_DEPTH: usize = MAX_DOCUMENT_DEPTH - 2;
+
 pub fn within_depth(value: &Value, limit: usize) -> bool {
     let mut stack = vec![(value, 1usize)];
     while let Some((node, d)) = stack.pop() {
@@ -423,7 +435,7 @@ pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
     };
     let raw = unbase64url(encoded).ok_or_else(damaged)?;
     let text = String::from_utf8(raw).map_err(|_| damaged())?;
-    let body: Value = serde_json::from_str(&text).map_err(|_| damaged())?;
+    let body: Value = crate::canonical_json::parse_json_body(&text).map_err(|_| damaged())?;
     if !body.is_object() {
         return Err(damaged());
     }
@@ -617,19 +629,30 @@ pub enum Delta {
     },
 }
 
+/// How a peer names one copy of `entry` it holds (section 14.5): the entry's
+/// id, and `|` and its `sig` when it carries one.
+///
+/// Section 10.2's union keeps copies by id and signature, so a peer holding a
+/// copy whose signature fails holds the id and still lacks the entry. An id is
+/// section 9.5's digest and holds no `|`, so the key splits at its first one.
+pub fn copy_key(entry: &Value) -> String {
+    let id = entry.get("id").and_then(Value::as_str).unwrap_or_default();
+    match entry.get("sig").and_then(Value::as_str) {
+        Some(sig) => format!("{id}|{sig}"),
+        None => id.to_owned(),
+    }
+}
+
 /// Computes what `they_have` is missing from `entries` (section 14.5).
 ///
-/// A delta carries no invite: its reader already holds the key (section 11.2).
+/// `they_have` names copies by [`copy_key`]. A delta carries no invite: its
+/// reader already holds the key (section 11.2).
 pub fn delta_for(entries: &[Value], they_have: &BTreeSet<String>) -> Delta {
     let mut ordered: Vec<Value> = entries.to_vec();
     crate::log::order_entries(&mut ordered);
     let missing: Vec<Value> = ordered
         .into_iter()
-        .filter(|e| {
-            !e.get("id")
-                .and_then(Value::as_str)
-                .is_some_and(|id| they_have.contains(id))
-        })
+        .filter(|e| !they_have.contains(&copy_key(e)))
         .collect();
     if missing.is_empty() {
         return Delta::NothingMissing;
@@ -642,4 +665,46 @@ pub fn delta_for(entries: &[Value], they_have: &BTreeSet<String>) -> Delta {
             code: e.code,
         },
     }
+}
+
+/// The domain [`bill_key_digest`] hashes under (section 9.4).
+pub const BILL_KEY_DIGEST_DOMAIN: &str = "splitz-bill-key-v1";
+
+/// What a `createBill` states as `keyDigest` for `key` (section 9.4): SHA-256
+/// of [`BILL_KEY_DIGEST_DOMAIN`] then the key's 32 bytes, as unpadded
+/// base64url. `None` when `key` is not a bill key.
+///
+/// The bill id is the digest of the create entry, so the key an invite
+/// carries is checked against the bill it names: a key somebody else made,
+/// handed over with a real bill's id, opens a version of the bill only its
+/// holder sees.
+pub fn bill_key_digest(key: &str) -> Option<String> {
+    let bytes = unbase64url(key)?;
+    if bytes.len() != 32 || base64url(&bytes) != key {
+        return None;
+    }
+    let mut message = BILL_KEY_DIGEST_DOMAIN.as_bytes().to_vec();
+    message.extend_from_slice(&bytes);
+    Some(base64url(&sha256(&message)))
+}
+
+/// Whether `key` is the one `create` was made with: `None` when `create`
+/// states no `keyDigest`, and so commits to none.
+pub fn key_fits_bill(create: &Value, key: &str) -> Option<bool> {
+    let stated = create.get("keyDigest")?.as_str()?;
+    Some(bill_key_digest(key).as_deref() == Some(stated))
+}
+
+/// §9.4. Whether `entry` is `bill_id`'s own create and commits to a key other
+/// than `key`.
+///
+/// Its own: a `createBill` whose id is `bill_id` **and derives from it**. The
+/// id member is whatever its writer typed, so a create that merely states
+/// `bill_id` proves nothing, and anybody holding the key could otherwise seal
+/// one with another `keyDigest` and have every device refuse the real bill.
+pub fn create_refuses_key(entry: &Value, bill_id: &str, key: &str) -> bool {
+    entry.get("kind").and_then(Value::as_str) == Some("createBill")
+        && entry.get("id").and_then(Value::as_str) == Some(bill_id)
+        && crate::log::derive_bill_id(entry).is_ok_and(|derived| derived == bill_id)
+        && key_fits_bill(entry, key) == Some(false)
 }

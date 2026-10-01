@@ -90,18 +90,29 @@ check("a key of the wrong length is named, not accepted",
       splitz.bill_key_problem(anaKey) === undefined,
       `${splitz.bill_key_problem("AAAA")}`);
 
+check("a seed derived from a secret is the one the protocol pins",
+  splitz.identity_seed_from_secret({ bytes: new Uint8Array([1, 2, 3]) })
+    === "MNp3HJmtVUpkGFp2KXoi4ysYoDqKi9Sf4upQw5qvOps", "MNp3…");
+check("and a long secret whose first byte is high crosses whole",
+  splitz.identity_seed_from_secret({ bytes: new Uint8Array(64).fill(0xab) })
+    === "zHlJI6Xb7tQXjLuwAoEwVjjVEB8jPs5DA_NhM50W1YM", "zHlJ…");
 console.log("ana opens a bill and joins it");
-const create = splitz.create_bill_entry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed);
+// The bill key is the wallet's to keep, minted from the platform's own entropy.
+const billKey = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
+check("that key is one the cipher can use", splitz.bill_key_problem(billKey) === undefined, billKey);
+// The key is minted first: the create entry commits to it (§9.4).
+const create = splitz.create_bill_entry(ana.facts(), "Dinner", "EUR", "equal", anaKey, billKey, ana.seed);
 ana.add(create);
 const billId = JSON.parse(create).id;
 ana.add(splitz.join_bill_entry(ana.facts(), billId, "Ana", "u1ana", anaKey, [], ana.seed));
 
 console.log("ana shares it, and ben takes it from the code");
-// The bill key is the wallet's to keep, minted from the platform's own entropy.
-const billKey = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
-check("that key is one the cipher can use", splitz.bill_key_problem(billKey) === undefined, billKey);
 const invite = splitz.invite_for_bill(ana.facts(), billId, ana.entries, billKey, "Dinner", 1800000000);
 const link = splitz.render_invite_link(invite, "https://example.org/join");
+const stranger = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
+check("a bill code carrying some other key is refused",
+  splitz.read_scanned(splitz.shareable_bill_payload(ana.facts(), billId, ana.entries, stranger)).refused_code
+    === "invite_key_mismatch", "invite_key_mismatch");
 check("the invite reads back from an https link", splitz.read_scanned(link).bill_id === billId, link);
 check("and expires by the wallet's clock",
       !splitz.invite_expiry(invite, 1799999999).expired && splitz.invite_expiry(invite, 1800000001).expired,
@@ -113,8 +124,8 @@ const scanned = splitz.read_scanned(payload);
 check("the scan names the same bill", scanned.bill_id === billId, `${scanned.bill_id}`);
 ben.entries = splitz.merge_entries(ben.entries, scanned.entries).entries;
 ben.add(splitz.join_bill_entry(ben.facts(), billId, "Ben", "u1ben", benKey, [], ben.seed));
-// What ana holds, as she would report it: the ids of her entries.
-const anaHolds = splitz.history_of(ana.facts(), billId, ana.entries).map((e) => e.entry_id);
+// What ana holds, as she would report it: one key per copy (§14.5).
+const anaHolds = ana.entries.map((e) => splitz.copy_key(e));
 const behind = splitz.delta_for_peer(ben.facts(), billId, ben.entries, anaHolds);
 check("ana lacks only ben's join, and it fits one code",
       Number(behind.missing) === 1 && typeof behind.uri === "string" &&
@@ -136,7 +147,7 @@ const fetched = await anaRelay.fetch(channel);
 check("another client fetches every blob pushed, once, though it was pushed twice",
       JSON.stringify([...fetched].sort()) === JSON.stringify([...pushed].sort()),
       `${fetched.length} of ${pushed.length}`);
-const opened = splitz.open_blobs(fetched, billKey);
+const opened = splitz.open_blobs(fetched, billId, billKey);
 check("every blob opened", Number(opened.unopenable) === 0, `unopenable=${opened.unopenable}`);
 // Merged by entry id: what a blob opens to is the entry, not necessarily the
 // same text, so a round trip adds no entry to the log it came from.
@@ -231,7 +242,8 @@ console.log("a person says the send landed; its records come from the note alone
 const records = splitz.pending_send_records(ben.facts(), billId, ben.entries, note, txid, ben.seed);
 check("one record, for what the request carried", records.length === 1,
       `${records.length} record(s)`);
-const paymentId = `"${txid}:${ana.me}"`;
+// The payer's id first (section 10.3 step 5), then the transaction and the payee.
+const paymentId = `"${ben.me}:${txid}:${ana.me}"`;
 check("under the payment id a send that succeeded records",
       records[0].includes(paymentId) &&
         splitz.payment_entries_for_send(ben.facts(), billId, owed, txid, ben.seed)[0]
@@ -253,6 +265,11 @@ check("ana sees the payment", afterPayment.bill.payments.length === 1,
 check("and it is not confirmed", afterPayment.bill.confirmed_payments.length === 0,
       JSON.stringify(afterPayment.bill.confirmed_payments));
 const paid = afterPayment.bill.payments[0];
+const mine = splitz.awaiting_my_confirmation(ana.facts(), billId, ana.entries);
+check("ana is shown it as hers to confirm",
+      mine.length === 1 && mine[0].id === paid.id, JSON.stringify(mine.map((p) => p.id)));
+check("and ben, who paid it, is shown nothing to confirm",
+      splitz.awaiting_my_confirmation(ben.facts(), billId, ben.entries).length === 0, "none");
 const confirmScreen = ["Ben says he paid you",
                        `${splitz.render_amount(paid.zatoshi)} ZEC`,
                        `priced at ${splitz.rate_figure(paid.paid_at_rate)} EUR a ZEC`,
@@ -286,6 +303,21 @@ const dropped = splitz.check_proposal(owed.request.uri, []);
 check("a reader that dropped the payment is caught",
       dropped.missing.length === 1 && dropped.missing[0].address === anaAddress,
       `missing=${dropped.missing.map((m) => m.address)}`);
+check("as the sentence to show, the same reading has nothing to say",
+      splitz.proposal_problem(owed.request.uri, [{ address: anaAddress, zatoshi: sent }]) == null,
+      "none");
+const problem = splitz.proposal_problem(owed.request.uri, []);
+check("and the dropped one is a sentence, so nothing is built",
+      typeof problem === "string" && problem.length > 0, `${problem}`);
+
+console.log("a swap provider's answer is read by its status first");
+check("a 2xx body is the answer", splitz.swap_answer(200, '{"quote":1}') === '{"quote":1}', "read");
+const noRoute = await refusal(() => splitz.swap_answer(400, '{"message":"no route"}'));
+check("a 4xx is refused with the provider's own words, and waiting will not help",
+      noRoute?.detail?.includes("no route") === true && noRoute.transient === false,
+      `${noRoute?.detail}`);
+const upstream = await refusal(() => splitz.swap_answer(503, "upstream down"));
+check("a 5xx is refused as one to try again", upstream?.transient === true, `${upstream?.detail}`);
 
 console.log("ana's wallet saw the transaction arrive");
 const arrivals = splitz.arrivals_of(ana.facts(), [{ bill_id: billId, entries: ana.entries }],

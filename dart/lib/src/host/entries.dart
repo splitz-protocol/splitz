@@ -36,6 +36,7 @@ Map<String, dynamic> createBill({
   required String currency,
   String splitMode = 'equal',
   required String creatorKey,
+  String? billKey,
 }) {
   final entry = <String, dynamic>{
     'v': entryVersion,
@@ -47,6 +48,9 @@ Map<String, dynamic> createBill({
     'splitMode': splitMode,
     'creatorKey': creatorKey,
     'nonce': base64UrlNoPad(host.randomBytes(nonceBytes)),
+    // §9.4: the bill key it will be sealed under, so a joiner can tell an
+    // invite's key belongs to this bill. Every bill this writes states one.
+    if (billKey != null) 'keyDigest': splitz.billKeyDigest(billKey),
   };
   entry['id'] = splitz.deriveBillId(entry);
   return entry;
@@ -78,7 +82,17 @@ Map<String, dynamic> joinBill({
   });
 }
 
+/// [local] as an id [author] minted: `<author>:<local>`, or [local] itself
+/// when it already begins that way.
+///
+/// §10.3 step 5 keeps such an id for its author whatever `at` another entry
+/// states, so every expense and payment written here carries one.
+String authoredId(String author, String local) =>
+    local.startsWith('$author:') ? local : '$author:$local';
+
 /// Adds an expense. `amount` is minor units of the bill's currency (§2.1).
+///
+/// The expense's id is [expenseId] under [authoredId].
 ///
 /// `split` is §4's own shape and is passed through untouched: nothing here
 /// invents a split method the specification does not define.
@@ -91,7 +105,7 @@ Map<String, dynamic> addExpense({
   String? description,
 }) {
   final expense = <String, dynamic>{
-    'id': expenseId,
+    'id': authoredId(host.me, expenseId),
     'paidBy': paidBy,
     'amount': amount,
     'at': _at(host),
@@ -108,7 +122,8 @@ Map<String, dynamic> addExpense({
 /// settles it (§10.5) — a record is a claim, not a settlement.
 ///
 /// `paymentId` is the transaction id, so the record and the transaction carry
-/// one identifier and a reader can check the second from the first.
+/// one identifier and a reader can check the second from the first. The
+/// record's id is [paymentId] under [authoredId].
 ///
 /// `amount` is minor units of the bill's currency and is what settles the
 /// debt. `zatoshi` and `paidAtRate` record what actually left the wallet and
@@ -130,7 +145,7 @@ Map<String, dynamic> recordPayment({
   String? note,
 }) {
   final payment = <String, dynamic>{
-    'id': paymentId,
+    'id': authoredId(host.me, paymentId),
     'from': host.me,
     'to': to,
     'amount': amount,

@@ -1,3 +1,4 @@
+import 'package:splitz_core/splitz_core.dart' as splitz;
 import 'package:test/test.dart';
 import 'package:splitz_core/host.dart';
 
@@ -112,9 +113,9 @@ void main() {
       x.log.add([
         confirmPayment(
           host: x.ana,
-          paymentId: 'p1',
+          paymentId: 'ben:p1',
           method: 'recipientConfirmed',
-          record: x.log.fold().paymentDigests['p1']!,
+          record: x.log.fold().paymentDigests['ben:p1']!,
         ),
       ]),
       isEmpty,
@@ -142,5 +143,84 @@ void main() {
 
   test('somebody on no bill with this device is not a standing', () {
     expect(totalsAcross([_bill('X').log.fold()], 'cat').standings, isEmpty);
+  });
+
+  /// [f] with [bound] as the ids §10.7 bound, as a verifying fold reports it.
+  FoldedBill boundTo(FoldedBill f, Set<String> bound) => FoldedBill(
+        bill: f.bill,
+        setAside: f.setAside,
+        withdrawn: f.withdrawn,
+        replacedAddresses: f.replacedAddresses,
+        identities: splitz.Identities({for (final id in bound) id: 'key-$id'}),
+        paymentAuthors: f.paymentAuthors,
+        paymentDigests: f.paymentDigests,
+      );
+
+  test('an id bound on one bill and not on another is two standings', () {
+    // On X Ben is bound and owes Ana 45.00. On Y an unsigned join under Ben's
+    // id is owed 45.00 by Ana: nothing says it is the same person.
+    final x = boundTo(_bill('X').log.fold(), {'ana', 'ben'});
+    final y = _bill('Y');
+    final flipped = y.log.fold();
+    final standings = totalsAcross([x, flipped], 'ana').standings;
+    expect(standings.map((s) => (s.withId, s.owedToMe, s.billIds.length)), [
+      ('ben', 4500, 1),
+      ('ben', 4500, 1),
+    ]);
+    // Bound on both, one person: one standing.
+    final both = totalsAcross(
+      [
+        x,
+        boundTo(flipped, {'ana', 'ben'})
+      ],
+      'ana',
+    ).standings;
+    expect(both.single.owedToMe, 9000);
+  });
+
+  test('an id bound to two keys on two bills is two standings', () {
+    // Y's creator binds `ben` to a key of their own: the same string, and
+    // somebody else.
+    final x = boundTo(_bill('X').log.fold(), {'ana', 'ben'});
+    final y = _bill('Y').log.fold();
+    final other = FoldedBill(
+      bill: y.bill,
+      setAside: y.setAside,
+      withdrawn: y.withdrawn,
+      replacedAddresses: y.replacedAddresses,
+      identities: const splitz.Identities({'ana': 'key-ana', 'ben': 'key-mal'}),
+      paymentAuthors: y.paymentAuthors,
+      paymentDigests: y.paymentDigests,
+    );
+    final standings = totalsAcross([x, other], 'ana').standings;
+    expect(standings.map((s) => (s.withId, s.owedToMe, s.billIds.length)), [
+      ('ben', 4500, 1),
+      ('ben', 4500, 1),
+    ]);
+  });
+
+  test("a record the payee wrote in the payer's name is not on its way", () {
+    final x = _bill('X');
+    x.ana.tick();
+    // Ana, the payee, records Ben paying her: §10.4 lets either party write
+    // a payment, but §14.4 counts as sent only what its payer recorded.
+    final written =
+        recordPayment(host: x.ana, paymentId: 'p1', to: 'ana', amount: 4500);
+    final inBensName = <String, dynamic>{
+      ...written,
+      'payment': <String, dynamic>{
+        ...written['payment'] as Map<String, dynamic>,
+        'from': 'ben',
+      },
+    };
+    inBensName['id'] = splitz.deriveEntryId(inBensName);
+    expect(x.log.add([inBensName]), isEmpty);
+    final forBen = totalsAcross([x.log.fold()], 'ben').standings.single;
+    expect(forBen.sentAwaiting, 0);
+    expect(forBen.owedByMe, 4500);
+    // Ben's own record of the same payment is on its way.
+    _record(x, 'p2', 4500);
+    expect(totalsAcross([x.log.fold()], 'ben').standings.single.sentAwaiting,
+        4500);
   });
 }

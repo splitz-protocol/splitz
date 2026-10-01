@@ -8,7 +8,8 @@ use serde_json::{json, Value};
 use splitz_core::host::{add_expense, confirm_payment, create_bill, join_bill};
 use splitz_host::{
     channel_for_bill, BillStore, HostError, InMemoryBillStorage, InMemorySecretStore,
-    InMemorySplitsRelay, Randomness, Sealing, SplitsKeys, SplitsRelay, SplitsSync, WalletBillHost,
+    InMemorySplitsRelay, Randomness, Sealing, SplitsKeys, SplitsRelay, SplitsSync, SyncFailure,
+    WalletBillHost,
 };
 use support::FakeWallet;
 
@@ -72,7 +73,7 @@ fn two_devices_that_sync_the_same_bill_hold_the_same_entries() {
 
     let (ana_store, ana_keys) = (ana.store(), ana.keys());
     let key = ana_keys.ensure_bill_key("placeholder").unwrap();
-    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     ana_keys.store_bill_key(&bill_id, &key).unwrap();
     ana_store.merge(&bill_id, vec![create.clone()]).unwrap();
@@ -108,13 +109,97 @@ fn two_devices_that_sync_the_same_bill_hold_the_same_entries() {
     );
 }
 
+/// `inner`, with every push refused (or, with `refuse` false, counted).
+struct RefusingPush<'a> {
+    inner: &'a InMemorySplitsRelay,
+    refuse: bool,
+    pushed: std::cell::RefCell<Vec<usize>>,
+}
+
+impl SplitsRelay for RefusingPush<'_> {
+    fn push(&self, channel: &str, blobs: &[String]) -> Result<(), HostError> {
+        self.pushed.borrow_mut().push(blobs.len());
+        if self.refuse {
+            return Err(HostError::Relay {
+                message: "The relay refused the push: 413".to_owned(),
+                transient: true,
+            });
+        }
+        self.inner.push(channel, blobs)
+    }
+
+    fn fetch(&self, channel: &str) -> Result<Vec<String>, HostError> {
+        self.inner.fetch(channel)
+    }
+}
+
+#[test]
+fn a_refused_push_does_not_stop_this_device_seeing_what_others_wrote() {
+    let relay = InMemorySplitsRelay::default();
+    let ana = Device::new("ana", "u1ana", 1);
+    let ben = Device::new("ben", "u1ben", 90);
+    let (ana_store, ana_keys) = (ana.store(), ana.keys());
+    let key = ana_keys.ensure_bill_key("placeholder").unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
+    let bill_id = create["id"].as_str().unwrap().to_owned();
+    ana_keys.store_bill_key(&bill_id, &key).unwrap();
+    ana.wallet.tick();
+    let join_ana = join_bill(&ana.host(), Some("Ana"), Some("u1ana"), None, None).unwrap();
+    ana_store.merge(&bill_id, vec![create, join_ana]).unwrap();
+    SplitsSync::new(&ana_store, &ana_keys, &relay)
+        .push(&bill_id)
+        .unwrap();
+
+    let (ben_store, ben_keys) = (ben.store(), ben.keys());
+    ben_keys.store_bill_key(&bill_id, &key).unwrap();
+    ben.wallet.tick();
+    let join_ben = join_bill(&ben.host(), Some("Ben"), Some("u1ben"), None, None).unwrap();
+    ben_store.merge(&bill_id, vec![join_ben]).unwrap();
+    let refusing = RefusingPush {
+        inner: &relay,
+        refuse: true,
+        pushed: Default::default(),
+    };
+    let ben_sync = SplitsSync::new(&ben_store, &ben_keys, &refusing);
+    assert!(matches!(
+        ben_sync.sync(&bill_id),
+        Err(HostError::Relay { .. })
+    ));
+    assert_eq!(
+        ben_store.read(&bill_id).unwrap().len(),
+        3,
+        "the pull ran before the push was refused"
+    );
+}
+
+#[test]
+fn a_push_is_not_sent_the_blobs_the_channel_already_holds() {
+    let relay = InMemorySplitsRelay::default();
+    let counting = RefusingPush {
+        inner: &relay,
+        refuse: false,
+        pushed: Default::default(),
+    };
+    let ana = Device::new("ana", "u1ana", 1);
+    let (store, keys) = (ana.store(), ana.keys());
+    let key = keys.ensure_bill_key("placeholder").unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
+    let bill_id = create["id"].as_str().unwrap().to_owned();
+    keys.store_bill_key(&bill_id, &key).unwrap();
+    store.merge(&bill_id, vec![create]).unwrap();
+    let sync = SplitsSync::new(&store, &keys, &counting);
+    sync.sync(&bill_id).unwrap();
+    sync.sync(&bill_id).unwrap();
+    assert_eq!(*counting.pushed.borrow(), vec![1]);
+}
+
 #[test]
 fn syncing_twice_changes_nothing() {
     let relay = InMemorySplitsRelay::default();
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     let key = keys.ensure_bill_key("placeholder").unwrap();
-    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     keys.store_bill_key(&bill_id, &key).unwrap();
     store.merge(&bill_id, vec![create]).unwrap();
@@ -135,7 +220,7 @@ fn a_blob_from_another_bill_is_skipped_not_fatal() {
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     let key = keys.ensure_bill_key("placeholder").unwrap();
-    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     keys.store_bill_key(&bill_id, &key).unwrap();
     store.merge(&bill_id, vec![create]).unwrap();
@@ -168,7 +253,7 @@ fn a_bill_with_no_key_cannot_be_synced_and_says_so() {
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     match SplitsSync::new(&store, &keys, &relay).pull("never-seen") {
-        Err(HostError::Sync(why)) => assert!(why.contains("No key")),
+        Err(HostError::Sync { kind, .. }) => assert_eq!(kind, SyncFailure::NoKey),
         other => panic!("expected a sync refusal, got {other:?}"),
     }
 }
@@ -184,7 +269,7 @@ fn pushing_signs_nothing_so_a_peer_cannot_borrow_this_devices_key() {
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     let key = keys.ensure_bill_key("placeholder").unwrap();
-    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     keys.store_bill_key(&bill_id, &key).unwrap();
     let forged = confirm_payment(&ana.host(), "y1", "recipientConfirmed", None, "r").unwrap();
@@ -216,7 +301,7 @@ fn a_peers_entry_is_merged_without_judging_who_wrote_it() {
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     let key = keys.ensure_bill_key("placeholder").unwrap();
-    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     keys.store_bill_key(&bill_id, &key).unwrap();
     store.merge(&bill_id, vec![create]).unwrap();
@@ -266,7 +351,7 @@ fn a_bill_forgotten_while_a_sync_fetches_is_not_written_back() {
     let ana = Device::new("ana", "u1ana", 1);
     let (store, keys) = (ana.store(), ana.keys());
     let host = ana.host();
-    let create = create_bill(&host, "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap();
+    let create = create_bill(&host, "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
     let bill_id = create["id"].as_str().unwrap().to_owned();
     keys.ensure_bill_key(&bill_id).unwrap();
     store.merge(&bill_id, vec![create]).unwrap();
@@ -280,7 +365,9 @@ fn a_bill_forgotten_while_a_sync_fetches_is_not_written_back() {
     let sync = SplitsSync::new(&store, &keys, &relay);
     sync.push(&bill_id).unwrap();
     match sync.pull(&bill_id) {
-        Err(HostError::Sync(why)) => assert!(why.contains("forgotten"), "{why}"),
+        Err(HostError::Sync { kind, message }) => {
+            assert_eq!(kind, SyncFailure::Forgotten, "{message}")
+        }
         other => panic!("expected a sync refusal, got {other:?}"),
     }
     assert!(
@@ -313,4 +400,94 @@ fn a_stored_entry_that_is_not_an_entry_is_skipped_not_raised() {
     )
     .unwrap();
     assert!(ana.store().read("b1").unwrap().is_empty());
+}
+
+/// Ana's bill, its create committing to its key, pushed to `relay`; and a
+/// second key that is not the bill's.
+fn committed_bill(relay: &InMemorySplitsRelay, ana: &Device) -> (String, String, String, Value) {
+    let (store, keys) = (ana.store(), ana.keys());
+    let key = keys.ensure_bill_key("placeholder").unwrap();
+    let create = create_bill(
+        &ana.host(),
+        "Dinner",
+        "EUR",
+        "equal",
+        &"A".repeat(43),
+        Some(&key),
+    )
+    .unwrap();
+    let bill_id = create["id"].as_str().unwrap().to_owned();
+    keys.store_bill_key(&bill_id, &key).unwrap();
+    store.merge(&bill_id, vec![create.clone()]).unwrap();
+    SplitsSync::new(&store, &keys, relay)
+        .sync(&bill_id)
+        .unwrap();
+    let stranger = keys.ensure_bill_key("another-bill").unwrap();
+    assert_ne!(stranger, key);
+    (bill_id, key, stranger, create)
+}
+
+/// Ben, holding the bill's real key, syncs after `forged` was sealed under it.
+fn ben_syncs_after(forged: Value) {
+    let relay = InMemorySplitsRelay::default();
+    let ana = Device::new("ana", "u1ana", 1);
+    let (bill_id, key, stranger, genuine) = committed_bill(&relay, &ana);
+    let forged = forged_from(forged, &genuine, &bill_id, &stranger);
+    relay
+        .push(
+            &channel_for_bill(&bill_id),
+            &[Sealing.seal(&forged, &key).unwrap()],
+        )
+        .unwrap();
+    let ben = Device::new("ben", "u1ben", 2);
+    let (store, keys) = (ben.store(), ben.keys());
+    keys.store_bill_key(&bill_id, &key).unwrap();
+    let result = SplitsSync::new(&store, &keys, &relay)
+        .sync(&bill_id)
+        .unwrap();
+    assert!(result.entries.contains(&genuine));
+    assert_eq!(keys.read_bill_key(&bill_id).unwrap(), Some(key));
+}
+
+/// `shape` names the forgery: "swapped" is the genuine create committing to
+/// `stranger`, anything else a create stating the id and nothing real.
+fn forged_from(shape: Value, genuine: &Value, bill_id: &str, stranger: &str) -> Value {
+    if shape == "swapped" {
+        let mut forged = genuine.clone();
+        forged["keyDigest"] = Value::from(splitz_core::bill_key_digest(stranger).unwrap());
+        forged
+    } else {
+        json!({"v": 1, "id": bill_id, "kind": "createBill", "keyDigest": "x"})
+    }
+}
+
+#[test]
+fn a_create_stating_the_bill_id_with_another_key_digest_is_not_the_bills() {
+    ben_syncs_after(Value::from("swapped"));
+}
+
+#[test]
+fn a_create_stating_the_bill_id_with_junk_in_it_is_not_the_bills() {
+    ben_syncs_after(Value::from("junk"));
+}
+
+#[test]
+fn the_bills_own_create_still_refuses_a_strangers_key() {
+    let relay = InMemorySplitsRelay::default();
+    let ana = Device::new("ana", "u1ana", 1);
+    let (bill_id, _, stranger, genuine) = committed_bill(&relay, &ana);
+    let other = InMemorySplitsRelay::default();
+    other
+        .push(
+            &channel_for_bill(&bill_id),
+            &[Sealing.seal(&genuine, &stranger).unwrap()],
+        )
+        .unwrap();
+    let vic = Device::new("vic", "u1vic", 3);
+    let (store, keys) = (vic.store(), vic.keys());
+    keys.store_bill_key(&bill_id, &stranger).unwrap();
+    match SplitsSync::new(&store, &keys, &other).pull(&bill_id) {
+        Err(HostError::ForeignKey(id)) => assert_eq!(id, bill_id),
+        other => panic!("expected a foreign key, got {other:?}"),
+    }
 }

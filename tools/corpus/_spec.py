@@ -425,7 +425,13 @@ def _read_memo(text):
     import base64
     if not re.fullmatch(r"[A-Za-z0-9_-]*", text) or len(text) % 4 == 1:
         _not_canonical()
-    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    out = base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+    # Section 8.7: the bits end on a byte. A decoder that drops stray bits
+    # reads a memo that is not canonical, and a later check then refuses the
+    # request with some other code than the one every reader gives.
+    if base64.urlsafe_b64encode(out).decode().rstrip("=") != text:
+        _not_canonical()
+    return out
 
 
 def _unqchar(text):
@@ -778,14 +784,13 @@ def _percent_decode(value):
     i = 0
     raw = value.encode("utf-8")
     while i < len(raw):
-        if raw[i] == 0x25 and i + 2 < len(raw):          # '%'
-            hexpair = raw[i + 1:i + 3].decode("ascii", "replace")
-            try:
-                out.append(int(hexpair, 16))
-                i += 3
-                continue
-            except ValueError:
-                pass
+        # '%' then exactly two hexadecimal digits; `int` alone accepts a sign
+        # and surrounding space.
+        pair = raw[i + 1:i + 3]
+        if raw[i] == 0x25 and len(pair) == 2 and all(b in b"0123456789abcdefABCDEF" for b in pair):
+            out.append(int(pair.decode("ascii"), 16))
+            i += 3
+            continue
         out.append(raw[i])
         i += 1
     return out.decode("utf-8", "replace")
@@ -961,6 +966,9 @@ PAYLOAD_CAP = 2331          # a version-40 QR code, byte mode, EC level M
 # conforming document reaches is the sharedBy array inside an itemised split,
 # at eight.
 MAX_DOCUMENT_DEPTH = 64
+# Section 10.1: an entry sits two levels inside the payload that carries it
+# (the body and its `log`), so its own bound is two less.
+MAX_ENTRY_DEPTH = MAX_DOCUMENT_DEPTH - 2
 
 
 def _depth(value, limit):
@@ -1008,6 +1016,45 @@ def _strict_json(text):
 
     return _json.loads(text, parse_constant=constant, parse_float=number)
 
+
+
+BILL_KEY_DIGEST_DOMAIN = "splitz-bill-key-v1"
+
+
+def bill_key_digest(key):
+    """Section 9.4: what a createBill states as keyDigest for `key`, or None."""
+    import base64
+    import hashlib
+    if not _b64url_len(key, KEY_BYTES):
+        return None
+    raw = base64.urlsafe_b64decode(key + "=" * (-len(key) % 4))
+    digest = hashlib.sha256(BILL_KEY_DIGEST_DOMAIN.encode() + raw).digest()
+    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+
+def read_scan(text):
+    """What a scanned bill code opens as, by section 9.4's key check.
+
+    Returns {"kind": "bill", "entryCount": n} for a bill code whose invite
+    key is the one its bill was made with, or whose create commits to none;
+    raises Refused("invite_key_mismatch") for one carrying another key. The
+    bill's own create is the one whose id derives from it.
+    """
+    payload = decode_payload(text)
+    invite = payload.get("invite")
+    entries = [e for e in payload["log"] if isinstance(e, dict)]
+    if isinstance(invite, dict):
+        b, k = invite.get("b"), invite.get("k")
+        if isinstance(b, str) and isinstance(k, str):
+            for e in entries:
+                # Only the bill's own create, whose id derives, speaks for
+                # its key: anybody holding it can write one stating the id.
+                if e.get("kind") == "createBill" and e.get("id") == b \
+                        and derive_bill_id(e) == b \
+                        and isinstance(e.get("keyDigest"), str) \
+                        and e["keyDigest"] != bill_key_digest(k):
+                    raise Refused("invite_key_mismatch")
+    return {"kind": "bill", "entryCount": len(entries)}
 
 def decode_payload(text):
     import base64
@@ -1161,8 +1208,20 @@ def parse_instant(text):
 
 
 def _int(value, code="bill_type_error"):
-    if isinstance(value, bool) or not isinstance(value, int):
+    # Section 9.3: a number's code follows from its value. One past the 64-bit
+    # range, or one no double holds, is amount_overflow however it was
+    # written; any other non-integer is canonical_json_float.
+    if isinstance(value, bool):
         raise Refused(code)
+    if isinstance(value, float):
+        if value != value or abs(value) >= 2**63:
+            raise Refused("amount_overflow")
+        raise Refused("canonical_json_float")
+    if not isinstance(value, int):
+        raise Refused(code)
+    if abs(value) >= 2**63:
+        # Section 2.2's range is symmetric.
+        raise Refused("amount_overflow")
     return value
 
 
@@ -1907,7 +1966,7 @@ def check_entry(entry):
     # check below and the id derivation both recurse. An entry arriving over a
     # relay (section 11.3) never passes section 11.2's cap, so a depth nobody
     # bounded here is a stack the peer chose.
-    if not _depth(entry, MAX_DOCUMENT_DEPTH):
+    if not _depth(entry, MAX_ENTRY_DEPTH):
         raise Refused("bill_type_error")
     kind = entry.get("kind")
     if kind not in ENTRY_KINDS:
@@ -1966,13 +2025,11 @@ def check_entry(entry):
     _str(entry.get("author"))
 
     if kind == "createBill":
-        # Section 9.4: both fields, or the entry is unbound.
-        if not _b64url_len(entry.get("creatorKey", ""), KEY_BYTES) \
-                or not _b64url_len(entry.get("nonce", ""), NONCE_LEN):
-            raise Refused("create_unbound")
-        # The fold copies these into the bill document without re-reading
-        # them, so they are decided here rather than at decode, where the
-        # whole bill would be unopenable instead of this entry refused.
+        # Section 10.1's order among a create's members: name, currency,
+        # split mode, then creatorKey and nonce, then the id. The fold copies
+        # the first three into the bill document without re-reading them, so
+        # they are decided here rather than at decode, where the whole bill
+        # would be unopenable instead of this entry refused.
         if "name" in entry and not isinstance(entry["name"], str):
             raise Refused("bill_type_error")
         check_currency(entry.get("currency"))
@@ -1981,6 +2038,13 @@ def check_entry(entry):
             raise Refused("bill_type_error")
         if mode not in SPLIT_MODES:
             raise Refused("bill_unknown_split_mode")
+        # Section 9.4: both fields, or the entry is unbound.
+        if not _b64url_len(entry.get("creatorKey", ""), KEY_BYTES) \
+                or not _b64url_len(entry.get("nonce", ""), NONCE_LEN):
+            raise Refused("create_unbound")
+        # Section 9.4: the digest of the bill key it was made with, when stated.
+        if "keyDigest" in entry and not _b64url_len(entry["keyDigest"], KEY_BYTES):
+            raise Refused("bill_type_error")
         if entry["id"] != derive_bill_id(entry):
             raise Refused("create_id_not_derived")
     elif entry["id"] != derive_entry_id(entry):
@@ -2063,6 +2127,18 @@ def _destination(participant):
         address = participant.get("payTo")
     return address if isinstance(address, str) else None
 
+
+
+def owns_id(author, value):
+    """SPEC.md 10.3 step 5: whether `value` is an id its `author` minted.
+
+    The author's participant id, `:`, then anything. Only the author writes
+    entries under such an id, so a copy of it in anybody else's entry is set
+    aside whatever `at` either states. An author whose id holds `:` mints
+    nothing.
+    """
+    return (isinstance(author, str) and ":" not in author
+            and isinstance(value, str) and value.startswith(author + ":"))
 
 def fold(entries, bill_id=None, verify=None):
     """Section 10.3. Returns the bill and everything the fold reached."""
@@ -2396,7 +2472,9 @@ def fold(entries, bill_id=None, verify=None):
             return payload
 
         result = applied(e, set_rate)
-        if result is not None:
+        # SPEC.md 10.1: the creator's latest rate stands over anybody else's,
+        # which decides only while the creator has set none.
+        if result is not None and not (rate_author == creator and e["author"] != creator):
             rate = result[0]
             rate_entry, rate_author = e["id"], e["author"]
 
@@ -2418,7 +2496,21 @@ def fold(entries, bill_id=None, verify=None):
     # of range is set aside, deterministically and in log order, rather than
     # left to make section 5 refuse the whole bill.
     running = {pid: 0 for pid in participants}
+    # What each author has recorded one participant paying another. Section
+    # 14.4 sums a payer's own records, so the bound is per author: a record
+    # the other party wrote cannot carry the payer's out of range.
     pair_total = {}
+    # SPEC.md 10.3 step 5: the ids some entry's own author minted.
+    owned = {"expense": set(), "payment": set()}
+    for e in live:
+        member = {"addExpense": "expense", "recordPayment": "payment"}.get(e["kind"])
+        if member is None:
+            continue
+        for version in (amendments.get(e["id"]), e):
+            if version is None or not isinstance(version.get(member), dict):
+                continue
+            if owns_id(e["author"], version[member].get("id")):
+                owned[member].add(version[member]["id"])
 
     def _fits(v):
         # Section 2.2. A balance has a magnitude, so the range is symmetric:
@@ -2445,7 +2537,10 @@ def fold(entries, bill_id=None, verify=None):
                 decode_expense(ex, currency, set(participants))
                 # One id names one expense. An amendment or a withdrawal is
                 # written against the expense a reader shows, and two under
-                # one id leave it to guess which.
+                # one id leave it to guess which. An id its author minted is
+                # theirs whatever the order; otherwise the first stands.
+                if ex["id"] in owned["expense"] and not owns_id(e["author"], ex["id"]):
+                    raise Refused("duplicate_expense")
                 if ex["id"] in expense_entries:
                     raise Refused("duplicate_expense")
                 # Section 4 is what turns an expense into what each person
@@ -2494,14 +2589,16 @@ def fold(entries, bill_id=None, verify=None):
                 # that speaks for the payment's `to` is checked against that
                 # record's `to`. Two records under one id name a payee
                 # ambiguously, so one recipient's confirmation would settle a
-                # debt another never vouched for. The first stands; the second
-                # is refused.
+                # debt another never vouched for. A record under an id its
+                # author minted stands; otherwise the first does.
+                if pay["id"] in owned["payment"] and not owns_id(e["author"], pay["id"]):
+                    raise Refused("duplicate_payment")
                 if any(p["id"] == pay["id"] for p in payments):
                     raise Refused("duplicate_payment")
                 # What one participant has recorded paying another, confirmed
                 # or not, stays in range: section 14.4 sums the unconfirmed
                 # part of it.
-                pair = (pay["from"], pay["to"])
+                pair = (pay["from"], pay["to"], e["author"])
                 total = pair_total.get(pair, 0) + pay["amount"]
                 if not _fits(total):
                     raise Refused("amount_overflow")
@@ -2696,6 +2793,17 @@ def payable_address(participant):
     return address if address and _ascii_alnum(address) else None
 
 
+def copy_key(entry):
+    """Section 14.5: how a peer names one copy it holds.
+
+    The entry's id, and `|` and its `sig` when it carries one. The union keeps
+    copies by id and signature, so a peer holding a copy whose signature fails
+    holds the id and still lacks the entry.
+    """
+    sig = entry.get("sig")
+    return f"{entry.get('id')}|{sig}" if isinstance(sig, str) else f"{entry.get('id')}"
+
+
 def delta_for(entries, they_have):
     """Section 14.5. What a peer has not seen, and whether it fits one square.
 
@@ -2709,7 +2817,7 @@ def delta_for(entries, they_have):
     `{"state": "too_big", "entryCount": n, "code": ...}`.
     """
     known = set(they_have)
-    missing = [e for e in order(entries) if e.get("id") not in known]
+    missing = [e for e in order(entries) if copy_key(e) not in known]
     if not missing:
         return {"state": "nothing", "entryCount": 0}
     try:

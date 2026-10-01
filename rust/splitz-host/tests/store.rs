@@ -11,7 +11,8 @@ use support::FakeWallet;
 /// A create, a join and an expense, written a minute apart.
 fn a_log(wallet: &FakeWallet) -> Vec<Value> {
     let host = WalletBillHost::new(wallet);
-    let mut entries = vec![create_bill(&host, "Dinner", "EUR", "equal", &"A".repeat(43)).unwrap()];
+    let mut entries =
+        vec![create_bill(&host, "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap()];
     wallet.tick();
     entries.push(join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap());
     wallet.tick();

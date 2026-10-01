@@ -19,14 +19,14 @@ const facts = (me, at, nonce) => ({
 });
 
 // The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
-// key: 32 bytes, unpadded base64url.
-const seed = (first) =>
-  Buffer.from(Array.from({ length: 32 }, (_, i) => (first + i) & 0xff)).toString(
-    "base64url",
-  );
+// key: 32 bytes, unpadded base64url. Minted once from the platform's secure
+// generator and kept; a wallet that holds a seed phrase derives it instead,
+// with `identity_seed_from_secret`, so a restored wallet speaks as the same
+// participant.
+const seed = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 
-const anaSeed = seed(1);
-const benSeed = seed(90);
+const anaSeed = seed();
+const benSeed = seed();
 // A wallet that publishes a key speaks as the participant id that key derives
 // (§10.7), or the key binds nothing.
 const anaKey = splitz.identity_key_from_seed(anaSeed);
@@ -37,8 +37,12 @@ const ben = splitz.participant_id_for_key(benKey);
 // Ana's device writes four entries. Each comes back as the JSON §9.3
 // canonicalises, with §9.5's id already derived and signed; the wallet stores
 // the string and never inspects it.
+// The bill's key is minted first, from the platform's entropy: the create
+// entry commits to it (section 9.4), so a joiner can tell an invite's key is
+// this bill's.
+const billKey = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
 const create = splitz.create_bill_entry(facts(ana, "2026-10-28T19:31:00.000Z", 1),
-  "Dinner", "EUR", "equal", anaKey, anaSeed);
+  "Dinner", "EUR", "equal", anaKey, billKey, anaSeed);
 
 // The bill these entries belong to, read back from the entry that opened it.
 // Every other entry is signed on it (§10.6), and every fold names it, so a

@@ -8,7 +8,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:splitz_core/splitz_core.dart';
-import 'package:splitz_core/host.dart' show ProposedOutput, checkProposal;
+import 'package:splitz_core/host.dart'
+    show ProposedOutput, ScanRefused, ScannedBill, checkProposal, readScan;
 import 'package:test/test.dart';
 
 /// The corpus lives at the repository root, one level above this package, so a
@@ -121,6 +122,17 @@ void main() {
   // Section 14 is addressed to a host, so none of it is reachable from the
   // wire format: an implementation can keep sections 1 to 12 and still ask a
   // payer for a debt they have already paid.
+  runCases('scan.json', (c, produce) {
+    switch (readScan(c['text'] as String)) {
+      case ScannedBill(:final entries):
+        produce({'kind': 'bill', 'entryCount': entries.length});
+      case ScanRefused(:final code):
+        raise(code, 'refused');
+      case final other:
+        produce({'kind': other.runtimeType.toString()});
+    }
+  });
+
   runCases('delta.json', (c, produce) {
     final entries = (c['log'] as List).cast<Map<String, dynamic>>();
     final theyHave = {

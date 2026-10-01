@@ -52,6 +52,7 @@ void main() {
       'EUR',
       'equal',
       key,
+      null,
       seed,
     );
     expect(create, contains('"kind":"createBill"'));
@@ -79,6 +80,7 @@ void main() {
       'EUR',
       'equal',
       anaKey,
+      null,
       anaSeed,
     );
     // Every other entry is signed on the bill it belongs to (§10.6).

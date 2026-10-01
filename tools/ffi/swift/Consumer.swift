@@ -99,10 +99,24 @@ func run(origin: String, downOrigin: String) async throws {
             && billKeyProblem(key: anaKey) == nil,
           billKeyProblem(key: "AAAA") ?? "nil")
 
+    check("a seed derived from a secret is the one the protocol pins",
+          try identitySeedFromSecret(secret: SecretBytes(bytes: Data([1, 2, 3])))
+              == "MNp3HJmtVUpkGFp2KXoi4ysYoDqKi9Sf4upQw5qvOps", "MNp3…")
+    check("and a long secret whose first byte is high crosses whole",
+          try identitySeedFromSecret(secret: SecretBytes(bytes: Data(repeating: 0xAB, count: 64)))
+              == "zHlJI6Xb7tQXjLuwAoEwVjjVEB8jPs5DA_NhM50W1YM", "zHlJ…")
     print("ana opens a bill and joins it")
+    // The bill key is the wallet's to keep, minted from the platform's own
+    // entropy (SystemRandomNumberGenerator is cryptographically secure on
+    // Apple platforms); §9.4's id is public.
+    var entropy = SystemRandomNumberGenerator()
+    let billKey = try newBillKey(entropy: RandomBytes(
+        bytes: Data((0..<32).map { _ in UInt8.random(in: 0...255, using: &entropy) })))
+    check("that key is one the cipher can use", billKeyProblem(key: billKey) == nil, billKey)
+    // The key is minted first: the create entry commits to it (§9.4).
     let create = try createBillEntry(facts: ana.facts(), name: "Dinner",
                                      currency: "EUR", splitMode: "equal",
-                                     creatorKey: anaKey, seed: ana.seed)
+                                     creatorKey: anaKey, billKey: billKey, seed: ana.seed)
     try ana.add(create)
     let billId = (try JSONSerialization.jsonObject(with: Data(create.utf8))
         as! [String: Any])["id"] as! String
@@ -113,25 +127,23 @@ func run(origin: String, downOrigin: String) async throws {
                                   payTo: "u1ben", identityKey: benKey,
                                   payouts: [], seed: ben.seed))
     try ben.take(ana)
-    // What ana holds, as she would report it: the ids of her entries.
-    let anaHolds = try historyOf(facts: ana.facts(), billId: billId, entries: ana.entries)
-        .map(\.entryId)
+    // What ana holds, as she would report it: one key per copy (§14.5).
+    let anaHolds = try ana.entries.map { try copyKey(entry: $0) }
     let behind = try deltaForPeer(facts: ben.facts(), billId: billId, entries: ben.entries,
                                   theyHave: anaHolds)
     check("ana lacks only ben's join, and it fits one code",
           behind.missing == 1 && behind.uri != nil && behind.tooBigCode == nil, "\(behind.missing)")
 
     print("the two logs move through a relay that holds only ciphertext")
-    // The bill key is the wallet's to keep, minted from the platform's own
-    // entropy (SystemRandomNumberGenerator is cryptographically secure on
-    // Apple platforms); §9.4's id is public.
-    var entropy = SystemRandomNumberGenerator()
-    let billKey = try newBillKey(entropy: RandomBytes(
-        bytes: Data((0..<32).map { _ in UInt8.random(in: 0...255, using: &entropy) })))
-    check("that key is one the cipher can use", billKeyProblem(key: billKey) == nil, billKey)
     let invite = try inviteForBill(facts: ana.facts(), billId: billId, entries: ana.entries,
                                    billKey: billKey, name: "Dinner", expiry: 1_800_000_000)
     let link = try renderInviteLink(invite: invite, base: "https://example.org/join")
+    let stranger = try newBillKey(entropy: RandomBytes(
+        bytes: Data((0..<32).map { _ in UInt8.random(in: 0...255, using: &entropy) })))
+    let strangerCode = try shareableBillPayload(facts: ana.facts(), billId: billId,
+                                                entries: ana.entries, billKey: stranger)!
+    check("a bill code carrying some other key is refused",
+          readScanned(text: strangerCode).refusedCode == "invite_key_mismatch", "invite_key_mismatch")
     check("the invite reads back from an https link", readScanned(text: link).billId == billId, link)
     check("and expires by the wallet's clock",
           try !inviteExpiry(invite: invite, nowUnixSeconds: 1_799_999_999).expired
@@ -149,7 +161,7 @@ func run(origin: String, downOrigin: String) async throws {
     let fetched = try await anaRelay.fetch(channel: channel)
     check("another client fetches every blob pushed, once, though it was pushed twice",
           fetched.sorted() == pushed.sorted(), "\(fetched.count) of \(pushed.count)")
-    let opened = openBlobs(blobs: fetched, billKey: billKey)
+    let opened = openBlobs(blobs: fetched, billId: billId, billKey: billKey)
     check("every blob opened", opened.unopenable == 0, "unopenable=\(opened.unopenable)")
     // Merged by entry id: what a blob opens to is the entry, not necessarily
     // the same text, so a round trip adds no entry to the log it came from.
@@ -260,7 +272,7 @@ func run(origin: String, downOrigin: String) async throws {
                                          seed: ben.seed)
     check("one record, for what the request carried", records.count == 1,
           "\(records.count) record(s)")
-    let paymentId = "\"\(txid):\(ana.me)\""
+    let paymentId = "\"\(ben.me):\(txid):\(ana.me)\""
     let succeeded = try paymentEntriesForSend(facts: ben.facts(), billId: billId,
                                               obligation: owed!, txid: txid, seed: ben.seed)
     check("under the payment id a send that succeeded records",
@@ -286,6 +298,11 @@ func run(origin: String, downOrigin: String) async throws {
     check("and it is not confirmed", afterPayment.bill.confirmedPayments.isEmpty,
           "\(afterPayment.bill.confirmedPayments)")
     let paid = afterPayment.bill.payments[0]
+    let mine = try awaitingMyConfirmation(facts: ana.facts(), billId: billId, entries: ana.entries)
+    check("ana is shown it as hers to confirm", mine.map(\.id) == [paid.id], "\(mine.map(\.id))")
+    check("and ben, who paid it, is shown nothing to confirm",
+          try awaitingMyConfirmation(facts: ben.facts(), billId: billId, entries: ben.entries).isEmpty,
+          "none")
     let confirmScreen = ["Ben says he paid you",
                          "\(try renderAmount(zatoshi: paid.zatoshi!)) ZEC",
                          "priced at \(rateFigure(rate: paid.paidAtRate!)) EUR a ZEC",
@@ -315,6 +332,24 @@ func run(origin: String, downOrigin: String) async throws {
     let dropped = try checkProposal(uri: owed!.request.uri!, outputs: [])
     check("a reader that dropped the payment is caught",
           dropped.missing.map(\.address) == [anaAddress], "\(dropped)")
+    check("as the sentence to show, the same reading has nothing to say",
+          proposalProblem(uri: owed!.request.uri!,
+                          outputs: [ProposedOutput(address: anaAddress, zatoshi: sent)]) == nil,
+          "none")
+    let problem = proposalProblem(uri: owed!.request.uri!, outputs: [])
+    check("and the dropped one is a sentence, so nothing is built",
+          problem?.isEmpty == false, "\(problem ?? "nil")")
+
+    print("a swap provider's answer is read by its status first")
+    check("a 2xx body is the answer",
+          try swapAnswer(status: 200, body: "{\"quote\":1}") == "{\"quote\":1}", "read")
+    let noRoute = await refusal { _ = try swapAnswer(status: 400, body: "{\"message\":\"no route\"}") }
+    check("a 4xx is refused with the provider's own words, and waiting will not help",
+          noRoute?.detail.contains("no route") == true && noRoute?.transient == false,
+          "\(noRoute?.detail ?? "nil")")
+    let upstream = await refusal { _ = try swapAnswer(status: 503, body: "upstream down") }
+    check("a 5xx is refused as one to try again", upstream?.transient == true,
+          "\(upstream?.detail ?? "nil")")
 
     print("ana's wallet saw the transaction arrive")
     let arrivals = try arrivalsOf(facts: ana.facts(),

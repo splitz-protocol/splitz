@@ -92,7 +92,7 @@ impl Sealing {
         // instead of the refusal aborting the whole pull.
         let text = String::from_utf8(clear)
             .map_err(|_| HostError::Sealing("Opened blob is not UTF-8".to_owned()))?;
-        let decoded: Value = serde_json::from_str(&text)
+        let decoded: Value = splitz_core::parse_json(&text)
             .map_err(|e| HostError::Sealing(format!("Opened blob is not JSON: {e}")))?;
         if !decoded.is_object() {
             return Err(HostError::Sealing("Opened blob is not an entry".to_owned()));

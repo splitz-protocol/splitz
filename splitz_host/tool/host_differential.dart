@@ -213,6 +213,9 @@ String tamper(String sig) => (sig[0] == 'A' ? 'B' : 'A') + sig.substring(1);
 /// and no signing. The instant is supplied per entry so both implementations
 /// write the same `at` without either deriving one.
 class DiffHost implements seam.BillHost {
+  @override
+  seam.ReadsAddress? get readsAddress => null;
+
   DiffHost({required this.me, required String at, required String txid})
     : _at = DateTime.parse(at).toUtc(),
       _txid = txid;

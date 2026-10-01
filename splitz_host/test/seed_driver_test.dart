@@ -19,7 +19,7 @@ import 'support/process_port.dart';
 String twelveWords(String tag) =>
     List<String>.generate(12, (i) => '$tag$i').join(' ');
 
-Future<({Process process, int port, Directory dir})> startDriver({
+Future<({Process process, int port, Uri url, Directory dir})> startDriver({
   List<String>? phrases,
 }) async {
   phrases ??= [
@@ -33,7 +33,7 @@ Future<({Process process, int port, Directory dir})> startDriver({
   await Process.run('chmod', ['600', file.path]);
 
   final up = await startOnFreePort('tool/seed-driver.py', [file.path]);
-  return (process: up.process, port: up.port, dir: dir);
+  return (process: up.process, port: up.port, url: Uri.parse(up.url), dir: dir);
 }
 
 Future<String> Function(Uri) ioFetch() {
@@ -71,9 +71,7 @@ void main() {
       });
       final client = HttpClient();
       Future<int> status(Map<String, String> headers) async {
-        final request = await client.getUrl(
-          Uri.parse('http://127.0.0.1:${driver.port}/seed/0'),
-        );
+        final request = await client.getUrl(Uri.parse('${driver.url}/seed/0'));
         headers.forEach(request.headers.set);
         final response = await request.close();
         await response.drain<void>();
@@ -86,6 +84,30 @@ void main() {
     },
   );
 
+  test('a caller without the run\'s token gets no phrase', () async {
+    // Any process on this machine reaches loopback. The token is printed to
+    // the one that started the driver, and is what it hands its run.
+    final driver = await startDriver();
+    addTearDown(() async {
+      driver.process.kill();
+      await driver.dir.delete(recursive: true);
+    });
+    final client = HttpClient();
+    Future<int> status(String path) async {
+      final request = await client.getUrl(
+        Uri.parse('http://127.0.0.1:${driver.port}$path'),
+      );
+      final response = await request.close();
+      await response.drain<void>();
+      return response.statusCode;
+    }
+
+    expect(await status('/seed/0'), 403);
+    expect(await status('/health'), 403);
+    expect(await status('/wrong-token/seed/0'), 403);
+    expect(await status('${driver.url.path}/seed/0'), 200);
+  });
+
   test('the driver serves a phrase by index, and names the wallet', () async {
     final driver = await startDriver();
     addTearDown(() async {
@@ -93,10 +115,7 @@ void main() {
       await driver.dir.delete(recursive: true);
     });
 
-    final client = SeedDriver(
-      origin: Uri.parse('http://127.0.0.1:${driver.port}'),
-      fetch: ioFetch(),
-    );
+    final client = SeedDriver(origin: driver.url, fetch: ioFetch());
 
     expect(await client.isUp, isTrue);
 
@@ -118,10 +137,7 @@ void main() {
         await driver.dir.delete(recursive: true);
       });
 
-      final client = SeedDriver(
-        origin: Uri.parse('http://127.0.0.1:${driver.port}'),
-        fetch: ioFetch(),
-      );
+      final client = SeedDriver(origin: driver.url, fetch: ioFetch());
       await expectLater(
         () => client.seedAt(3),
         throwsA(isA<SeedDriverException>()),
@@ -147,10 +163,7 @@ void main() {
       await driver.dir.delete(recursive: true);
     });
 
-    final client = SeedDriver(
-      origin: Uri.parse('http://127.0.0.1:${driver.port}'),
-      fetch: ioFetch(),
-    );
+    final client = SeedDriver(origin: driver.url, fetch: ioFetch());
     expect((await client.seedAt(0)).phrase, twelveWords('one'));
     expect(
       (await client.seedAt(1)).phrase,

@@ -38,25 +38,27 @@ pub use authority::{
 pub use balances::{
     creditors, debtors, direct_debts, net_balances, residual_is_zero, DirectDebt, Position,
 };
-pub use canonical_json::canonical_json;
+pub use canonical_json::{canonical_json, parse_json};
 pub use error::{code, describe_code, Result, SplitError};
 pub use instant::canonical_instant;
 pub use invite::{
-    channel_for, decode_payload, delta_for, encode_payload, frame_sealed, is_invite_expired,
-    parse_invite, parse_sealed_frame, render_invite, render_invite_link, sealed_nonce,
-    sealed_plaintext, strip_scan_padding, within_depth, Delta, Invite, ScannedPayload, SealedFrame,
-    BILL_PREFIX, DELTA_PREFIX, INVITE_VERSION, MAX_DOCUMENT_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES,
-    PAYLOAD_CAP, PAYLOAD_VERSION, SCAN_PADDING, SEALED_VERSION, TAG_BYTES,
+    bill_key_digest, channel_for, copy_key, create_refuses_key, decode_payload, delta_for,
+    encode_payload, frame_sealed, is_invite_expired, key_fits_bill, parse_invite,
+    parse_sealed_frame, render_invite, render_invite_link, sealed_nonce, sealed_plaintext,
+    strip_scan_padding, within_depth, Delta, Invite, ScannedPayload, SealedFrame,
+    BILL_KEY_DIGEST_DOMAIN, BILL_PREFIX, DELTA_PREFIX, INVITE_VERSION, MAX_DOCUMENT_DEPTH,
+    MAX_ENTRY_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP, PAYLOAD_VERSION, SCAN_PADDING,
+    SEALED_VERSION, TAG_BYTES,
 };
 pub use log::{
     check_entry, confirmation_rule, derive_bill_id, derive_entry_id, fold_log, merge_logs,
-    order_entries, payload_for, payment_digest, FoldResult, MergeResult, ReplacedAddress, SetAside,
-    BILL_ID_DOMAIN, ENTRY_ID_DOMAIN, ENTRY_KINDS, PAYMENT_DIGEST_DOMAIN,
+    order_entries, owns_id, payload_for, payment_digest, FoldResult, MergeResult, ReplacedAddress,
+    SetAside, BILL_ID_DOMAIN, ENTRY_ID_DOMAIN, ENTRY_KINDS, PAYMENT_DIGEST_DOMAIN,
 };
 pub use model::{Bill, Expense, Participant, PaymentRecord, Payout};
 pub use money::{
-    check_currency, checked_add, checked_mul, checked_sub, checked_sum, is_currency, MAX_AMOUNT,
-    MAX_ENTRY_AMOUNT, MIN_AMOUNT,
+    check_currency, checked_add, checked_mul, checked_sub, checked_sum, document_integer,
+    is_currency, MAX_AMOUNT, MAX_ENTRY_AMOUNT, MIN_AMOUNT,
 };
 pub use obligation::{
     choose_payouts, render_obligation, withholdings, Awaiting, Obligation, Unpayable, Withholdings,

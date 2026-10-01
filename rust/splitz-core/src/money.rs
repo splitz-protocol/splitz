@@ -98,3 +98,39 @@ pub fn checked_sum(values: impl IntoIterator<Item = i64>, refusal: &'static str)
     }
     Ok(total)
 }
+
+/// An integer section 2.2 holds. Section 9.3: a number's code follows from its
+/// value — one past the 64-bit range, or one no double holds, is
+/// `amount_overflow` however it was written, and any other non-integer is
+/// `canonical_json_float`.
+pub fn document_integer(value: &serde_json::Value) -> Result<i64> {
+    if let Some(n) = value.as_i64() {
+        // Section 2.2's range is symmetric: the most negative 64-bit value has
+        // no positive counterpart, so its magnitude is past the range.
+        if n == i64::MIN {
+            return Err(SplitError::new(
+                code::AMOUNT_OVERFLOW,
+                "A number past 64 bits",
+            ));
+        }
+        return Ok(n);
+    }
+    if !value.is_number() {
+        return Err(SplitError::new(
+            code::BILL_TYPE_ERROR,
+            "Expected an integer",
+        ));
+    }
+    let past = value.is_u64()
+        || value
+            .as_f64()
+            .is_none_or(|f| !f.is_finite() || f.abs() >= 9_223_372_036_854_775_808.0);
+    Err(if past {
+        SplitError::new(code::AMOUNT_OVERFLOW, "A number past 64 bits")
+    } else {
+        SplitError::new(
+            code::CANONICAL_JSON_FLOAT,
+            "A number that is not an integer",
+        )
+    })
+}

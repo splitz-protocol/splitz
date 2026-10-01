@@ -199,10 +199,10 @@ pub fn check_entry(entry: &Value) -> Result<()> {
     // §10.1. An entry arriving over a relay (§11.3) never passes §11.2's cap,
     // and every pass below walks it — deriving its id encodes it. A depth
     // nobody bounded is a stack the peer chose.
-    if !crate::invite::within_depth(entry, crate::invite::MAX_DOCUMENT_DEPTH) {
+    if !crate::invite::within_depth(entry, crate::invite::MAX_ENTRY_DEPTH) {
         return Err(SplitError::new(
             code::BILL_TYPE_ERROR,
-            "An entry nests deeper than the document limit",
+            "An entry nests deeper than the entry limit",
         ));
     }
 
@@ -384,6 +384,16 @@ pub fn check_entry(entry: &Value) -> Result<()> {
                 "A create entry carries a 32-byte key and a 16-byte nonce",
             ));
         }
+        // §9.4: the digest of the bill key it was made with, when it states
+        // one.
+        if let Some(digest) = entry.get("keyDigest") {
+            if !is_b64url_of_length(digest.as_str(), 32) {
+                return Err(SplitError::new(
+                    code::BILL_TYPE_ERROR,
+                    "A key digest is 32 bytes",
+                ));
+            }
+        }
         if entry.get("id").and_then(Value::as_str) != Some(derive_bill_id(entry)?.as_str()) {
             return Err(SplitError::new(
                 code::CREATE_ID_NOT_DERIVED,
@@ -400,6 +410,24 @@ pub fn check_entry(entry: &Value) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+/// §10.3 step 5. Whether `id` is one its `author` minted: the author's
+/// participant id, `:`, then anything.
+///
+/// Only the author writes entries under such an id, so a copy of it in
+/// anybody else's entry is set aside whatever `at` either states. §10.2's
+/// order is each author's to write, and deciding whose id it is by that order
+/// hands it to whoever backdates furthest.
+///
+/// An author whose id holds `:` mints nothing: `<payer>:<txid>` as a
+/// participant id would otherwise own `<payer>:<txid>:<recipient>`, the id the
+/// payer's own send record carries.
+pub fn owns_id(author: &str, id: &str) -> bool {
+    !author.contains(':')
+        && id
+            .strip_prefix(author)
+            .is_some_and(|rest| rest.starts_with(':'))
 }
 
 fn field<'a>(entry: &'a Value, name: &str) -> &'a str {
@@ -1133,6 +1161,13 @@ pub fn fold_log_verified(
             Ok(payload)
         });
         if let Some((payload, _)) = applied {
+            // §10.1. The creator's latest rate stands over anybody else's,
+            // which decides only while the creator has set none: the latest
+            // by `at` is whoever dates furthest ahead, and the creator is the
+            // one participant every reader can verify (§10.7).
+            if rate_author.as_deref() == Some(creator.as_str()) && author != creator {
+                continue;
+            }
             rate = Some(payload);
             rate_entry = Some(field(entry, "id").to_owned());
             rate_author = Some(author.to_owned());
@@ -1155,8 +1190,27 @@ pub fn fold_log_verified(
     // refuse the whole bill.
     let mut running: BTreeMap<String, i64> =
         participants.keys().map(|id| (id.clone(), 0)).collect();
-    let mut pair_total: BTreeMap<(String, String), i64> = BTreeMap::new();
+    // What each author has recorded one participant paying another. §14.4
+    // sums a payer's own records, so the bound is per author: a record the
+    // other party wrote cannot carry the payer's out of range.
+    let mut pair_total: BTreeMap<(String, String, String), i64> = BTreeMap::new();
     let ids: BTreeSet<String> = participants.keys().cloned().collect();
+    // §10.3 step 5: the ids some entry's own author minted (see `owns_id`).
+    let mut owned_expense_ids: BTreeSet<String> = BTreeSet::new();
+    let mut owned_payment_ids: BTreeSet<String> = BTreeSet::new();
+    for entry in &live {
+        let (member, owned) = match field(entry, "kind") {
+            "addExpense" => ("expense", &mut owned_expense_ids),
+            "recordPayment" => ("payment", &mut owned_payment_ids),
+            _ => continue,
+        };
+        for version in versions(entry) {
+            let id = version[member]["id"].as_str().unwrap_or_default();
+            if owns_id(field(entry, "author"), id) {
+                owned.insert(id.to_owned());
+            }
+        }
+    }
     for entry in &live {
         match field(entry, "kind") {
             "addExpense" => {
@@ -1201,7 +1255,15 @@ pub fn fold_log_verified(
                     let d = crate::serialization::decode_expense(&ex, &currency, &ids)?;
                     // One id names one expense. An amendment or a withdrawal is
                     // written against the expense a reader shows, and two under
-                    // one id leave it to guess which.
+                    // one id leave it to guess which. An id its author minted
+                    // is theirs whatever the order; otherwise the first stands.
+                    if owned_expense_ids.contains(&d.id) && !owns_id(field(entry, "author"), &d.id)
+                    {
+                        return Err(SplitError::new(
+                            code::DUPLICATE_EXPENSE,
+                            format!("Copies {}, which its author minted", d.id),
+                        ));
+                    }
                     if expense_entries.contains_key(&d.id) {
                         return Err(SplitError::new(
                             code::DUPLICATE_EXPENSE,
@@ -1289,10 +1351,17 @@ pub fn fold_log_verified(
                     // that speaks for the payment's `to` is checked against
                     // that record's `to`. Two records under one id name a payee
                     // ambiguously, so one recipient's confirmation would settle
-                    // a debt another never vouched for. The first record stands
-                    // and the second is refused; one transaction paying several
-                    // people carries the transaction in `reference`.
+                    // a debt another never vouched for. A record under an id its
+                    // author minted stands; otherwise the first does. One
+                    // transaction paying several people carries the
+                    // transaction in `reference`.
                     let pay_id = field(&pay, "id");
+                    if owned_payment_ids.contains(pay_id) && !owns_id(author, pay_id) {
+                        return Err(SplitError::new(
+                            code::DUPLICATE_PAYMENT,
+                            format!("Copies {pay_id}, which its author minted"),
+                        ));
+                    }
                     if payments.iter().any(|p| field(p, "id") == pay_id) {
                         return Err(SplitError::new(
                             code::DUPLICATE_PAYMENT,
@@ -1302,7 +1371,11 @@ pub fn fold_log_verified(
                     // What one participant has recorded paying another,
                     // confirmed or not, stays in range: §14.4 sums the
                     // unconfirmed part.
-                    let pair = (field(&pay, "from").to_owned(), field(&pay, "to").to_owned());
+                    let pair = (
+                        field(&pay, "from").to_owned(),
+                        field(&pay, "to").to_owned(),
+                        author.to_owned(),
+                    );
                     let amount = pay["amount"].as_i64().unwrap_or(0);
                     let total = checked_add(
                         pair_total.get(&pair).copied().unwrap_or(0),

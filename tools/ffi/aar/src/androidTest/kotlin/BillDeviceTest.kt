@@ -121,15 +121,16 @@ class BillTest {
               anaKey.length == 43, anaKey)
 
         println("ana opens a bill and joins it")
-        val create = createBillEntry(ana.facts(), "Dinner", "EUR", "equal", anaKey, ana.seed)
+        // The bill key is the wallet's to keep, minted from the platform's own
+        // entropy; §9.4's id is public.
+        val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
+        // Minted first: the create entry commits to it (§9.4).
+        val create = createBillEntry(ana.facts(), "Dinner", "EUR", "equal", anaKey, billKey, ana.seed)
         ana.add(create)
         val billId = Regex("\"id\":\"([^\"]+)\"").find(create)!!.groupValues[1]
         ana.add(joinBillEntry(ana.facts(), billId, "Ana", "u1ana", anaKey, listOf(), ana.seed))
 
         println("ana shares it, and ben takes it from the code")
-        // The bill key is the wallet's to keep, minted from the platform's own
-        // entropy; §9.4's id is public.
-        val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
         check("that key is one the cipher can use", billKeyProblem(billKey) == null, billKey)
         val payload = shareableBillPayload(ana.facts(), billId, ana.entries, billKey)
         check("the whole bill fits in one code", payload != null, "${payload?.length} characters")
@@ -150,7 +151,7 @@ class BillTest {
         check("the relay holds each blob once, though it was pushed twice",
               fetched.size == blobs.size && fetched.toSet() == blobs.toSet(),
               "${fetched.size} of ${blobs.size}")
-        val opened = openBlobs(fetched, billKey)
+        val opened = openBlobs(fetched, billId, billKey)
         check("every blob opened", opened.unopenable == 0u, "unopenable=${opened.unopenable}")
         ana.entries = mergeEntries(ana.entries, opened.entries).entries
 

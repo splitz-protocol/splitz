@@ -35,7 +35,7 @@ pub mod wallet_bill_host;
 
 pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKind};
 pub use currencies::{currency_exponent, ISO_4217_EXPONENTS};
-pub use error::{HostError, Result};
+pub use error::{HostError, Result, SyncFailure};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
 pub use keys::{
     identity_seed_from, is_well_formed_key, Randomness, SplitsKeys, SystemRandomness,

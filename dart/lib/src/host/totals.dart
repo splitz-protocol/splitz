@@ -36,10 +36,12 @@ class Standing {
 
   /// Payments this device recorded to them that they have not confirmed.
   /// Still in [owedByMe]: a record moves nothing until it is confirmed
-  /// (§10.5), so this says what is already on its way.
+  /// (§10.5), so this says what is already on its way. Only records this
+  /// device wrote: one the payee wrote in its name is not a send (§14.4).
   final int sentAwaiting;
 
-  /// Payments they recorded to this device that it has not confirmed.
+  /// Payments they recorded to this device that it has not confirmed. Only
+  /// records they wrote.
   final int receivedAwaiting;
 
   /// The bills this standing sums, in §2.3 order.
@@ -55,8 +57,10 @@ class Totals {
   const Totals({required this.standings, required this.uncounted});
 
   /// One per other participant and currency, in §2.3 order of id then
-  /// currency. A pair with nothing owed and nothing awaiting either way is
-  /// left out.
+  /// currency — and, for an id one bill binds to a key and another does not
+  /// (§10.7), one more per bill that does not, since nothing there says it is
+  /// the same person. A pair with nothing owed and nothing awaiting either way
+  /// is left out.
   final List<Standing> standings;
 
   /// Bills left out whole, by id, with the §12 code that kept each out: one
@@ -70,17 +74,35 @@ Totals totalsAcross(List<FoldedBill> bills, String me) {
   final sums = <String, List<int>>{};
   final billsOf = <String, Set<String>>{};
   final uncounted = <String, String>{};
-  String key(String withId, String currency) => '$withId\u0000$currency';
+  // Who and which currency each key stands for.
+  final named = <String, (String, String)>{};
 
   final ordered = [...bills]
     ..sort((a, b) => splitz.compareUtf8(a.bill.id, b.bill.id));
+  // §10.7: an id is one person across bills only when one key binds it. Where
+  // a bill binds it, it is that key's; an id some bill binds and another does
+  // not is, on that other bill, whoever wrote a join under it, so it is
+  // summed there on its own rather than netted against the bound one.
+  final boundSomewhere = {
+    for (final folded in ordered) ...folded.identities.bound.keys,
+  };
   for (final folded in ordered) {
     final bill = folded.bill;
+    String key(String withId) {
+      final bound = folded.identities.bound[withId];
+      return bound != null
+          ? '$withId\u0000${bill.currency}\u0000key:$bound'
+          : boundSomewhere.contains(withId)
+              ? '$withId\u0000${bill.currency}\u0000${bill.id}'
+              : '$withId\u0000${bill.currency}';
+    }
+
     // Everything this bill adds, worked out before any of it is kept.
     final adds = <String, List<int>>{};
     void add(String withId, int slot, int amount) {
-      final row =
-          adds.putIfAbsent(key(withId, bill.currency), () => [0, 0, 0, 0]);
+      final k = key(withId);
+      named[k] = (withId, bill.currency);
+      final row = adds.putIfAbsent(k, () => [0, 0, 0, 0]);
       row[slot] = splitz.checkedAdd(row[slot], amount);
     }
 
@@ -91,6 +113,8 @@ Totals totalsAcross(List<FoldedBill> bills, String me) {
       }
       for (final p in bill.payments) {
         if (bill.confirmedPayments.contains(p.id)) continue;
+        // §14.4: what is on its way is what its payer recorded.
+        if (folded.paymentAuthors[p.id] != p.from) continue;
         if (p.from == me && p.to != me) add(p.to, 2, p.amount);
         if (p.to == me && p.from != me) add(p.from, 3, p.amount);
       }
@@ -115,10 +139,10 @@ Totals totalsAcross(List<FoldedBill> bills, String me) {
   for (final k in keys) {
     final row = sums[k]!;
     if (row.every((v) => v == 0)) continue;
-    final cut = k.indexOf('\u0000');
+    final (withId, currency) = named[k]!;
     standings.add(Standing(
-      withId: k.substring(0, cut),
-      currency: k.substring(cut + 1),
+      withId: withId,
+      currency: currency,
       owedToMe: row[0],
       owedByMe: row[1],
       sentAwaiting: row[2],

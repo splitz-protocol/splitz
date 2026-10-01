@@ -36,7 +36,10 @@ def host_functions() -> set[str]:
 def binding_exports() -> set[str]:
     return set(
         re.findall(
-            r"#\[uniffi::export\]\s*(?:#\[[^\]]*\]\s*)*pub fn ([a-z0-9_]+)", BINDING.read_text()
+            # Any attribute, argument or doc line may sit between the export
+            # and the function it marks.
+            r"#\[uniffi::export(?:\([^)]*\))?\]\s*(?:(?:#\[[^\]]*\]|///[^\n]*)\s*)*pub fn ([a-z0-9_]+)",
+            BINDING.read_text(),
         )
     )
 

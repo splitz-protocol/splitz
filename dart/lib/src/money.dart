@@ -105,3 +105,24 @@ int checkedSum(Iterable<int> values, [String code = SplitCode.amountOverflow]) {
 }
 
 String _show(Object? value) => value is String ? '"$value"' : '$value';
+
+/// An integer §2.2 holds. §9.3: a number's code follows from its value — one
+/// past the 64-bit range, or one no double holds, is `amount_overflow` however
+/// it was written, and any other non-integer is `canonical_json_float`.
+int documentInteger(Object? value) {
+  if (value is int) {
+    // §2.2's range is symmetric: the most negative 64-bit value has no
+    // positive counterpart, so its magnitude is past the range.
+    if (value == -9223372036854775807 - 1) {
+      raise(SplitCode.amountOverflow, 'A number past 64 bits: $value');
+    }
+    return value;
+  }
+  if (value is double) {
+    if (!value.isFinite || value.abs() >= 9223372036854775808.0) {
+      raise(SplitCode.amountOverflow, 'A number past 64 bits: $value');
+    }
+    raise(SplitCode.canonicalJsonFloat, 'A number that is not an integer');
+  }
+  raise(SplitCode.billTypeError, 'Expected an integer, got $value');
+}

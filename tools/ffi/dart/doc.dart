@@ -5,6 +5,7 @@
 /// runs it, so the document's sample is a sample that executed.
 // docs:begin
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:splitz_dart_consumer/splitz_ffi.dart';
@@ -19,16 +20,22 @@ HostFacts facts(String me, String at, int nonce) => HostFacts(
 );
 
 /// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
-/// key: 32 bytes, unpadded base64url.
-String seed(int first) => base64Url
-    .encode(List.generate(32, (i) => (first + i) & 0xff))
-    .replaceAll('=', '');
+/// key: 32 bytes, unpadded base64url. Minted once from the platform's secure
+/// generator and kept; a wallet that holds a seed phrase derives it instead,
+/// with `identitySeedFromSecret`, so a restored wallet speaks as the same
+/// participant.
+String seed() {
+  final random = Random.secure();
+  return base64Url
+      .encode(List.generate(32, (_) => random.nextInt(256)))
+      .replaceAll('=', '');
+}
 
 void main(List<String> args) {
   configureDefaultBindings(libraryPath: args[0]);
 
-  final anaSeed = seed(1);
-  final benSeed = seed(90);
+  final anaSeed = seed();
+  final benSeed = seed();
   // A wallet that publishes a key speaks as the participant id that key
   // derives (§10.7), or the key binds nothing.
   final anaKey = identityKeyFromSeed(anaSeed);
@@ -39,12 +46,22 @@ void main(List<String> args) {
   // Ana's device writes four entries. Each comes back as the JSON §9.3
   // canonicalises, with §9.5's id already derived and signed; the wallet
   // stores the string and never inspects it.
+  // The bill's key is minted first, from the platform's entropy: the create
+  // entry commits to it (§9.4), so a joiner can tell an invite's key is this
+  // bill's.
+  final random = Random.secure();
+  final billKey = newBillKey(
+    RandomBytes(
+      bytes: Uint8List.fromList(List.generate(32, (_) => random.nextInt(256))),
+    ),
+  );
   final create = createBillEntry(
     facts(ana, '2026-10-28T19:31:00.000Z', 1),
     'Dinner',
     'EUR',
     'equal',
     anaKey,
+    billKey,
     anaSeed,
   );
 

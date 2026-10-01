@@ -70,6 +70,31 @@ pub fn check_secret_store(store: &dyn SecretStore, run_id: &str) -> Vec<SeamFind
             reads(Some("second"))
         },
     );
+    run(&mut out, SEAM, "two keys hold two values", || {
+        let other = format!("splitz-contract/{run_id}/other");
+        store.write(&key, "one")?;
+        store.write(&other, "two")?;
+        let one = store.read(&key)?;
+        let two = store.read(&other)?;
+        store.delete(&other)?;
+        Ok(
+            (one.as_deref() != Some("one") || two.as_deref() != Some("two"))
+                .then(|| format!("read {one:?} and {two:?}")),
+        )
+    });
+    run(&mut out, SEAM, "a value reads back whole", || {
+        // Longer than any secret this layer writes: a 43-character bill key,
+        // an identity seed, a pending send's note.
+        let whole: String = "abcdefghij".chars().cycle().take(512).collect();
+        store.write(&key, &whole)?;
+        let got = store.read(&key)?;
+        Ok((got.as_deref() != Some(whole.as_str())).then(|| {
+            format!(
+                "read {} of 512 characters",
+                got.map_or(0, |g| g.chars().count())
+            )
+        }))
+    });
     run(&mut out, SEAM, "a deleted key reads as empty", || {
         store.delete(&key)?;
         reads(None)

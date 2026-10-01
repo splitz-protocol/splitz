@@ -13,10 +13,10 @@ use std::cell::Cell;
 use std::collections::BTreeSet;
 
 use splitz_core::host::{
-    accept_scan, add_expense, base64url_no_pad, confirm_payment, create_bill, delta_for,
-    invite_for, join_bill, obligation_for, read_scan, record_payment, record_send, set_rate,
-    settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
-    SignEntry, VerifyEntry,
+    accept_scan, add_expense, authored_id, base64url_no_pad, confirm_payment, create_bill,
+    delta_for, invite_for, join_bill, obligation_for, read_scan, record_payment, record_send,
+    set_rate, settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned,
+    SendResult, Sent, SignEntry, VerifyEntry,
 };
 use splitz_core::{
     check_entry, net_balances, participant_id, sha256_hex, signing_message, Delta, Invite,
@@ -151,7 +151,7 @@ fn equal_split(among: &[&str]) -> Value {
 #[test]
 fn a_create_entry_opens_a_bill_and_its_id_is_the_bill() {
     let ana = FakeHost::new("ana");
-    let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
 
     // §9.4: the bill's id IS the digest of the entry that opens it, so a
     // wallet cannot choose one and two wallets cannot disagree about it.
@@ -165,8 +165,8 @@ fn a_create_entry_opens_a_bill_and_its_id_is_the_bill() {
 #[test]
 fn two_bills_opened_at_one_instant_by_one_person_are_two_bills() {
     let ana = FakeHost::new("ana");
-    let first = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
-    let second = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    let first = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
+    let second = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
 
     // The clock has not moved and neither has the author. §9.4's nonce is the
     // only thing that separates them.
@@ -179,7 +179,7 @@ fn two_bills_opened_at_one_instant_by_one_person_are_two_bills() {
 fn every_entry_kind_this_layer_writes_passes_ingress() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let written: Vec<Value> = vec![
-        create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap(),
+        create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap(),
         join_bill(
             &ana,
             Some("Ana"),
@@ -251,7 +251,7 @@ fn a_wallet_with_no_address_to_be_paid_at_is_still_a_host() {
     assert!(bare.signer().is_none());
     assert!(bare.verifier().is_none());
     // It can still open a bill and write to it.
-    create_bill(&bare, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    create_bill(&bare, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
 }
 
 #[test]
@@ -273,7 +273,7 @@ fn the_clock_and_the_randomness_come_from_the_host() {
 
 /// A bill two people share: ana pays 90.00, split evenly, so ben owes 45.00.
 fn dinner(ana: &FakeHost, ben: &FakeHost) -> Vec<Value> {
-    let create = create_bill(ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let join_ana = join_bill(ana, Some("Ana"), ana.pay_to_address(), None, None).unwrap();
     ben.tick();
@@ -295,7 +295,7 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
     let bill = |ben_signs: bool| {
         let ana = signing_host("ana", &fake_key("ana"), Some("u1ana"));
         let signer = signing_host(&ben_id, &fake_key("ben"), Some("u1ben"));
-        let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+        let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
         let bill_id = create["id"].as_str().unwrap().to_owned();
         // Ben's device verifies on this bill, as a real one folding it would.
         let mut ben = signing_host_on(&ben_id, &fake_key("ben"), Some("u1ben"), &bill_id);
@@ -430,7 +430,7 @@ fn a_recipient_with_no_address_is_reported_never_dropped() {
 #[test]
 fn an_unpriced_bill_is_an_ordinary_bill_not_a_refusal() {
     let ana = FakeHost::paid_at("ana", "u1ana");
-    let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let join = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
     let mut log = BillLog::new(&ana);
@@ -462,7 +462,7 @@ fn a_sent_request_records_what_was_owed_when_it_was_made() {
     assert_eq!(payment["to"], json!("ana"));
     assert_eq!(payment["amount"], json!(4500));
     let txid = settled.txid.clone().unwrap();
-    assert_eq!(payment["id"], json!(format!("{txid}:ana")));
+    assert_eq!(payment["id"], json!(format!("ben:{txid}:ana")));
     assert_eq!(payment["reference"], json!(txid));
 
     // §10.5: a record is a claim. The balance has not moved.
@@ -520,7 +520,7 @@ fn a_confirmation_is_what_clears_the_debt() {
     let owed = obligation_for(&ben, &folded).unwrap().unwrap();
     let settled = settle(&ben, &mut log, &owed).unwrap();
     let txid = settled.txid.unwrap();
-    let payment_id = format!("{txid}:ana");
+    let payment_id = format!("ben:{txid}:ana");
 
     // Recorded, not confirmed: ben still owes.
     let before = log.fold().unwrap();
@@ -584,7 +584,7 @@ fn a_dinner_ben_paid(ana: &FakeHost, ben: &FakeHost, ana_key: &str, ben_key: &st
     let ben_id = participant_id(ben_key).unwrap();
     let mut entries = vec![sign_entry(
         ana,
-        &create_bill(ana, "Dinner", "EUR", "equal", ana_key).unwrap(),
+        &create_bill(ana, "Dinner", "EUR", "equal", ana_key, None).unwrap(),
         TEST_BILL,
     )
     .unwrap()];
@@ -738,7 +738,7 @@ fn a_rival_claim_does_not_change_who_a_payer_pays() {
 fn an_invite_round_trips_through_the_protocol_parser() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let key = fake_key("ana");
-    let create = create_bill(&ana, "Dinner", "EUR", "equal", &key).unwrap();
+    let create = create_bill(&ana, "Dinner", "EUR", "equal", &key, None).unwrap();
     ana.tick();
     let join = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
     let mut log = BillLog::new(&ana);
@@ -761,7 +761,7 @@ fn an_invite_round_trips_through_the_protocol_parser() {
 fn a_whole_bill_travels_in_one_square_and_opens_on_the_other_side() {
     let ana = FakeHost::paid_at("ana", "u1ana");
     let key = fake_key("ana");
-    let create = create_bill(&ana, "Dinner", "EUR", "equal", &key).unwrap();
+    let create = create_bill(&ana, "Dinner", "EUR", "equal", &key, None).unwrap();
     ana.tick();
     let join = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
     let mut log = BillLog::new(&ana);
@@ -791,7 +791,7 @@ fn a_whole_bill_travels_in_one_square_and_opens_on_the_other_side() {
 #[test]
 fn a_delta_carries_only_what_the_peer_has_not_seen_and_no_key() {
     let ana = FakeHost::paid_at("ana", "u1ana");
-    let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let join = join_bill(&ana, Some("Ana"), None, None, None).unwrap();
     let mut log = BillLog::new(&ana);
@@ -848,7 +848,7 @@ fn an_invite_member_that_is_not_a_string_is_refused_not_panicked() {
 /// pays 90.00, each split evenly across all three, so ana owes 30.00 to ben and
 /// 30.00 to cat — two settlements carried by one transaction.
 fn two_debts(ana: &FakeHost, ben: &FakeHost, cat: &FakeHost) -> Vec<Value> {
-    let create = create_bill(ana, "Dinner", "EUR", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let join_ana = join_bill(ana, Some("Ana"), ana.pay_to_address(), None, None).unwrap();
     ben.tick();
@@ -881,6 +881,67 @@ fn two_debts(ana: &FakeHost, ben: &FakeHost, cat: &FakeHost) -> Vec<Value> {
     ana.tick();
     let rate = set_rate(ana, "EUR", 51234, None).unwrap();
     vec![create, join_ana, join_ben, join_cat, e1, e2, rate]
+}
+
+/// `FakeHost`, with a ZIP 321 reader that refuses one address.
+struct Refusing<'a> {
+    inner: &'a FakeHost,
+    unread: &'a str,
+}
+
+impl BillHost for Refusing<'_> {
+    fn me(&self) -> &str {
+        self.inner.me()
+    }
+
+    fn now(&self) -> String {
+        self.inner.now()
+    }
+
+    fn random_bytes(&self, byte_count: usize) -> Vec<u8> {
+        self.inner.random_bytes(byte_count)
+    }
+
+    fn broadcast(&self, uri: &str) -> Sent {
+        self.inner.broadcast(uri)
+    }
+
+    fn reads_address(&self, address: &str) -> bool {
+        address != self.unread
+    }
+}
+
+#[test]
+fn an_address_the_payer_cannot_read_is_unpayable_and_the_rest_is_paid() {
+    // Cat's `payTo` passes §8.3's alphabet but this wallet's reader refuses
+    // it; a request naming it would be refused whole, so ben's share goes out
+    // alone.
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let cat = FakeHost::paid_at("cat", "u1cat");
+    let mut log = BillLog::new(&ana);
+    assert!(log.add(two_debts(&ana, &ben, &cat)).unwrap().is_empty());
+    let folded = log.fold().unwrap();
+
+    let reading = Refusing {
+        inner: &ana,
+        unread: "u1cat",
+    };
+    let owed = obligation_for(&reading, &folded).unwrap().unwrap();
+    let unpayable: Vec<String> = owed
+        .request
+        .unpayable
+        .iter()
+        .map(|u| format!("{}:{}", u.id, u.reason))
+        .collect();
+    assert_eq!(unpayable, vec!["cat:bad_address"]);
+    assert_eq!(owed.request.recipients, vec!["ben"]);
+    assert_eq!(owed.request.carried_minor_units, 3000);
+    assert!(!owed.uri().unwrap().contains("u1cat"));
+
+    let everything = obligation_for(&ana, &folded).unwrap().unwrap();
+    assert!(everything.request.unpayable.is_empty());
+    assert_eq!(everything.request.carried_minor_units, 6000);
 }
 
 #[test]
@@ -916,7 +977,7 @@ fn one_transaction_paying_two_people_is_two_records_each_confirmable() {
             .iter()
             .map(|r| r["payment"]["id"].as_str().unwrap())
             .collect::<Vec<_>>(),
-        vec![format!("{txid}:ben"), format!("{txid}:cat")]
+        vec![format!("ana:{txid}:ben"), format!("ana:{txid}:cat")]
     );
     for record in &settled.records {
         // The transaction ties both records to the chain, and is what
@@ -941,7 +1002,7 @@ fn one_transaction_paying_two_people_is_two_records_each_confirmable() {
     for _ in 0..8 {
         ben.tick();
     }
-    let payment_id = format!("{txid}:ben");
+    let payment_id = format!("ana:{txid}:ben");
     let digest = log.fold().unwrap().payment_digests[&payment_id].clone();
     let confirmation =
         confirm_payment(&ben, &payment_id, "recipientConfirmed", None, &digest).unwrap();
@@ -1034,4 +1095,14 @@ fn a_pending_send_found_on_chain_later_records_what_a_sent_one_would() {
     };
     assert_eq!(payments(&records), payments(&sent.records));
     assert!(later.fold().unwrap().set_aside.is_empty());
+}
+
+#[test]
+fn an_id_is_written_under_its_author_once_whatever_the_author_holds() {
+    assert_eq!(authored_id("ana", "hotel"), "ana:hotel");
+    assert_eq!(authored_id("ana", "ana:hotel"), "ana:hotel");
+    // §10.3 step 5 gives an author holding `:` no minted ids; the builder
+    // still writes the same id for one, in both implementations.
+    assert_eq!(authored_id("ben:t1", "ben:t1:ana"), "ben:t1:ana");
+    assert_eq!(authored_id("ben:t1", "ana"), "ben:t1:ana");
 }

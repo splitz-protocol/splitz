@@ -9,7 +9,7 @@ fn entry_with_note(note: &str) -> Value {
     let text = format!(
         r#"{{"v":1,"id":"x","author":"ana","kind":"addExpense","at":"2026-10-28T19:03:00.000Z","expense":{{"id":"x1","paidBy":"ana","amount":1,"at":"2026-10-28T19:03:00.000Z","split":{{"type":"equal","among":["ana"]}},"note":{note}}}}}"#
     );
-    let mut entry: Value = serde_json::from_str(&text).expect("the text is JSON");
+    let mut entry: Value = splitz_core::parse_json(&text).expect("the text is JSON");
     // A number §9.3 cannot encode has no id to derive; §10.1 refuses it before
     // the id is read, so the written one stands.
     if let Ok(id) = derive_entry_id(&entry) {

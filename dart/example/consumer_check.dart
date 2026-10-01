@@ -83,7 +83,7 @@ void main() {
     'kind': 'recordPayment',
     'at': canonicalInstant(nowIso),
     'payment': {
-      'id': txid,
+      'id': '$me:$txid:ben', // §10.3 step 5: an id its author minted
       'from': me,
       'to': 'ben',
       'amount': 4500,

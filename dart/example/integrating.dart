@@ -88,7 +88,11 @@ void main() {
   // A bill closes because a payment is confirmed, not because one was sent.
   // One transaction paying two people is two records, and §10.5 requires each
   // to carry its own id: under one id the second is set aside and its payee
-  // asked to be paid again. The transaction goes in `reference`, and each
+  // asked to be paid again. Each id is `<payer>:<txid>:<payee>`: §10.3 step 5
+  // keeps an id that begins with its author's id for that author, so a copy
+  // somebody else backdates is the one set aside, not the payer's record.
+  // `paymentIdForSend` in `package:splitz_core/host.dart` writes the same
+  // id. The transaction goes in `reference`, and each
   // record states what it sent in ZEC and the rate it was priced at, so the
   // payee confirms against a figure they can compare with what arrived.
   //
@@ -107,7 +111,7 @@ void main() {
       'kind': 'recordPayment',
       'at': at,
       'payment': {
-        'id': '$txid:${settlement.to}',
+        'id': '$me:$txid:${settlement.to}',
         'from': me,
         'to': settlement.to,
         'amount': settlement.amount,
@@ -124,7 +128,10 @@ void main() {
 
   final ids = {for (final r in records) (r['payment'] as Map)['id']};
   print('records: ${records.length}, ids: ${ids.join(', ')}');
-  if (records.length != 2 || ids.length != 2) {
-    throw StateError('one record per payee, each its own id');
+  if (records.length != 2 ||
+      ids.length != 2 ||
+      !ids.every((id) => ownsId(me, id as String))) {
+    throw StateError(
+        'one record per payee, each its own id, each the payer\'s');
   }
 }

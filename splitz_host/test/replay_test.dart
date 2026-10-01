@@ -107,12 +107,12 @@ void main() {
     final digest = (await _fold(ana, idA, [
       ...billA,
       payA,
-    ])).paymentDigests['P']!;
+    ])).paymentDigests['${mal.id}:P']!;
     ana.wallet.tick();
     confirmA = await ana.sign(
       splitz.confirmPayment(
         host: ana.host,
-        paymentId: 'P',
+        paymentId: '${mal.id}:P',
         method: 'recipientConfirmed',
         record: digest,
       ),
@@ -120,7 +120,7 @@ void main() {
     );
     final foldedA = await _fold(ana, idA, [...billA, payA, confirmA]);
     // The control: on its own bill, the confirmation stands.
-    expect(foldedA.bill.confirmedPayments, contains('P'));
+    expect(foldedA.bill.confirmedPayments, contains('${mal.id}:P'));
 
     // Bill B: Ana paid 100.00 for both of them, so Mal owes her 50.00.
     final (b, entriesB) = await _bill(ana, mal, 'B');

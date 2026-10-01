@@ -260,13 +260,24 @@ class TooBigForOneSquare extends Delta {
   final String code;
 }
 
+/// How a peer names one copy of [entry] it holds (§14.5): the entry's id, and
+/// `|` and its `sig` when it carries one.
+///
+/// §10.2's union keeps copies by id and signature, so a peer holding a copy
+/// whose signature fails holds the id and still lacks the entry. An id is
+/// §9.5's digest and holds no `|`, so the key splits at its first one.
+String copyKey(Map<String, dynamic> entry) {
+  final sig = entry['sig'];
+  return sig is String ? '${entry['id']}|$sig' : '${entry['id']}';
+}
+
 /// Computes what [theyHave] is missing from [entries] (§14.5).
 ///
-/// A delta carries no invite: its reader already holds the key (§11.2).
+/// [theyHave] names copies by [copyKey]. A delta carries no invite: its reader already holds the key (§11.2).
 Delta deltaFor(List<Map<String, dynamic>> entries, Set<String> theyHave) {
   final missing = [
     for (final e in orderEntries(entries))
-      if (!theyHave.contains(e['id'])) e,
+      if (!theyHave.contains(copyKey(e))) e,
   ];
   if (missing.isEmpty) return const NothingMissing();
   try {

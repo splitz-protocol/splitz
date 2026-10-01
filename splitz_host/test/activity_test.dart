@@ -5,6 +5,7 @@
 /// payment claimed but not confirmed.
 library;
 
+import 'package:splitz_core/splitz_core.dart' show deriveEntryId;
 import 'package:splitz_core/host.dart' as entries;
 import 'package:splitz_host/splitz_host.dart';
 import 'package:test/test.dart';
@@ -23,6 +24,94 @@ List<BillEvent> historyOf(entries.BillLog log) {
 }
 
 void main() {
+  group('an entry the fold set aside for a member of the wrong type', () {
+    // §10.1 checks the ids at ingress and leaves the rest to the fold, so an
+    // entry naming a string amount reaches the store. The fold sets it aside;
+    // the history must read it as well, or one peer's entry takes down every
+    // bill a wallet lists.
+    for (final (member, value) in <(String, Object)>[
+      ('amount', '9000'),
+      ('description', 7),
+    ]) {
+      test('expense.$member ${value.runtimeType}', () {
+        final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
+        final create = entries.createBill(
+          host: ana,
+          name: 'Dinner',
+          currency: 'USD',
+          creatorKey: fakeKey('ana'),
+        );
+        ana.tick();
+        final join = entries.joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
+        ana.tick();
+        final expense = entries.addExpense(
+          host: ana,
+          expenseId: 'x1',
+          paidBy: 'ana',
+          amount: 9000,
+          split: const {
+            'type': 'equal',
+            'among': ['ana'],
+          },
+        );
+        // Typed as a decoded entry is, so the reader meets the member.
+        final bad = <String, dynamic>{
+          ...expense,
+          'expense': <String, dynamic>{
+            ...expense['expense'] as Map<String, dynamic>,
+            member: value,
+          },
+        };
+        bad['id'] = deriveEntryId(bad);
+        final log = entries.BillLog(ana, entries: [create, join]);
+        log.add([bad]);
+        expect(log.fold().setAside.map((s) => s.id), contains(bad['id']));
+        expect(() => historyOf(log), returnsNormally);
+        expect(historyOf(log), hasLength(3));
+      });
+    }
+  });
+
+  test('two copies of one entry are one line', () {
+    final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
+    final create = entries.createBill(
+      host: ana,
+      name: 'Dinner',
+      currency: 'USD',
+      creatorKey: fakeKey('ana'),
+    );
+    ana.tick();
+    final join = entries.joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
+    ana.tick();
+    final expense = entries.addExpense(
+      host: ana,
+      expenseId: 'x1',
+      paidBy: 'ana',
+      amount: 9000,
+      split: const {
+        'type': 'equal',
+        'among': ['ana'],
+      },
+    );
+    // §10.2 keeps both signed copies of one id; §9.5 makes them agree.
+    final log = entries.BillLog(
+      ana,
+      entries: [
+        create,
+        {...join, 'sig': 'AAAA'},
+        {...join, 'sig': 'BBBB'},
+        {...expense, 'sig': 'AAAA'},
+        {...expense, 'sig': 'BBBB'},
+      ],
+    );
+    final history = historyOf(log);
+    expect(history.map((e) => e.kind), [
+      BillEventKind.expenseAdded,
+      BillEventKind.joined,
+      BillEventKind.opened,
+    ]);
+  });
+
   group('what a history shows', () {
     test('every entry becomes a line, newest first', () {
       final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
@@ -207,9 +296,9 @@ void main() {
       b.log.add([
         entries.confirmPayment(
           host: ben,
-          paymentId: 'p1',
+          paymentId: 'ana:p1',
           method: 'recipientConfirmed',
-          record: b.log.fold().paymentDigests['p1']!,
+          record: b.log.fold().paymentDigests['ana:p1']!,
         ),
       ]);
 
@@ -238,7 +327,7 @@ void main() {
       // asserting twice that they paid it.
       final b = paid(method: 'cash');
       final bill = b.log.fold().bill;
-      expect(awaitingConfirmationBy(bill, 'ben').map((p) => p.id), ['p1']);
+      expect(awaitingConfirmationBy(bill, 'ben').map((p) => p.id), ['ana:p1']);
       expect(awaitingConfirmationBy(bill, 'ana'), isEmpty);
     });
 
@@ -248,9 +337,9 @@ void main() {
       b.log.add([
         entries.confirmPayment(
           host: ben,
-          paymentId: 'p1',
+          paymentId: 'ana:p1',
           method: 'recipientConfirmed',
-          record: b.log.fold().paymentDigests['p1']!,
+          record: b.log.fold().paymentDigests['ana:p1']!,
         ),
       ]);
       expect(awaitingConfirmationBy(b.log.fold().bill, 'ben'), isEmpty);
@@ -278,7 +367,7 @@ void main() {
       log.add([
         entries.recordPayment(
           host: ana,
-          paymentId: 'p1',
+          paymentId: 'ana:p1',
           to: 'ana',
           amount: 100,
           method: 'cash',

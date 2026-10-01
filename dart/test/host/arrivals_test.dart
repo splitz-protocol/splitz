@@ -70,6 +70,35 @@ void _confirm(({BillLog log, FakeHost ana, FakeHost ben}) b, String id) {
 List<String> _ids(List<Arrival> arrivals) =>
     [for (final a in arrivals) '${a.billId}/${a.payment.id}'];
 
+/// [f] with [bound] as the keys §10.7 bound on it, for tests about who a
+/// payer is rather than how a key comes to be bound.
+FoldedBill _bound(FoldedBill f, Map<String, String> bound) => FoldedBill(
+      bill: f.bill,
+      setAside: f.setAside,
+      withdrawn: f.withdrawn,
+      replacedAddresses: f.replacedAddresses,
+      identities: splitz.Identities(bound),
+      paymentAuthors: f.paymentAuthors,
+      paymentDigests: f.paymentDigests,
+    );
+
+/// Ben pays [_t1] on bill X and on bill Y, each bound as [x] and [y] (null:
+/// unbound); returns what Ana's wallet proposes for both bills.
+Arrivals _twoBills({String? x, String? y}) {
+  final bx = _bill('X');
+  final by = _bill('Y');
+  _paid(bx, 'p1', _t1, zatoshi: 10000);
+  _paid(by, 'p1', _t1, zatoshi: 10000);
+  return arrivalsFor(
+    [
+      _bound(bx.log.fold(), {if (x != null) 'ben': x}),
+      _bound(by.log.fold(), {if (y != null) 'ben': y}),
+    ],
+    'ana',
+    const [IncomingTransaction(_t1, 20000)],
+  );
+}
+
 void main() {
   test('a record whose transaction arrived with its ZEC is proposed', () {
     final b = _bill('Dinner');
@@ -79,9 +108,9 @@ void main() {
       'ana',
       const [IncomingTransaction(_t1, 20000)],
     );
-    expect(found.arrived.map((a) => a.payment.id), ['p1']);
+    expect(found.arrived.map((a) => a.payment.id), ['ben:p1']);
     expect(found.arrived.single.txid, _t1);
-    expect(found.arrived.single.record, b.log.fold().paymentDigests['p1']);
+    expect(found.arrived.single.record, b.log.fold().paymentDigests['ben:p1']);
     expect(found.short, isEmpty);
     expect(found.unstated, isEmpty);
   });
@@ -105,7 +134,7 @@ void main() {
       ),
     ]);
     expect(refused, isEmpty);
-    expect(b.log.fold().bill.confirmedPayments, {'p1'});
+    expect(b.log.fold().bill.confirmedPayments, {'ben:p1'});
   });
 
   test('a transaction id is matched whatever its case and padding', () {
@@ -128,7 +157,7 @@ void main() {
       const [IncomingTransaction(_t1, 20000)],
     );
     expect(found.arrived, isEmpty);
-    expect(found.short.map((a) => a.payment.id), ['p1']);
+    expect(found.short.map((a) => a.payment.id), ['ben:p1']);
   });
 
   test('a record stating no ZEC cannot be checked', () {
@@ -140,7 +169,7 @@ void main() {
       const [IncomingTransaction(_t1, 20000)],
     );
     expect(found.arrived, isEmpty);
-    expect(found.unstated.map((a) => a.payment.id), ['p1']);
+    expect(found.unstated.map((a) => a.payment.id), ['ben:p1']);
   });
 
   test('one transaction is evidence once, across bills', () {
@@ -148,7 +177,10 @@ void main() {
     final y = _bill('Y');
     _paid(x, 'p1', _t1);
     _paid(y, 'p1', _t1);
-    final bills = [y.log.fold(), x.log.fold()];
+    final bills = [
+      _bound(y.log.fold(), {'ben': fakeKey('ben')}),
+      _bound(x.log.fold(), {'ben': fakeKey('ben')}),
+    ];
     final found = arrivalsFor(
       bills,
       'ana',
@@ -158,7 +190,7 @@ void main() {
         splitz.compareUtf8(x.log.fold().bill.id, y.log.fold().bill.id) < 0
             ? x.log.fold().bill.id
             : y.log.fold().bill.id;
-    expect(_ids(found.arrived), ['$first/p1']);
+    expect(_ids(found.arrived), ['$first/ben:p1']);
     expect(found.short, hasLength(1));
   });
 
@@ -166,15 +198,18 @@ void main() {
     final x = _bill('X');
     final y = _bill('Y');
     _paid(x, 'p1', _t1);
-    _confirm(x, 'p1');
+    _confirm(x, 'ben:p1');
     _paid(y, 'p2', _t1);
     final found = arrivalsFor(
-      [x.log.fold(), y.log.fold()],
+      [
+        _bound(x.log.fold(), {'ben': fakeKey('ben')}),
+        _bound(y.log.fold(), {'ben': fakeKey('ben')}),
+      ],
       'ana',
       const [IncomingTransaction(_t1, 30000)],
     );
     expect(found.arrived, isEmpty, reason: '20000 of 30000 is already used');
-    expect(_ids(found.short), ['${y.log.fold().bill.id}/p2']);
+    expect(_ids(found.short), ['${y.log.fold().bill.id}/ben:p2']);
   });
 
   test('records stating the most ZEC an integer holds cannot wrap the count',
@@ -185,9 +220,9 @@ void main() {
     final b = _bill('Dinner');
     const most = 9223372036854775807;
     _paid(b, 'p1', _t1, zatoshi: most);
-    _confirm(b, 'p1');
+    _confirm(b, 'ben:p1');
     _paid(b, 'p2', _t1, zatoshi: most);
-    _confirm(b, 'p2');
+    _confirm(b, 'ben:p2');
     _paid(b, 'p3', _t1, zatoshi: 1000);
     final found = arrivalsFor(
       [b.log.fold()],
@@ -195,7 +230,7 @@ void main() {
       const [IncomingTransaction(_t1, 20000)],
     );
     expect(found.arrived, isEmpty);
-    expect(found.short.map((a) => a.payment.id), ['p3']);
+    expect(found.short.map((a) => a.payment.id), ['ben:p3']);
   });
 
   test('two transactions each pay for their own record', () {
@@ -207,7 +242,7 @@ void main() {
       'ana',
       const [IncomingTransaction(_t1, 20000), IncomingTransaction(_t2, 20000)],
     );
-    expect(found.arrived.map((a) => a.payment.id), ['p1', 'p2']);
+    expect(found.arrived.map((a) => a.payment.id), ['ben:p1', 'ben:p2']);
   });
 
   test('records to somebody else, and other methods, are not matched', () {
@@ -241,5 +276,85 @@ void main() {
     expect(found.arrived, isEmpty);
     expect(found.short, isEmpty);
     expect(found.unstated, isEmpty);
+  });
+
+  test(
+      'a txid is compared with ASCII space trimmed and ASCII lower-cased, '
+      'nothing wider', () {
+    expect(txidKey(' \tABCD\r\n'), 'abcd');
+    expect(txidKey('abcd\u{FEFF}'), 'abcd\u{FEFF}');
+    expect(txidKey('\u{00A0}abcd'), '\u{00A0}abcd');
+    expect(txidKey('\u{0130}BC'), '\u{0130}bc');
+  });
+
+  test('a transaction two payers name is evidence for neither', () {
+    final b = _bill('Dinner');
+    _paid(b, 'p1', _t1);
+    final mal = FakeHost(me: 'mal', payToAddress: 'u1mal');
+    mal.tick();
+    expect(
+        b.log.add([joinBill(host: mal, name: 'Mal', payTo: 'u1mal')]), isEmpty);
+    mal.tick();
+    expect(
+      b.log.add([
+        recordPayment(
+          host: mal,
+          paymentId: '0',
+          to: 'ana',
+          amount: 1000,
+          reference: _t1,
+          zatoshi: 20000,
+        ),
+      ]),
+      isEmpty,
+    );
+    final found = arrivalsFor(
+      [b.log.fold()],
+      'ana',
+      const [IncomingTransaction(_t1, 20000)],
+    );
+    expect(found.arrived, isEmpty);
+    expect(
+        found.disputed.map((a) => a.payment.id).toSet(), {'ben:p1', 'mal:0'});
+  });
+
+  group('a payer is who §10.7 bound, not the id string', () {
+    test('an unbound id on another bill is not the bound payer it names', () {
+      final found = _twoBills(x: fakeKey('ben'));
+      expect(found.arrived, isEmpty);
+      expect(found.disputed, hasLength(2));
+    });
+
+    test('one id bound to two keys on two bills is two payers', () {
+      final found = _twoBills(x: fakeKey('ben'), y: fakeKey('mal'));
+      expect(found.arrived, isEmpty);
+      expect(found.disputed, hasLength(2));
+    });
+
+    test('one id unbound on two bills is two payers', () {
+      final found = _twoBills();
+      expect(found.arrived, isEmpty);
+      expect(found.disputed, hasLength(2));
+    });
+
+    test('one key on two bills is one payer, and both arrive', () {
+      final found = _twoBills(x: fakeKey('ben'), y: fakeKey('ben'));
+      expect(found.disputed, isEmpty);
+      expect(found.arrived, hasLength(2));
+    });
+  });
+
+  test('one payer naming a transaction twice is still counted once', () {
+    final b = _bill('Dinner');
+    _paid(b, 'p1', _t1);
+    _paid(b, 'p2', _t1);
+    final found = arrivalsFor(
+      [b.log.fold()],
+      'ana',
+      const [IncomingTransaction(_t1, 20000)],
+    );
+    expect(found.disputed, isEmpty);
+    expect(found.arrived.map((a) => a.payment.id), ['ben:p1']);
+    expect(found.short.map((a) => a.payment.id), ['ben:p2']);
   });
 }

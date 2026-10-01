@@ -14,10 +14,17 @@ It is read once at startup and never written, copied or logged. Nothing here
 prints a phrase: the log line for a request names the index and the account,
 which is what a person reading a run needs and all they need.
 
-Two routes, matching `SeedDriver` in lib/src/testing/seed_driver.dart:
+Two routes, under a token this process mints when it starts, matching
+`SeedDriver` in lib/src/testing/seed_driver.dart:
 
-    GET /health        -> {"ok": true, "wallets": <count>}
-    GET /seed/<index>  -> {"seed": "<phrase>", "name": "<label>"}
+    GET /<token>/health        -> {"ok": true, "wallets": <count>}
+    GET /<token>/seed/<index>  -> {"seed": "<phrase>", "name": "<label>"}
+
+The line printed at start is the whole URL, token included, and is the
+`SPLITS_SEED_DRIVER_URL` a run is given. Any other process on this machine can
+reach loopback; without the token it is answered 403, so a phrase goes only to
+the run that was handed the URL. The token is worthless once this process
+stops, so it may sit in that run's defines.
 
 It binds to 127.0.0.1 only. A simulator reaches loopback on the host; a
 physical device does not, and that is the intended limit — a driver reachable
@@ -28,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -83,6 +91,7 @@ def load(path: Path) -> list[tuple[str, str]]:
 
 class Driver(BaseHTTPRequestHandler):
     phrases: list[tuple[str, str]] = []
+    token: str = ""
 
     def _json(self, status: int, body: dict) -> None:
         payload = json.dumps(body).encode("utf-8")
@@ -109,7 +118,12 @@ class Driver(BaseHTTPRequestHandler):
         if not self._from_this_machine():
             self._json(403, {"error": "this driver answers local callers only"})
             return
-        if self.path == "/health":
+        prefix = f"/{self.token}/"
+        if not (self.token and self.path.startswith(prefix)):
+            self._json(403, {"error": "this driver answers the run it was started for"})
+            return
+        route = self.path[len(prefix) - 1 :]
+        if route == "/health":
             self._json(
                 200,
                 {
@@ -122,8 +136,8 @@ class Driver(BaseHTTPRequestHandler):
             )
             return
 
-        if self.path.startswith("/seed/"):
-            raw = self.path[len("/seed/") :]
+        if route.startswith("/seed/"):
+            raw = route[len("/seed/") :]
             if not raw.isdigit():
                 self._json(400, {"error": "index is a number"})
                 return
@@ -147,10 +161,10 @@ class Driver(BaseHTTPRequestHandler):
         self._json(404, {"error": "not a route"})
 
     def log_message(self, fmt: str, *args) -> None:
-        # The default logs the request line, which carries the index. That is
-        # fine; what must never reach a log is the phrase, and nothing here
-        # writes one.
-        sys.stderr.write(f"seed-driver: {fmt % args}\n")
+        # The default logs the request line, which carries the index and the
+        # token. The token is left out; what must never reach a log is the
+        # phrase, and nothing here writes one.
+        sys.stderr.write(f"seed-driver: {(fmt % args).replace(self.token, '<token>')}\n")
 
 
 def main() -> int:
@@ -162,10 +176,12 @@ def main() -> int:
     args = parser.parse_args()
 
     Driver.phrases = load(args.seed_file)
+    Driver.token = secrets.token_urlsafe(24)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Driver)
     print(
         f"seed-driver: {len(Driver.phrases)} wallets on "
-        f"http://127.0.0.1:{server.server_address[1]} — stop it when the run ends",
+        f"http://127.0.0.1:{server.server_address[1]}/{Driver.token} "
+        "— stop it when the run ends",
         file=sys.stderr,
     )
     try:

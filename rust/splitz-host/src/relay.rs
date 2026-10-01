@@ -106,6 +106,11 @@ impl<'a> HttpSplitsRelay<'a> {
     /// server: a bound only one side keeps is not a bound.
     pub const MAX_BLOB_CHARS: usize = 64 * 1024;
 
+    /// A push body longer than this, in UTF-8 bytes, is refused by the
+    /// server, so a push is split into requests that each fit. Mirrored by the
+    /// server.
+    pub const MAX_BODY_BYTES: usize = 32 * 1024 * 1024;
+
     /// `origin` is a scheme, a host and an optional path. A query or a
     /// fragment is refused: the channel is appended to the path, and an origin
     /// carrying either would put it after them, addressing something else.
@@ -158,6 +163,43 @@ impl<'a> HttpSplitsRelay<'a> {
         Ok(Some(json!({ "blobs": blobs }).to_string()))
     }
 
+    /// `blobs` as the push bodies that carry them, in order, each at most
+    /// `MAX_BODY_BYTES`. Refused as [`Self::push_body`] refuses; every blob is
+    /// then at most `MAX_BLOB_CHARS`, so every body holds at least one.
+    pub fn push_bodies(blobs: &[String]) -> Result<Vec<String>, HostError> {
+        const OPEN: &str = "{\"blobs\":[";
+        const CLOSE: &str = "]}";
+        let empty = OPEN.len() + CLOSE.len();
+        let mut bodies = Vec::new();
+        let mut batch: Vec<String> = Vec::new();
+        let mut size = empty;
+        for blob in blobs {
+            let chars = blob.chars().count();
+            if chars > Self::MAX_BLOB_CHARS {
+                return Err(relay_error(
+                    format!(
+                        "A blob of {chars} characters is over the {} the relay accepts",
+                        Self::MAX_BLOB_CHARS
+                    ),
+                    false,
+                ));
+            }
+            let encoded = Value::String(blob.clone()).to_string();
+            // One more blob costs its bytes and, after the first, a comma.
+            if !batch.is_empty() && size + 1 + encoded.len() > Self::MAX_BODY_BYTES {
+                bodies.push(format!("{OPEN}{}{CLOSE}", batch.join(",")));
+                batch.clear();
+                size = empty;
+            }
+            size += usize::from(!batch.is_empty()) + encoded.len();
+            batch.push(encoded);
+        }
+        if !batch.is_empty() {
+            bodies.push(format!("{OPEN}{}{CLOSE}", batch.join(",")));
+        }
+        Ok(bodies)
+    }
+
     /// Reads the relay's answer to a push, whatever its HTTP status. Anything
     /// but `{"ok":true}` is a refusal, and retryable: the relay answered, and
     /// what it refused — a full store, a dropped body — may pass later.
@@ -207,14 +249,15 @@ impl<'a> HttpSplitsRelay<'a> {
 
 impl SplitsRelay for HttpSplitsRelay<'_> {
     fn push(&self, channel: &str, blobs: &[String]) -> Result<(), HostError> {
-        let Some(body) = Self::push_body(blobs)? else {
-            return Ok(());
-        };
-        let answer = self
-            .transport
-            .post(&Self::channel_url(&self.origin, channel)?, &body)
-            .map_err(|e| Self::not_reached(&e))?;
-        Self::push_answer(&answer)
+        let url = Self::channel_url(&self.origin, channel)?;
+        for body in Self::push_bodies(blobs)? {
+            let answer = self
+                .transport
+                .post(&url, &body)
+                .map_err(|e| Self::not_reached(&e))?;
+            Self::push_answer(&answer)?;
+        }
+        Ok(())
     }
 
     fn fetch(&self, channel: &str) -> Result<Vec<String>, HostError> {

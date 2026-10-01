@@ -313,20 +313,22 @@ const int _addressPrefixLength = 10;
 /// True when [address] occurs in [text] whole, or as a prefix of at least
 /// 10 characters that stops agreeing with it on a
 /// character that is not an ASCII letter or digit.
+///
+/// A character is a Unicode scalar value (§2.3), counted the same way in
+/// every implementation: UTF-16 units and UTF-8 bytes give two answers for
+/// one screen.
 bool _showsAddress(String text, String address) {
-  if (address.length <= _addressPrefixLength) return text.contains(address);
-  final head = address.substring(0, _addressPrefixLength);
-  for (var at = text.indexOf(head); at >= 0; at = text.indexOf(head, at + 1)) {
-    var n = _addressPrefixLength;
-    while (n < address.length &&
-        at + n < text.length &&
-        text.codeUnitAt(at + n) == address.codeUnitAt(n)) {
+  final t = text.runes.toList();
+  final a = address.runes.toList();
+  if (a.length <= _addressPrefixLength) return text.contains(address);
+  for (var at = 0; at + _addressPrefixLength <= t.length; at++) {
+    var n = 0;
+    while (n < a.length && at + n < t.length && t[at + n] == a[n]) {
       n++;
     }
-    if (n == address.length) return true;
-    if (at + n >= text.length || !_isAddressChar(text.codeUnitAt(at + n))) {
-      return true;
-    }
+    if (n < _addressPrefixLength) continue;
+    if (n == a.length) return true;
+    if (at + n >= t.length || !_isAddressChar(t[at + n])) return true;
   }
   return false;
 }

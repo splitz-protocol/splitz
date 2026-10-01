@@ -86,6 +86,7 @@ abstract final class SplitCode {
   static const inviteMissingKey = 'invite_missing_key';
   static const inviteBadExpiry = 'invite_bad_expiry';
   static const inviteBadLink = 'invite_bad_link';
+  static const inviteKeyMismatch = 'invite_key_mismatch';
   static const payloadNotAPayload = 'payload_not_a_payload';
   static const payloadDamaged = 'payload_damaged';
   static const payloadMissingBody = 'payload_missing_body';
@@ -181,6 +182,8 @@ const Map<String, String> _plainMessages = {
   'invite_bad_expiry': 'This invite is damaged. Ask for a new one.',
   'invite_bad_link': 'This invite link can\'t be made from that address.',
   'invite_future_version': 'This invite needs a newer app. Update to join.',
+  'invite_key_mismatch':
+      'This invite doesn\'t fit this bill. Ask its organiser for a new one.',
   'invite_missing_bill_id': 'This invite is incomplete. Ask for a new one.',
   'invite_missing_key': 'This invite is incomplete. Ask for a new one.',
   'invite_missing_version': 'This invite can\'t be read.',

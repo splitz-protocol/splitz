@@ -430,6 +430,27 @@ class OneClickSwaps implements SwapProvider {
     if ('${quote['amountIn']}' != '$amountInZatoshi') {
       throw const SwapException('The provider quoted a different amount in');
     }
+    // The floor is what the recipient is guaranteed. One below the tolerance
+    // asked for lets the provider keep more than the payer agreed to lose,
+    // and the record still says the whole debt was paid.
+    final floor = _optional(quote, 'minAmountOut');
+    if (floor != null) {
+      final out = BigInt.tryParse(_string(quote, 'amountOut'));
+      final least = BigInt.tryParse(floor);
+      if (out == null || least == null || least.isNegative) {
+        throw const SwapException('The provider quoted amounts out of shape');
+      }
+      // The provider rounds its floor down, so the bound is the product
+      // rounded down too: 15150548 at 1% is 14999042.52, stated 14999042.
+      if (least <
+          out *
+              BigInt.from(10000 - slippageBasisPoints) ~/
+              BigInt.from(10000)) {
+        throw const SwapException(
+          'The provider guarantees less than the tolerance asked for',
+        );
+      }
+    }
     return SwapQuote(
       depositAddress: _string(quote, 'depositAddress'),
       depositMemo: _optional(quote, 'depositMemo'),

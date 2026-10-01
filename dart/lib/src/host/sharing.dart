@@ -87,6 +87,16 @@ Scanned readScan(String text) {
         }
       }
     }
+    // §9.4: a key handed over with a bill it was not made for opens a
+    // version of the bill only its holder sees.
+    final key = invite?.key;
+    if (key != null) {
+      for (final e in entries) {
+        if (splitz.createRefusesKey(e, invite!.billId, key)) {
+          return const ScanRefused(splitz.SplitCode.inviteKeyMismatch);
+        }
+      }
+    }
     return ScannedBill(
         entries: entries, invite: invite, notEntries: notEntries);
   } on splitz.SplitError catch (e) {

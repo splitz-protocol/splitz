@@ -85,6 +85,7 @@ pub mod code {
     pub const INVITE_MISSING_KEY: &str = "invite_missing_key";
     pub const INVITE_BAD_EXPIRY: &str = "invite_bad_expiry";
     pub const INVITE_BAD_LINK: &str = "invite_bad_link";
+    pub const INVITE_KEY_MISMATCH: &str = "invite_key_mismatch";
     pub const PAYLOAD_NOT_A_PAYLOAD: &str = "payload_not_a_payload";
     pub const PAYLOAD_DAMAGED: &str = "payload_damaged";
     pub const PAYLOAD_MISSING_BODY: &str = "payload_missing_body";
@@ -250,6 +251,10 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
     (
         "invite_future_version",
         "This invite needs a newer app. Update to join.",
+    ),
+    (
+        "invite_key_mismatch",
+        "This invite doesn't fit this bill. Ask its organiser for a new one.",
     ),
     (
         "invite_missing_bill_id",

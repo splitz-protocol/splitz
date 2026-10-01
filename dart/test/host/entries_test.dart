@@ -75,4 +75,13 @@ void main() {
       }
     });
   });
+
+  test('an id is written under its author once, whatever the author holds', () {
+    expect(authoredId('ana', 'hotel'), 'ana:hotel');
+    expect(authoredId('ana', 'ana:hotel'), 'ana:hotel');
+    // §10.3 step 5 gives an author holding `:` no minted ids; the builder
+    // still writes the same id for one, in both implementations.
+    expect(authoredId('ben:t1', 'ben:t1:ana'), 'ben:t1:ana');
+    expect(authoredId('ben:t1', 'ana'), 'ben:t1:ana');
+  });
 }

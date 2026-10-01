@@ -110,7 +110,11 @@ void main() {
   // A bill closes because a payment is confirmed, not because one was sent.
   // One transaction paying two people is two records, and §10.5 requires each
   // to carry its own id: under one id the second is set aside and its payee
-  // asked to be paid again. The transaction goes in `reference`, and each
+  // asked to be paid again. Each id is `<payer>:<txid>:<payee>`: §10.3 step 5
+  // keeps an id that begins with its author's id for that author, so a copy
+  // somebody else backdates is the one set aside, not the payer's record.
+  // `paymentIdForSend` in `package:splitz_core/host.dart` writes the same
+  // id. The transaction goes in `reference`, and each
   // record states what it sent in ZEC and the rate it was priced at, so the
   // payee confirms against a figure they can compare with what arrived.
   //
@@ -129,7 +133,7 @@ void main() {
       'kind': 'recordPayment',
       'at': at,
       'payment': {
-        'id': '$txid:${settlement.to}',
+        'id': '$me:$txid:${settlement.to}',
         'from': me,
         'to': settlement.to,
         'amount': settlement.amount,
@@ -146,8 +150,11 @@ void main() {
 
   final ids = {for (final r in records) (r['payment'] as Map)['id']};
   print('records: ${records.length}, ids: ${ids.join(', ')}');
-  if (records.length != 2 || ids.length != 2) {
-    throw StateError('one record per payee, each its own id');
+  if (records.length != 2 ||
+      ids.length != 2 ||
+      !ids.every((id) => ownsId(me, id as String))) {
+    throw StateError(
+        'one record per payee, each its own id, each the payer\'s');
   }
 }
 ```
@@ -257,6 +264,11 @@ Future<void> main() async {
     List<int>.generate(creatorKeyBytes, (i) => i),
   );
 
+  // The key the bill's entries are sealed under, which its create commits to
+  // (§9.4): a key handed over with this bill's id and any other key is then
+  // refused rather than opening a copy only its holder sees.
+  final billKey = base64UrlNoPad(host.randomBytes(32));
+
   final log = BillLog(host)
     ..add([
       createBill(
@@ -264,6 +276,7 @@ Future<void> main() async {
         name: 'Dinner',
         currency: 'EUR',
         creatorKey: myEd25519PublicKeyBase64Url,
+        billKey: billKey,
       ),
     ]);
 
@@ -321,8 +334,20 @@ fn main() -> splitz_core::Result<()> {
     let host = MyWallet;
     let my_key = base64url_no_pad(&[0u8; CREATOR_KEY_BYTES]);
 
+    // The key the bill's entries are sealed under, which its create commits
+    // to (§9.4): a key handed over with this bill's id and any other key is
+    // then refused rather than opening a copy only its holder sees.
+    let bill_key = base64url_no_pad(&host.random_bytes(32));
+
     let mut log = BillLog::new(&host);
-    log.add(vec![create_bill(&host, "Dinner", "EUR", "equal", &my_key)?])?;
+    log.add(vec![create_bill(
+        &host,
+        "Dinner",
+        "EUR",
+        "equal",
+        &my_key,
+        Some(&bill_key),
+    )?])?;
     log.add(vec![join_bill(
         &host,
         Some("Ana"),
@@ -451,13 +476,16 @@ fun facts(me: String, at: String, nonce: Int) =
     HostFacts(me, at, ByteArray(16) { (nonce + it).toByte() })
 
 /// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
-/// key: 32 bytes, unpadded base64url.
-fun seed(first: Int): String = java.util.Base64.getUrlEncoder().withoutPadding()
-    .encodeToString(ByteArray(32) { (first + it).toByte() })
+/// key: 32 bytes, unpadded base64url. Minted once from the platform's secure
+/// generator and kept; a wallet that holds a seed phrase derives it instead,
+/// with `identitySeedFromSecret`, so a restored wallet speaks as the same
+/// participant.
+fun seed(): String = java.util.Base64.getUrlEncoder().withoutPadding()
+    .encodeToString(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) })
 
 fun main() {
-    val anaSeed = seed(1)
-    val benSeed = seed(90)
+    val anaSeed = seed()
+    val benSeed = seed()
     // A wallet that publishes a key speaks as the participant id that key
     // derives (§10.7), or the key binds nothing.
     val anaKey = identityKeyFromSeed(anaSeed)
@@ -468,8 +496,12 @@ fun main() {
     // Ana's device writes four entries. Each comes back as the JSON §9.3
     // canonicalises, with §9.5's id already derived and signed; the wallet
     // stores the string and never inspects it.
+    // The bill's key is minted first, from the platform's entropy: the create
+    // entry commits to it (§9.4), so a joiner can tell an invite's key is
+    // this bill's.
+    val billKey = newBillKey(RandomBytes(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }))
     val create = createBillEntry(facts(ana, "2026-10-28T19:31:00.000Z", 1),
-        "Dinner", "EUR", "equal", anaKey, anaSeed)
+        "Dinner", "EUR", "equal", anaKey, billKey, anaSeed)
 
     // The bill these entries belong to, read back from the entry that opened
     // it. Every other entry is signed on it (§10.6), and every fold names it,
@@ -581,6 +613,7 @@ Two costs the Android side carries, and they are not obvious from the file:
 
 ```dart file=tools/ffi/dart/doc.dart
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:splitz_dart_consumer/splitz_ffi.dart';
@@ -595,16 +628,22 @@ HostFacts facts(String me, String at, int nonce) => HostFacts(
 );
 
 /// The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
-/// key: 32 bytes, unpadded base64url.
-String seed(int first) => base64Url
-    .encode(List.generate(32, (i) => (first + i) & 0xff))
-    .replaceAll('=', '');
+/// key: 32 bytes, unpadded base64url. Minted once from the platform's secure
+/// generator and kept; a wallet that holds a seed phrase derives it instead,
+/// with `identitySeedFromSecret`, so a restored wallet speaks as the same
+/// participant.
+String seed() {
+  final random = Random.secure();
+  return base64Url
+      .encode(List.generate(32, (_) => random.nextInt(256)))
+      .replaceAll('=', '');
+}
 
 void main(List<String> args) {
   configureDefaultBindings(libraryPath: args[0]);
 
-  final anaSeed = seed(1);
-  final benSeed = seed(90);
+  final anaSeed = seed();
+  final benSeed = seed();
   // A wallet that publishes a key speaks as the participant id that key
   // derives (§10.7), or the key binds nothing.
   final anaKey = identityKeyFromSeed(anaSeed);
@@ -615,12 +654,22 @@ void main(List<String> args) {
   // Ana's device writes four entries. Each comes back as the JSON §9.3
   // canonicalises, with §9.5's id already derived and signed; the wallet
   // stores the string and never inspects it.
+  // The bill's key is minted first, from the platform's entropy: the create
+  // entry commits to it (§9.4), so a joiner can tell an invite's key is this
+  // bill's.
+  final random = Random.secure();
+  final billKey = newBillKey(
+    RandomBytes(
+      bytes: Uint8List.fromList(List.generate(32, (_) => random.nextInt(256))),
+    ),
+  );
   final create = createBillEntry(
     facts(ana, '2026-10-28T19:31:00.000Z', 1),
     'Dinner',
     'EUR',
     'equal',
     anaKey,
+    billKey,
     anaSeed,
   );
 
@@ -739,14 +788,14 @@ const facts = (me, at, nonce) => ({
 });
 
 // The Ed25519 seed a wallet keeps in the platform keychain, as §9.4 writes a
-// key: 32 bytes, unpadded base64url.
-const seed = (first) =>
-  Buffer.from(Array.from({ length: 32 }, (_, i) => (first + i) & 0xff)).toString(
-    "base64url",
-  );
+// key: 32 bytes, unpadded base64url. Minted once from the platform's secure
+// generator and kept; a wallet that holds a seed phrase derives it instead,
+// with `identity_seed_from_secret`, so a restored wallet speaks as the same
+// participant.
+const seed = () => Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 
-const anaSeed = seed(1);
-const benSeed = seed(90);
+const anaSeed = seed();
+const benSeed = seed();
 // A wallet that publishes a key speaks as the participant id that key derives
 // (§10.7), or the key binds nothing.
 const anaKey = splitz.identity_key_from_seed(anaSeed);
@@ -757,8 +806,12 @@ const ben = splitz.participant_id_for_key(benKey);
 // Ana's device writes four entries. Each comes back as the JSON §9.3
 // canonicalises, with §9.5's id already derived and signed; the wallet stores
 // the string and never inspects it.
+// The bill's key is minted first, from the platform's entropy: the create
+// entry commits to it (section 9.4), so a joiner can tell an invite's key is
+// this bill's.
+const billKey = splitz.new_bill_key({ bytes: crypto.getRandomValues(new Uint8Array(32)) });
 const create = splitz.create_bill_entry(facts(ana, "2026-10-28T19:31:00.000Z", 1),
-  "Dinner", "EUR", "equal", anaKey, anaSeed);
+  "Dinner", "EUR", "equal", anaKey, billKey, anaSeed);
 
 // The bill these entries belong to, read back from the entry that opened it.
 // Every other entry is signed on it (§10.6), and every fold names it, so a
@@ -990,10 +1043,12 @@ The same holds for a recipient whose preferred payout is `swap` or `cash` — it
 cannot become an output of this URI, and the reason is not a missing address.
 
 **`renderObligation` / `render_obligation` already does this**, and the
-samples above hand-roll the loop only to show the parts. It takes the
+samples above hand-roll the loop only to show the parts. It takes one payer's
 settlements and the bill, plus the rate, and returns the URI together with the
 recipients it could not carry:
-`renderObligation(plan.settlements, bill, rate: rate, skipUnpayable: true)`. With `skipUnpayable` it
+`renderObligation(plan.settlements.where((s) => s.from == me).toList(), bill, rate: rate, skipUnpayable: true)`.
+**It does not filter by payer:** handed the whole plan, it renders every
+payer's debts into one request, and whoever sends it pays them all. With `skipUnpayable` it
 renders the payable outputs and reports the rest; without it a recipient it
 cannot carry refuses the whole request. Prefer it to writing the loop: this
 is the hazard the loop exists to get wrong.

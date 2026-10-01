@@ -9,6 +9,12 @@ repository = "https://github.com/KamaIOps/Splitz-Protocol"
 # Held back from crates.io for the same reason `splitz-core` is: a publish
 # there cannot be undone. Both come off together when the product is released.
 publish = false
+# The provider schemas and captured answers the tests hold the clients to live
+# in `tools/contracts/`, two levels above this package, so a published crate
+# cannot carry them and its tests would fail to read them. `tests/` and
+# `examples/` are left out: they are lanes of the repository, not artifacts of
+# the package.
+include = ["src/**"]
 
 [dependencies]
 splitz-core = { path = "../splitz-core", version = "1.0.0" }

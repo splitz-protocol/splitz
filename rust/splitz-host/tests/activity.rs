@@ -43,7 +43,7 @@ fn history_of(wallet: &FakeWallet, entries: Vec<Value>) -> Vec<BillEvent> {
 fn every_entry_becomes_a_line_newest_first() {
     let ana = FakeWallet::new("ana", Some("u1ana"));
     let host = WalletBillHost::new(&ana);
-    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana"), None).unwrap();
     // §10.2 orders by instant and breaks a tie by entry id, so two entries
     // written at one instant are ordered by a digest rather than by which was
     // written first. The clock moves so the history has a clock order to show.
@@ -74,7 +74,7 @@ fn a_second_join_carrying_an_address_is_an_address_change() {
     // so it is its own event rather than a second "joined".
     let ana = FakeWallet::new("ana", Some("u1ana"));
     let host = WalletBillHost::new(&ana);
-    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let first = join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap();
     ana.tick();
@@ -96,7 +96,7 @@ fn a_second_join_carrying_an_address_is_an_address_change() {
 fn a_join_with_no_address_is_not_an_address_change() {
     let ana = FakeWallet::new("ana", Some("u1ana"));
     let host = WalletBillHost::new(&ana);
-    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let first = join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap();
     ana.tick();
@@ -112,7 +112,7 @@ fn a_join_with_no_address_is_not_an_address_change() {
 fn a_priced_bill_says_what_it_was_priced_at() {
     let ana = FakeWallet::new("ana", Some("u1ana"));
     let host = WalletBillHost::new(&ana);
-    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let join = join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap();
     ana.tick();
@@ -136,6 +136,15 @@ fn record_digest(entries: &[Value]) -> String {
     splitz_core::payment_digest(&record["payment"]).unwrap()
 }
 
+/// The id the log's payment record was written under.
+fn record_id(entries: &[Value]) -> String {
+    let record = entries
+        .iter()
+        .find(|e| e["kind"] == "recordPayment")
+        .expect("the log holds a payment");
+    record["payment"]["id"].as_str().unwrap().to_owned()
+}
+
 /// A bill two people are on, one owing the other.
 fn a_bill_with_a_payment(reference: Option<&str>, method: &str) -> (FakeWallet, Vec<Value>) {
     let ana = FakeWallet::new("ana", Some("u1ana"));
@@ -146,6 +155,7 @@ fn a_bill_with_a_payment(reference: Option<&str>, method: &str) -> (FakeWallet, 
         "USD",
         "equal",
         &fake_key("ana"),
+        None,
     )
     .unwrap();
     ana.tick();
@@ -216,7 +226,7 @@ fn the_payees_confirmation_flips_it_and_is_its_own_line() {
     let digest = record_digest(&entries);
     let confirmation = confirm_payment(
         &WalletBillHost::new(&ana),
-        "pay-1",
+        &record_id(&entries),
         // §10.5: only the recipient settles a debt. `shieldedZec` names a
         // transaction and speaks for nobody in particular.
         "recipientConfirmed",
@@ -268,7 +278,7 @@ fn a_confirmed_payment_leaves_the_waiting_list() {
     entries.push(
         confirm_payment(
             &WalletBillHost::new(&ana),
-            "pay-1",
+            &record_id(&entries),
             // §10.5: only the recipient settles a debt. `shieldedZec` names a
             // transaction and speaks for nobody in particular.
             "recipientConfirmed",
@@ -288,7 +298,7 @@ fn a_refused_entry_stays_in_the_history_with_its_code() {
     // indistinguishable from one that was never sent.
     let ana = FakeWallet::new("ana", Some("u1ana"));
     let host = WalletBillHost::new(&ana);
-    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana")).unwrap();
+    let create = create_bill(&host, "Dinner", "USD", "equal", &fake_key("ana"), None).unwrap();
     ana.tick();
     let join = join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap();
     ana.tick();
@@ -303,4 +313,23 @@ fn a_refused_entry_stays_in_the_history_with_its_code() {
         .expect("the refused entry is still a line");
     assert_eq!(refused.refused_code.as_deref(), Some("self_payment"));
     assert!(!refused.applied());
+}
+
+#[test]
+fn two_copies_of_one_entry_are_one_line() {
+    let (ana, entries) = a_bill_with_a_payment(Some("tx-1"), "shieldedZec");
+    // Section 10.2 keeps both signed copies of one id; section 9.5 makes them
+    // agree in every member a line shows.
+    let mut twinned = Vec::new();
+    for entry in &entries {
+        for sig in ["AAAA", "BBBB"] {
+            let mut copy = entry.clone();
+            copy["sig"] = json!(sig);
+            twinned.push(copy);
+        }
+    }
+    let honest = history_of(&ana, entries);
+    let doubled = history_of(&ana, twinned);
+    let kinds = |h: &[BillEvent]| h.iter().map(|e| e.kind).collect::<Vec<_>>();
+    assert_eq!(kinds(&doubled), kinds(&honest));
 }

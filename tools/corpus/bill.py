@@ -87,6 +87,12 @@ BILL_CASES = [
      mutate(lambda d: d["expenses"][0].__setitem__("amount", "9000"))),
     ("an_amount_that_is_a_float",
      mutate(lambda d: d["expenses"][0].__setitem__("amount", 90.0))),
+    # §9.3: past the 64-bit range is amount_overflow wherever a number is read,
+    # the bill document as much as an entry, and §2.2's range is symmetric.
+    ("an_amount_of_two_to_the_63",
+     mutate(lambda d: d["expenses"][0].__setitem__("amount", 2**63))),
+    ("an_amount_of_minus_two_to_the_63",
+     mutate(lambda d: d["expenses"][0].__setitem__("amount", -2**63))),
     ("a_leap_second",
      mutate(lambda d: d["expenses"][0].__setitem__("at", "2026-12-31T23:59:60.000Z"))),
     ("a_day_the_month_does_not_have",

@@ -6,7 +6,8 @@ use serde_json::Value;
 use splitz_core::compare_utf8;
 use splitz_core::host::{
     arrivals_for, base64url_no_pad, confirm_payment, create_bill, join_bill, record_payment,
-    Arrival, BillHost, BillLog, IncomingTransaction, Sent, SignEntry, VerifyEntry,
+    Arrival, Arrivals, BillHost, BillLog, FoldedBill, IncomingTransaction, Sent, SignEntry,
+    VerifyEntry,
 };
 
 const T1: &str = "aa00000000000000000000000000000000000000000000000000000000000001";
@@ -73,7 +74,7 @@ impl Bill {
     fn new(name: &str) -> Self {
         let ana = FakeHost::new("ana");
         let ben = FakeHost::new("ben");
-        let create = create_bill(&ana, name, "EUR", "equal", &fake_key("ana")).unwrap();
+        let create = create_bill(&ana, name, "EUR", "equal", &fake_key("ana"), None).unwrap();
         ana.tick();
         let join_ana = join_bill(&ana, Some("Ana"), Some("u1ana"), None, None).unwrap();
         ben.tick();
@@ -113,6 +114,7 @@ impl Bill {
     }
 
     fn confirm(&mut self, id: &str) {
+        let id = &format!("ben:{id}");
         self.ana.tick();
         let record = self.folded().payment_digests[id].clone();
         let entry = confirm_payment(&self.ana, id, "recipientConfirmed", None, &record).unwrap();
@@ -134,6 +136,61 @@ fn ids(arrivals: &[Arrival]) -> Vec<String> {
         .collect()
 }
 
+/// `folded` with `ben` bound to `key` (None: unbound), for tests about who a
+/// payer is rather than how a key comes to be bound.
+fn bound(mut folded: FoldedBill, key: Option<&str>) -> FoldedBill {
+    folded.identities.bound.clear();
+    if let Some(key) = key {
+        folded
+            .identities
+            .bound
+            .insert("ben".to_owned(), key.to_owned());
+    }
+    folded
+}
+
+/// Ben pays T1 on bill X and on bill Y, each bound as `x` and `y`; what Ana's
+/// wallet proposes for both bills.
+fn two_bills(x: Option<&str>, y: Option<&str>) -> Arrivals {
+    let mut bx = Bill::new("X");
+    let mut by = Bill::new("Y");
+    bx.paid("p1", T1, Some(10_000), "shieldedZec");
+    by.paid("p1", T1, Some(10_000), "shieldedZec");
+    arrivals_for(
+        &[bound(bx.folded(), x), bound(by.folded(), y)],
+        "ana",
+        &[received(T1, 20_000)],
+    )
+}
+
+#[test]
+fn an_unbound_id_on_another_bill_is_not_the_bound_payer_it_names() {
+    let found = two_bills(Some(&fake_key("ben")), None);
+    assert!(found.arrived.is_empty());
+    assert_eq!(found.disputed.len(), 2);
+}
+
+#[test]
+fn one_id_bound_to_two_keys_on_two_bills_is_two_payers() {
+    let found = two_bills(Some(&fake_key("ben")), Some(&fake_key("mal")));
+    assert!(found.arrived.is_empty());
+    assert_eq!(found.disputed.len(), 2);
+}
+
+#[test]
+fn one_id_unbound_on_two_bills_is_two_payers() {
+    let found = two_bills(None, None);
+    assert!(found.arrived.is_empty());
+    assert_eq!(found.disputed.len(), 2);
+}
+
+#[test]
+fn one_key_on_two_bills_is_one_payer_and_both_arrive() {
+    let found = two_bills(Some(&fake_key("ben")), Some(&fake_key("ben")));
+    assert!(found.disputed.is_empty());
+    assert_eq!(found.arrived.len(), 2);
+}
+
 fn payment_ids(arrivals: &[Arrival]) -> Vec<&str> {
     arrivals.iter().map(|a| a.payment.id.as_str()).collect()
 }
@@ -148,9 +205,9 @@ fn a_record_whose_transaction_arrived_with_its_zec_is_proposed() {
         "ana",
         &[received(T1, 20_000)],
     );
-    assert_eq!(payment_ids(&found.arrived), ["p1"]);
+    assert_eq!(payment_ids(&found.arrived), ["ben:p1"]);
     assert_eq!(found.arrived[0].txid, T1);
-    assert_eq!(found.arrived[0].record, folded.payment_digests["p1"]);
+    assert_eq!(found.arrived[0].record, folded.payment_digests["ben:p1"]);
     assert!(found.short.is_empty() && found.unstated.is_empty());
 }
 
@@ -162,9 +219,10 @@ fn the_proposed_confirmation_is_one_the_fold_applies() {
         .arrived
         .remove(0);
     b.ana.tick();
-    let entry = confirm_payment(&b.ana, "p1", "walletReceived", Some(&a.txid), &a.record).unwrap();
+    let entry =
+        confirm_payment(&b.ana, "ben:p1", "walletReceived", Some(&a.txid), &a.record).unwrap();
     b.entries.push(entry);
-    assert!(b.folded().bill.confirmed_payments.contains("p1"));
+    assert!(b.folded().bill.confirmed_payments.contains("ben:p1"));
 }
 
 #[test]
@@ -185,7 +243,7 @@ fn a_record_claiming_more_zec_than_arrived_is_short() {
     b.paid("p1", T1, Some(20_001), "shieldedZec");
     let found = arrivals_for(&[b.folded()], "ana", &[received(T1, 20_000)]);
     assert!(found.arrived.is_empty());
-    assert_eq!(payment_ids(&found.short), ["p1"]);
+    assert_eq!(payment_ids(&found.short), ["ben:p1"]);
 }
 
 #[test]
@@ -194,7 +252,7 @@ fn a_record_stating_no_zec_cannot_be_checked() {
     b.paid("p1", T1, None, "shieldedZec");
     let found = arrivals_for(&[b.folded()], "ana", &[received(T1, 20_000)]);
     assert!(found.arrived.is_empty());
-    assert_eq!(payment_ids(&found.unstated), ["p1"]);
+    assert_eq!(payment_ids(&found.unstated), ["ben:p1"]);
 }
 
 #[test]
@@ -203,7 +261,8 @@ fn one_transaction_is_evidence_once_across_bills() {
     let mut y = Bill::new("Y");
     x.paid("p1", T1, Some(20_000), "shieldedZec");
     y.paid("p1", T1, Some(20_000), "shieldedZec");
-    let (fx, fy) = (x.folded(), y.folded());
+    let ben = fake_key("ben");
+    let (fx, fy) = (bound(x.folded(), Some(&ben)), bound(y.folded(), Some(&ben)));
     assert_ne!(fx.bill.id, fy.bill.id);
     let first = if compare_utf8(&fx.bill.id, &fy.bill.id).is_lt() {
         fx.bill.id.clone()
@@ -211,7 +270,7 @@ fn one_transaction_is_evidence_once_across_bills() {
         fy.bill.id.clone()
     };
     let found = arrivals_for(&[fy, fx], "ana", &[received(T1, 20_000)]);
-    assert_eq!(ids(&found.arrived), vec![format!("{first}/p1")]);
+    assert_eq!(ids(&found.arrived), vec![format!("{first}/ben:p1")]);
     assert_eq!(found.short.len(), 1);
 }
 
@@ -222,10 +281,15 @@ fn a_record_already_confirmed_uses_its_share_first() {
     x.paid("p1", T1, Some(20_000), "shieldedZec");
     x.confirm("p1");
     y.paid("p2", T1, Some(20_000), "shieldedZec");
-    let fy = y.folded();
-    let found = arrivals_for(&[x.folded(), fy.clone()], "ana", &[received(T1, 30_000)]);
+    let ben = fake_key("ben");
+    let fy = bound(y.folded(), Some(&ben));
+    let found = arrivals_for(
+        &[bound(x.folded(), Some(&ben)), fy.clone()],
+        "ana",
+        &[received(T1, 30_000)],
+    );
     assert!(found.arrived.is_empty(), "20000 of 30000 is already used");
-    assert_eq!(ids(&found.short), vec![format!("{}/p2", fy.bill.id)]);
+    assert_eq!(ids(&found.short), vec![format!("{}/ben:p2", fy.bill.id)]);
 }
 
 #[test]
@@ -241,7 +305,7 @@ fn records_stating_the_most_zec_an_integer_holds_cannot_wrap_the_count() {
     b.paid("p3", T1, Some(1000), "shieldedZec");
     let found = arrivals_for(&[b.folded()], "ana", &[received(T1, 20_000)]);
     assert!(found.arrived.is_empty());
-    assert_eq!(payment_ids(&found.short), ["p3"]);
+    assert_eq!(payment_ids(&found.short), ["ben:p3"]);
 }
 
 #[test]
@@ -254,7 +318,7 @@ fn two_transactions_each_pay_for_their_own_record() {
         "ana",
         &[received(T1, 20_000), received(T2, 20_000)],
     );
-    assert_eq!(payment_ids(&found.arrived), ["p1", "p2"]);
+    assert_eq!(payment_ids(&found.arrived), ["ben:p1", "ben:p2"]);
 }
 
 #[test]
@@ -284,4 +348,54 @@ fn a_transaction_nobody_named_proposes_nothing() {
     assert!(found.arrived.is_empty());
     assert!(found.short.is_empty());
     assert!(found.unstated.is_empty());
+}
+
+#[test]
+fn a_txid_is_compared_with_ascii_space_trimmed_and_ascii_lower_cased_nothing_wider() {
+    use splitz_core::host::txid_key;
+    assert_eq!(txid_key(" \tABCD\r\n"), "abcd");
+    assert_eq!(txid_key("abcd\u{FEFF}"), "abcd\u{FEFF}");
+    assert_eq!(txid_key("\u{00A0}abcd"), "\u{00A0}abcd");
+    assert_eq!(txid_key("\u{0130}BC"), "\u{0130}bc");
+}
+
+#[test]
+fn a_transaction_two_payers_name_is_evidence_for_neither() {
+    let mut b = Bill::new("Dinner");
+    b.paid("p1", T1, Some(20_000), "shieldedZec");
+    let mal = FakeHost::new("mal");
+    mal.tick();
+    b.entries
+        .push(join_bill(&mal, Some("Mal"), Some("u1mal"), None, None).unwrap());
+    mal.tick();
+    b.entries.push(
+        record_payment(
+            &mal,
+            "0",
+            "ana",
+            1000,
+            "shieldedZec",
+            Some(T1),
+            Some(20_000),
+            None,
+            None,
+        )
+        .unwrap(),
+    );
+    let found = arrivals_for(&[b.folded()], "ana", &[received(T1, 20_000)]);
+    assert!(found.arrived.is_empty());
+    let mut disputed = payment_ids(&found.disputed);
+    disputed.sort();
+    assert_eq!(disputed, ["ben:p1", "mal:0"]);
+}
+
+#[test]
+fn one_payer_naming_a_transaction_twice_is_still_counted_once() {
+    let mut b = Bill::new("Dinner");
+    b.paid("p1", T1, Some(20_000), "shieldedZec");
+    b.paid("p2", T1, Some(20_000), "shieldedZec");
+    let found = arrivals_for(&[b.folded()], "ana", &[received(T1, 20_000)]);
+    assert!(found.disputed.is_empty());
+    assert_eq!(payment_ids(&found.arrived), ["ben:p1"]);
+    assert_eq!(payment_ids(&found.short), ["ben:p2"]);
 }

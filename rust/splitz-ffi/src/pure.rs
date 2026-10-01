@@ -21,6 +21,15 @@ use crate::host_facts::{FactHost, HostFacts};
 use crate::records as ffi;
 
 /// Reads a log a wallet handed over, in the order §10.2 puts it.
+/// How a peer names one copy of `entry` it holds (§14.5): the entry's id, and
+/// `|` and its `sig` when it carries one. What `delta_for_peer` reads in
+/// `they_have`.
+#[uniffi::export]
+pub fn copy_key(entry: String) -> Result<String> {
+    let parsed = parse_entries(std::slice::from_ref(&entry))?;
+    Ok(splitz_core::copy_key(&parsed[0]))
+}
+
 fn parse_entries(entries_json: &[String]) -> Result<Vec<Value>> {
     let mut entries = Vec::with_capacity(entries_json.len());
     for text in entries_json {
@@ -31,7 +40,7 @@ fn parse_entries(entries_json: &[String]) -> Result<Vec<Value>> {
 }
 
 fn parse(text: &str, what: &str) -> Result<Value> {
-    serde_json::from_str(text).map_err(|e| SplitzError::Host {
+    splitz_core::parse_json(text).map_err(|e| SplitzError::Host {
         detail: format!("{what} is not JSON: {e}"),
         transient: false,
     })
@@ -115,6 +124,10 @@ fn build(
 
 /// Opens a bill. Its §9.4 id is the digest of this entry, so read it back
 /// from the entry rather than deriving it a second way.
+///
+/// `bill_key` is the key the bill will be sealed under, minted first with
+/// [`new_bill_key`]: the entry states its digest (§9.4), and a joiner then
+/// refuses an invite whose key is not the bill's.
 #[uniffi::export]
 pub fn create_bill_entry(
     facts: HostFacts,
@@ -122,6 +135,7 @@ pub fn create_bill_entry(
     currency: String,
     split_mode: String,
     creator_key: String,
+    bill_key: Option<String>,
     seed: String,
 ) -> Result<String> {
     // §9.4's nonce is 16 bytes nobody can predict. Fewer is refused rather
@@ -136,7 +150,14 @@ pub fn create_bill_entry(
         });
     }
     build(&facts, &seed, None, |host| {
-        create_bill(host, &name, &currency, &split_mode, &creator_key)
+        create_bill(
+            host,
+            &name,
+            &currency,
+            &split_mode,
+            &creator_key,
+            bill_key.as_deref(),
+        )
     })
 }
 
@@ -271,11 +292,11 @@ pub fn record_payment_entry(
 /// Confirms a payment to this device. **Only the payee confirms** — a payer
 /// who could confirm their own would settle a debt by asserting twice that
 /// they paid it.
-#[uniffi::export]
 ///
 /// `record` is the digest of the record being confirmed, from the folded
 /// bill's `payment_digests` (§10.5): the confirmation stands only while the
 /// record under `payment_id` still says what it said then.
+#[uniffi::export]
 pub fn confirm_payment_entry(
     facts: HostFacts,
     bill_id: String,
@@ -644,6 +665,7 @@ pub fn arrivals_of(
         arrived: each(found.arrived),
         short: each(found.short),
         unstated: each(found.unstated),
+        disputed: each(found.disputed),
     })
 }
 
@@ -739,7 +761,8 @@ pub fn identity_key_from_seed(seed: String) -> Result<String> {
 /// the identity. A wallet with no such secret mints a random seed instead,
 /// which signs correctly and cannot be recovered.
 #[uniffi::export]
-pub fn identity_seed_from_secret(secret: Vec<u8>) -> Result<String> {
+pub fn identity_seed_from_secret(secret: ffi::SecretBytes) -> Result<String> {
+    let secret = secret.bytes;
     if secret.is_empty() {
         return Err(SplitzError::Host {
             detail: "an empty secret derives nothing; mint a random seed".to_owned(),
@@ -873,6 +896,10 @@ pub struct OpenedBlobs {
     /// is a key that is wrong, and that looks identical to a quiet relay
     /// unless somebody counts.
     pub unopenable: u32,
+    /// The bill's own create opened under this key and commits to another
+    /// (§9.4, `invite_key_mismatch`): the key is not this bill's, so nothing
+    /// opened is kept and every blob counts as unopenable.
+    pub foreign_key: bool,
 }
 
 /// Opens what a relay handed back.
@@ -883,18 +910,37 @@ pub struct OpenedBlobs {
 /// stored log depend on network order, and §10.7 decides authorship over the
 /// whole log at fold time instead.
 #[uniffi::export]
-pub fn open_blobs(blobs: Vec<String>, bill_key: String) -> OpenedBlobs {
+pub fn open_blobs(blobs: Vec<String>, bill_id: String, bill_key: String) -> OpenedBlobs {
     let mut entries = Vec::new();
     let mut unopenable = 0;
+    let mut foreign_key = false;
     for blob in &blobs {
         match Sealing.open(blob, &bill_key) {
-            Ok(entry) => entries.push(entry.to_string()),
+            Ok(entry) => {
+                // §9.4: `bill_id`'s own create opened under this key that
+                // commits to another is a bill somebody else made and sealed
+                // for this key alone. Any other create is merely an entry.
+                if splitz_core::create_refuses_key(&entry, &bill_id, &bill_key) {
+                    foreign_key = true;
+                }
+                entries.push(entry.to_string());
+            }
             Err(_) => unopenable += 1,
         }
+    }
+    if foreign_key {
+        // Nothing of it is merged: every entry is from that other bill's
+        // channel, whichever ids they carry.
+        return OpenedBlobs {
+            entries: Vec::new(),
+            unopenable: u32::try_from(blobs.len()).unwrap_or(u32::MAX),
+            foreign_key,
+        };
     }
     OpenedBlobs {
         entries,
         unopenable,
+        foreign_key,
     }
 }
 
@@ -950,7 +996,8 @@ pub fn shareable_bill_payload(
 /// fit one square and a relay is needed. A delta carries no key; its reader
 /// already holds one.
 ///
-/// `they_have` is the entry ids the peer reports holding.
+/// `they_have` is the copies the peer reports holding, each named by
+/// [`copy_key`].
 #[uniffi::export]
 pub fn delta_for_peer(
     facts: HostFacts,
@@ -1104,7 +1151,7 @@ pub fn payment_entries_for_send(
     let paid_at_rate = rate_json(&obligation.rate);
     let mut records = Vec::with_capacity(owed.len());
     for (to, amount) in owed {
-        let payment_id = splitz_core::host::payment_id_for_send(&txid, &to);
+        let payment_id = splitz_core::host::payment_id_for_send(&facts.me, &txid, &to);
         records.push(build(&facts, &seed, Some(&bill_id), |host| {
             record_payment(
                 host,

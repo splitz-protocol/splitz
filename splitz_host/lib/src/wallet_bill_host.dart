@@ -19,14 +19,17 @@ class WalletBillHost extends splitz.BillHost {
     String? me,
     splitz.SignEntry? sign,
     splitz.VerifyEntry? verify,
+    splitz.ReadsAddress? readsAddress,
   }) : _me = me,
        _sign = sign,
-       _verify = verify;
+       _verify = verify,
+       _readsAddress = readsAddress;
 
   final SplitsWallet _wallet;
   final String? _me;
   final splitz.SignEntry? _sign;
   final splitz.VerifyEntry? _verify;
+  final splitz.ReadsAddress? _readsAddress;
 
   /// The participant id entries are written as: [me] when given, otherwise
   /// the account's own id.
@@ -91,4 +94,9 @@ class WalletBillHost extends splitz.BillHost {
 
   @override
   splitz.VerifyEntry? get verify => _verify;
+
+  /// This wallet's own reading of an address, when it is narrower than §8.3's
+  /// (§14.6). Null reads every address the protocol admits.
+  @override
+  splitz.ReadsAddress? get readsAddress => _readsAddress;
 }

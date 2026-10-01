@@ -178,14 +178,17 @@ fn keys_stated_by(entry: &Value) -> Vec<String> {
     out
 }
 
-/// Identifies one (entry, key) question.
+/// Identifies one (copy, key) question.
 ///
-/// `sig` is part of it: §9.5's digest excludes the signature, so a signed
-/// entry and its unsigned twin share an id while giving opposite answers.
+/// The copy is its whole canonical encoding: two copies may share an id and a
+/// signature over different content (§9.5's digest excludes the signature, and
+/// a copy nobody checked the id of may carry any), and an answer filed under
+/// the id lets the copy that fails overwrite the one that verifies. An entry
+/// §9.3 cannot encode is filed under its plain encoding; ingress refuses it
+/// before any fold applies it.
 fn pair(entry: &Value, key: &str) -> String {
-    let id = entry.get("id").and_then(Value::as_str).unwrap_or_default();
-    let sig = entry.get("sig").and_then(Value::as_str).unwrap_or_default();
-    format!("{id}\u{0}{sig}\u{0}{key}")
+    let copy = splitz_core::canonical_json(entry).unwrap_or_else(|_| entry.to_string());
+    format!("{copy}\u{0}{key}")
 }
 
 /// Signature answers for one log, ready for a fold.

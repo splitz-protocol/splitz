@@ -64,6 +64,9 @@ READ = [
     ("a_padded_memo", f"zcash:{A}?amount=1&memo=dGhhbmtz" + "=="[:0] + "YQ=="),
     ("a_memo_of_impossible_length", f"zcash:{A}?amount=1&memo=A"),
     ("a_memo_with_stray_bits", f"zcash:{A}?amount=1&memo=AB"),
+    # §8.7: reading comes first, so a memo that does not read is refused as
+    # such even when the request is also wrong in another way.
+    ("a_memo_with_stray_bits_on_a_zero_amount", f"zcash:{A}?amount=0&memo=AB"),
     ("a_standard_base64_memo", f"zcash:{A}?amount=1&memo=a+b/"),
     ("a_lower_case_fiat_code", f"zcash:{A}?amount=1&fiat=eur:100"),
     ("a_fiat_with_no_count", f"zcash:{A}?amount=1&fiat=EUR:"),

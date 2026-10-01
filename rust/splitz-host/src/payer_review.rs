@@ -337,20 +337,22 @@ const ADDRESS_PREFIX_LENGTH: usize = 10;
 /// True when `address` occurs in `text` whole, or as a prefix of at least 10
 /// characters that stops agreeing with it on a character that is not an
 /// ASCII letter or digit.
+///
+/// A character is a Unicode scalar value (§2.3), counted the same way in
+/// every implementation: UTF-8 bytes and UTF-16 units give two answers for
+/// one screen.
 fn shows_address(text: &str, address: &str) -> bool {
-    let Some(head) = address.get(..ADDRESS_PREFIX_LENGTH) else {
-        return text.contains(address);
-    };
-    if address.len() == ADDRESS_PREFIX_LENGTH {
+    let t: Vec<char> = text.chars().collect();
+    let a: Vec<char> = address.chars().collect();
+    if a.len() <= ADDRESS_PREFIX_LENGTH {
         return text.contains(address);
     }
-    let bytes = text.as_bytes();
-    let wanted = address.as_bytes();
-    occurrences(text, head).any(|at| {
-        let mut n = ADDRESS_PREFIX_LENGTH;
-        while n < wanted.len() && bytes.get(at + n) == Some(&wanted[n]) {
+    (0..t.len().saturating_sub(ADDRESS_PREFIX_LENGTH - 1)).any(|at| {
+        let mut n = 0;
+        while n < a.len() && t.get(at + n) == Some(&a[n]) {
             n += 1;
         }
-        n == wanted.len() || !bytes.get(at + n).is_some_and(u8::is_ascii_alphanumeric)
+        n >= ADDRESS_PREFIX_LENGTH
+            && (n == a.len() || !t.get(at + n).is_some_and(char::is_ascii_alphanumeric))
     })
 }

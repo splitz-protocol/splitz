@@ -65,6 +65,26 @@ pub fn render_obligation(
     skip_unpayable: bool,
     include_fiat: bool,
 ) -> Result<Obligation> {
+    render_reading(
+        settlements,
+        bill,
+        rate,
+        skip_unpayable,
+        include_fiat,
+        &|_| true,
+    )
+}
+
+/// [`render_obligation`], with an address `reads_address` answers false for
+/// reported as one the request cannot carry (§14.6).
+pub(crate) fn render_reading(
+    settlements: &[Settlement],
+    bill: &Bill,
+    rate: &ExchangeRate,
+    skip_unpayable: bool,
+    include_fiat: bool,
+    reads_address: &dyn Fn(&str) -> bool,
+) -> Result<Obligation> {
     let mut payments = Vec::new();
     let mut recipients = Vec::new();
     let mut unpayable = Vec::new();
@@ -83,7 +103,10 @@ pub fn render_obligation(
                 ),
             ));
         };
-        match who.payable_address() {
+        // §14.6: an address the payer's own reader cannot read is one the
+        // whole request fails on, so it is reported like any other it cannot
+        // carry.
+        match who.payable_address().filter(|a| reads_address(a)) {
             None => {
                 let bad = who.published_address().is_some_and(|a| !a.is_empty());
                 let reason = if bad {

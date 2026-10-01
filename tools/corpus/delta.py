@@ -12,7 +12,7 @@ import pathlib
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
-from _spec import ADDRESSES, PAYLOAD_CAP, delta_for, seal_log  # noqa: E402
+from _spec import ADDRESSES, PAYLOAD_CAP, copy_key, delta_for, seal_log  # noqa: E402
 
 KEY = "k" * 43
 NONCE = "n" * 22
@@ -63,6 +63,16 @@ def cases():
     # An id the log does not carry says nothing about what is missing.
     case("an_id_the_log_does_not_hold_is_ignored", small,
          ids + ["not-an-entry-of-this-log"])
+    # Section 14.5: a peer names a copy, not an id. The union keeps copies by
+    # id and signature, so holding a copy under another signature is holding
+    # the id and lacking the entry.
+    signed = small[:-1] + [dict(small[-1], sig="GENUINE")]
+    keys = [copy_key(e) for e in signed]
+    case("a_peer_holding_every_copy_is_missing_nothing", signed, keys)
+    case("a_peer_holding_a_copy_under_another_signature_lacks_it", signed,
+         keys[:-1] + [signed[-1]["id"] + "|FORGED"])
+    case("a_peer_naming_a_signed_entry_by_id_alone_is_sent_it", signed,
+         [e["id"] for e in signed])
     case("an_empty_log_is_missing_nothing", [], [])
     case("an_empty_log_with_a_peer_who_claims_entries", [], ["whatever"])
 

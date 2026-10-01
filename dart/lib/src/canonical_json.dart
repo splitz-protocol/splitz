@@ -21,6 +21,14 @@ import 'ordering.dart';
 /// conforming document reaches is nine.
 const int maxDocumentDepth = 64;
 
+/// How deep one entry may nest (§10.1): [maxDocumentDepth] less the two
+/// levels a payload wraps it in, the body and its `log`.
+///
+/// An entry admitted at the document limit would sit at 66 inside the
+/// payload that carries it, which every reader refuses, so one entry would
+/// leave the bill unsendable by code for good.
+const int maxEntryDepth = maxDocumentDepth - 2;
+
 /// Whether [value] nests no deeper than [limit].
 ///
 /// Iterative on purpose: a recursive check is the thing it exists to prevent.

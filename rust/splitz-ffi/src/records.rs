@@ -252,6 +252,9 @@ pub struct Arrivals {
     pub short: Vec<Arrival>,
     /// They state no ZEC, so nothing can be checked.
     pub unstated: Vec<Arrival>,
+    /// Records naming a transaction that records from another payer also
+    /// name. None is proposed; the payee settles which it pays first.
+    pub disputed: Vec<Arrival>,
 }
 
 /// What this device and one other participant owe each other in one
@@ -364,6 +367,16 @@ pub enum ReviewRule {
 /// rather than a bare byte string, so every generator carries it alike.
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct RandomBytes {
+    pub bytes: Vec<u8>,
+}
+
+/// A secret only the wallet's owner holds, such as bytes derived from the
+/// mnemonic and passphrase. A record rather than a bare byte string, so every
+/// generator carries it alike: one that writes a bare `Vec<u8>` without its
+/// length prefix reads the first bytes as a length, and the same mnemonic
+/// derives another identity in that language than in the others.
+#[derive(uniffi::Record, Clone, PartialEq, Eq)]
+pub struct SecretBytes {
     pub bytes: Vec<u8>,
 }
 
