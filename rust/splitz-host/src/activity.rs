@@ -43,8 +43,10 @@ pub struct BillEvent {
     /// §9.3's canonical instant. Fixed width, so lexicographic order is
     /// chronological order and a screen sorts on the string.
     pub at: String,
-    /// Who the entry is about, where that differs from `author` — the payee of
-    /// a payment, the participant a vouch names.
+    /// Who or what the entry is about, where that differs from `author` — the
+    /// payee of a payment, the participant a vouch names, the payment a
+    /// confirmation confirms, and the entry an amendment or a withdrawal
+    /// targets, by its entry id.
     pub subject: Option<String>,
     /// Minor units of the bill's currency (§2.1).
     pub amount_minor_units: Option<i64>,
@@ -206,10 +208,16 @@ fn event(
             built.amount_minor_units = number(entry, "expense", "amount");
             built.description = member(entry, "expense", "description");
         }
-        Some("amendEntry") => built.kind = BillEventKind::ExpenseAmended,
+        // Both name the entry they act on by its id, at the top level (§10.4,
+        // §10.8): a reader without it can say something was changed or
+        // withdrawn, and not what.
+        Some("amendEntry") => {
+            built.kind = BillEventKind::ExpenseAmended;
+            built.subject = text(entry, "targetId");
+        }
         Some("voidEntry") => {
             built.kind = BillEventKind::EntryWithdrawn;
-            built.subject = member(entry, "void", "target");
+            built.subject = text(entry, "targetId");
         }
         Some("recordPayment") => {
             built.kind = BillEventKind::PaymentRecorded;

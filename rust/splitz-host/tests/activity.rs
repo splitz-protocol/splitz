@@ -8,8 +8,8 @@ mod support;
 
 use serde_json::{json, Value};
 use splitz_core::host::{
-    add_expense, base64url_no_pad, confirm_payment, create_bill, join_bill, record_payment,
-    set_rate, BillLog, CREATOR_KEY_BYTES,
+    add_expense, amend_entry, base64url_no_pad, confirm_payment, create_bill, join_bill,
+    record_payment, set_rate, void_entry, BillLog, CREATOR_KEY_BYTES,
 };
 use splitz_host::{
     activity_of, awaiting_confirmation_by, BillEvent, BillEventKind, WalletBillHost,
@@ -332,4 +332,46 @@ fn two_copies_of_one_entry_are_one_line() {
     let doubled = history_of(&ana, twinned);
     let kinds = |h: &[BillEvent]| h.iter().map(|e| e.kind).collect::<Vec<_>>();
     assert_eq!(kinds(&doubled), kinds(&honest));
+}
+
+#[test]
+fn a_correction_and_a_withdrawal_each_name_their_target() {
+    let ana = FakeWallet::new("ana", Some("u1ana"));
+    let host = WalletBillHost::new(&ana);
+    let create = create_bill(&host, "D", "USD", "equal", &fake_key("ana"), None).unwrap();
+    let join = join_bill(&host, Some("Ana"), Some("u1ana"), None, None).unwrap();
+    ana.tick();
+    let taxi = add_expense(
+        &host,
+        "x1",
+        "ana",
+        3000,
+        json!({"type": "equal", "among": ["ana"]}),
+        Some("Taxi"),
+    )
+    .unwrap();
+    let taxi_id = taxi["id"].as_str().unwrap().to_owned();
+    ana.tick();
+    let mut payload = taxi["expense"].clone();
+    payload["amount"] = json!(2500);
+    let amend = amend_entry(&host, &taxi_id, "expense", payload).unwrap();
+    ana.tick();
+    let withdraw = void_entry(&host, &taxi_id).unwrap();
+
+    let history = history_of(&ana, vec![create, join, taxi, amend, withdraw]);
+    let withdrawal = history
+        .iter()
+        .find(|e| e.kind == BillEventKind::EntryWithdrawn)
+        .unwrap();
+    assert_eq!(withdrawal.subject.as_deref(), Some(taxi_id.as_str()));
+    let correction = history
+        .iter()
+        .find(|e| e.kind == BillEventKind::ExpenseAmended)
+        .unwrap();
+    assert_eq!(correction.subject.as_deref(), Some(taxi_id.as_str()));
+    let added = history.iter().find(|e| e.entry_id == taxi_id).unwrap();
+    assert_eq!(
+        (added.description.as_deref(), added.withdrawn),
+        (Some("Taxi"), true)
+    );
 }

@@ -131,8 +131,10 @@ def a_history_entry(rng: random.Random) -> dict:
     elif kind == "addExpense":
         base["expense"] = {"paidBy": who, "amount": rng.randrange(-500, 9000),
                            "description": rng.choice(["Wine", "", "café"])}
-    elif kind == "voidEntry":
-        base["void"] = {"target": "e-gone"}
+    elif kind in ("amendEntry", "voidEntry"):
+        # The target is named at the top level (§10.4, §10.8); a value that
+        # is not a string is what a peer may write, and is read as none.
+        base["targetId"] = rng.choice(["e-gone", base["id"][::-1], 7, None])
     elif kind == "recordPayment":
         base["payment"] = {"id": rng.choice([f"{who}:p0", f"{who}:p1",
                                              f"{who}:p9"]), "to": who,

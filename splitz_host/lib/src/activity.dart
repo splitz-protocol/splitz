@@ -57,8 +57,10 @@ class BillEvent {
   /// chronological order and a screen sorts on the string.
   final String at;
 
-  /// Who the entry is about, where that differs from [author] — the payee of
-  /// a payment, the participant a vouch names.
+  /// Who or what the entry is about, where that differs from [author] — the
+  /// payee of a payment, the participant a vouch names, the payment a
+  /// confirmation confirms, and the entry an amendment or a withdrawal
+  /// targets, by its entry id.
   final String? subject;
 
   /// Minor units of the bill's currency (§2.1).
@@ -216,13 +218,19 @@ BillEvent _event(
         description: _text(expense?['description']),
       );
 
+    // Both name the entry they act on by its id, at the top level (§10.4,
+    // §10.8): a reader without it can say something was changed or
+    // withdrawn, and not what.
     case 'amendEntry':
-      return make(BillEventKind.expenseAmended);
+      return make(
+        BillEventKind.expenseAmended,
+        subject: _text(entry['targetId']),
+      );
 
     case 'voidEntry':
       return make(
         BillEventKind.entryWithdrawn,
-        subject: _text(object('void')?['target']),
+        subject: _text(entry['targetId']),
       );
 
     case 'recordPayment':

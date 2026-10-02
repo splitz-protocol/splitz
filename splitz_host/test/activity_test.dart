@@ -346,6 +346,60 @@ void main() {
     });
   });
 
+  group('what a correction or a withdrawal acts on', () {
+    test('each names its target entry', () {
+      final ana = FakeHost(me: 'ana', payToAddress: 'u1ana');
+      final log = entries.BillLog(
+        ana,
+        entries: [
+          entries.createBill(
+            host: ana,
+            name: 'D',
+            currency: 'USD',
+            creatorKey: fakeKey('ana'),
+          ),
+          entries.joinBill(host: ana, name: 'Ana', payTo: 'u1ana'),
+        ],
+      );
+      ana.tick();
+      final taxi = entries.addExpense(
+        host: ana,
+        expenseId: 'x1',
+        paidBy: 'ana',
+        amount: 3000,
+        split: const {
+          'type': 'equal',
+          'among': ['ana'],
+        },
+        description: 'Taxi',
+      );
+      log.add([taxi]);
+      ana.tick();
+      final amend = entries.amendEntry(
+        host: ana,
+        targetId: taxi['id'] as String,
+        member: 'expense',
+        payload: {...taxi['expense'] as Map<String, dynamic>, 'amount': 2500},
+      );
+      log.add([amend]);
+      ana.tick();
+      log.add([entries.voidEntry(host: ana, targetId: taxi['id'] as String)]);
+
+      final history = historyOf(log);
+      final withdrawal = history.firstWhere(
+        (e) => e.kind == BillEventKind.entryWithdrawn,
+      );
+      expect(withdrawal.subject, taxi['id']);
+      final correction = history.firstWhere(
+        (e) => e.kind == BillEventKind.expenseAmended,
+      );
+      expect(correction.subject, taxi['id']);
+      // The line a withdrawal names is still read, and marked withdrawn.
+      final added = history.firstWhere((e) => e.entryId == taxi['id']);
+      expect((added.description, added.withdrawn), ('Taxi', true));
+    });
+  });
+
   group('what the fold would not apply', () {
     test('a refused entry stays in the history, with its code', () {
       // An entry that vanished silently is indistinguishable from one that
