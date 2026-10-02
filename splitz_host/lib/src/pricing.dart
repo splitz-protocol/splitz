@@ -345,3 +345,79 @@ class FirstZecPrices implements ZecPrices {
     return null;
   }
 }
+
+/// The basis points two prices may differ by, of the lower, and still be one
+/// price.
+const int _defaultPriceToleranceBp = 200;
+
+/// The one price two markets' answers stand for, or null when they do not
+/// stand for one.
+///
+/// A missing answer defers to the other: one market down does not leave a
+/// bill unpriced. A figure that is not positive is not an answer. When both
+/// answer, they agree when `(high - low) * 10000 <= low * toleranceBp`,
+/// evaluated in exact integers, and [second] is the figure; otherwise there is
+/// no price. Throws [ArgumentError] for a negative [toleranceBp].
+///
+/// Specified in SPEC.md §15.6.
+int? agreedPrice(
+  int? first,
+  int? second, [
+  int toleranceBp = _defaultPriceToleranceBp,
+]) {
+  if (toleranceBp < 0) {
+    throw ArgumentError.value(
+      toleranceBp,
+      'toleranceBp',
+      'must not be negative',
+    );
+  }
+  final a = first != null && first > 0 ? first : null;
+  final b = second != null && second > 0 ? second : null;
+  if (a == null || b == null) return a ?? b;
+  final low = a < b ? a : b;
+  final high = a < b ? b : a;
+  // Both are at most 2^53 - 1, so the product overflows 64 bits.
+  final apart = BigInt.from(high - low) * BigInt.from(10000);
+  if (apart > BigInt.from(low) * BigInt.from(toleranceBp)) return null;
+  return b;
+}
+
+/// Two sources asked for one currency, held to each other.
+///
+/// A rate fixed onto a bill prices every request on it, so a figure one market
+/// misquotes — a stablecoin off its peg read as a dollar — is as good as
+/// unpriced. Both are asked every time; a source that fails counts as having
+/// no answer, so with both failing the currency is unpriced rather than
+/// raised, and a currency one source cannot price is priced by the other
+/// alone. [agreedPrice] decides, and its figure is [second]'s.
+///
+/// Specified in SPEC.md §15.6.
+class AgreeingZecPrices implements ZecPrices {
+  const AgreeingZecPrices(
+    this.first,
+    this.second, {
+    this.toleranceBp = _defaultPriceToleranceBp,
+  });
+
+  final ZecPrices first;
+  final ZecPrices second;
+
+  /// Basis points of the lower figure the two may differ by.
+  final int toleranceBp;
+
+  @override
+  Future<int?> minorUnitsPerZec(String currency) async {
+    Future<int?> ask(ZecPrices source) async {
+      try {
+        return await source.minorUnitsPerZec(currency);
+      } on Object {
+        return null;
+      }
+    }
+
+    final a = await ask(first);
+    final b = await ask(second);
+    return agreedPrice(a, b, toleranceBp);
+  }
+}

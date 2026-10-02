@@ -19,6 +19,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:splitz_core/host.dart' as host;
 import 'package:splitz_core/splitz_core.dart' as protocol;
 
 import 'relay.dart' show JsonGet, JsonPost;
@@ -175,6 +176,174 @@ class SwapQuote {
 
   /// What a payment record should carry as its `reference` (§9.2).
   String get paymentReference => reference ?? depositAddress;
+}
+
+/// Where [payout] sits in [payouts], or null when none of them is it.
+///
+/// A payout is matched on its type, address, asset and chain together, never
+/// on its position: a payee who edits their list moves every position after
+/// the edit, and an index kept across that pays an address nobody picked
+/// (§14.8).
+int? declaredPayoutIndex(
+  List<protocol.Payout> payouts,
+  protocol.Payout payout,
+) {
+  for (var i = 0; i < payouts.length; i++) {
+    final p = payouts[i];
+    if (p.type == payout.type &&
+        p.address == payout.address &&
+        p.asset == payout.asset &&
+        p.chain == payout.chain) {
+      return i;
+    }
+  }
+  return null;
+}
+
+/// Why a swap's deposit may not be sent, as [swapSendRefusal] reads it.
+enum SwapSendRefused {
+  /// The quote's deadline has passed.
+  expired,
+
+  /// The deposit needs a memo, and a payment request carries none.
+  needsMemo,
+
+  /// The payee no longer declares the payout the quote was asked for.
+  payoutGone,
+
+  /// A payment this payer sent and nobody has confirmed covers the debt
+  /// (§14.4).
+  held,
+
+  /// The bill no longer says this payer owes the quoted amount to the payee
+  /// through a payout a request cannot carry.
+  notOwed,
+
+  /// The payee's payout no longer names the address the quote delivers to.
+  recipientChanged,
+
+  /// The payee's payout no longer names the asset and chain the quote buys.
+  assetChanged,
+
+  /// The bill's rate no longer converts the debt to the quote's ZEC.
+  rateChanged,
+}
+
+/// The refusal of a swap's deposit, or what [swapSendRefusal] returns when
+/// one applies.
+class SwapSendRefusal {
+  const SwapSendRefusal(this.refused, {this.paidTo = const []});
+
+  final SwapSendRefused refused;
+
+  /// Who must confirm the payment already sent, in ascending id order, for
+  /// [SwapSendRefused.held]. Empty otherwise.
+  final List<String> paidTo;
+}
+
+/// Whether [quote]'s deposit may be sent to pay [to] [amountMinorUnits] on
+/// [bill], or null when it may (§15.7).
+///
+/// [now] is a §9.3 instant. [bill] is the bill as the store holds it at the
+/// moment of sending, and [obligation] is this payer's obligation read from
+/// it with [chosen] as the payout for [to] (§14.8), or null when the bill has
+/// no rate. [chosen] is the payout the quote was asked for; null means the
+/// payee's first.
+///
+/// Checked in this order, the first that applies answering: the quote has
+/// expired; its deposit needs a memo, which a payment request cannot carry
+/// and without which the deposit is lost; [chosen] is no longer declared; a
+/// payment this payer already sent covers the debt and waits on
+/// [SwapSendRefusal.paidTo] (§14.4), so a second deposit would pay it twice;
+/// the debt is no longer owed in exactly [amountMinorUnits]; the payout's
+/// address is not [SwapQuote.recipient], so the deposit pays an address the
+/// payee replaced; its asset or chain is not the quote's, so one address may
+/// be a different account or none; and the bill's rate no longer converts
+/// [amountMinorUnits] to [SwapQuote.amountInZatoshi], so the deposit is sized
+/// by a rate the record does not state.
+///
+/// Throws as `fiatToZatoshi` does when the bill's rate cannot price its own
+/// currency.
+SwapSendRefusal? swapSendRefusal(
+  SwapQuote quote, {
+  required String now,
+  required protocol.Bill bill,
+  required host.PayerObligation? obligation,
+  required String to,
+  required int amountMinorUnits,
+  protocol.Payout? chosen,
+}) {
+  if (quote.hasExpired(now)) {
+    return const SwapSendRefusal(SwapSendRefused.expired);
+  }
+  final memo = quote.depositMemo;
+  if (memo != null && memo.isNotEmpty) {
+    return const SwapSendRefusal(SwapSendRefused.needsMemo);
+  }
+  final payouts = bill.participant(to)?.payouts ?? const <protocol.Payout>[];
+  final protocol.Payout? payout;
+  if (chosen == null) {
+    payout = payouts.isEmpty ? null : payouts.first;
+  } else {
+    final at = declaredPayoutIndex(payouts, chosen);
+    if (at == null) return const SwapSendRefusal(SwapSendRefused.payoutGone);
+    payout = payouts[at];
+  }
+  final waiting = obligation?.awaiting.where((a) => a.to == to).firstOrNull;
+  if (waiting != null) {
+    return SwapSendRefusal(SwapSendRefused.held, paidTo: waiting.paidTo);
+  }
+  final owed =
+      obligation != null &&
+      obligation.unpayable.any(
+        (u) => u.id == to && u.minorUnits == amountMinorUnits,
+      );
+  if (!owed) return const SwapSendRefusal(SwapSendRefused.notOwed);
+  final address = payout?.address;
+  if (address == null || quote.recipient != address) {
+    return const SwapSendRefusal(SwapSendRefused.recipientChanged);
+  }
+  final asset = payout!.asset;
+  final chain = payout.chain;
+  if (asset == null || chain == null || !quote.asset.answers(asset, chain)) {
+    return const SwapSendRefusal(SwapSendRefused.assetChanged);
+  }
+  final rate = bill.rate;
+  if (rate == null ||
+      quote.amountInZatoshi !=
+          protocol.fiatToZatoshi(
+            amountMinorUnits,
+            rate,
+            amountCurrency: bill.currency,
+          )) {
+    return const SwapSendRefusal(SwapSendRefused.rateChanged);
+  }
+  return null;
+}
+
+/// The entries to withdraw once the swap [reference] names is reported
+/// failed: the ids of the entries that recorded [me]'s unconfirmed `swap`
+/// payments carrying that reference, in the order [folded] lists the
+/// payments (§15.7).
+///
+/// While such a record stands the debt reads as paid and waiting and nothing
+/// can pay it again; its author may withdraw it (§10.8). A confirmed record
+/// is left: the payee has said the money arrived. A record somebody else
+/// wrote is theirs to withdraw.
+List<String> failedSwapWithdrawals(
+  host.FoldedBill folded, {
+  required String me,
+  required String reference,
+}) {
+  final bill = folded.bill;
+  return [
+    for (final p in bill.payments)
+      if (p.method == 'swap' &&
+          p.reference == reference &&
+          p.from == me &&
+          !bill.confirmedPayments.contains(p.id))
+        ?folded.paymentEntries[p.id],
+  ];
 }
 
 /// Where a swap has got to.

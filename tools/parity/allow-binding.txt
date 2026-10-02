@@ -21,6 +21,7 @@ fold_verified             -> fold_entries
 fold_unverified           -> fold_entries
 identity_seed_from        -> identity_seed_from_secret
 is_well_formed_key        -> bill_key_problem
+unsent_claim_refusal      -> pending_send_unsent_refusal
 check_bill_storage        # takes the wallet's storage as a trait object; the binding has no callbacks, and a binding wallet's storage is its own code
 check_secret_store        # the same, over the wallet's keychain
 check_splits_relay        # the same, over the relay client; the relay's answers are checked by relay_push_answer and relay_fetch_answer

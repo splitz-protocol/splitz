@@ -863,6 +863,15 @@ to hand over cash — is the wallet's. A payer MAY settle one debt by a lower
 preference the recipient declared, as its own choice for that payment and
 never by rewriting the order (§14.8).
 
+**Setting or changing one way of being paid** writes the whole list again, in
+this order: the new payout first, then every payout the record already
+declares that the new one does not replace, in its declared order. A new payout
+replaces every declared payout of its own `type`, and a `swap` only those of
+the same `asset` (compared case-insensitively; `chain` does not distinguish).
+A record that declares no payouts declares its `payTo` as one `zec` payout for
+this purpose, and one with neither declares nothing. `rankedPayouts` /
+`ranked_payouts` takes a participant and the new payout and returns that list.
+
 **A participant id MUST be a non-empty string holding no `:`**
 (`bill_bad_participant_id`). `:` ends the part of an expense or payment id
 that names its author (§10.3): an author whose id holds one mints nothing, so
@@ -1964,6 +1973,41 @@ A withdrawal the fold refuses is otherwise still written, still synced, and
 looks to its author exactly like one that worked — the entry is in the log and
 the thing it meant to remove is still on the bill.
 
+**Asking before taking somebody off.** For a `voidEntry` of a `joinBill` the
+question is what still names the participant, and what of it the author may
+change first. An implementation SHOULD answer it before writing that
+withdrawal. `planRemoval` / `plan_removal` in both host packages, and
+`plan_removal` in the binding, answer it from the log, the bill it folds to,
+the creator, the author and the participant. They read the log as the rule
+above reads it: every entry not withdrawn, whether the fold applied it or set
+it aside; an amended entry through both the entry and the amendment §10.4
+would apply to it, a withdrawn amendment not at all, and an earlier one never
+in its place; and one reading per entry id, since §10.2's union keeps copies
+of one id under different signatures and an expense restated once per copy is
+on the bill twice. They return, in log order:
+
+- **the expenses the author can write again without them** — applied by the
+  fold, not paid for by them, written by the author or on a bill the author
+  created, and whose split still divides the amount once they are taken out
+  (`splitWithout` / `split_without`): an `equal` or `shares` split shared
+  among the rest, an `itemized` split with them taken off each item. An
+  expense named only by the entry an amendment corrects is written again as
+  it reads now;
+- **every other entry that names them**, and why: an expense the fold does
+  not apply, one they paid for, one written by somebody else on a bill the
+  author did not create (with its author), one whose split needs a person's
+  choice — `exact` and `percentage` figures that must still add up, an item
+  only they shared, shares that leave nobody a share — a payment from or to
+  them, and a confirmation they wrote.
+
+Each expense is written again as a new `addExpense` with the entry it replaces
+withdrawn, never as an amendment: the rule above counts an amended entry as
+naming them while the entry it corrects does. The answer goes stale as soon
+as another entry arrives, so a host SHOULD plan again immediately before
+writing and write nothing when the plan differs from the one the person
+agreed to (`RemovalPlan.sameAs` / `same_as`, `same_removal_plan` in the
+binding).
+
 **What all of this rests on.** These rules name participant **ids**, and an id
 is unauthenticated until §10.7 binds a key to it. For a participant who has
 published no key, an entry authored as them is admitted unverified, so the
@@ -2463,6 +2507,15 @@ bill; otherwise it stays, carrying the transaction id when the wallet named
 one, until a person says which way the send went. `PendingSends` implements
 this in both host packages.
 
+**A person's word that nothing left the wallet is checked before the note
+goes.** A host MUST NOT remove a note on that word while the wallet is still
+sending any transaction, or while it holds a transaction it built itself at or
+after the note's `at`, compared to the second. A send killed after its
+broadcast and mined before the app came back is no longer waiting, and its
+note may name no transaction: clearing it pays the debt twice. A note that
+will not read names no instant and is held only by what is still sending.
+`unsentClaimRefusal` implements the check in both host packages.
+
 ### 14.4 A pending payment withholds the whole debt
 
 §10.5 moves a balance only on confirmation, so a debt this payer has already
@@ -2489,6 +2542,14 @@ paid is still in the plan §6 produces.
 
 A payment that never lands is withheld by the same rule, and §10.8's
 withdrawal of its record is what releases the debt.
+
+**A payer does not withdraw a payment its wallet shows on its way.** A host
+MUST NOT withdraw its own record of a `shieldedZec` payment while its wallet
+shows the transaction the record names mined or still sending: withdrawn, the
+debt is offered again while the first payment has reached, or may yet reach,
+the payee. Once that transaction has expired unmined, or when the wallet holds
+no such transaction, §10.8 alone decides. `ownPaymentWithdrawalRefusal`
+implements the check in both host packages.
 
 ### 14.5 A peer who is current and a peer who is behind are different answers
 
@@ -2771,6 +2832,14 @@ left before dessert and cannot be handed a code across the table.
   answer: a bill with no rate is an ordinary bill, there is no §12 code for an
   unpriced one, and an implementation MUST NOT invent a figure to avoid showing
   that state.
+- A rate that is fixed onto a bill prices every request on it, so a wallet
+  SHOULD read each currency from two independent markets and use the figure
+  only when they agree: both positive and differing by at most 200 basis
+  points of the lower, compared in exact integers as `(high - low) * 10000 <=
+  low * tolerance`. A market that fails or cannot price the currency defers to
+  the other; with neither answering the currency is unpriced. Two markets that
+  disagree are not a price, and an implementation MUST NOT pick one of them.
+  `AgreeingZecPrices` and `agreedPrice` / `agreed_price` are this rule.
 
 ### 15.7 `SwapProvider`
 
@@ -2787,3 +2856,19 @@ Settles a debt whose payout is owed in some asset other than ZEC.
   MUST NOT be recorded as the §10.5 payment for a debt settled on this one.
 - A provider a build has not configured MUST raise and say why. Every operation
   failing loudly is the alternative to a swap that silently does nothing.
+- A deposit MUST NOT be sent until the quote is checked again against the bill
+  as the device holds it at that moment, and it is refused when the quote has
+  expired; when its deposit needs a memo, which a payment request cannot
+  carry; when the payout it was asked for is no longer declared; when a
+  payment the payer already sent covers the debt and is unconfirmed (§14.4);
+  when the bill no longer owes exactly the quoted amount to that payee; when
+  the payee's payout no longer names the address the quote delivers to, or
+  the asset and chain it buys; and when the bill's rate (§7.1) no longer
+  converts the debt to the quote's ZEC. A quote taken before any of these
+  changed sends money the bill no longer asks for, or to an address the payee
+  no longer uses, and a deposit cannot be taken back.
+- When `statusOf` reports a swap will not complete, the payer's device MUST
+  withdraw (§10.8) each unconfirmed `swap` payment record it wrote carrying
+  that swap's `reference`. While such a record stands the debt reads as paid
+  and waiting (§14.4), and nothing can pay it again. A record the payee has
+  confirmed is left as it is.

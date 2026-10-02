@@ -419,3 +419,65 @@ impl ZecPrices for FirstZecPrices<'_> {
         }
     }
 }
+
+/// The basis points two prices may differ by, of the lower, and still be one
+/// price.
+const DEFAULT_PRICE_TOLERANCE_BP: u32 = 200;
+
+/// The one price two markets' answers stand for, or `None` when they do not
+/// stand for one.
+///
+/// A missing answer defers to the other: one market down does not leave a
+/// bill unpriced. A figure that is not positive is not an answer. When both
+/// answer, they agree when `(high - low) * 10000 <= low * tolerance_bp`,
+/// evaluated in exact integers, and `second` is the figure; otherwise there
+/// is no price.
+///
+/// Specified in SPEC.md §15.6.
+pub fn agreed_price(first: Option<i64>, second: Option<i64>, tolerance_bp: u32) -> Option<i64> {
+    let a = first.filter(|p| *p > 0);
+    let b = second.filter(|p| *p > 0);
+    let (Some(a), Some(b)) = (a, b) else {
+        return a.or(b);
+    };
+    let (low, high) = (a.min(b), a.max(b));
+    // Both are at most 2^53 - 1, so the product overflows 64 bits.
+    let apart = i128::from(high - low) * 10_000;
+    (apart <= i128::from(low) * i128::from(tolerance_bp)).then_some(b)
+}
+
+/// Two sources asked for one currency, held to each other.
+///
+/// A rate fixed onto a bill prices every request on it, so a figure one market
+/// misquotes — a stablecoin off its peg read as a dollar — is as good as
+/// unpriced. Both are asked every time; a source that fails counts as having
+/// no answer, so with both failing the currency is unpriced rather than an
+/// error, and a currency one source cannot price is priced by the other
+/// alone. [`agreed_price`] decides, and its figure is `second`'s.
+///
+/// Specified in SPEC.md §15.6.
+pub struct AgreeingZecPrices<'a> {
+    pub first: &'a dyn ZecPrices,
+    pub second: &'a dyn ZecPrices,
+    /// Basis points of the lower figure the two may differ by.
+    pub tolerance_bp: u32,
+}
+
+impl<'a> AgreeingZecPrices<'a> {
+    /// `first` and `second` held to 200 basis points.
+    pub fn new(first: &'a dyn ZecPrices, second: &'a dyn ZecPrices) -> Self {
+        Self {
+            first,
+            second,
+            tolerance_bp: DEFAULT_PRICE_TOLERANCE_BP,
+        }
+    }
+}
+
+impl ZecPrices for AgreeingZecPrices<'_> {
+    fn minor_units_per_zec(&self, currency: &str) -> Result<Option<i64>> {
+        let a = self.first.minor_units_per_zec(currency).ok().flatten();
+        let b = self.second.minor_units_per_zec(currency).ok().flatten();
+        Ok(agreed_price(a, b, self.tolerance_bp))
+    }
+}

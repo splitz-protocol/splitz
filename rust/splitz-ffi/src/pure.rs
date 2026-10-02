@@ -185,6 +185,35 @@ pub fn join_bill_entry(
     })
 }
 
+/// `first`, then every payout `who` declares that it does not take the place
+/// of, in their declared order (§9.1): the list to write when one way of
+/// being paid is set or changed.
+///
+/// A record declaring no payouts declares its `pay_to` as its one Zcash
+/// payout. `first` replaces every declared payout of its own kind, and a swap
+/// only one of the same asset (case-insensitively; the chain does not
+/// distinguish).
+#[uniffi::export]
+pub fn ranked_payouts(who: ffi::Participant, first: ffi::Payout) -> Vec<ffi::Payout> {
+    let core_payout = |p: &ffi::Payout| splitz_core::Payout {
+        kind: p.kind.clone(),
+        address: p.address.clone(),
+        asset: p.asset.clone(),
+        chain: p.chain.clone(),
+    };
+    let who = splitz_core::Participant {
+        id: who.id,
+        name: who.name,
+        pay_to: who.pay_to,
+        identity_key: who.identity_key,
+        payouts: who.payouts.iter().map(core_payout).collect(),
+    };
+    splitz_host::ranked_payouts(&who, &core_payout(&first))
+        .iter()
+        .map(convert::payout)
+        .collect()
+}
+
 /// One §9.1 payout as the join carries it.
 fn payout_json(p: &ffi::Payout) -> Value {
     let mut out = serde_json::Map::new();
@@ -727,6 +756,18 @@ pub fn coinbase_price_request(origin: String) -> String {
 #[uniffi::export]
 pub fn zec_price_from_coinbase(body: String, currency: String) -> Result<Option<i64>> {
     Ok(splitz_host::price_from_coinbase(&body, &currency)?)
+}
+
+/// The one price two markets' answers for a currency stand for, or `None`
+/// when they do not stand for one: a market with no answer defers to the
+/// other, and when both answer they must differ by at most `tolerance_bp`
+/// basis points of the lower (200 is the protocol's default). The figure is
+/// `second`'s. A wallet reads both with [`zec_price_from_binance`] and
+/// [`zec_price_from_coinbase`], treating a failed read as no answer, and
+/// fixes the result onto the bill.
+#[uniffi::export]
+pub fn agreed_price(first: Option<i64>, second: Option<i64>, tolerance_bp: u32) -> Option<i64> {
+    splitz_host::agreed_price(first, second, tolerance_bp)
 }
 
 // --- keys a wallet keeps ----------------------------------------------------
@@ -1335,6 +1376,79 @@ pub fn pending_send_after(
     })
 }
 
+/// Whether the send `note` holds may be cleared on a person's word that
+/// nothing left the wallet, given whether the wallet is `still_sending` any
+/// transaction and the transactions it built itself, `own` (§14.3). `None`
+/// when it may.
+///
+/// A send killed after its broadcast and mined before the app came back is
+/// no longer waiting and its note may name no transaction; one the wallet
+/// built at or after the note was written may be it, and clearing the note
+/// would let the debt go out again. A note that does not read is held only
+/// by what is still sending.
+#[uniffi::export]
+pub fn pending_send_unsent_refusal(
+    bill_id: String,
+    note: String,
+    still_sending: bool,
+    own: Vec<ffi::OwnTransaction>,
+) -> Option<ffi::UnsentClaimRefusal> {
+    let held = PendingSend::held(&bill_id, &note);
+    let own: Vec<splitz_host::OwnTransaction> = own
+        .into_iter()
+        .map(|t| splitz_host::OwnTransaction {
+            txid: t.txid,
+            created: t.created,
+        })
+        .collect();
+    splitz_host::unsent_claim_refusal(&held, still_sending, &own).map(|r| match r {
+        splitz_host::UnsentClaimRefusal::StillSending => ffi::UnsentClaimRefusal::StillSending,
+        splitz_host::UnsentClaimRefusal::BuiltSince { txid } => {
+            ffi::UnsentClaimRefusal::BuiltSince { txid }
+        }
+    })
+}
+
+/// Whether this device, `me`, may withdraw its own record of a payment from
+/// `from` by `method` naming the transaction `reference`, given where its
+/// wallet shows that transaction, `state`: `None` when it may (§14.4).
+///
+/// Withdrawn while the transaction is mined or still sending, the debt is
+/// offered again while the first payment has reached, or may yet reach, the
+/// payee. A cash or swap record, or one somebody else wrote, is not this
+/// rule's.
+#[uniffi::export]
+pub fn own_payment_withdrawal_refusal(
+    from: String,
+    method: String,
+    reference: Option<String>,
+    me: String,
+    state: Option<ffi::TransactionState>,
+) -> Option<ffi::OwnPaymentWithdrawal> {
+    let payment = splitz_core::PaymentRecord {
+        id: String::new(),
+        from,
+        to: String::new(),
+        amount: 0,
+        currency: String::new(),
+        method,
+        at: String::new(),
+        zatoshi: None,
+        paid_at_rate: None,
+        reference,
+        note: None,
+    };
+    let state = state.map(|s| match s {
+        ffi::TransactionState::Mined => splitz_host::TransactionState::Mined,
+        ffi::TransactionState::Waiting => splitz_host::TransactionState::Waiting,
+        ffi::TransactionState::Expired => splitz_host::TransactionState::Expired,
+    });
+    splitz_host::own_payment_withdrawal_refusal(&payment, &me, state).map(|r| match r {
+        splitz_host::OwnPaymentWithdrawal::Mined => ffi::OwnPaymentWithdrawal::Mined,
+        splitz_host::OwnPaymentWithdrawal::Waiting => ffi::OwnPaymentWithdrawal::Waiting,
+    })
+}
+
 /// The signed payment records for the send `note` holds having gone out as
 /// the transaction `txid`, for a wallet to merge into the bill before it
 /// deletes the note.
@@ -1372,6 +1486,106 @@ pub fn pending_send_records(
     let mut log = BillLog::with_entries(&host, parsed).for_bill(bill_id);
     let records = send.records(&host, &mut log, &txid).map_err(unrecordable)?;
     Ok(records.iter().map(Value::to_string).collect())
+}
+
+// --- taking somebody off a bill (§10.8) -------------------------------------
+
+/// What taking `id` off the bill needs, as the device whose participant id
+/// is `me` sees it: the expenses it can write again without them, and every
+/// other entry that still names them.
+///
+/// Ask before writing the `voidEntry` of their join: while any entry names
+/// them, the fold refuses it with `participant_still_named`, and a refused
+/// withdrawal is still written and synced. `entries` are folded with
+/// signatures checked, as `fold_entries` folds them; the bill's creator is
+/// the author of the create `bill_id` names.
+#[uniffi::export]
+pub fn plan_removal(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    id: String,
+    me: String,
+) -> Result<ffi::RemovalPlan> {
+    let parsed = parse_entries(&entries)?;
+    let verified = Signer.prepare(parsed.iter(), &bill_id);
+    let verify = |entry: &Value, key: &str| verified.verify(entry, key);
+    let host = FactHost {
+        facts: &facts,
+        sign: None,
+        verify: Some(&verify),
+    };
+    let folded = BillLog::with_entries(&host, parsed.clone())
+        .for_bill(bill_id.clone())
+        .fold()?;
+    let creator = parsed
+        .iter()
+        .find(|e| {
+            e.get("kind").and_then(Value::as_str) == Some("createBill")
+                && e.get("id").and_then(Value::as_str) == Some(bill_id.as_str())
+        })
+        .and_then(|e| e.get("author").and_then(Value::as_str))
+        .unwrap_or_default();
+    let plan = splitz_host::plan_removal(&folded, creator, &parsed, &id, &me);
+    Ok(convert::removal_plan(&plan))
+}
+
+/// Whether `now` writes exactly what `confirmed` does and is held back by the
+/// same entries: what a person agreed to is still what would be written.
+/// A wallet plans again inside the turn that writes the restated expenses and
+/// writes nothing when this is false.
+#[uniffi::export]
+pub fn same_removal_plan(confirmed: ffi::RemovalPlan, now: ffi::RemovalPlan) -> Result<bool> {
+    Ok(host_removal_plan(confirmed)?.same_as(&host_removal_plan(now)?))
+}
+
+/// `split` without `id` in it, the others sharing what was theirs, as JSON;
+/// `None` when that leaves nobody or needs a choice only a person can make
+/// (§4.4).
+#[uniffi::export]
+pub fn split_without(split_json: String, id: String) -> Result<Option<String>> {
+    let split = parse(&split_json, "a split")?;
+    Ok(splitz_host::split_without(&split, &id).map(|s| s.to_string()))
+}
+
+/// A plan the binding gave out, read back so the host compares it.
+fn host_removal_plan(plan: ffi::RemovalPlan) -> Result<splitz_host::RemovalPlan> {
+    let mut edits = Vec::with_capacity(plan.edits.len());
+    for e in plan.edits {
+        edits.push(splitz_host::RemovalEdit {
+            entry_id: e.entry_id,
+            seen: splitz_core::Expense {
+                id: e.seen.id,
+                description: e.seen.description,
+                paid_by: e.seen.paid_by,
+                amount: e.seen.amount,
+                currency: e.seen.currency,
+                at: e.seen.at,
+                split: parse(&e.seen.split_json, "a split")?,
+            },
+            author: e.author,
+            split: parse(&e.split_json, "a split")?,
+        });
+    }
+    let blockers = plan
+        .blockers
+        .into_iter()
+        .map(|b| splitz_host::RemovalBlocker {
+            block: match b.block {
+                ffi::RemovalBlock::Unapplied => splitz_host::RemovalBlock::Unapplied,
+                ffi::RemovalBlock::PaidFor => splitz_host::RemovalBlock::PaidFor,
+                ffi::RemovalBlock::AddedByAnother => splitz_host::RemovalBlock::AddedByAnother,
+                ffi::RemovalBlock::SplitByHand => splitz_host::RemovalBlock::SplitByHand,
+                ffi::RemovalBlock::Payment => splitz_host::RemovalBlock::Payment,
+                ffi::RemovalBlock::Confirmation => splitz_host::RemovalBlock::Confirmation,
+            },
+            entry_id: b.entry_id,
+            description: b.description,
+            author: b.author,
+            from_them: b.from_them,
+        })
+        .collect();
+    Ok(splitz_host::RemovalPlan { edits, blockers })
 }
 
 // --- what the payer is shown before sending (§14.2) -------------------------
@@ -1667,4 +1881,86 @@ pub fn swap_quote_from_response(
 #[uniffi::export]
 pub fn swap_status_from_response(body: String) -> Result<ffi::SwapStatus> {
     Ok(convert::status(&splitz_host::status_from_response(&body)?))
+}
+
+/// Where `payout` sits in `payouts`, matched on its type, address, asset and
+/// chain together, or `None` when none of them is it (§14.8). What
+/// `obligation_via`'s `via` holds for a payout a person picked.
+#[uniffi::export]
+pub fn declared_payout_index(payouts: Vec<ffi::Payout>, payout: ffi::Payout) -> Option<u32> {
+    let payouts: Vec<splitz_core::Payout> = payouts.iter().map(convert::payout_back).collect();
+    splitz_host::declared_payout_index(&payouts, &convert::payout_back(&payout))
+        .and_then(|at| u32::try_from(at).ok())
+}
+
+/// Whether `quote`'s deposit may be sent to pay `to` `amount_minor_units`,
+/// read against `entries` as the wallet holds them at the moment of sending,
+/// or `None` when it may (§15.7). `facts.now` is the instant the quote's
+/// deadline is compared with.
+///
+/// `chosen` is the payout the quote was asked for, `None` for the payee's
+/// first; the obligation is read with it as `obligation_via` reads a choice.
+/// `bill_id` names the bill the entries belong to, as for [`fold_entries`].
+#[uniffi::export]
+pub fn swap_send_refusal(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    quote: ffi::SwapQuote,
+    to: String,
+    amount_minor_units: i64,
+    chosen: Option<ffi::Payout>,
+) -> Result<Option<ffi::SwapSendRefusal>> {
+    let parsed = parse_entries(&entries)?;
+    let verified = Signer.prepare(parsed.iter(), &bill_id);
+    let verify = |entry: &Value, key: &str| verified.verify(entry, key);
+    let host = FactHost {
+        facts: &facts,
+        sign: None,
+        verify: Some(&verify),
+    };
+    let folded = BillLog::with_entries(&host, parsed)
+        .for_bill(bill_id)
+        .fold()?;
+    let chosen = chosen.as_ref().map(convert::payout_back);
+    let mut via = BTreeMap::new();
+    if let Some(chosen) = &chosen {
+        let payouts = folded
+            .bill
+            .participant(&to)
+            .map_or(&[][..], |p| &p.payouts[..]);
+        if let Some(at) = splitz_host::declared_payout_index(payouts, chosen) {
+            via.insert(to.clone(), at as i64);
+        }
+    }
+    let obligation = splitz_core::host::obligation_via(&host, &folded, &via)?;
+    Ok(splitz_host::swap_send_refusal(
+        &convert::quote_back(&quote),
+        &facts.now,
+        &folded.bill,
+        obligation.as_ref(),
+        &to,
+        amount_minor_units,
+        chosen.as_ref(),
+    )?
+    .map(convert::swap_send_refusal))
+}
+
+/// The entries to withdraw once the swap `reference` names is reported
+/// failed: the entries that recorded `facts.me`'s unconfirmed `swap` payments
+/// carrying it (§15.7). A wallet signs a `void` of each with
+/// [`void_entry_for`] and merges them.
+///
+/// `bill_id` names the bill the entries belong to, as for [`fold_entries`].
+#[uniffi::export]
+pub fn failed_swap_withdrawals(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    reference: String,
+) -> Result<Vec<String>> {
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    Ok(splitz_host::failed_swap_withdrawals(
+        &folded, &facts.me, &reference,
+    ))
 }

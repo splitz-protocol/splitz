@@ -161,4 +161,112 @@ void main() {
       );
     });
   });
+
+  group('two markets held to each other', () {
+    Future<int?> agreeing(_Source a, _Source b, [String currency = 'USD']) =>
+        AgreeingZecPrices(a, b).minorUnitsPerZec(currency);
+
+    test('two markets that agree give the second one\'s figure', () async {
+      const prices = AgreeingZecPrices(
+        FixedZecPrices({'USD': 138819}),
+        FixedZecPrices({'USD': 138905, 'EUR': 122241}),
+      );
+      expect(await prices.minorUnitsPerZec('USD'), 138905);
+      expect(await prices.minorUnitsPerZec('EUR'), 122241);
+      expect(await prices.minorUnitsPerZec('GBP'), isNull);
+    });
+
+    test('two markets that disagree give no price', () async {
+      // (152701 - 138819) x 10000 = 138820000 > 138819 x 200 = 27763800:
+      // 1000 bp apart, past the 200 allowed.
+      expect(await agreeing(_Source(138819), _Source(152701)), isNull);
+      expect(await agreeing(_Source(152701), _Source(138819)), isNull);
+    });
+
+    test('the tolerance is inclusive, in basis points of the lower', () async {
+      // 10000 x 1.02 = 10200: exactly 200 bp, then one past it.
+      expect(await agreeing(_Source(10000), _Source(10200)), 10200);
+      expect(await agreeing(_Source(10200), _Source(10000)), 10000);
+      expect(await agreeing(_Source(10000), _Source(10201)), isNull);
+      expect(await agreeing(_Source(10201), _Source(10000)), isNull);
+    });
+
+    test('a tolerance the caller chose is the one applied', () async {
+      final a = _Source(10000);
+      final b = _Source(10201);
+      expect(
+        await AgreeingZecPrices(a, b, toleranceBp: 201).minorUnitsPerZec('USD'),
+        10201,
+      );
+      expect(
+        await AgreeingZecPrices(a, b, toleranceBp: 0).minorUnitsPerZec('USD'),
+        isNull,
+      );
+      expect(
+        await AgreeingZecPrices(
+          _Source(7),
+          _Source(7),
+          toleranceBp: 0,
+        ).minorUnitsPerZec('USD'),
+        7,
+      );
+    });
+
+    test('figures at the 2^53 - 1 bound do not overflow', () async {
+      const top = 9007199254740991;
+      expect(await agreeing(_Source(top), _Source(top)), top);
+      expect(await agreeing(_Source(top ~/ 2), _Source(top)), isNull);
+    });
+
+    test('one market answering stands alone', () async {
+      expect(await agreeing(_Source(null), _Source(138905)), 138905);
+      expect(await agreeing(_Source(138819), _Source(null)), 138819);
+      expect(
+        await agreeing(_Source(null, fails: true), _Source(138905)),
+        138905,
+      );
+      expect(
+        await agreeing(_Source(138819), _Source(null, fails: true)),
+        138819,
+      );
+    });
+
+    test('a figure that is not positive is not an answer', () async {
+      expect(await agreeing(_Source(0), _Source(138905)), 138905);
+      expect(await agreeing(_Source(-5), _Source(138905)), 138905);
+      expect(await agreeing(_Source(138819), _Source(0)), 138819);
+      expect(await agreeing(_Source(0), _Source(0)), isNull);
+    });
+
+    test('markets that cannot be reached leave the bill unpriced', () async {
+      expect(
+        await agreeing(
+          _Source(null, fails: true),
+          _Source(null, fails: true),
+          'EUR',
+        ),
+        isNull,
+      );
+    });
+
+    test('both markets are asked every time', () async {
+      final a = _Source(100);
+      final b = _Source(200);
+      await agreeing(a, b);
+      expect((a.asked, b.asked), (1, 1));
+    });
+
+    test('agreedPrice refuses a negative tolerance', () {
+      expect(() => agreedPrice(1, 1, -1), throwsArgumentError);
+    });
+
+    test('keeps §15.6', () async {
+      const prices = AgreeingZecPrices(
+        FixedZecPrices({'USD': 138819}),
+        FixedZecPrices({'EUR': 122241}),
+      );
+      expect(await checkZecPrices(prices), isEmpty);
+      expect(await checkZecPrices(prices, priced: 'EUR'), isEmpty);
+    });
+  });
 }

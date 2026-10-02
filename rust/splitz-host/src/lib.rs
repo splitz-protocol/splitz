@@ -17,9 +17,11 @@ pub mod error;
 pub mod fold;
 pub mod keys;
 pub mod payer_review;
+pub mod payouts;
 pub mod pending_sends;
 pub mod pricing;
 pub mod relay;
+pub mod removal_plan;
 pub mod sealing;
 pub mod seam_contracts;
 pub mod send_request;
@@ -44,14 +46,21 @@ pub use keys::{
 pub use payer_review::{
     check_payee_review, check_payer_review, rate_figure, ReviewFinding, ReviewRule,
 };
-pub use pending_sends::{PendingSend, PendingSends, SendEnded, Unrecordable};
+pub use payouts::ranked_payouts;
+pub use pending_sends::{
+    own_payment_withdrawal_refusal, unsent_claim_refusal, OwnPaymentWithdrawal, OwnTransaction,
+    PendingSend, PendingSends, SendEnded, TransactionState, Unrecordable, UnsentClaimRefusal,
+};
 pub use pricing::{
-    binance_price_url, coinbase_price_url, coingecko_price_url, price_from_binance,
-    price_from_coinbase, price_from_coingecko, BinanceZecPrices, CoinGeckoZecPrices,
-    CoinbaseZecPrices, FirstZecPrices, FixedZecPrices, NoZecPrices, BINANCE_ZEC_SYMBOL,
-    MAX_MINOR_UNITS_PER_ZEC,
+    agreed_price, binance_price_url, coinbase_price_url, coingecko_price_url, price_from_binance,
+    price_from_coinbase, price_from_coingecko, AgreeingZecPrices, BinanceZecPrices,
+    CoinGeckoZecPrices, CoinbaseZecPrices, FirstZecPrices, FixedZecPrices, NoZecPrices,
+    BINANCE_ZEC_SYMBOL, MAX_MINOR_UNITS_PER_ZEC,
 };
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
+pub use removal_plan::{
+    plan_removal, split_without, RemovalBlock, RemovalBlocker, RemovalEdit, RemovalPlan,
+};
 pub use sealing::{Sealing, BLOB_VERSION};
 pub use seam_contracts::{
     check_bill_storage, check_secret_store, check_splits_relay, check_zec_prices, SeamFinding,
@@ -62,8 +71,9 @@ pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
 pub use swap_watch::{SwapWatch, SwapWatchList};
 pub use swaps::{
-    assets_from_tokens, quote_from_response, quote_request_body, status_from_response, swap_answer,
-    OneClickSwaps, SwapQuote, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
+    assets_from_tokens, declared_payout_index, failed_swap_withdrawals, quote_from_response,
+    quote_request_body, status_from_response, swap_answer, swap_send_refusal, OneClickSwaps,
+    SwapQuote, SwapSendRefusal, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
 };
 pub use sync::{SplitsSync, SyncResult};
 pub use transport::{component_encode, query_encode, HttpTransport};

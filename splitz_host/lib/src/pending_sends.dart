@@ -396,3 +396,110 @@ class PendingSends {
     );
   }
 }
+
+/// A transaction the wallet built itself, as [unsentClaimRefusal] reads it.
+class OwnTransaction {
+  const OwnTransaction({required this.txid, required this.created});
+
+  /// The transaction's id, as the wallet reports it.
+  final String txid;
+
+  /// When the wallet created it: a §9.3 instant. Fixed width, so it orders
+  /// against a note's [PendingSend.at] by its text.
+  final String created;
+}
+
+/// Why a person may not say a send left nothing in the wallet (§14.3).
+enum UnsentClaim {
+  /// The wallet is still sending a transaction, and it may be this one.
+  stillSending,
+
+  /// The wallet built a transaction at or after the note was written.
+  builtSince,
+}
+
+/// The refusal of a person's word that [send] left nothing in the wallet, or
+/// null when the note may go (§14.3).
+class UnsentClaimRefusal {
+  const UnsentClaimRefusal(this.claim, {this.txid});
+
+  final UnsentClaim claim;
+
+  /// The transaction that may be this send, for [UnsentClaim.builtSince].
+  final String? txid;
+}
+
+/// Whether [send]'s note may be removed on a person's word that nothing left
+/// the wallet, given whether the wallet [stillSending] any transaction and
+/// the transactions it built itself, [own] (§14.3).
+///
+/// A send killed after its broadcast and mined before the app came back is
+/// no longer waiting, and its note may carry no transaction id; a
+/// transaction the wallet built at or after the note was written may be it,
+/// and clearing the note would let the debt go out again. Compared to the
+/// second: a wallet stamps its transactions in whole seconds, and the note is
+/// written before the wallet is called. A note that will not read names no
+/// instant, so only [stillSending] holds it.
+UnsentClaimRefusal? unsentClaimRefusal(
+  PendingSend send, {
+  required bool stillSending,
+  required List<OwnTransaction> own,
+}) {
+  if (stillSending) return const UnsentClaimRefusal(UnsentClaim.stillSending);
+  if (send.damaged || send.at.length < 19) return null;
+  final began = send.at.substring(0, 19);
+  for (final t in own) {
+    if (t.created.length >= 19 &&
+        t.created.substring(0, 19).compareTo(began) >= 0) {
+      return UnsentClaimRefusal(UnsentClaim.builtSince, txid: t.txid);
+    }
+  }
+  return null;
+}
+
+/// Where a transaction the wallet holds stands.
+enum TransactionState {
+  /// In a block: it went through.
+  mined,
+
+  /// Not mined and not expired: the wallet may still broadcast it.
+  waiting,
+
+  /// Expired unmined: it can no longer go through.
+  expired,
+}
+
+/// Why this device may not withdraw its own record of a shielded payment.
+enum OwnPaymentWithdrawal {
+  /// The wallet shows the transaction the record names went through.
+  mined,
+
+  /// The wallet still holds that transaction and may send it.
+  waiting,
+}
+
+/// Whether this device, [me], may withdraw its own record of [payment], given
+/// where its wallet shows the transaction the record names, [state]: null
+/// when it may (§14.4).
+///
+/// Withdrawn, the debt is offered again while the first payment has reached,
+/// or may yet reach, the payee, and it is paid twice. Only a `shieldedZec`
+/// record the payer wrote names a transaction this wallet can look up; a cash
+/// or swap record, or one somebody else wrote, is decided by §10.8 alone, and
+/// [state] null (the history does not hold it) or expired leaves it free.
+OwnPaymentWithdrawal? ownPaymentWithdrawalRefusal(
+  splitz.PaymentRecord payment, {
+  required String me,
+  required TransactionState? state,
+}) {
+  if (payment.from != me ||
+      payment.method != 'shieldedZec' ||
+      payment.reference == null) {
+    return null;
+  }
+  return switch (state) {
+    TransactionState.mined => OwnPaymentWithdrawal.mined,
+    TransactionState.waiting => OwnPaymentWithdrawal.waiting,
+    TransactionState.expired || null => null,
+  };
+}

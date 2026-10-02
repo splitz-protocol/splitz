@@ -297,4 +297,142 @@ void main() {
     final back = PendingSend.fromJson(send.toJson());
     expect(back?.toJson(), send.toJson());
   });
+
+  group('§14.3: saying a send left nothing in the wallet', () {
+    final note = _send();
+    const before = OwnTransaction(
+      txid: 'aa',
+      created: '2026-10-28T19:29:59.000Z',
+    );
+    const sameSecond = OwnTransaction(
+      txid: 'bb',
+      created: '2026-10-28T19:30:00.000Z',
+    );
+    const after = OwnTransaction(
+      txid: 'cc',
+      created: '2026-10-28T19:31:12.000Z',
+    );
+
+    test('a transaction built since the note holds it, and is named', () {
+      final r = unsentClaimRefusal(
+        note,
+        stillSending: false,
+        own: const [before, after],
+      );
+      expect(r?.claim, UnsentClaim.builtSince);
+      expect(r?.txid, 'cc');
+    });
+
+    test('one built in the note\'s own second holds it too', () {
+      // The wallet stamps whole seconds; the note was written first.
+      expect(
+        unsentClaimRefusal(
+          note,
+          stillSending: false,
+          own: const [sameSecond],
+        )?.claim,
+        UnsentClaim.builtSince,
+      );
+    });
+
+    test('one built before the note does not hold it', () {
+      expect(
+        unsentClaimRefusal(note, stillSending: false, own: const [before]),
+        isNull,
+      );
+      expect(
+        unsentClaimRefusal(note, stillSending: false, own: const []),
+        isNull,
+      );
+    });
+
+    test('anything still sending holds it, whatever it is', () {
+      expect(
+        unsentClaimRefusal(note, stillSending: true, own: const [])?.claim,
+        UnsentClaim.stillSending,
+      );
+    });
+
+    test('a note that will not read is held only by what is still sending', () {
+      const damaged = PendingSend.damaged('b1');
+      expect(
+        unsentClaimRefusal(damaged, stillSending: false, own: const [after]),
+        isNull,
+      );
+      expect(
+        unsentClaimRefusal(damaged, stillSending: true, own: const [])?.claim,
+        UnsentClaim.stillSending,
+      );
+    });
+  });
+
+  group("§14.4: withdrawing one's own record of a shielded payment", () {
+    splitz.PaymentRecord payment({
+      String from = 'me',
+      String method = 'shieldedZec',
+      String? reference = 'tx1',
+    }) => splitz.PaymentRecord(
+      id: 'p1',
+      from: from,
+      to: 'ben',
+      amount: 1000,
+      currency: 'USD',
+      method: method,
+      at: '2026-10-28T19:30:00.000Z',
+      reference: reference,
+    );
+
+    test('refused while the wallet shows it mined or still sending', () {
+      expect(
+        ownPaymentWithdrawalRefusal(
+          payment(),
+          me: 'me',
+          state: TransactionState.mined,
+        ),
+        OwnPaymentWithdrawal.mined,
+      );
+      expect(
+        ownPaymentWithdrawalRefusal(
+          payment(),
+          me: 'me',
+          state: TransactionState.waiting,
+        ),
+        OwnPaymentWithdrawal.waiting,
+      );
+    });
+
+    test('free once it expired, or when the history does not hold it', () {
+      expect(
+        ownPaymentWithdrawalRefusal(
+          payment(),
+          me: 'me',
+          state: TransactionState.expired,
+        ),
+        isNull,
+      );
+      expect(
+        ownPaymentWithdrawalRefusal(payment(), me: 'me', state: null),
+        isNull,
+      );
+    });
+
+    test('cash, swaps, another payer\'s record and a record with no '
+        'transaction are not this rule\'s', () {
+      for (final p in [
+        payment(method: 'cash'),
+        payment(method: 'swap'),
+        payment(from: 'ben'),
+        payment(reference: null),
+      ]) {
+        expect(
+          ownPaymentWithdrawalRefusal(
+            p,
+            me: 'me',
+            state: TransactionState.mined,
+          ),
+          isNull,
+        );
+      }
+    });
+  });
 }

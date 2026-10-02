@@ -275,6 +275,100 @@ pub enum Unrecordable {
 /// Namespaced away from bills so a sweep of one never reaches the other.
 const PREFIX: &str = "pendingsend/";
 
+/// A transaction the wallet built itself, as [`unsent_claim_refusal`] reads
+/// it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnTransaction {
+    /// The transaction's id, as the wallet reports it.
+    pub txid: String,
+    /// When the wallet created it: a §9.3 instant. Fixed width, so it orders
+    /// against a note's `at` by its text.
+    pub created: String,
+}
+
+/// Why a person may not say a send left nothing in the wallet (§14.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UnsentClaimRefusal {
+    /// The wallet is still sending a transaction, and it may be this one.
+    StillSending,
+    /// The wallet built `txid` at or after the note was written.
+    BuiltSince { txid: String },
+}
+
+/// Whether `send`'s note may be removed on a person's word that nothing left
+/// the wallet, given whether the wallet is `still_sending` any transaction and
+/// the transactions it built itself, `own` (§14.3). `None` when it may go.
+///
+/// A send killed after its broadcast and mined before the app came back is
+/// no longer waiting, and its note may carry no transaction id; a
+/// transaction the wallet built at or after the note was written may be it,
+/// and clearing the note would let the debt go out again. Compared to the
+/// second: a wallet stamps its transactions in whole seconds, and the note is
+/// written before the wallet is called. A note that will not read names no
+/// instant, so only `still_sending` holds it.
+pub fn unsent_claim_refusal(
+    send: &PendingSend,
+    still_sending: bool,
+    own: &[OwnTransaction],
+) -> Option<UnsentClaimRefusal> {
+    if still_sending {
+        return Some(UnsentClaimRefusal::StillSending);
+    }
+    if send.is_damaged() {
+        return None;
+    }
+    let began = send.at.get(..19)?;
+    own.iter()
+        .find(|t| t.created.get(..19).is_some_and(|c| c >= began))
+        .map(|t| UnsentClaimRefusal::BuiltSince {
+            txid: t.txid.clone(),
+        })
+}
+
+/// Where a transaction the wallet holds stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransactionState {
+    /// In a block: it went through.
+    Mined,
+    /// Not mined and not expired: the wallet may still broadcast it.
+    Waiting,
+    /// Expired unmined: it can no longer go through.
+    Expired,
+}
+
+/// Why this device may not withdraw its own record of a shielded payment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnPaymentWithdrawal {
+    /// The wallet shows the transaction the record names went through.
+    Mined,
+    /// The wallet still holds that transaction and may send it.
+    Waiting,
+}
+
+/// Whether this device, `me`, may withdraw its own record of `payment`, given
+/// where its wallet shows the transaction the record names, `state`: `None`
+/// when it may (§14.4).
+///
+/// Withdrawn, the debt is offered again while the first payment has reached,
+/// or may yet reach, the payee, and it is paid twice. Only a `shieldedZec`
+/// record the payer wrote names a transaction this wallet can look up; a cash
+/// or swap record, or one somebody else wrote, is decided by §10.8 alone, and
+/// `state` `None` (the history does not hold it) or expired leaves it free.
+pub fn own_payment_withdrawal_refusal(
+    payment: &splitz_core::PaymentRecord,
+    me: &str,
+    state: Option<TransactionState>,
+) -> Option<OwnPaymentWithdrawal> {
+    if payment.from != me || payment.method != "shieldedZec" || payment.reference.is_none() {
+        return None;
+    }
+    match state {
+        Some(TransactionState::Mined) => Some(OwnPaymentWithdrawal::Mined),
+        Some(TransactionState::Waiting) => Some(OwnPaymentWithdrawal::Waiting),
+        Some(TransactionState::Expired) | None => None,
+    }
+}
+
 /// The unresolved send for each bill, at most one per bill.
 ///
 /// **One instance per storage.** The check that a send is not already under

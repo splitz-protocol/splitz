@@ -40,6 +40,46 @@ pub struct PendingSendHeld {
     pub txid: Option<String>,
 }
 
+/// A transaction the wallet built itself: what a person's word that a send
+/// left nothing is checked against (§14.3).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct OwnTransaction {
+    /// The transaction's id, as the wallet reports it.
+    pub txid: String,
+    /// When the wallet created it, a §9.3 instant.
+    pub created: String,
+}
+
+/// Why a person may not say a send left nothing in the wallet (§14.3).
+#[derive(uniffi::Enum, Debug, Clone, PartialEq, Eq)]
+pub enum UnsentClaimRefusal {
+    /// The wallet is still sending a transaction, and it may be this one.
+    StillSending,
+    /// The wallet built `txid` at or after the note was written.
+    BuiltSince { txid: String },
+}
+
+/// Where a transaction the wallet holds stands.
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransactionState {
+    /// In a block: it went through.
+    Mined,
+    /// Not mined and not expired: the wallet may still broadcast it.
+    Waiting,
+    /// Expired unmined: it can no longer go through.
+    Expired,
+}
+
+/// Why this device may not withdraw its own record of a shielded payment
+/// (§14.4).
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnPaymentWithdrawal {
+    /// The wallet shows the transaction the record names went through.
+    Mined,
+    /// The wallet still holds that transaction and may send it.
+    Waiting,
+}
+
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Payout {
     /// `zec`, `swap` or `cash`.
@@ -496,10 +536,91 @@ pub enum SwapState {
     Failed,
 }
 
+/// Why a swap's deposit may not be sent (§15.7). Each is a refusal a payer
+/// fixes by getting a new quote, or by waiting, as its words say.
+#[derive(uniffi::Enum, Debug, Clone, PartialEq, Eq)]
+pub enum SwapSendRefusal {
+    /// The quote's deadline has passed.
+    Expired,
+    /// The deposit needs a memo, and a payment request carries none.
+    NeedsMemo,
+    /// The payee no longer declares the payout the quote was asked for.
+    PayoutGone,
+    /// A payment this payer sent and nobody has confirmed covers the debt
+    /// (§14.4); `paid_to` must confirm it.
+    Held { paid_to: Vec<String> },
+    /// The bill no longer says this payer owes the quoted amount.
+    NotOwed,
+    /// The payee's payout no longer names the quote's `recipient`.
+    RecipientChanged,
+    /// The payee's payout no longer names the asset and chain the quote buys.
+    AssetChanged,
+    /// The bill's rate no longer converts the debt to the quote's ZEC.
+    RateChanged,
+}
+
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct SwapStatus {
     pub state: SwapState,
     /// On the destination chain. MUST NOT be recorded as the §10.5 payment.
     pub destination_tx_hash: Option<String>,
     pub detail: Option<String>,
+}
+
+/// One expense to write again without the person, withdrawing `entry_id`
+/// (§10.8).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct RemovalEdit {
+    /// The `addExpense` entry the restated expense replaces.
+    pub entry_id: String,
+    /// The expense as the plan read it: payer, amount and description of
+    /// what is written again.
+    pub seen: Expense,
+    /// Who wrote the expense being withdrawn. The expense written in its
+    /// place is the restating device's (§10.4).
+    pub author: Option<String>,
+    /// `seen`'s split without the person, as JSON.
+    pub split_json: String,
+}
+
+/// Why an entry still names somebody once a plan's edits are written.
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemovalBlock {
+    /// An expense naming them that the fold does not apply.
+    Unapplied,
+    /// They paid for the expense.
+    PaidFor,
+    /// Written by somebody else, on a bill this device did not open;
+    /// `author` can take them out of it.
+    AddedByAnother,
+    /// Taking them out of the split needs a choice only a person can make.
+    SplitByHand,
+    /// A payment from or to them is on the bill.
+    Payment,
+    /// They confirmed a payment.
+    Confirmation,
+}
+
+/// One entry that still names somebody once a plan's edits are written.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct RemovalBlocker {
+    pub block: RemovalBlock,
+    pub entry_id: String,
+    /// The expense's description; empty when it has none, and for a payment
+    /// or a confirmation.
+    pub description: String,
+    /// Who wrote the expense, for `AddedByAnother`.
+    pub author: Option<String>,
+    /// For `Payment`: whether they are its payer rather than its payee.
+    pub from_them: bool,
+}
+
+/// What taking somebody off a bill needs, as one device sees it (§10.8).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct RemovalPlan {
+    /// Expenses this device can take them out of.
+    pub edits: Vec<RemovalEdit>,
+    /// What still names them once `edits` are written. Empty with `edits`
+    /// when nothing names them, and the `voidEntry` of their join applies.
+    pub blockers: Vec<RemovalBlocker>,
 }

@@ -455,9 +455,10 @@ otherwise write for itself, each pure and each run by the four consumers
 | `checkPayeeReview(payment, visibleText, absentWords)` | the payee's confirm screen against §14.2 |
 | `binancePriceRequest` / `zecPriceFromBinance` | ZEC in USD from Binance's ZECUSDC ticker, USDC read as USD |
 | `coinbasePriceRequest` / `zecPriceFromCoinbase` | ZEC in most currencies from one Coinbase answer |
+| `agreedPrice(first, second, toleranceBp)` | the one price two markets' answers stand for, or none when they differ by more than `toleranceBp` basis points of the lower (§15.6) |
 
-Ask Binance first for USD and Coinbase for every other currency, or for USD
-when Binance cannot answer. The HTTP is yours; the binding writes each request
+Ask both for USD and pass the two readings (none for a failed read) to
+`agreedPrice` with 200; ask Coinbase alone for every other currency. The HTTP is yours; the binding writes each request
 and reads each answer. `RandomBytes`, `InviteExpiry` and the three-field
 `Delta` are records rather than a bare byte string, flag or tagged enum
 because not every generator lowers those correctly.
@@ -991,7 +992,11 @@ surfacing a changed pay-to address (7).
    one request; `BinanceZecPrices` reads the ZECUSDC ticker and prices USD
    alone, taking USDC as USD. `FirstZecPrices([...])` asks sources in order
    and passes over one that fails, so a blocked feed does not leave a bill
-   unpriced while another can price it.
+   unpriced while another can price it. A rate fixed onto a bill prices every
+   request on it, so hold two markets to each other:
+   `AgreeingZecPrices(first, second)` answers only when both agree within 200
+   basis points of the lower (or one answers and the other cannot), and a
+   binding wallet reads both answers and passes them to `agreedPrice`.
 
 ## Things that are easy to get wrong
 

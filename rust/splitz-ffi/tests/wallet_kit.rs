@@ -3,11 +3,11 @@
 //! invite links and expiry, and what a peer lacks.
 
 use splitz_ffi::{
-    bill_key_problem, binance_price_request, check_payee_review, coinbase_price_request,
-    create_bill_entry, delta_for_peer, identity_key_from_seed, invite_expiry, invite_for_bill,
-    join_bill_entry, new_bill_key, read_scanned, render_invite_link, zec_price_from_binance,
-    zec_price_from_coinbase, ExchangeRate, HostFacts, PaymentRecord, RandomBytes, ReviewRule,
-    SplitzError,
+    agreed_price, bill_key_problem, binance_price_request, check_payee_review,
+    coinbase_price_request, create_bill_entry, delta_for_peer, identity_key_from_seed,
+    invite_expiry, invite_for_bill, join_bill_entry, new_bill_key, read_scanned,
+    render_invite_link, zec_price_from_binance, zec_price_from_coinbase, ExchangeRate, HostFacts,
+    PaymentRecord, RandomBytes, ReviewRule, SplitzError,
 };
 
 fn contracts() -> String {
@@ -99,6 +99,12 @@ fn the_fallback_price_sources_read_their_captured_answers() {
         zec_price_from_binance("<html>blocked</html>".into(), "USD".into()),
         Err(SplitzError::Host { .. })
     ));
+    assert_eq!(
+        agreed_price(Some(138_819), Some(138_905), 200),
+        Some(138_905)
+    );
+    assert_eq!(agreed_price(Some(138_819), Some(152_701), 200), None);
+    assert_eq!(agreed_price(None, Some(138_905), 200), Some(138_905));
 }
 
 #[test]
@@ -340,4 +346,164 @@ fn a_create_that_only_states_the_bill_id_does_not_make_its_key_foreign() {
     assert!(!opened.foreign_key);
     assert_eq!(opened.entries.len(), 3);
     assert_eq!(opened.unopenable, 0);
+}
+
+/// Ana owes Ben 40.00 EUR, paid in USDC on Base first and Arbitrum second.
+fn swap_bill() -> (Device, Device, String, Vec<String>) {
+    let (ana, bill_id, mut entries) = bill();
+    let ben = Device::new(90);
+    let payout = |address: &str, chain: &str| splitz_ffi::Payout {
+        kind: "swap".into(),
+        address: Some(address.into()),
+        asset: Some("USDC".into()),
+        chain: Some(chain.into()),
+    };
+    entries.push(
+        join_bill_entry(
+            ana.facts(3),
+            bill_id.clone(),
+            Some("Ana".into()),
+            Some("u1ana".into()),
+            Some(ana.key.clone()),
+            vec![],
+            ana.seed.clone(),
+        )
+        .unwrap(),
+    );
+    entries.push(
+        join_bill_entry(
+            ben.facts(4),
+            bill_id.clone(),
+            Some("Ben".into()),
+            None,
+            Some(ben.key.clone()),
+            vec![payout("0xbenbase", "base"), payout("0xbenarb", "arb")],
+            ben.seed.clone(),
+        )
+        .unwrap(),
+    );
+    entries.push(
+        splitz_ffi::add_expense_entry(
+            ben.facts(5),
+            bill_id.clone(),
+            "x1".into(),
+            ben.me.clone(),
+            8000,
+            serde_json::json!({"type": "equal", "among": [ana.me, ben.me]}).to_string(),
+            None,
+            ben.seed.clone(),
+        )
+        .unwrap(),
+    );
+    entries.push(
+        splitz_ffi::set_rate_entry(
+            ana.facts(6),
+            bill_id.clone(),
+            "EUR".into(),
+            51234,
+            None,
+            ana.seed.clone(),
+        )
+        .unwrap(),
+    );
+    (ana, ben, bill_id, entries)
+}
+
+fn swap_quote(recipient: &str, chain: &str) -> splitz_ffi::SwapQuote {
+    splitz_ffi::SwapQuote {
+        deposit_address: "t1deposit".into(),
+        recipient: Some(recipient.into()),
+        deposit_memo: None,
+        amount_in_zatoshi: 7_807_316,
+        amount_out: "39990000".into(),
+        min_amount_out: None,
+        asset: splitz_ffi::TradableAsset {
+            asset_id: format!("nep141:{chain}-usdc"),
+            symbol: "USDC".into(),
+            chain: chain.into(),
+            decimals: 6,
+        },
+        deadline: "2026-10-28T20:30:00.000Z".into(),
+        reference: Some("intent-1".into()),
+    }
+}
+
+#[test]
+fn a_swap_deposit_is_checked_against_the_entries_and_the_payout_chosen() {
+    use splitz_ffi::{failed_swap_withdrawals, swap_send_refusal, SwapSendRefusal};
+    let (ana, ben, bill_id, mut entries) = swap_bill();
+    let ask = |entries: &Vec<String>, q, chosen| {
+        swap_send_refusal(
+            ana.facts(10),
+            bill_id.clone(),
+            entries.clone(),
+            q,
+            ben.me.clone(),
+            4000,
+            chosen,
+        )
+        .unwrap()
+    };
+    assert_eq!(ask(&entries, swap_quote("0xbenbase", "base"), None), None);
+    let second = splitz_ffi::Payout {
+        kind: "swap".into(),
+        address: Some("0xbenarb".into()),
+        asset: Some("USDC".into()),
+        chain: Some("arb".into()),
+    };
+    assert_eq!(
+        ask(
+            &entries,
+            swap_quote("0xbenarb", "arb"),
+            Some(second.clone())
+        ),
+        None
+    );
+    assert_eq!(
+        ask(&entries, swap_quote("0xbenbase", "base"), Some(second)),
+        Some(SwapSendRefusal::RecipientChanged)
+    );
+
+    let record = splitz_ffi::record_payment_entry(
+        ana.facts(11),
+        bill_id.clone(),
+        splitz_ffi::PaymentDraft {
+            payment_id: "intent-1".into(),
+            to: ben.me.clone(),
+            amount: 4000,
+            method: "swap".into(),
+            reference: Some("intent-1".into()),
+            zatoshi: Some(7_807_316),
+            paid_at_rate: None,
+            note: None,
+        },
+        ana.seed.clone(),
+    )
+    .unwrap();
+    let record_id = serde_json::from_str::<serde_json::Value>(&record).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    entries.push(record);
+    assert_eq!(
+        ask(&entries, swap_quote("0xbenbase", "base"), None),
+        Some(SwapSendRefusal::Held {
+            paid_to: vec![ben.me.clone()]
+        })
+    );
+    assert_eq!(
+        failed_swap_withdrawals(
+            ana.facts(12),
+            bill_id.clone(),
+            entries.clone(),
+            "intent-1".into()
+        )
+        .unwrap(),
+        [record_id]
+    );
+    assert!(
+        failed_swap_withdrawals(ben.facts(12), bill_id, entries, "intent-1".into())
+            .unwrap()
+            .is_empty()
+    );
 }

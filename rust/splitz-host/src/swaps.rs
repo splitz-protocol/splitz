@@ -18,6 +18,8 @@
 use std::cell::RefCell;
 
 use serde_json::{json, Value};
+use splitz_core::host::{FoldedBill, PayerObligation};
+use splitz_core::{fiat_to_zatoshi, Bill, Payout, RateRounding};
 
 use crate::error::HostError;
 use crate::transport::{query_encode, HttpTransport};
@@ -157,6 +159,147 @@ impl SwapQuote {
     pub fn payment_reference(&self) -> &str {
         self.reference.as_deref().unwrap_or(&self.deposit_address)
     }
+}
+
+/// Where `payout` sits in `payouts`, or `None` when none of them is it.
+///
+/// A payout is matched on its type, address, asset and chain together, never
+/// on its position: a payee who edits their list moves every position after
+/// the edit, and an index kept across that pays an address nobody picked
+/// (§14.8).
+pub fn declared_payout_index(payouts: &[Payout], payout: &Payout) -> Option<usize> {
+    payouts.iter().position(|p| p == payout)
+}
+
+/// Why a swap's deposit may not be sent, as [`swap_send_refusal`] reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SwapSendRefusal {
+    /// The quote's deadline has passed.
+    Expired,
+    /// The deposit needs a memo, and a payment request carries none.
+    NeedsMemo,
+    /// The payee no longer declares the payout the quote was asked for.
+    PayoutGone,
+    /// A payment this payer sent and nobody has confirmed covers the debt
+    /// (§14.4); `paid_to` must confirm it, in ascending id order.
+    Held { paid_to: Vec<String> },
+    /// The bill no longer says this payer owes the quoted amount to the payee
+    /// as a debt a payment request leaves out.
+    NotOwed,
+    /// The payee's payout no longer names the address the quote delivers to.
+    RecipientChanged,
+    /// The payee's payout no longer names the asset and chain the quote buys.
+    AssetChanged,
+    /// The bill's rate no longer converts the debt to the quote's ZEC.
+    RateChanged,
+}
+
+/// Whether `quote`'s deposit may be sent to pay `to` `amount_minor_units` on
+/// `bill`, or `None` when it may (§15.7).
+///
+/// `now` is a §9.3 instant. `bill` is the bill as the store holds it at the
+/// moment of sending, and `obligation` is this payer's obligation read from
+/// it with `chosen` as the payout for `to` (§14.8), or `None` when the bill
+/// has no rate. `chosen` is the payout the quote was asked for; `None` means
+/// the payee's first.
+///
+/// Checked in this order, the first that applies answering: the quote has
+/// expired; its deposit needs a memo, which a payment request cannot carry
+/// and without which the deposit is lost; `chosen` is no longer declared; a
+/// payment this payer already sent covers the debt (§14.4), so a second
+/// deposit would pay it twice; the debt is no longer owed in exactly
+/// `amount_minor_units`; the payout's address is not the quote's
+/// `recipient`, so the deposit pays an address the payee replaced; its asset
+/// or chain is not the quote's, so one address may be a different account or
+/// none; and the bill's rate no longer converts `amount_minor_units` to the
+/// quote's `amount_in_zatoshi`, so the deposit is sized by a rate the record
+/// does not state.
+///
+/// Refused as [`fiat_to_zatoshi`] refuses when the bill's rate cannot price
+/// its own currency.
+pub fn swap_send_refusal(
+    quote: &SwapQuote,
+    now: &str,
+    bill: &Bill,
+    obligation: Option<&PayerObligation>,
+    to: &str,
+    amount_minor_units: i64,
+    chosen: Option<&Payout>,
+) -> splitz_core::Result<Option<SwapSendRefusal>> {
+    if quote.has_expired(now) {
+        return Ok(Some(SwapSendRefusal::Expired));
+    }
+    if quote.deposit_memo.as_deref().is_some_and(|m| !m.is_empty()) {
+        return Ok(Some(SwapSendRefusal::NeedsMemo));
+    }
+    let payouts = bill.participant(to).map_or(&[][..], |p| &p.payouts[..]);
+    let payout = match chosen {
+        None => payouts.first(),
+        Some(chosen) => match declared_payout_index(payouts, chosen) {
+            None => return Ok(Some(SwapSendRefusal::PayoutGone)),
+            Some(at) => payouts.get(at),
+        },
+    };
+    if let Some(waiting) = obligation.and_then(|o| o.awaiting.iter().find(|a| a.to == to)) {
+        return Ok(Some(SwapSendRefusal::Held {
+            paid_to: waiting.paid_to.clone(),
+        }));
+    }
+    let owed = obligation.is_some_and(|o| {
+        o.request
+            .unpayable
+            .iter()
+            .any(|u| u.id == to && u.minor_units == amount_minor_units)
+    });
+    if !owed {
+        return Ok(Some(SwapSendRefusal::NotOwed));
+    }
+    let Some(payout) = payout.filter(|p| p.address.is_some()) else {
+        return Ok(Some(SwapSendRefusal::RecipientChanged));
+    };
+    if quote.recipient != payout.address {
+        return Ok(Some(SwapSendRefusal::RecipientChanged));
+    }
+    match (&payout.asset, &payout.chain) {
+        (Some(asset), Some(chain)) if quote.asset.answers(asset, chain) => {}
+        _ => return Ok(Some(SwapSendRefusal::AssetChanged)),
+    }
+    let Some(rate) = &bill.rate else {
+        return Ok(Some(SwapSendRefusal::RateChanged));
+    };
+    let zatoshi = fiat_to_zatoshi(
+        amount_minor_units,
+        rate,
+        Some(&bill.currency),
+        RateRounding::Up,
+    )?;
+    if quote.amount_in_zatoshi != zatoshi {
+        return Ok(Some(SwapSendRefusal::RateChanged));
+    }
+    Ok(None)
+}
+
+/// The entries to withdraw once the swap `reference` names is reported
+/// failed: the ids of the entries that recorded `me`'s unconfirmed `swap`
+/// payments carrying that reference, in the order `folded` lists the payments
+/// (§15.7).
+///
+/// While such a record stands the debt reads as paid and waiting and nothing
+/// can pay it again; its author may withdraw it (§10.8). A confirmed record
+/// is left: the payee has said the money arrived. A record somebody else
+/// wrote is theirs to withdraw.
+pub fn failed_swap_withdrawals(folded: &FoldedBill, me: &str, reference: &str) -> Vec<String> {
+    let bill = &folded.bill;
+    bill.payments
+        .iter()
+        .filter(|p| {
+            p.method == "swap"
+                && p.reference.as_deref() == Some(reference)
+                && p.from == me
+                && !bill.confirmed_payments.contains(&p.id)
+        })
+        .filter_map(|p| folded.payment_entries.get(&p.id).cloned())
+        .collect()
 }
 
 /// Where a swap has got to.

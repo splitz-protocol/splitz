@@ -231,6 +231,43 @@ pub(crate) fn asset_back(a: &ffi::TradableAsset) -> splitz_host::TradableAsset {
     }
 }
 
+pub(crate) fn quote_back(q: &ffi::SwapQuote) -> splitz_host::SwapQuote {
+    splitz_host::SwapQuote {
+        deposit_address: q.deposit_address.clone(),
+        recipient: q.recipient.clone(),
+        deposit_memo: q.deposit_memo.clone(),
+        amount_in_zatoshi: q.amount_in_zatoshi,
+        amount_out: q.amount_out.clone(),
+        min_amount_out: q.min_amount_out.clone(),
+        asset: asset_back(&q.asset),
+        deadline: q.deadline.clone(),
+        reference: q.reference.clone(),
+    }
+}
+
+pub(crate) fn payout_back(p: &ffi::Payout) -> splitz_core::Payout {
+    splitz_core::Payout {
+        kind: p.kind.clone(),
+        address: p.address.clone(),
+        asset: p.asset.clone(),
+        chain: p.chain.clone(),
+    }
+}
+
+pub(crate) fn swap_send_refusal(r: splitz_host::SwapSendRefusal) -> ffi::SwapSendRefusal {
+    use splitz_host::SwapSendRefusal as R;
+    match r {
+        R::Expired => ffi::SwapSendRefusal::Expired,
+        R::NeedsMemo => ffi::SwapSendRefusal::NeedsMemo,
+        R::PayoutGone => ffi::SwapSendRefusal::PayoutGone,
+        R::Held { paid_to } => ffi::SwapSendRefusal::Held { paid_to },
+        R::NotOwed => ffi::SwapSendRefusal::NotOwed,
+        R::RecipientChanged => ffi::SwapSendRefusal::RecipientChanged,
+        R::AssetChanged => ffi::SwapSendRefusal::AssetChanged,
+        R::RateChanged => ffi::SwapSendRefusal::RateChanged,
+    }
+}
+
 pub(crate) fn status(s: &splitz_host::SwapStatus) -> ffi::SwapStatus {
     use splitz_host::SwapState as S;
     ffi::SwapStatus {
@@ -243,5 +280,38 @@ pub(crate) fn status(s: &splitz_host::SwapStatus) -> ffi::SwapStatus {
         },
         destination_tx_hash: s.destination_tx_hash.clone(),
         detail: s.detail.clone(),
+    }
+}
+
+pub(crate) fn removal_plan(p: &splitz_host::RemovalPlan) -> ffi::RemovalPlan {
+    ffi::RemovalPlan {
+        edits: p
+            .edits
+            .iter()
+            .map(|e| ffi::RemovalEdit {
+                entry_id: e.entry_id.clone(),
+                seen: expense(&e.seen),
+                author: e.author.clone(),
+                split_json: e.split.to_string(),
+            })
+            .collect(),
+        blockers: p
+            .blockers
+            .iter()
+            .map(|b| ffi::RemovalBlocker {
+                block: match b.block {
+                    splitz_host::RemovalBlock::Unapplied => ffi::RemovalBlock::Unapplied,
+                    splitz_host::RemovalBlock::PaidFor => ffi::RemovalBlock::PaidFor,
+                    splitz_host::RemovalBlock::AddedByAnother => ffi::RemovalBlock::AddedByAnother,
+                    splitz_host::RemovalBlock::SplitByHand => ffi::RemovalBlock::SplitByHand,
+                    splitz_host::RemovalBlock::Payment => ffi::RemovalBlock::Payment,
+                    splitz_host::RemovalBlock::Confirmation => ffi::RemovalBlock::Confirmation,
+                },
+                entry_id: b.entry_id.clone(),
+                description: b.description.clone(),
+                author: b.author.clone(),
+                from_them: b.from_them,
+            })
+            .collect(),
     }
 }

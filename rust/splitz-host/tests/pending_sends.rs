@@ -350,3 +350,124 @@ fn a_note_reads_back_as_it_was_written() {
     let back = PendingSend::from_json(&written.to_json()).expect("reads back");
     assert_eq!(back, written);
 }
+
+// §14.3: saying a send left nothing in the wallet.
+
+fn own(txid: &str, created: &str) -> splitz_host::OwnTransaction {
+    splitz_host::OwnTransaction {
+        txid: txid.to_owned(),
+        created: created.to_owned(),
+    }
+}
+
+#[test]
+fn a_transaction_built_since_the_note_holds_it_and_is_named() {
+    let before = own("aa", "2026-10-28T19:29:59.000Z");
+    let after = own("cc", "2026-10-28T19:31:12.000Z");
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&send("b1"), false, &[before, after]),
+        Some(splitz_host::UnsentClaimRefusal::BuiltSince {
+            txid: "cc".to_owned()
+        })
+    );
+}
+
+#[test]
+fn one_built_in_the_notes_own_second_holds_it_too() {
+    // The wallet stamps whole seconds; the note was written first.
+    let same = own("bb", "2026-10-28T19:30:00.000Z");
+    assert!(matches!(
+        splitz_host::unsent_claim_refusal(&send("b1"), false, &[same]),
+        Some(splitz_host::UnsentClaimRefusal::BuiltSince { .. })
+    ));
+}
+
+#[test]
+fn one_built_before_the_note_does_not_hold_it() {
+    let before = own("aa", "2026-10-28T19:29:59.000Z");
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&send("b1"), false, &[before]),
+        None
+    );
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&send("b1"), false, &[]),
+        None
+    );
+}
+
+#[test]
+fn anything_still_sending_holds_it() {
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&send("b1"), true, &[]),
+        Some(splitz_host::UnsentClaimRefusal::StillSending)
+    );
+}
+
+#[test]
+fn a_note_that_will_not_read_is_held_only_by_what_is_still_sending() {
+    let damaged = PendingSend::damaged("b1");
+    let after = own("cc", "2026-10-28T19:31:12.000Z");
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&damaged, false, &[after]),
+        None
+    );
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&damaged, true, &[]),
+        Some(splitz_host::UnsentClaimRefusal::StillSending)
+    );
+}
+
+// §14.4: withdrawing one's own record of a shielded payment.
+
+fn payment(from: &str, method: &str, reference: Option<&str>) -> splitz_core::PaymentRecord {
+    splitz_core::PaymentRecord {
+        id: "p1".to_owned(),
+        from: from.to_owned(),
+        to: "ben".to_owned(),
+        amount: 1000,
+        currency: "USD".to_owned(),
+        method: method.to_owned(),
+        at: "2026-10-28T19:30:00.000Z".to_owned(),
+        zatoshi: None,
+        paid_at_rate: None,
+        reference: reference.map(str::to_owned),
+        note: None,
+    }
+}
+
+#[test]
+fn withdrawing_ones_own_shielded_record_is_refused_while_mined_or_waiting() {
+    use splitz_host::{
+        own_payment_withdrawal_refusal as refusal, OwnPaymentWithdrawal, TransactionState,
+    };
+    let p = payment("me", "shieldedZec", Some("tx1"));
+    assert_eq!(
+        refusal(&p, "me", Some(TransactionState::Mined)),
+        Some(OwnPaymentWithdrawal::Mined)
+    );
+    assert_eq!(
+        refusal(&p, "me", Some(TransactionState::Waiting)),
+        Some(OwnPaymentWithdrawal::Waiting)
+    );
+}
+
+#[test]
+fn withdrawing_is_free_once_expired_or_when_the_history_does_not_hold_it() {
+    use splitz_host::{own_payment_withdrawal_refusal as refusal, TransactionState};
+    let p = payment("me", "shieldedZec", Some("tx1"));
+    assert_eq!(refusal(&p, "me", Some(TransactionState::Expired)), None);
+    assert_eq!(refusal(&p, "me", None), None);
+}
+
+#[test]
+fn cash_swaps_another_payers_record_and_no_transaction_are_not_this_rules() {
+    use splitz_host::{own_payment_withdrawal_refusal as refusal, TransactionState};
+    for p in [
+        payment("me", "cash", Some("tx1")),
+        payment("me", "swap", Some("tx1")),
+        payment("ben", "shieldedZec", Some("tx1")),
+        payment("me", "shieldedZec", None),
+    ] {
+        assert_eq!(refusal(&p, "me", Some(TransactionState::Mined)), None);
+    }
+}

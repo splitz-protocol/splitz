@@ -22,6 +22,8 @@ dart::BillKeyConflict       # `HostError::KeyConflict`, naming the bill.
 dart::BillStorageUnreadable # `HostError::Unreadable`, naming the key: §15.4's read raising on a value that is there and cannot be read.
 dart::SendInFlight          # `HostError::SendInFlight { pending }`, carrying the earlier send when one is written down.
 dart::UnrecordableReason    # The variants of Rust's `Unrecordable` enum, which carries them directly; Dart's `Unrecordable` exception carries one of these.
+dart::UnsentClaim         # The variants of Rust's `UnsentClaimRefusal` enum, whose `BuiltSince` carries the txid directly; Dart's `UnsentClaimRefusal` class carries one of these and the txid beside it.
+dart::SwapSendRefused     # The variants of Rust's `SwapSendRefusal` enum, which carries `Held { paid_to }` directly; Dart's `SwapSendRefusal` class carries one of these and the `paidTo` list.
 dart::UnansweredSignatureQuestion  # `FoldFailure::Unanswered`, one of the two ways a verified fold fails. Dart throws it past a fold that returns.
 rust::HostError          # The enum the four above collapse into.
 rust::Result             # `Result<T> = core::result::Result<T, HostError>`. Dart throws, so there is no alias to name.
