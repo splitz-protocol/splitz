@@ -248,33 +248,41 @@ void main() {
       }
     }
 
-    test(
-      'holds the URL, owner-only, and is gone when the driver stops',
-      () async {
-        final home = await Directory.systemTemp.createTemp('define');
-        final define = File('${home.path}/driver.json');
-        final (process, dir, _) = await start(define);
-        await until(() => define.existsSync() && define.lengthSync() > 0);
-        // The permission bits, read through Dart rather than `stat`, whose
-        // flags differ between BSD and GNU.
-        expect(define.statSync().mode & 0x1ff, 0x180, reason: 'mode 0600');
-        final url =
-            (jsonDecode(define.readAsStringSync())
-                    as Map)['SPLITS_SEED_DRIVER_URL']
-                as String;
-        expect(url, startsWith('http://127.0.0.1:'));
-        final health = await ioFetch()(Uri.parse('$url/health'));
-        final answer = jsonDecode(health) as Map;
-        expect(answer['ok'], isTrue);
-        expect(answer['wallets'], 1);
+    // `kill` sends TERM and a closed terminal sends HUP; the file outlives a
+    // driver that handles only INT, and blocks the next start at its path.
+    for (final signal in [
+      ProcessSignal.sigint,
+      ProcessSignal.sigterm,
+      ProcessSignal.sighup,
+    ]) {
+      test(
+        'holds the URL, owner-only, and is gone when $signal stops the driver',
+        () async {
+          final home = await Directory.systemTemp.createTemp('define');
+          final define = File('${home.path}/driver.json');
+          final (process, dir, _) = await start(define);
+          await until(() => define.existsSync() && define.lengthSync() > 0);
+          // The permission bits, read through Dart rather than `stat`, whose
+          // flags differ between BSD and GNU.
+          expect(define.statSync().mode & 0x1ff, 0x180, reason: 'mode 0600');
+          final url =
+              (jsonDecode(define.readAsStringSync())
+                      as Map)['SPLITS_SEED_DRIVER_URL']
+                  as String;
+          expect(url, startsWith('http://127.0.0.1:'));
+          final health = await ioFetch()(Uri.parse('$url/health'));
+          final answer = jsonDecode(health) as Map;
+          expect(answer['ok'], isTrue);
+          expect(answer['wallets'], 1);
 
-        process.kill(ProcessSignal.sigint);
-        await process.exitCode;
-        expect(define.existsSync(), isFalse);
-        await dir.delete(recursive: true);
-        await home.delete(recursive: true);
-      },
-    );
+          process.kill(signal);
+          expect(await process.exitCode, 0);
+          expect(define.existsSync(), isFalse);
+          await dir.delete(recursive: true);
+          await home.delete(recursive: true);
+        },
+      );
+    }
 
     test('is never written over a file already at its path', () async {
       final home = await Directory.systemTemp.createTemp('define');

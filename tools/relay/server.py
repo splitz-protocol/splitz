@@ -325,9 +325,10 @@ def main() -> None:
     print(f"relay on http://{args.host}:{server.server_address[1]}", flush=True)
     if STATE_FILE is not None:
         threading.Thread(target=saver, daemon=True).start()
-    # Asked to stop, it stops through `finally`, which writes what the last
-    # interval's pushes added.
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    # Asked to stop — TERM from `kill`, HUP from a closed terminal — it stops
+    # through `finally`, which writes what the last interval's pushes added.
+    for stop in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(stop, lambda *_: sys.exit(0))
     try:
         server.serve_forever()
     except KeyboardInterrupt:

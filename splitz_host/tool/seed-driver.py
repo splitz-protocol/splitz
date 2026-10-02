@@ -30,7 +30,8 @@ A command line is readable by every process on the machine (`ps`), so a URL
 passed as `--dart-define` hands the token to all of them for the length of the
 run. With `--define-file PATH` the URL is written to PATH, readable by its
 owner only, and the run is given `--dart-define-from-file=PATH` instead; the
-file is deleted when this process stops.
+file is deleted when this process stops on INT, TERM or HUP. KILL cannot be
+caught and leaves it behind.
 
 It binds to 127.0.0.1 only. A simulator reaches loopback on the host; a
 physical device does not, and that is the intended limit — a driver reachable
@@ -43,6 +44,7 @@ import argparse
 import json
 import os
 import secrets
+import signal
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -189,31 +191,48 @@ def main() -> int:
     Driver.token = secrets.token_urlsafe(24)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Driver)
     url = f"http://127.0.0.1:{server.server_address[1]}/{Driver.token}"
-    if args.define_file is not None:
-        # Created here, owner-only, and refused if something is already at
-        # the path: a file another process made could be read by it.
-        fd = os.open(args.define_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump({"SPLITS_SEED_DRIVER_URL": url}, f)
-        print(
-            f"seed-driver: {len(Driver.phrases)} wallets; run with "
-            f"--dart-define-from-file={args.define_file} "
-            "— stop it when the run ends",
-            file=sys.stderr,
-        )
-    else:
-        print(
-            f"seed-driver: {len(Driver.phrases)} wallets on {url} "
-            "— stop it when the run ends",
-            file=sys.stderr,
-        )
+    # TERM (`kill`) and HUP (a closed terminal) end the process the way Ctrl-C
+    # does, so the `finally` below removes the define file. Installed before
+    # the file exists: left behind, it makes the next start at its path refuse.
+    for stop in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(stop, signal.default_int_handler)
+    created = False
     try:
+        if args.define_file is not None:
+            # Created here, owner-only, and refused if something is already at
+            # the path: a file another process made could be read by it, and
+            # is never this process's to delete.
+            # The stop signals are held while the file is made and recorded
+            # as made: one handled between the two would leave it behind.
+            held = {signal.SIGINT, signal.SIGTERM, signal.SIGHUP}
+            signal.pthread_sigmask(signal.SIG_BLOCK, held)
+            try:
+                fd = os.open(
+                    args.define_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+                )
+                created = True
+            finally:
+                signal.pthread_sigmask(signal.SIG_UNBLOCK, held)
+            with os.fdopen(fd, "w") as f:
+                json.dump({"SPLITS_SEED_DRIVER_URL": url}, f)
+            print(
+                f"seed-driver: {len(Driver.phrases)} wallets; run with "
+                f"--dart-define-from-file={args.define_file} "
+                "— stop it when the run ends",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"seed-driver: {len(Driver.phrases)} wallets on {url} "
+                "— stop it when the run ends",
+                file=sys.stderr,
+            )
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         server.server_close()
-        if args.define_file is not None:
+        if created:
             args.define_file.unlink(missing_ok=True)
     return 0
 

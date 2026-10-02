@@ -7,10 +7,13 @@ Usage: python3 tools/relay/test_server.py
 """
 import json
 import os
+import signal
 import stat
+import subprocess
 import sys
 import tempfile
 import threading
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import server  # noqa: E402
@@ -100,7 +103,51 @@ def a_failed_save_is_tried_again():
             assert json.load(f) == {CH: ["one"]}
 
 
+def a_stop_by_any_signal_keeps_the_last_push():
+    """INT, TERM (`kill`) and HUP (a closed terminal) all end through the
+    flush, so a push made just before the stop is in the state file."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for stop in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        with tempfile.TemporaryDirectory() as d:
+            state = os.path.join(d, "s.json")
+            relay = subprocess.Popen(
+                [sys.executable, os.path.join(here, "server.py"), "--port", "0",
+                 "--state-file", state],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            try:
+                origin = relay.stdout.readline().split()[-1]
+                push = urllib.request.Request(
+                    f"{origin}/c/{CH}",
+                    data=json.dumps({"blobs": [stop.name]}).encode(),
+                    method="POST",
+                )
+                with urllib.request.urlopen(push) as answer:
+                    assert answer.status == 200
+                relay.send_signal(stop)
+                try:
+                    code = relay.wait(30)
+                except subprocess.TimeoutExpired:
+                    relay.kill()
+                    raise AssertionError(
+                        f"{stop.name}: the relay did not stop in 30 s; "
+                        f"stderr: {relay.stderr.read()[-500:]}"
+                    )
+                assert code == 0, f"{stop.name}: exit {code}"
+            finally:
+                if relay.poll() is None:
+                    relay.kill()
+                relay.stdout.close()
+                relay.stderr.close()
+            with open(state, encoding="utf-8") as f:
+                assert json.load(f) == {CH: [stop.name]}, stop.name
+
+
 if __name__ == "__main__":
-    for test in (a_stop_during_a_save_keeps_every_push, a_failed_save_is_tried_again):
+    for test in (
+        a_stop_during_a_save_keeps_every_push,
+        a_failed_save_is_tried_again,
+        a_stop_by_any_signal_keeps_the_last_push,
+    ):
         test()
         print(f"ok  {test.__name__}")
