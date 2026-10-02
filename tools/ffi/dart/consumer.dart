@@ -184,21 +184,20 @@ void main(List<String> args) {
   ana.entries
     ..clear()
     ..addAll(mergeEntries(ana.entries, ben.entries).entries);
-  ana.add(
-    addExpenseEntry(
-      ana.facts(),
-      billId,
-      'x1',
-      ana.me,
-      9000,
-      jsonEncode({
-        'type': 'equal',
-        'among': [ana.me, ben.me],
-      }),
-      'dinner',
-      ana.signingSeed(),
-    ),
+  final dinner = addExpenseEntry(
+    ana.facts(),
+    billId,
+    'x1',
+    ana.me,
+    9000,
+    jsonEncode({
+      'type': 'equal',
+      'among': [ana.me, ben.me],
+    }),
+    'dinner',
+    ana.signingSeed(),
   );
+  ana.add(dinner);
   ana.add(
     setRateEntry(
       ana.facts(),
@@ -229,6 +228,75 @@ void main(List<String> args) {
     '${folded.bill.expenses.single.amount}',
   );
 
+  print('ana plans taking ben off the bill (§10.8)');
+  SplitzErrorExceptionHost? refusedBy(void Function() call) {
+    try {
+      call();
+      return null;
+    } on SplitzErrorExceptionHost catch (e) {
+      return e;
+    }
+  }
+
+  final dinnerId = (jsonDecode(dinner) as Map)['id'] as String;
+  final unpaid = planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me);
+  check(
+    'her expense is offered, split without him, and nothing blocks it',
+    unpaid.blockers.isEmpty &&
+        unpaid.edits.length == 1 &&
+        unpaid.edits.single.entryId == dinnerId &&
+        jsonEncode(jsonDecode(unpaid.edits.single.splitJson)) ==
+            jsonEncode({
+              'type': 'equal',
+              'among': [ana.me],
+            }),
+    '${unpaid.edits.map((e) => e.splitJson).toList()}',
+  );
+  check(
+    'and the plan still stands while the bill has not moved',
+    sameRemovalPlan(
+          unpaid,
+          planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me),
+        ) ==
+        RemovalPlanStanding.stands,
+    'stands',
+  );
+  final without = splitWithout(
+    jsonEncode({
+      'type': 'equal',
+      'among': [ana.me, ben.me],
+    }),
+    ben.me,
+  );
+  check(
+    'a split without him crosses as JSON',
+    without != null &&
+        jsonEncode(jsonDecode(without)) ==
+            jsonEncode({
+              'type': 'equal',
+              'among': [ana.me],
+            }),
+    '$without',
+  );
+  check(
+    'and one only a person can redivide is answered with none',
+    splitWithout(
+          jsonEncode({
+            'type': 'exact',
+            'amounts': {ana.me: 1, ben.me: 1},
+          }),
+          ben.me,
+        ) ==
+        null,
+    'none',
+  );
+  final notSplit = refusedBy(() => splitWithout('{', ben.me));
+  check(
+    'text that is not a split is refused',
+    notSplit != null,
+    '${notSplit?.detail}',
+  );
+
   print('ben owes half of it');
   ben.entries
     ..clear()
@@ -250,6 +318,34 @@ void main(List<String> args) {
     'nothing is withheld',
     owed.request.withheldMinorUnits == 0,
     '${owed.request.withheldMinorUnits}',
+  );
+
+  print(
+    'a send the wallet wrote down is not cleared on a person\'s word (§14.3)',
+  );
+  final txid = 'ab' * 32;
+  final note = pendingSendNote(billId, owed, ben.now());
+  check(
+    'nobody may say it never left while the wallet is still sending',
+    pendingSendUnsentRefusal(billId, note, true, const []) ==
+        const UnsentClaimRefusalStillSending(),
+    '${pendingSendUnsentRefusal(billId, note, true, const [])}',
+  );
+  final builtSince = pendingSendUnsentRefusal(billId, note, false, [
+    OwnTransaction(txid: txid, created: ben.now()),
+  ]);
+  check(
+    'nor once the wallet built a transaction after the note was written',
+    builtSince == UnsentClaimRefusalBuiltSince(txid: txid),
+    '$builtSince',
+  );
+  check(
+    'one built before it does not hold the note',
+    pendingSendUnsentRefusal(billId, note, false, [
+          OwnTransaction(txid: 'cd' * 32, created: '2026-10-28T19:30:00.000Z'),
+        ]) ==
+        null,
+    'none',
   );
 
   print('ben\'s review screen shows what §14.2 says it must');
@@ -334,6 +430,62 @@ void main(List<String> args) {
     'and ben, who paid it, is shown nothing to confirm',
     awaitingMyConfirmation(ben.facts(), billId, ben.entries).isEmpty,
     'none',
+  );
+  // The record names no transaction; the rule is asked as if it named `txid`.
+  check(
+    'ben may not withdraw his record while its transaction is mined',
+    ownPaymentWithdrawalRefusal(
+          paid.from,
+          paid.method,
+          txid,
+          ben.me,
+          TransactionState.mined,
+        ) ==
+        OwnPaymentWithdrawal.mined,
+    '${ownPaymentWithdrawalRefusal(paid.from, paid.method, txid, ben.me, TransactionState.mined)}',
+  );
+  check(
+    'and may once it expired unmined',
+    ownPaymentWithdrawalRefusal(
+          paid.from,
+          paid.method,
+          txid,
+          ben.me,
+          TransactionState.expired,
+        ) ==
+        null,
+    'none',
+  );
+  check(
+    'a record naming no transaction is not this rule\'s',
+    ownPaymentWithdrawalRefusal(
+          paid.from,
+          paid.method,
+          paid.reference,
+          ben.me,
+          TransactionState.mined,
+        ) ==
+        null,
+    'none',
+  );
+  final paidPlan = planRemoval(
+    ana.facts(),
+    billId,
+    ana.entries,
+    ben.me,
+    ana.me,
+  );
+  check(
+    'once he has paid, taking ben off is blocked by the payment',
+    paidPlan.blockers.length == 1 &&
+        paidPlan.blockers.single.block == RemovalBlock.payment &&
+        paidPlan.blockers.single.fromThem,
+    '${paidPlan.blockers.map((b) => b.block).toList()}',
+  );
+  check(
+    'so the plan ana saw before no longer stands',
+    sameRemovalPlan(unpaid, paidPlan) == RemovalPlanStanding.changed,
+    'changed',
   );
   // This record was written by hand, with no ZEC figure, rate or reference:
   // the screen says so in the wallet's own words.
@@ -431,15 +583,6 @@ void main(List<String> args) {
     swapAnswer(200, '{"quote":1}') == '{"quote":1}',
     'read',
   );
-  SplitzErrorExceptionHost? refusedBy(void Function() call) {
-    try {
-      call();
-      return null;
-    } on SplitzErrorExceptionHost catch (e) {
-      return e;
-    }
-  }
-
   final noRoute = refusedBy(() => swapAnswer(400, '{"message":"no route"}'));
   check(
     'a 4xx is refused with the provider\'s own words, and waiting will not help',
@@ -504,6 +647,227 @@ void main(List<String> args) {
         coinbasePriceRequest('https://api.coinbase.com') ==
             'https://api.coinbase.com/v2/exchange-rates?currency=ZEC',
     '18015979',
+  );
+  check(
+    'two sources within the tolerance agree on the higher',
+    agreedPrice(138819, 138905, 200) == 138905,
+    '${agreedPrice(138819, 138905, 200)}',
+  );
+  check(
+    'and two that are not give no price',
+    agreedPrice(138819, 152701, 200) == null,
+    '${agreedPrice(138819, 152701, 200)}',
+  );
+
+  print(
+    'a payout a person declares goes first, and replaces its own kind (§9.1)',
+  );
+  String listed(List<Payout> payouts) => [
+    for (final p in payouts) '${p.kind}:${p.address}:${p.asset}:${p.chain}',
+  ].join(' ');
+  final ranked = rankedPayouts(
+    const Participant(
+      id: 'p',
+      name: 'P',
+      payTo: 'zOld',
+      identityKey: null,
+      payouts: [],
+    ),
+    const Payout(kind: 'swap', address: '0xa', asset: 'USDC', chain: null),
+  );
+  check(
+    'a pay-to-only record keeps its ZEC behind the new swap',
+    listed(ranked) == 'swap:0xa:USDC:null zec:zOld:null:null',
+    listed(ranked),
+  );
+  final replaced = rankedPayouts(
+    const Participant(
+      id: 'p',
+      name: 'P',
+      payTo: null,
+      identityKey: null,
+      payouts: [
+        Payout(kind: 'cash', address: null, asset: null, chain: null),
+        Payout(kind: 'zec', address: 'zA', asset: null, chain: null),
+        Payout(kind: 'swap', address: '0xb', asset: 'USDT', chain: null),
+      ],
+    ),
+    const Payout(kind: 'zec', address: 'zB', asset: null, chain: null),
+  );
+  check(
+    'a new ZEC payout replaces the old one, the rest keep their order',
+    listed(replaced) ==
+        'zec:zB:null:null cash:null:null:null swap:0xb:USDT:null',
+    listed(replaced),
+  );
+
+  print('a swap deposit is checked against the bill before it is sent (§15.7)');
+  const onBase = Payout(
+    kind: 'swap',
+    address: '0xbenbase',
+    asset: 'USDC',
+    chain: 'base',
+  );
+  const onArb = Payout(
+    kind: 'swap',
+    address: '0xbenarb',
+    asset: 'USDC',
+    chain: 'arb',
+  );
+  final taxiCreate = createBillEntry(
+    ana.facts(),
+    'Taxi',
+    'EUR',
+    'equal',
+    anaKey,
+    null,
+    ana.signingSeed(),
+  );
+  final taxiId = (jsonDecode(taxiCreate) as Map)['id'] as String;
+  final taxi = [
+    taxiCreate,
+    joinBillEntry(
+      ana.facts(),
+      taxiId,
+      'Ana',
+      'u1ana',
+      anaKey,
+      const [],
+      ana.signingSeed(),
+    ),
+    joinBillEntry(ben.facts(), taxiId, 'Ben', null, benKey, const [
+      onBase,
+      onArb,
+    ], ben.signingSeed()),
+    addExpenseEntry(
+      ben.facts(),
+      taxiId,
+      't1',
+      ben.me,
+      8000,
+      jsonEncode({
+        'type': 'equal',
+        'among': [ana.me, ben.me],
+      }),
+      null,
+      ben.signingSeed(),
+    ),
+    setRateEntry(ana.facts(), taxiId, 'EUR', 51234, null, ana.signingSeed()),
+  ];
+  SwapQuote quote(String recipient, String chain) => SwapQuote(
+    depositAddress: 't1deposit',
+    recipient: recipient,
+    depositMemo: null,
+    amountInZatoshi: 7807316,
+    amountOut: '39990000',
+    minAmountOut: null,
+    asset: TradableAsset(
+      assetId: 'nep141:$chain-usdc',
+      symbol: 'USDC',
+      chain: chain,
+      decimals: 6,
+    ),
+    deadline: '2026-10-29T23:00:00.000Z',
+    reference: 'intent-1',
+  );
+  check(
+    'a deposit to ben\'s first payout, for what ana owes, may go',
+    swapSendRefusal(
+          ana.facts(),
+          taxiId,
+          taxi,
+          quote('0xbenbase', 'base'),
+          ben.me,
+          4000,
+          null,
+        ) ==
+        null,
+    'none',
+  );
+  check(
+    'one asked for his second payout may go too',
+    swapSendRefusal(
+          ana.facts(),
+          taxiId,
+          taxi,
+          quote('0xbenarb', 'arb'),
+          ben.me,
+          4000,
+          onArb,
+        ) ==
+        null,
+    'none',
+  );
+  final wrongRecipient = swapSendRefusal(
+    ana.facts(),
+    taxiId,
+    taxi,
+    quote('0xbenbase', 'base'),
+    ben.me,
+    4000,
+    onArb,
+  );
+  check(
+    'one whose recipient is not the payout chosen is refused',
+    wrongRecipient == const SwapSendRefusalRecipientChanged(),
+    '$wrongRecipient',
+  );
+  check(
+    'the payout chosen is found by type, address, asset and chain',
+    declaredPayoutIndex(const [onBase, onArb], onArb) == 1 &&
+        declaredPayoutIndex(
+              const [onBase, onArb],
+              const Payout(
+                kind: 'swap',
+                address: '0xbenarb',
+                asset: 'USDC',
+                chain: null,
+              ),
+            ) ==
+            null,
+    '${declaredPayoutIndex(const [onBase, onArb], onArb)}',
+  );
+  final swapRecord = recordPaymentEntry(
+    ana.facts(),
+    taxiId,
+    PaymentDraft(
+      paymentId: 'intent-1',
+      to: ben.me,
+      amount: 4000,
+      method: 'swap',
+      reference: 'intent-1',
+      zatoshi: 7807316,
+      paidAtRate: null,
+      note: null,
+    ),
+    ana.signingSeed(),
+  );
+  taxi.add(swapRecord);
+  final held = swapSendRefusal(
+    ana.facts(),
+    taxiId,
+    taxi,
+    quote('0xbenbase', 'base'),
+    ben.me,
+    4000,
+    null,
+  );
+  check(
+    'once a payment covers the debt, a second deposit is held for ben to confirm',
+    held is SwapSendRefusalHeld && held.paidTo.join() == ben.me,
+    '$held',
+  );
+  final failed = failedSwapWithdrawals(ana.facts(), taxiId, taxi, 'intent-1');
+  check(
+    'a swap that failed names ana\'s record of it to withdraw',
+    failed.length == 1 &&
+        failed.single == (jsonDecode(swapRecord) as Map)['id'] as String,
+    '$failed',
+  );
+  check(
+    'and nothing to ben, who did not write it',
+    failedSwapWithdrawals(ben.facts(), taxiId, taxi, 'intent-1').isEmpty,
+    'none',
   );
 
   print(

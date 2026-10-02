@@ -1533,10 +1533,22 @@ pub fn plan_removal(
 /// Whether `now` writes exactly what `confirmed` does and is held back by the
 /// same entries: what a person agreed to is still what would be written.
 /// A wallet plans again inside the turn that writes the restated expenses and
-/// writes nothing when this is false.
+/// writes nothing unless this is `Stands`.
+///
+/// An enum, not a `bool`: the Dart generator lowers a returned `bool` as an
+/// integer, and the binding it writes does not compile.
 #[uniffi::export]
-pub fn same_removal_plan(confirmed: ffi::RemovalPlan, now: ffi::RemovalPlan) -> Result<bool> {
-    Ok(host_removal_plan(confirmed)?.same_as(&host_removal_plan(now)?))
+pub fn same_removal_plan(
+    confirmed: ffi::RemovalPlan,
+    now: ffi::RemovalPlan,
+) -> Result<ffi::RemovalPlanStanding> {
+    Ok(
+        if host_removal_plan(confirmed)?.same_as(&host_removal_plan(now)?) {
+            ffi::RemovalPlanStanding::Stands
+        } else {
+            ffi::RemovalPlanStanding::Changed
+        },
+    )
 }
 
 /// `split` without `id` in it, the others sharing what was theirs, as JSON;

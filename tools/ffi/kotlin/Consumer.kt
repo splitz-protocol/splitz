@@ -57,6 +57,10 @@ class Device(private val seedByte: Int) {
 fun refusal(block: () -> Unit): SplitzException.Host? =
     try { block(); null } catch (e: SplitzException.Host) { e }
 
+/// A signed entry's own id: the one beside its signature, not its payload's.
+fun entryId(entry: String): String =
+    Regex("\"id\":\"([^\"]+)\",\"sig\":").find(entry)!!.groupValues[1]
+
 /// `args` are a running relay's origin and an origin nothing answers.
 fun main(args: Array<String>) {
     val (origin, downOrigin) = args
@@ -160,8 +164,9 @@ fun main(args: Array<String>) {
           queried?.transient == false, "${queried?.detail}")
 
     println("ana adds an expense they share, and prices it")
-    ana.add(addExpenseEntry(ana.facts(), billId, "x1", ana.me, 9000,
-        """{"type":"equal","among":["${ana.me}","${ben.me}"]}""", "dinner", ana.seed))
+    val dinner = addExpenseEntry(ana.facts(), billId, "x1", ana.me, 9000,
+        """{"type":"equal","among":["${ana.me}","${ben.me}"]}""", "dinner", ana.seed)
+    ana.add(dinner)
     ana.add(setRateEntry(ana.facts(), billId, "EUR", 300000, "a fixed feed", ana.seed))
 
     val folded = foldEntries(ana.facts(), billId, ana.entries)
@@ -171,6 +176,27 @@ fun main(args: Array<String>) {
     check("both keys are bound under §10.7",
           folded.identities.bound == mapOf(ana.me to anaKey, ben.me to benKey),
           "${folded.identities.bound.keys}")
+
+    println("ana plans taking ben off the bill (§10.8)")
+    val dinnerId = entryId(dinner)
+    val unpaid = planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me)
+    check("her expense is offered, split without him, and nothing blocks it",
+          unpaid.blockers.isEmpty() && unpaid.edits.map { it.entryId } == listOf(dinnerId) &&
+              unpaid.edits.single().splitJson == """{"type":"equal","among":["${ana.me}"]}""",
+          "${unpaid.edits.map { it.splitJson }}")
+    check("and the plan still stands while the bill has not moved",
+          sameRemovalPlan(unpaid, planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me)) ==
+              RemovalPlanStanding.STANDS,
+          "same")
+    check("a split without him crosses as JSON",
+          splitWithout("""{"type":"equal","among":["${ana.me}","${ben.me}"]}""", ben.me) ==
+              """{"type":"equal","among":["${ana.me}"]}""",
+          "${splitWithout("""{"type":"equal","among":["${ana.me}","${ben.me}"]}""", ben.me)}")
+    check("and one only a person can redivide is answered with none",
+          splitWithout("""{"type":"exact","amounts":{"${ana.me}":1,"${ben.me}":1}}""", ben.me) == null,
+          "none")
+    val notSplit = refusal { splitWithout("{", ben.me) }
+    check("text that is not a split is refused", notSplit != null, "${notSplit?.detail}")
 
     println("ben owes half of it")
     ben.take(ana)
@@ -216,6 +242,16 @@ fun main(args: Array<String>) {
     check("one built and not broadcast keeps its note, naming the transaction",
           pendingSendBlocks(billId, note)?.txid == txid, "${pendingSendBlocks(billId, note)?.txid}")
     check("and the next send is still blocked", pendingSendBlocks(billId, note) != null, "blocked")
+    check("nobody may say it never left while the wallet is still sending",
+          pendingSendUnsentRefusal(billId, note!!, true, listOf()) == UnsentClaimRefusal.StillSending,
+          "${pendingSendUnsentRefusal(billId, note, true, listOf())}")
+    val builtSince = pendingSendUnsentRefusal(billId, note, false, listOf(OwnTransaction(txid, ben.now())))
+    check("nor once the wallet built a transaction after the note was written",
+          builtSince == UnsentClaimRefusal.BuiltSince(txid), "$builtSince")
+    check("one built before it does not hold the note",
+          pendingSendUnsentRefusal(billId, note, false,
+              listOf(OwnTransaction("cd".repeat(32), "2026-10-28T19:30:00.000Z"))) == null,
+          "none")
     check("a note that does not read blocks as well",
           pendingSendBlocks(billId, "{not json")?.damaged == true, "damaged")
     val lost = refusal { pendingSendRecords(ben.facts(), billId, ben.entries, "{not json", txid, ben.seed) }
@@ -254,6 +290,25 @@ fun main(args: Array<String>) {
           "${toConfirm.map { it.id }}")
     check("and ben, who paid it, is shown nothing to confirm",
           awaitingMyConfirmation(ben.facts(), billId, ben.entries).isEmpty(), "none")
+    check("ben may not withdraw his record while its transaction is mined",
+          ownPaymentWithdrawalRefusal(paid.from, paid.method, paid.reference, ben.me,
+              TransactionState.MINED) == OwnPaymentWithdrawal.MINED,
+          "${ownPaymentWithdrawalRefusal(paid.from, paid.method, paid.reference, ben.me, TransactionState.MINED)}")
+    check("and may once it expired unmined",
+          ownPaymentWithdrawalRefusal(paid.from, paid.method, paid.reference, ben.me,
+              TransactionState.EXPIRED) == null,
+          "none")
+    check("ana's word on ben's record is not this rule's",
+          ownPaymentWithdrawalRefusal(paid.from, paid.method, paid.reference, ana.me,
+              TransactionState.MINED) == null,
+          "none")
+    val paidPlan = planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me)
+    check("once he has paid, taking ben off is blocked by the payment",
+          paidPlan.blockers.map { it.block } == listOf(RemovalBlock.PAYMENT) &&
+              paidPlan.blockers.single().fromThem,
+          "${paidPlan.blockers.map { it.block }}")
+    check("so the plan ana saw before no longer stands",
+          sameRemovalPlan(unpaid, paidPlan) == RemovalPlanStanding.CHANGED, "changed")
     val confirmScreen = listOf("Ben says he paid you",
                                "${renderAmount(paid.zatoshi!!)} ZEC",
                                "priced at ${rateFigure(paid.paidAtRate!!)} EUR a ZEC",
@@ -382,6 +437,64 @@ fun main(args: Array<String>) {
               18015979L && coinbasePriceRequest("https://api.coinbase.com") ==
               "https://api.coinbase.com/v2/exchange-rates?currency=ZEC",
           "18015979")
+    check("two sources within the tolerance agree on the higher",
+          agreedPrice(138_819L, 138_905L, 200u) == 138_905L, "${agreedPrice(138_819L, 138_905L, 200u)}")
+    check("and two that are not give no price",
+          agreedPrice(138_819L, 152_701L, 200u) == null, "${agreedPrice(138_819L, 152_701L, 200u)}")
+
+    println("a payout a person declares goes first, and replaces its own kind (§9.1)")
+    val swapUsdc = Payout("swap", "0xa", "USDC", null)
+    val ranked = rankedPayouts(Participant("p", "P", "zOld", null, listOf()), swapUsdc)
+    check("a pay-to-only record keeps its ZEC behind the new swap",
+          ranked == listOf(swapUsdc, Payout("zec", "zOld", null, null)), "$ranked")
+    val replaced = rankedPayouts(
+        Participant("p", "P", null, null, listOf(Payout("cash", null, null, null),
+            Payout("zec", "zA", null, null), Payout("swap", "0xb", "USDT", null))),
+        Payout("zec", "zB", null, null))
+    check("a new ZEC payout replaces the old one, the rest keep their order",
+          replaced.map { it.kind } == listOf("zec", "cash", "swap") && replaced.first().address == "zB",
+          "$replaced")
+
+    println("a swap deposit is checked against the bill before it is sent (§15.7)")
+    val onBase = Payout("swap", "0xbenbase", "USDC", "base")
+    val onArb = Payout("swap", "0xbenarb", "USDC", "arb")
+    val taxiCreate = createBillEntry(ana.facts(), "Taxi", "EUR", "equal", anaKey, null, ana.seed)
+    val taxiId = Regex("\"id\":\"([^\"]+)\"").find(taxiCreate)!!.groupValues[1]
+    var taxi = listOf(taxiCreate,
+        joinBillEntry(ana.facts(), taxiId, "Ana", "u1ana", anaKey, listOf(), ana.seed),
+        joinBillEntry(ben.facts(), taxiId, "Ben", null, benKey, listOf(onBase, onArb), ben.seed))
+    taxi = taxi + addExpenseEntry(ben.facts(), taxiId, "t1", ben.me, 8000,
+        """{"type":"equal","among":["${ana.me}","${ben.me}"]}""", null, ben.seed)
+    taxi = taxi + setRateEntry(ana.facts(), taxiId, "EUR", 51234, null, ana.seed)
+    fun quote(recipient: String, chain: String) = SwapQuote("t1deposit", recipient, null, 7_807_316L,
+        "39990000", null, TradableAsset("nep141:$chain-usdc", "USDC", chain, 6),
+        "2026-10-29T23:00:00.000Z", "intent-1")
+    check("a deposit to ben's first payout, for what ana owes, may go",
+          swapSendRefusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000L, null) == null,
+          "none")
+    check("one asked for his second payout may go too",
+          swapSendRefusal(ana.facts(), taxiId, taxi, quote("0xbenarb", "arb"), ben.me, 4000L, onArb) == null,
+          "none")
+    val wrongRecipient = swapSendRefusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"),
+        ben.me, 4000L, onArb)
+    check("one whose recipient is not the payout chosen is refused",
+          wrongRecipient == SwapSendRefusal.RecipientChanged, "$wrongRecipient")
+    check("the payout chosen is found by type, address, asset and chain",
+          declaredPayoutIndex(listOf(onBase, onArb), onArb) == 1u &&
+              declaredPayoutIndex(listOf(onBase, onArb), onArb.copy(chain = null)) == null,
+          "${declaredPayoutIndex(listOf(onBase, onArb), onArb)}")
+    val swapRecord = recordPaymentEntry(ana.facts(), taxiId,
+        PaymentDraft("intent-1", ben.me, 4000L, "swap", "intent-1", 7_807_316L, null, null), ana.seed)
+    val swapRecordId = entryId(swapRecord)
+    taxi = taxi + swapRecord
+    val held = swapSendRefusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000L, null)
+    check("once a payment covers the debt, a second deposit is held for ben to confirm",
+          held == SwapSendRefusal.Held(listOf(ben.me)), "$held")
+    check("a swap that failed names ana's record of it to withdraw",
+          failedSwapWithdrawals(ana.facts(), taxiId, taxi, "intent-1") == listOf(swapRecordId),
+          "${failedSwapWithdrawals(ana.facts(), taxiId, taxi, "intent-1")}")
+    check("and nothing to ben, who did not write it",
+          failedSwapWithdrawals(ben.facts(), taxiId, taxi, "intent-1").isEmpty(), "none")
 
     println(if (failures == 0)
         "CONSUMER RESULT: kotlin drives a whole bill with no callbacks, $failures failures"

@@ -189,10 +189,11 @@ func run(origin: String, downOrigin: String) async throws {
           queried?.transient == false, queried?.detail ?? "nil")
 
     print("ana adds an expense they share, and prices it")
-    try ana.add(try addExpenseEntry(
+    let dinner = try addExpenseEntry(
         facts: ana.facts(), billId: billId, expenseId: "x1", paidBy: ana.me, amount: 9000,
         splitJson: #"{"type":"equal","among":[""# + ana.me + #"",""# + ben.me + #""]}"#,
-        description: "dinner", seed: ana.seed))
+        description: "dinner", seed: ana.seed)
+    try ana.add(dinner)
     try ana.add(try setRateEntry(facts: ana.facts(), billId: billId, currency: "EUR",
                                  minorUnitsPerZec: 300000,
                                  source: "a fixed feed", seed: ana.seed))
@@ -204,6 +205,27 @@ func run(origin: String, downOrigin: String) async throws {
     check("both keys are bound under §10.7",
           folded.identities.bound == [ana.me: anaKey, ben.me: benKey],
           "\(folded.identities.bound.keys)")
+
+    print("ana plans taking ben off the bill (§10.8)")
+    let bothOfThem = #"{"type":"equal","among":[""# + ana.me + #"",""# + ben.me + #""]}"#
+    let onlyAna = #"{"type":"equal","among":[""# + ana.me + #""]}"#
+    let unpaid = try planRemoval(facts: ana.facts(), billId: billId, entries: ana.entries,
+                                 id: ben.me, me: ana.me)
+    check("her expense is offered, split without him, and nothing blocks it",
+          try unpaid.blockers.isEmpty && unpaid.edits.map(\.entryId) == [entryId(dinner)]
+            && unpaid.edits[0].splitJson == onlyAna,
+          "\(unpaid.edits.map(\.splitJson))")
+    let replanned = try planRemoval(facts: ana.facts(), billId: billId, entries: ana.entries,
+                                    id: ben.me, me: ana.me)
+    check("and the plan still stands while the bill has not moved",
+          try sameRemovalPlan(confirmed: unpaid, now: replanned) == .stands, "stands")
+    let without = try splitWithout(splitJson: bothOfThem, id: ben.me)
+    check("a split without him crosses as JSON", without == onlyAna, without ?? "nil")
+    let byHand = #"{"type":"exact","amounts":{""# + ana.me + #"":1,""# + ben.me + #"":1}}"#
+    check("and one only a person can redivide is answered with none",
+          try splitWithout(splitJson: byHand, id: ben.me) == nil, "none")
+    let notSplit = await refusal { _ = try splitWithout(splitJson: "{", id: ben.me) }
+    check("text that is not a split is refused", notSplit != nil, notSplit?.detail ?? "nil")
 
     print("ben owes half of it")
     try ben.take(ana)
@@ -258,6 +280,20 @@ func run(origin: String, downOrigin: String) async throws {
           pendingSendBlocks(billId: billId, note: note)?.txid ?? "nil")
     check("and the next send is still blocked",
           pendingSendBlocks(billId: billId, note: note) != nil, "blocked")
+    check("nobody may say it never left while the wallet is still sending",
+          pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: true, own: [])
+            == .stillSending,
+          "\(String(describing: pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: true, own: [])))")
+    let builtSince = pendingSendUnsentRefusal(
+        billId: billId, note: note!, stillSending: false,
+        own: [OwnTransaction(txid: txid, created: ben.now())])
+    check("nor once the wallet built a transaction after the note was written",
+          builtSince == .builtSince(txid: txid), "\(String(describing: builtSince))")
+    let builtBefore = OwnTransaction(txid: String(repeating: "cd", count: 32),
+                                     created: "2026-10-28T19:30:00.000Z")
+    check("one built before it does not hold the note",
+          pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: false,
+                                   own: [builtBefore]) == nil, "none")
     check("a note that does not read blocks as well",
           pendingSendBlocks(billId: billId, note: "{not json")?.damaged == true, "damaged")
     let lost = await refusal {
@@ -303,6 +339,21 @@ func run(origin: String, downOrigin: String) async throws {
     check("and ben, who paid it, is shown nothing to confirm",
           try awaitingMyConfirmation(facts: ben.facts(), billId: billId, entries: ben.entries).isEmpty,
           "none")
+    func withdrawal(_ me: String, _ state: TransactionState) -> OwnPaymentWithdrawal? {
+        ownPaymentWithdrawalRefusal(from: paid.from, method: paid.method,
+                                    reference: paid.reference, me: me, state: state)
+    }
+    check("ben may not withdraw his record while its transaction is mined",
+          withdrawal(ben.me, .mined) == .mined, "\(String(describing: withdrawal(ben.me, .mined)))")
+    check("and may once it expired unmined", withdrawal(ben.me, .expired) == nil, "none")
+    check("ana's word on ben's record is not this rule's", withdrawal(ana.me, .mined) == nil, "none")
+    let paidPlan = try planRemoval(facts: ana.facts(), billId: billId, entries: ana.entries,
+                                   id: ben.me, me: ana.me)
+    check("once he has paid, taking ben off is blocked by the payment",
+          paidPlan.blockers.map(\.block) == [.payment] && paidPlan.blockers[0].fromThem,
+          "\(paidPlan.blockers.map(\.block))")
+    check("so the plan ana saw before no longer stands",
+          try sameRemovalPlan(confirmed: unpaid, now: paidPlan) == .changed, "changed")
     let confirmScreen = ["Ben says he paid you",
                          "\(try renderAmount(zatoshi: paid.zatoshi!)) ZEC",
                          "priced at \(rateFigure(rate: paid.paidAtRate!)) EUR a ZEC",
@@ -418,6 +469,95 @@ func run(origin: String, downOrigin: String) async throws {
     check("coinbase prices the rest from one answer",
           kes == 18015979 && coinbasePriceRequest(origin: "https://api.coinbase.com")
             == "https://api.coinbase.com/v2/exchange-rates?currency=ZEC", "\(kes ?? -1)")
+    check("two sources within the tolerance agree on the higher",
+          agreedPrice(first: 138_819, second: 138_905, toleranceBp: 200) == 138_905,
+          "\(agreedPrice(first: 138_819, second: 138_905, toleranceBp: 200) ?? -1)")
+    check("and two that are not give no price",
+          agreedPrice(first: 138_819, second: 152_701, toleranceBp: 200) == nil, "none")
+
+    print("a payout a person declares goes first, and replaces its own kind (§9.1)")
+    let swapUsdc = Payout(kind: "swap", address: "0xa", asset: "USDC", chain: nil)
+    let ranked = rankedPayouts(
+        who: Participant(id: "p", name: "P", payTo: "zOld", identityKey: nil, payouts: []),
+        first: swapUsdc)
+    check("a pay-to-only record keeps its ZEC behind the new swap",
+          ranked == [swapUsdc, Payout(kind: "zec", address: "zOld", asset: nil, chain: nil)],
+          "\(ranked)")
+    let declared = [Payout(kind: "cash", address: nil, asset: nil, chain: nil),
+                    Payout(kind: "zec", address: "zA", asset: nil, chain: nil),
+                    Payout(kind: "swap", address: "0xb", asset: "USDT", chain: nil)]
+    let replaced = rankedPayouts(
+        who: Participant(id: "p", name: "P", payTo: nil, identityKey: nil, payouts: declared),
+        first: Payout(kind: "zec", address: "zB", asset: nil, chain: nil))
+    check("a new ZEC payout replaces the old one, the rest keep their order",
+          replaced.map(\.kind) == ["zec", "cash", "swap"] && replaced[0].address == "zB",
+          "\(replaced)")
+
+    print("a swap deposit is checked against the bill before it is sent (§15.7)")
+    let onBase = Payout(kind: "swap", address: "0xbenbase", asset: "USDC", chain: "base")
+    let onArb = Payout(kind: "swap", address: "0xbenarb", asset: "USDC", chain: "arb")
+    let taxiCreate = try createBillEntry(facts: ana.facts(), name: "Taxi", currency: "EUR",
+                                         splitMode: "equal", creatorKey: anaKey, billKey: nil,
+                                         seed: ana.seed)
+    let taxiId = (try JSONSerialization.jsonObject(with: Data(taxiCreate.utf8))
+        as! [String: Any])["id"] as! String
+    var taxi = [
+        taxiCreate,
+        try joinBillEntry(facts: ana.facts(), billId: taxiId, name: "Ana", payTo: "u1ana",
+                          identityKey: anaKey, payouts: [], seed: ana.seed),
+        try joinBillEntry(facts: ben.facts(), billId: taxiId, name: "Ben", payTo: nil,
+                          identityKey: benKey, payouts: [onBase, onArb], seed: ben.seed),
+        try addExpenseEntry(facts: ben.facts(), billId: taxiId, expenseId: "t1", paidBy: ben.me,
+                            amount: 8000, splitJson: bothOfThem, description: nil, seed: ben.seed),
+        try setRateEntry(facts: ana.facts(), billId: taxiId, currency: "EUR",
+                         minorUnitsPerZec: 51234, source: nil, seed: ana.seed),
+    ]
+    func quote(_ recipient: String, _ chain: String) -> SwapQuote {
+        SwapQuote(depositAddress: "t1deposit", recipient: recipient, depositMemo: nil,
+                  amountInZatoshi: 7_807_316, amountOut: "39990000", minAmountOut: nil,
+                  asset: TradableAsset(assetId: "nep141:\(chain)-usdc", symbol: "USDC",
+                                       chain: chain, decimals: 6),
+                  deadline: "2026-10-29T23:00:00.000Z", reference: "intent-1")
+    }
+    func swapRefusal(_ q: SwapQuote, _ chosen: Payout?) throws -> SwapSendRefusal? {
+        try swapSendRefusal(facts: ana.facts(), billId: taxiId, entries: taxi, quote: q,
+                            to: ben.me, amountMinorUnits: 4000, chosen: chosen)
+    }
+    check("a deposit to ben's first payout, for what ana owes, may go",
+          try swapRefusal(quote("0xbenbase", "base"), nil) == nil, "none")
+    check("one asked for his second payout may go too",
+          try swapRefusal(quote("0xbenarb", "arb"), onArb) == nil, "none")
+    let wrongRecipient = try swapRefusal(quote("0xbenbase", "base"), onArb)
+    check("one whose recipient is not the payout chosen is refused",
+          wrongRecipient == .recipientChanged, "\(String(describing: wrongRecipient))")
+    var noChain = onArb
+    noChain.chain = nil
+    check("the payout chosen is found by type, address, asset and chain",
+          declaredPayoutIndex(payouts: [onBase, onArb], payout: onArb) == 1
+            && declaredPayoutIndex(payouts: [onBase, onArb], payout: noChain) == nil,
+          "\(String(describing: declaredPayoutIndex(payouts: [onBase, onArb], payout: onArb)))")
+    let swapRecord = try recordPaymentEntry(
+        facts: ana.facts(), billId: taxiId,
+        payment: PaymentDraft(paymentId: "intent-1", to: ben.me, amount: 4000, method: "swap",
+                              reference: "intent-1", zatoshi: 7_807_316, paidAtRate: nil,
+                              note: nil),
+        seed: ana.seed)
+    taxi.append(swapRecord)
+    let held = try swapRefusal(quote("0xbenbase", "base"), nil)
+    check("once a payment covers the debt, a second deposit is held for ben to confirm",
+          held == .held(paidTo: [ben.me]), "\(String(describing: held))")
+    let failed = try failedSwapWithdrawals(facts: ana.facts(), billId: taxiId, entries: taxi,
+                                           reference: "intent-1")
+    check("a swap that failed names ana's record of it to withdraw",
+          try failed == [entryId(swapRecord)], "\(failed)")
+    check("and nothing to ben, who did not write it",
+          try failedSwapWithdrawals(facts: ben.facts(), billId: taxiId, entries: taxi,
+                                    reference: "intent-1").isEmpty, "none")
+}
+
+/// A signed entry's own id: the top-level one, not its payload's.
+func entryId(_ entry: String) throws -> String {
+    (try JSONSerialization.jsonObject(with: Data(entry.utf8)) as! [String: Any])["id"] as! String
 }
 
 let arguments = CommandLine.arguments

@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use splitz_ffi::{
     add_expense_entry, create_bill_entry, fold_entries, identity_key_from_seed, join_bill_entry,
     plan_removal, same_removal_plan, split_without, void_entry_for, HostFacts, RemovalBlock,
-    SplitzError,
+    RemovalPlanStanding, SplitzError,
 };
 
 struct Device {
@@ -105,7 +105,10 @@ fn the_creator_is_offered_their_expense_and_the_plan_holds_until_written() {
     assert_eq!(first.edits[0].entry_id, id_of(&taxi));
     let split: Value = serde_json::from_str(&first.edits[0].split_json).unwrap();
     assert_eq!(split["among"], json!([ana.me]));
-    assert!(same_removal_plan(first.clone(), plan(&entries)).unwrap());
+    assert_eq!(
+        same_removal_plan(first.clone(), plan(&entries)).unwrap(),
+        RemovalPlanStanding::Stands
+    );
 
     entries.push(
         add_expense_entry(
@@ -131,7 +134,10 @@ fn the_creator_is_offered_their_expense_and_the_plan_holds_until_written() {
     );
     let after = plan(&entries);
     assert!(after.edits.is_empty() && after.blockers.is_empty());
-    assert!(!same_removal_plan(first, after).unwrap());
+    assert_eq!(
+        same_removal_plan(first, after).unwrap(),
+        RemovalPlanStanding::Changed
+    );
 
     let join = id_of(&entries[2]);
     entries.push(void_entry_for(ana.facts(7), bill_id.clone(), join, ana.seed.clone()).unwrap());

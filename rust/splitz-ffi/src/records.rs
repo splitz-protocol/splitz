@@ -615,6 +615,17 @@ pub struct RemovalBlocker {
     pub from_them: bool,
 }
 
+/// Whether a removal plan a person agreed to is still what would be written
+/// (§10.8).
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemovalPlanStanding {
+    /// It writes exactly what was agreed to and is held back by the same
+    /// entries.
+    Stands,
+    /// The bill moved: plan again and ask again before writing anything.
+    Changed,
+}
+
 /// What taking somebody off a bill needs, as one device sees it (§10.8).
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct RemovalPlan {
