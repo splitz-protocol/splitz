@@ -662,9 +662,11 @@ void main(List<String> args) {
   print(
     'a payout a person declares goes first, and replaces its own kind (§9.1)',
   );
-  String listed(List<Payout> payouts) => [
-    for (final p in payouts) '${p.kind}:${p.address}:${p.asset}:${p.chain}',
-  ].join(' ');
+  String listed(List<Payout> payouts) {
+    String one(Payout p) => '${p.kind}:${p.address}:${p.asset}:${p.chain}';
+    return payouts.map(one).join(' ');
+  }
+
   final ranked = rankedPayouts(
     const Participant(
       id: 'p',
