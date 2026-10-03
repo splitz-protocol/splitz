@@ -770,3 +770,133 @@ impl SwapProvider for OneClickSwaps<'_> {
         status_from_response(&body)
     }
 }
+
+/// The most decimals a token states: a provider's figure, held in a `uint8`
+/// by the token standards it reports. A larger one would size the rendering
+/// by whatever the provider answered.
+pub const MAX_TOKEN_DECIMALS: i32 = 255;
+
+/// `base_units` of a token with `decimals` as whole tokens: `39990000` at 6
+/// decimals is `39.99`. Trailing fractional zeros are dropped, so one value
+/// has one rendering. `None` when `base_units` is not decimal digits or
+/// `decimals` is outside 0..=[`MAX_TOKEN_DECIMALS`].
+pub fn format_base_units(base_units: &str, decimals: i32) -> Option<String> {
+    if base_units.is_empty()
+        || !base_units.bytes().all(|b| b.is_ascii_digit())
+        || !(0..=MAX_TOKEN_DECIMALS).contains(&decimals)
+    {
+        return None;
+    }
+    let decimals = decimals as usize;
+    let digits = base_units.trim_start_matches('0');
+    let digits = if digits.is_empty() { "0" } else { digits };
+    if decimals == 0 {
+        return Some(digits.to_owned());
+    }
+    let padded = format!("{digits:0>width$}", width = decimals + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - decimals);
+    let fraction = fraction.trim_end_matches('0');
+    Some(if fraction.is_empty() {
+        whole.to_owned()
+    } else {
+        format!("{whole}.{fraction}")
+    })
+}
+
+/// The `note` a swap's payment record carries (§9.2): the asset and the chain
+/// it is delivered on — which the reference alone does not name once the
+/// payee changes their payout — and, when the quote stated a floor, the least
+/// the recipient is guaranteed, since the record claims the whole debt.
+pub fn swap_record_note(asset_symbol: &str, asset_chain: &str, guaranteed: Option<&str>) -> String {
+    match guaranteed {
+        Some(floor) => format!("at least {floor} {asset_symbol} on {asset_chain}"),
+        None => format!("{asset_symbol} on {asset_chain}"),
+    }
+}
+
+/// What sending a swap's deposit takes: the request handed to the wallet, and
+/// the note stored before the wallet is called (§14.3), which carries the
+/// swap so its record can be written after a restart from the note alone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SwapDeposit {
+    pub uri: String,
+    pub note: crate::pending_sends::PendingSend,
+}
+
+/// The deposit for `quote`, settling `amount_minor_units` of the debt to `to`
+/// on `bill_id` at the bill's `rate`; `at` is the wallet's §9.3 instant.
+///
+/// The request pays the quote's deposit address the quote's zatoshi and
+/// carries no memo, so a quote whose deposit needs one is refused: a deposit
+/// that arrives without the memo its provider requires is lost. Run
+/// [`swap_send_refusal`] first; this builds what that check let through.
+pub fn swap_deposit(
+    bill_id: &str,
+    quote: &SwapQuote,
+    to: &str,
+    amount_minor_units: i64,
+    rate: &splitz_core::ExchangeRate,
+    at: &str,
+) -> Result<SwapDeposit, HostError> {
+    if quote.deposit_memo.as_deref().is_some_and(|m| !m.is_empty()) {
+        return Err(HostError::Swap {
+            message: "this swap's deposit needs a memo a payment request cannot carry".to_owned(),
+            transient: false,
+        });
+    }
+    if amount_minor_units <= 0 {
+        return Err(HostError::Malformed(format!(
+            "a swap settles more than nothing, got {amount_minor_units}"
+        )));
+    }
+    let uri = splitz_core::render_uri(
+        &[splitz_core::Zip321Payment {
+            address: quote.deposit_address.clone(),
+            zatoshi: quote.amount_in_zatoshi,
+            fiat: None,
+            memo: None,
+            label: Some(format!("swap to {}", quote.asset.symbol)),
+            message: None,
+        }],
+        false,
+    )
+    .map_err(|e| HostError::Swap {
+        message: e.message,
+        transient: false,
+    })?;
+    let watch = crate::swap_watch::SwapWatch {
+        bill_id: bill_id.to_owned(),
+        reference: quote.payment_reference().to_owned(),
+        to: to.to_owned(),
+        deposit_address: quote.deposit_address.clone(),
+        deposit_memo: quote.deposit_memo.clone(),
+        asset_symbol: quote.asset.symbol.clone(),
+        asset_chain: quote.asset.chain.clone(),
+    };
+    let note = crate::pending_sends::PendingSend {
+        bill_id: bill_id.to_owned(),
+        uri: uri.clone(),
+        carried: std::collections::BTreeMap::from([(to.to_owned(), amount_minor_units)]),
+        at: at.to_owned(),
+        sent: std::collections::BTreeMap::new(),
+        rate: Some(rate.clone()),
+        swap: Some(watch),
+        zatoshi: Some(quote.amount_in_zatoshi),
+        txid: None,
+    };
+    Ok(SwapDeposit { uri, note })
+}
+
+/// The id `assets` — a provider's own token list — names native ZEC by, the
+/// one a Zcash wallet's deposit is: symbol `ZEC` on chain `zec`, both read
+/// ignoring case. `None` when the list carries none.
+///
+/// Read from the list rather than written down: a provider lists ZEC more
+/// than once (wrapped on other chains too), and quoting the wrong one asks for
+/// a deposit on a chain the wallet cannot send on.
+pub fn zec_asset_in(assets: &[TradableAsset]) -> Option<String> {
+    assets
+        .iter()
+        .find(|a| a.answers("ZEC", "zec"))
+        .map(|a| a.asset_id.clone())
+}

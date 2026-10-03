@@ -84,6 +84,11 @@ pub struct RemovalPlan {
     pub edits: Vec<RemovalEdit>,
     /// What still names them once `edits` are written.
     pub blockers: Vec<RemovalBlocker>,
+    /// Every `joinBill` still stating them, in log order: the entries a
+    /// `voidEntry` must withdraw, all of them, to take them off. Each change
+    /// to how somebody is paid restates their record in another join, and one
+    /// left standing keeps them on the bill.
+    pub joins: Vec<String>,
 }
 
 impl RemovalPlan {
@@ -117,6 +122,7 @@ impl RemovalPlan {
                 .zip(&other.edits)
                 .all(|(a, b)| edit(a) == edit(b))
             && self.blockers == other.blockers
+            && self.joins == other.joins
     }
 }
 
@@ -331,6 +337,7 @@ pub fn plan_removal(
 
     let mut edits = Vec::new();
     let mut blockers = Vec::new();
+    let mut joins = Vec::new();
     let mut read: BTreeSet<&str> = BTreeSet::new();
     for entry in log.iter().map(|e| object(Some(e))) {
         let Some(entry_id) = entry.get("id").and_then(Value::as_str) else {
@@ -413,8 +420,15 @@ pub fn plan_removal(
             Some("confirmPayment") if is(entry, "author", id) => {
                 blockers.push(RemovalBlocker::new(RemovalBlock::Confirmation, entry_id));
             }
+            Some("joinBill") if is(object(entry.get("participant")), "id", id) => {
+                joins.push(entry_id.to_owned());
+            }
             _ => {}
         }
     }
-    RemovalPlan { edits, blockers }
+    RemovalPlan {
+        edits,
+        blockers,
+        joins,
+    }
 }

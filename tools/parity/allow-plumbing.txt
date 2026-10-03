@@ -89,6 +89,18 @@ dart::iso4217_exponents        # `ISO_4217_EXPONENTS`: a Dart top-level constant
 rust::ISO_4217_EXPONENTS       # `iso4217Exponents`.
 dart::max_minor_units_per_zec  # `MAX_MINOR_UNITS_PER_ZEC`, as above.
 rust::MAX_MINOR_UNITS_PER_ZEC  # `maxMinorUnitsPerZec`.
+dart::max_account_index        # `MAX_ACCOUNT_INDEX`, as above.
+rust::MAX_ACCOUNT_INDEX        # `maxAccountIndex`.
+dart::max_token_decimals       # `MAX_TOKEN_DECIMALS`, as above.
+rust::MAX_TOKEN_DECIMALS       # `maxTokenDecimals`.
+dart::max_parse_exponent       # `MAX_PARSE_EXPONENT`, as above.
+rust::MAX_PARSE_EXPONENT       # `maxParseExponent`.
+dart::rate_warning_percent     # `RATE_WARNING_PERCENT`, as above.
+rust::RATE_WARNING_PERCENT     # `rateWarningPercent`.
+dart::BillNaming               # Dart carries `displayNameOf`, `sharedNames` and `shortId` as an extension on `Bill`, which is how a screen reads them; Rust declares `display_name_of`, `shared_names` and `short_id` as functions taking the bill.
+rust::display_name_of          # `BillNaming.displayNameOf`.
+rust::shared_names             # `BillNaming.sharedNames`.
+rust::short_id                 # `BillNaming.shortId`.
 rust::coingecko_price_url      # `CoinGeckoZecPrices.requestFor`: Rust lifts it to the crate so the binding and the client share one spelling.
 dart::binance_zec_symbol       # `BINANCE_ZEC_SYMBOL`: a Rust constant is upper-case, so the mechanical snake case differs.
 rust::BINANCE_ZEC_SYMBOL       # `binanceZecSymbol`.

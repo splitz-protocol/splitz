@@ -20,8 +20,16 @@ status_from_response      -> swap_status_from_response
 fold_verified             -> fold_entries
 fold_unverified           -> fold_entries
 identity_seed_from        -> identity_seed_from_secret
+identity_secret_from_mnemonic -> identity_seed_from_mnemonic
+swap_record_note          -> swap_payment_entry
 is_well_formed_key        -> bill_key_problem
 unsent_claim_refusal      -> pending_send_unsent_refusal
+named_send_refusal        -> pending_send_named_refusal
+display_name_of           -> display_names
+shared_names              # display_names qualifies every name a reader cannot tell apart, which is what a shared name is for
+short_id                  # read inside display_names
+creator_rate_missing      # fold_entries carries creator_id and rate_author, and the test is their comparison
+rate_far_from_live        # rate_percent_off carries the figure, and the 5 a host compares it with is stated beside it
 check_bill_storage        # takes the wallet's storage as a trait object; the binding has no callbacks, and a binding wallet's storage is its own code
 check_secret_store        # the same, over the wallet's keychain
 check_splits_relay        # the same, over the relay client; the relay's answers are checked by relay_push_answer and relay_fetch_answer

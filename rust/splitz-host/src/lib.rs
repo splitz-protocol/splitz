@@ -12,10 +12,12 @@
 //! on two things at once.
 
 pub mod activity;
+pub mod confirm_review;
 pub mod currencies;
 pub mod error;
 pub mod fold;
 pub mod keys;
+pub mod naming;
 pub mod payer_review;
 pub mod payouts;
 pub mod pending_sends;
@@ -36,26 +38,32 @@ pub mod wallet;
 pub mod wallet_bill_host;
 
 pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKind};
-pub use currencies::{currency_exponent, ISO_4217_EXPONENTS};
+pub use confirm_review::{concerns_before_confirming, PaymentConcern};
+pub use currencies::{
+    currency_exponent, parse_amount_in, parse_minor_units, ISO_4217_EXPONENTS, MAX_PARSE_EXPONENT,
+};
 pub use error::{HostError, Result, SyncFailure};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
 pub use keys::{
-    identity_seed_from, is_well_formed_key, Randomness, SplitsKeys, SystemRandomness,
-    IDENTITY_DOMAIN, KEY_LENGTH_BYTES,
+    identity_secret_from_mnemonic, identity_seed_from, is_well_formed_key, Randomness, SplitsKeys,
+    SystemRandomness, IDENTITY_DOMAIN, KEY_LENGTH_BYTES, MAX_ACCOUNT_INDEX,
 };
+pub use naming::{display_name_of, name_skeleton, shared_names, short_id};
 pub use payer_review::{
-    check_payee_review, check_payer_review, rate_figure, ReviewFinding, ReviewRule,
+    check_payee_review, check_payer_review, rate_figure, short_form, ReviewFinding, ReviewRule,
 };
-pub use payouts::ranked_payouts;
+pub use payouts::{payout_fallback, ranked_payouts, PayoutFallback};
 pub use pending_sends::{
-    own_payment_withdrawal_refusal, unsent_claim_refusal, OwnPaymentWithdrawal, OwnTransaction,
-    PendingSend, PendingSends, SendEnded, TransactionState, Unrecordable, UnsentClaimRefusal,
+    named_send_refusal, own_payment_withdrawal_refusal, unsent_claim_refusal, NamedSendRefusal,
+    OwnPaymentWithdrawal, OwnTransaction, PendingSend, PendingSends, SendEnded, TransactionState,
+    Unrecordable, UnsentClaimRefusal,
 };
 pub use pricing::{
-    agreed_price, binance_price_url, coinbase_price_url, coingecko_price_url, price_from_binance,
-    price_from_coinbase, price_from_coingecko, AgreeingZecPrices, BinanceZecPrices,
-    CoinGeckoZecPrices, CoinbaseZecPrices, FirstZecPrices, FixedZecPrices, NoZecPrices,
-    BINANCE_ZEC_SYMBOL, MAX_MINOR_UNITS_PER_ZEC,
+    agreed_price, binance_price_url, coinbase_price_url, coingecko_price_url, creator_rate_missing,
+    price_from_binance, price_from_coinbase, price_from_coingecko, rate_far_from_live,
+    rate_percent_off, AgreeingZecPrices, BinanceZecPrices, CoinGeckoZecPrices, CoinbaseZecPrices,
+    FirstZecPrices, FixedZecPrices, NoZecPrices, BINANCE_ZEC_SYMBOL, MAX_MINOR_UNITS_PER_ZEC,
+    RATE_WARNING_PERCENT,
 };
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use removal_plan::{
@@ -71,14 +79,16 @@ pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
 pub use swap_watch::{SwapWatch, SwapWatchList};
 pub use swaps::{
-    assets_from_tokens, declared_payout_index, failed_swap_withdrawals, quote_from_response,
-    quote_request_body, status_from_response, swap_answer, swap_send_refusal, OneClickSwaps,
-    SwapQuote, SwapSendRefusal, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
+    assets_from_tokens, declared_payout_index, failed_swap_withdrawals, format_base_units,
+    quote_from_response, quote_request_body, status_from_response, swap_answer, swap_deposit,
+    swap_record_note, swap_send_refusal, zec_asset_in, OneClickSwaps, SwapDeposit, SwapQuote,
+    SwapSendRefusal, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps, MAX_TOKEN_DECIMALS,
 };
 pub use sync::{SplitsSync, SyncResult};
 pub use transport::{component_encode, query_encode, HttpTransport};
 pub use wallet::{
-    BillStorage, InMemoryBillStorage, InMemorySecretStore, SecretStore, SplitsRelay, SplitsWallet,
-    SwapProvider, WalletAccount, WalletSendOutcome, WalletSendPhase, WalletSender, ZecPrices,
+    AccountSecretStore, BillStorage, InMemoryBillStorage, InMemorySecretStore, SecretStore,
+    SplitsRelay, SplitsWallet, SwapProvider, WalletAccount, WalletSendOutcome, WalletSendPhase,
+    WalletSender, ZecPrices,
 };
 pub use wallet_bill_host::WalletBillHost;

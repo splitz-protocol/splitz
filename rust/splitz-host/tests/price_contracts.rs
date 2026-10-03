@@ -289,3 +289,22 @@ fn both_markets_are_asked_every_time() {
     agreeing(&a, &b);
     assert_eq!((a.asked.get(), b.asked.get()), (1, 1));
 }
+
+#[test]
+fn a_rate_five_percent_or_more_from_the_live_price_is_warned_about() {
+    use splitz_host::{rate_far_from_live, rate_percent_off};
+    for (rate, live, off) in [
+        (105, 100, 5),
+        (104, 100, 4),
+        (95, 100, -5),
+        (96, 100, -4),
+        (1, 3, -66),
+    ] {
+        assert_eq!(rate_percent_off(rate, live), Some(off), "{rate} {live}");
+    }
+    assert_eq!(rate_percent_off(100, 0), None);
+    assert!(rate_far_from_live(105, 100) && rate_far_from_live(95, 100));
+    assert!(!rate_far_from_live(104, 100) && !rate_far_from_live(96, 100));
+    assert!(!rate_far_from_live(100, 0));
+    assert_eq!(rate_percent_off(i64::MAX, 1), None);
+}

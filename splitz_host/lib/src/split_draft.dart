@@ -77,6 +77,87 @@ class SplitDraft {
   /// in proportion to what they ate (§4.5).
   int extraMinorUnits;
 
+  /// The draft [split] was built from, so an expense can be corrected in the
+  /// form it was written in, or null when [split] is not one this draft can
+  /// hold whole: a type §4 does not define, a figure that is not an integer,
+  /// an id that is not a string, or a member this draft does not carry.
+  ///
+  /// §10.4 replaces an expense wholesale, so a reading that dropped or
+  /// guessed at anything would rewrite the expense when it is saved. What
+  /// this answers becomes [split] again under [toSplit], ids in their sorted
+  /// order.
+  static SplitDraft? fromSplit(Map<String, dynamic> split) {
+    bool only(Set<String> keys) => split.keys.every(keys.contains);
+    Set<String>? ids(Object? raw) {
+      if (raw is! List || raw.any((x) => x is! String)) return null;
+      return {for (final x in raw) x as String};
+    }
+
+    Map<String, int>? weights(Object? raw) {
+      if (raw is! Map || raw.values.any((v) => v is! int)) return null;
+      return {for (final e in raw.entries) '${e.key}': e.value as int};
+    }
+
+    switch (split['type']) {
+      case 'equal':
+        final among = ids(split['among']);
+        if (among == null || !only({'type', 'among'})) return null;
+        return SplitDraft(kind: SplitKind.equal, among: among);
+      case 'exact':
+        final amounts = weights(split['amounts']);
+        if (amounts == null || !only({'type', 'amounts'})) return null;
+        return SplitDraft(kind: SplitKind.exact, amounts: amounts);
+      case 'percentage':
+        final points = weights(split['basisPoints']);
+        if (points == null || !only({'type', 'basisPoints'})) return null;
+        return SplitDraft(kind: SplitKind.percentage, basisPoints: points);
+      case 'shares':
+        final counts = weights(split['shareCounts']);
+        if (counts == null || !only({'type', 'shareCounts'})) return null;
+        return SplitDraft(kind: SplitKind.shares, shareCounts: counts);
+      case 'itemized':
+        final extra = split.containsKey('extraMinorUnits')
+            ? split['extraMinorUnits']
+            : 0;
+        final raw = split['items'];
+        if (extra is! int ||
+            raw is! List ||
+            !only({'type', 'items', 'extraMinorUnits'})) {
+          return null;
+        }
+        final items = <DraftItem>[];
+        for (final item in raw) {
+          if (item is! Map) return null;
+          final description = item.containsKey('description')
+              ? item['description']
+              : '';
+          final minorUnits = item['minorUnits'];
+          final sharedBy = ids(item['sharedBy']);
+          if (description is! String ||
+              minorUnits is! int ||
+              sharedBy == null ||
+              !item.keys.every(
+                {'description', 'minorUnits', 'sharedBy'}.contains,
+              )) {
+            return null;
+          }
+          items.add(
+            DraftItem(
+              description: description,
+              minorUnits: minorUnits,
+              sharedBy: sharedBy,
+            ),
+          );
+        }
+        return SplitDraft(
+          kind: SplitKind.itemized,
+          items: items,
+          extraMinorUnits: extra,
+        );
+    }
+    return null;
+  }
+
   /// The §4 payload this would become.
   ///
   /// Built whatever state the form is in: it is the protocol's job to say a

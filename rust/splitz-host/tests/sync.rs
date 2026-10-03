@@ -490,4 +490,7 @@ fn the_bills_own_create_still_refuses_a_strangers_key() {
         Err(HostError::ForeignKey(id)) => assert_eq!(id, bill_id),
         other => panic!("expected a foreign key, got {other:?}"),
     }
+    // §9.4: the refused key is discarded, so the real invite is not refused as
+    // a conflict with it.
+    assert_eq!(keys.read_bill_key(&bill_id).unwrap(), None);
 }

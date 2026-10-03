@@ -325,6 +325,36 @@ pub fn unsent_claim_refusal(
         })
 }
 
+/// Why a person may not clear a note that names its transaction (§14.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamedSendRefusal {
+    /// The wallet still holds the transaction and may broadcast it.
+    Waiting,
+    /// The wallet shows it went through: it is recorded, not cleared.
+    Mined,
+}
+
+/// Whether `send`'s note may be removed on a person's word that nothing left
+/// the wallet, when the note names the transaction the send built: `state` is
+/// where the wallet's history shows that transaction. `None` when it may go,
+/// and for a note naming no transaction, which [`unsent_claim_refusal`]
+/// decides.
+///
+/// A transaction neither mined nor expired may still be broadcast, and one
+/// mined went through; either way clearing the note lets the debt go out a
+/// second time. Expired, or absent from the history, it can no longer land.
+pub fn named_send_refusal(
+    send: &PendingSend,
+    state: Option<TransactionState>,
+) -> Option<NamedSendRefusal> {
+    send.txid.as_ref()?;
+    match state {
+        Some(TransactionState::Waiting) => Some(NamedSendRefusal::Waiting),
+        Some(TransactionState::Mined) => Some(NamedSendRefusal::Mined),
+        Some(TransactionState::Expired) | None => None,
+    }
+}
+
 /// Where a transaction the wallet holds stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransactionState {

@@ -86,7 +86,7 @@ impl<'a> SplitsSync<'a> {
             return Ok(entries);
         }
         let key = self.require_key(bill_id)?;
-        refuse_foreign_key(bill_id, &key, &entries)?;
+        refuse_foreign_key(self.keys, bill_id, &key, &entries)?;
         let blobs = entries
             .iter()
             .map(|entry| Sealing.seal(entry, &key))
@@ -128,7 +128,7 @@ impl<'a> SplitsSync<'a> {
             }
         }
 
-        refuse_foreign_key(bill_id, &key, &entries)?;
+        refuse_foreign_key(self.keys, bill_id, &key, &entries)?;
 
         // Merged only while this device still holds the bill's key. A bill
         // forgotten while the fetch was in flight is not written back: it
@@ -183,11 +183,23 @@ impl<'a> SplitsSync<'a> {
 /// everything this device writes then reaches nobody else. The bill's own
 /// create names the key it was made with, so a log that disagrees is not
 /// merged and a held log is not sealed under a key that is not its own.
-fn refuse_foreign_key(bill_id: &str, key: &str, entries: &[Value]) -> Result<()> {
+///
+/// The key is then discarded, when it is still the one held (§9.4): it opens
+/// only what its maker sealed for this device, and kept it would refuse the
+/// bill's real invite as a conflict. A key chosen since the sync began stays.
+fn refuse_foreign_key(
+    keys: &SplitsKeys<'_>,
+    bill_id: &str,
+    key: &str,
+    entries: &[Value],
+) -> Result<()> {
     let foreign = entries
         .iter()
         .any(|e| splitz_core::create_refuses_key(e, bill_id, key));
     if foreign {
+        if keys.read_bill_key(bill_id).ok().flatten().as_deref() == Some(key) {
+            keys.forget_bill(bill_id)?;
+        }
         return Err(HostError::ForeignKey(bill_id.to_owned()));
     }
     Ok(())

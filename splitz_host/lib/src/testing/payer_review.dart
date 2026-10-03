@@ -58,6 +58,9 @@ enum ReviewRule {
   /// Every recipient paid by a preference other than their first (§14.8).
   lowerPreference,
 
+  /// Every recipient paid more than the debts the bill records explain (§6).
+  unexplained,
+
   /// The rate the request was priced at, and who set it.
   rate,
 
@@ -110,7 +113,9 @@ String rateFigure(splitz.ExchangeRate rate) {
 /// it. [via] is the payer's choice of payouts the obligation was rendered with
 /// (`obligationVia`), and [lowerWords] the screen's words for a recipient paid
 /// by one other than their first; a choice for somebody the obligation does
-/// not pay needs nothing shown. Findings come in the order of §14.2's list; within a rule, in the order
+/// not pay needs nothing shown. [unexplainedWords] are the screen's words for
+/// a payment carrying more than the debts the bill records explain (§6).
+/// Findings come in the order of §14.2's list; within a rule, in the order
 /// the obligation or the fold gives the facts.
 List<ReviewFinding> checkPayerReview({
   required PayerObligation obligation,
@@ -119,6 +124,7 @@ List<ReviewFinding> checkPayerReview({
   required Map<String, String> reasonWords,
   Map<String, int> via = const {},
   String lowerWords = '',
+  String unexplainedWords = '',
 }) {
   final text = visibleText.join('\n');
   final names = {for (final p in folded.bill.participants) p.id: p.name};
@@ -186,6 +192,23 @@ List<ReviewFinding> checkPayerReview({
       'that $who is paid by a lower preference',
       lowerWords.isEmpty ? 'lower_preference' : lowerWords,
       lowerWords.isNotEmpty && text.contains(lowerWords),
+    );
+  }
+
+  for (final s in obligation.settlements) {
+    if (s.unexplained <= 0) continue;
+    final who = name(s.to);
+    need(
+      ReviewRule.unexplained,
+      'who is paid more than their debts explain',
+      who,
+      text.contains(who),
+    );
+    need(
+      ReviewRule.unexplained,
+      'that part of what $who is paid is unexplained',
+      unexplainedWords.isEmpty ? 'unexplained' : unexplainedWords,
+      unexplainedWords.isNotEmpty && text.contains(unexplainedWords),
     );
   }
 
@@ -309,6 +332,16 @@ bool _showsNumber(String text, String number) {
 
 /// The shortest prefix of an address a screen may show in its place.
 const int _addressPrefixLength = 10;
+
+/// [value] — an address or a reference — as a narrow screen may show it and
+/// these checks still count it as shown (§14.2): whole when it is at most two
+/// characters longer than the shortest prefix allowed, otherwise that prefix
+/// and an ellipsis. Characters are Unicode scalar values (§2.3).
+String shortForm(String value) {
+  final runes = value.runes.toList();
+  if (runes.length <= _addressPrefixLength + 2) return value;
+  return '${String.fromCharCodes(runes.take(_addressPrefixLength))}…';
+}
 
 /// True when [address] occurs in [text] whole, or as a prefix of at least
 /// 10 characters that stops agreeing with it on a

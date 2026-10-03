@@ -123,6 +123,21 @@ class Settled {
 PayerObligation? obligationFor(BillHost host, FoldedBill folded) =>
     obligationVia(host, folded, const {});
 
+/// Whether [reviewed] is still the request [folded] asks of this payer, with
+/// the same payout choices [via] (§14.2).
+///
+/// Read immediately before the wallet is called: an entry merged after the
+/// payer reviewed the request — an expense, a new rate, a changed address —
+/// changes what is owed or where it goes, and the request they saw is no
+/// longer the one the bill asks for. A host sends only while this holds.
+bool requestStands(
+  BillHost host,
+  FoldedBill folded,
+  PayerObligation reviewed, {
+  Map<String, int> via = const {},
+}) =>
+    obligationVia(host, folded, via)?.uri == reviewed.uri;
+
 /// [obligationFor], with the payer's choice of payout for the recipients
 /// [via] names (§14.8).
 ///

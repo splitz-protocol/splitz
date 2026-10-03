@@ -226,10 +226,10 @@ console.log("ben's review screen shows what §14.2 says it must");
 const zec = splitz.render_amount(owed.request.payments[0].zatoshi);
 const screen = [`Pay Ana ${zec} ZEC`, "to u1ana",
                 `at ${splitz.rate_figure(owed.rate)} EUR per ZEC, set by Ana`];
-const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "");
+const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "", "");
 check("a screen showing every fact passes", shown.length === 0, JSON.stringify(screen));
 const noAddress = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed,
-    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "");
+    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "", "");
 check("one without the output's address is told exactly that",
       noAddress.length === 1 && noAddress[0].rule === splitz.ReviewRule.Output &&
         noAddress[0].fact === "the address Ana is paid at" && noAddress[0].expected === "u1ana",
@@ -513,6 +513,121 @@ check("a swap that failed names ana's record of it to withdraw",
       failed.length === 1 && failed[0] === JSON.parse(swapRecord).id, JSON.stringify(failed));
 check("and nothing to ben, who did not write it",
       splitz.failed_swap_withdrawals(ben.facts(), taxiId, taxi, "intent-1").length === 0, "none");
+
+console.log("a swap's deposit and its record come from the binding (§15.7)");
+const refusedHost = (run) => {
+  try {
+    run();
+    return undefined;
+  } catch (e) {
+    if (e instanceof splitz.SplitzErrorHost) return e;
+    throw e;
+  }
+};
+const taxiRate = { currency: "EUR", minor_units_per_zec: 51234, at: "2026-10-28T19:30:00.000Z", source: undefined };
+check("a debt is sized in zatoshi at the bill's rate, rounding up",
+      Number(splitz.fiat_to_zatoshi(4000, taxiRate)) === 7807316, `${splitz.fiat_to_zatoshi(4000, taxiRate)}`);
+const deposit = splitz.swap_deposit(taxiId, quote("0xbenbase", "base"), ben.me, 4000, taxiRate, ana.now());
+check("a deposit is one request to the quote's address for its zatoshi",
+      deposit.uri.startsWith("zcash:t1deposit?amount=0.07807316"), deposit.uri);
+check("and its note carries the swap", deposit.note.includes('"reference":"intent-1"'), deposit.note);
+const needsMemo = refusedHost(() => splitz.swap_deposit(taxiId,
+  { ...quote("0xbenbase", "base"), deposit_memo: "123" }, ben.me, 4000, taxiRate, ana.now()));
+check("one whose deposit needs a memo is refused", needsMemo !== undefined, `${needsMemo?.detail}`);
+const swapEntry = splitz.swap_payment_entry(ana.facts(), taxiId,
+  { ...quote("0xbenbase", "base"), min_amount_out: "39500000" }, ben.me, 4000, taxiRate, ana.seed);
+check("its record names the asset, the chain and the floor",
+      swapEntry.includes('"note":"at least 39.5 USDC on base"'), swapEntry);
+check("base units read as whole tokens",
+      splitz.format_base_units("39990000", 6) === "39.99" && splitz.format_base_units("x", 6) === undefined,
+      `${splitz.format_base_units("39990000", 6)}`);
+
+console.log("what every wallet derives, reads and asks before writing");
+const mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const derived = splitz.identity_seed_from_mnemonic(mnemonic, "", 1);
+check("a mnemonic derives the seed every wallet derives (§15.1)",
+      derived === "jWQijb3QECEvHgOUb4_W7UPiUujN7D-7Nq0jYg5mrKo", derived);
+const noMnemonic = refusedHost(() => splitz.identity_seed_from_mnemonic("", "", 0));
+check("an empty mnemonic is refused", noMnemonic !== undefined, `${noMnemonic?.detail}`);
+const digest = "00".repeat(31) + "ab";
+check("a txid in digest order is reversed (§14.7)",
+      splitz.txid_in_send_order(digest) === "ab" + "00".repeat(31) && splitz.txid_in_send_order("abc") === undefined,
+      `${splitz.txid_in_send_order(digest)}`);
+check("a typed figure is read in integers (§2.1)",
+      Number(splitz.parse_amount_in("12.34", "EUR")) === 1234 &&
+        splitz.parse_amount_in("1,000", "KWD") === undefined &&
+        Number(splitz.parse_minor_units("12.5", 2)) === 1250,
+      `${splitz.parse_amount_in("12.34", "EUR")}`);
+const gold = refusedHost(() =>
+  splitz.create_bill_entry(ana.facts(), "Gold", "XAU", "equal", anaKey, undefined, ana.seed));
+check("no bill is opened in a currency with no minor unit", gold !== undefined, `${gold?.detail}`);
+const named = splitz.pending_send_after(billId, splitz.pending_send_note(billId, owed, ben.now()),
+  splitz.SendEnded.Unresolved, "ab".repeat(32), false);
+check("a note naming its transaction is not cleared while the wallet may still send it",
+      splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Waiting) ===
+        splitz.NamedSendRefusal.Waiting,
+      `${splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Waiting)}`);
+check("nor once it went through, and may be once it expired",
+      splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Mined) ===
+          splitz.NamedSendRefusal.Mined &&
+        splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Expired) === undefined,
+      `${splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Expired)}`);
+const taxiFolded = splitz.fold_entries(ana.facts(), taxiId, taxi);
+check("the creator is the one the fold names", taxiFolded.creator_id === ana.me, taxiFolded.creator_id);
+const benOff = splitz.plan_removal(ana.facts(), taxiId, taxi, ben.me, ana.me);
+check("taking ben off lists his join to withdraw", benOff.joins.length === 1, JSON.stringify(benOff.joins));
+const off = splitz.void_entry_for(ana.facts(), taxiId, benOff.joins[0], ana.seed);
+check("which is refused before it is written while the bill names him",
+      splitz.entry_refusal(ana.facts(), taxiId, taxi, off) === "participant_still_named",
+      `${splitz.entry_refusal(ana.facts(), taxiId, taxi, off)}`);
+const own = splitz.void_entry_for(ana.facts(), taxiId, JSON.parse(swapRecord).id, ana.seed);
+check("and ana withdrawing her own record is not",
+      splitz.entry_refusal(ana.facts(), taxiId, taxi, own) === undefined, "none");
+
+console.log("and the rest of what every wallet needs from the protocol");
+const fallback = splitz.payout_fallback(["not on base", undefined]);
+check("a first payout this wallet cannot pay is passed over for the next it can (§14.8)",
+      fallback?.index === 1 && fallback?.passed_over === "not on base" &&
+        splitz.payout_fallback([undefined, "x"]) === undefined,
+      JSON.stringify(fallback));
+const wrapped = { asset_id: "nep141:near-zec", symbol: "ZEC", chain: "near", decimals: 8 };
+check("native ZEC is the one on its own chain",
+      splitz.zec_asset_in([wrapped, { asset_id: "nep141:zec.omft.near", symbol: "ZEC", chain: "zec", decimals: 8 }]) ===
+          "nep141:zec.omft.near" && splitz.zec_asset_in([wrapped]) === undefined,
+      "nep141:zec.omft.near");
+check("a rate 5% from the live price is told by how much",
+      Number(splitz.rate_percent_off(105, 100)) === 5 && splitz.rate_percent_off(1, 0) === undefined,
+      `${splitz.rate_percent_off(105, 100)}`);
+check("names a reader cannot tell apart fold alike",
+      splitz.name_skeleton("\u0410na") === splitz.name_skeleton("ana"), splitz.name_skeleton("\u0410na"));
+const names = splitz.display_names(ana.facts(), taxiId, taxi);
+const nameIds = names instanceof Map ? [...names.keys()] : Object.keys(names);
+check("every participant has a display name",
+      nameIds.length === 2 && nameIds.includes(ana.me) && nameIds.includes(ben.me), JSON.stringify(nameIds));
+const corrected = splitz.amend_expense_entry(ben.facts(), taxiId, taxi, `${ben.me}:t1`, undefined, 9000,
+  undefined, "taxi home", ben.seed);
+check("an expense is corrected from what the bill applies now",
+      splitz.entry_refusal(ben.facts(), taxiId, taxi, corrected) === undefined, "none");
+let unknownExpense;
+try {
+  splitz.amend_expense_entry(ben.facts(), taxiId, taxi, `${ben.me}:t9`, undefined, 1, undefined, undefined, ben.seed);
+} catch (e) {
+  unknownExpense = e.code ?? String(e);
+}
+check("and one the bill does not apply is refused", `${unknownExpense}`.includes("unknown_entry"),
+      `${unknownExpense}`);
+const concerns = splitz.concerns_before_confirming(ben.facts(), taxiId, taxi, `${ana.me}:intent-1`, undefined);
+check("ana paying by a rate she set is a concern before ben confirms it",
+      concerns.length === 1 && concerns[0] === splitz.PaymentConcern.RateSetByPayer, JSON.stringify(concerns));
+const toAna = splitz.record_payment_entry(ben.facts(), taxiId, {
+  payment_id: "p-memo", to: ana.me, amount: 1000, method: "shieldedZec", reference: "ab".repeat(32),
+  zatoshi: 2000000, paid_at_rate: undefined, note: undefined,
+}, ben.seed);
+const memos = splitz.memo_txids(ana.facts(), [{ bill_id: taxiId, entries: [...taxi, toAna] }]);
+check("memos are read for the transactions a record to this device names",
+      memos.length === 1 && memos[0] === "ab".repeat(32) &&
+        splitz.memo_txids(ana.facts(), [{ bill_id: taxiId, entries: taxi }]).length === 0,
+      JSON.stringify(memos));
 
 console.log(failures === 0
   ? `CONSUMER RESULT: javascript drives a whole bill with no callbacks, ${failures} failures`

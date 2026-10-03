@@ -166,6 +166,53 @@ pub fn identity_seed_from(secret: &[u8]) -> Vec<u8> {
     sha256(&message).to_vec()
 }
 
+/// The highest ZIP 32 account index: account indices are below 2^31.
+pub const MAX_ACCOUNT_INDEX: u32 = 0x7fff_ffff;
+
+/// The identity secret of a BIP39 wallet account (§15.1): the mnemonic and
+/// the passphrase, UTF-8, joined by a zero byte, and for any ZIP 32 account
+/// but account 0, a zero byte and `account_index` as four big-endian bytes.
+///
+/// The passphrase is part of it because it selects another wallet from one
+/// mnemonic; the account index because two accounts of one mnemonic are two
+/// people to a bill. Neither text may hold a zero byte, so no two inputs join
+/// to the same bytes. Every wallet derives the same bytes, so one person
+/// is one participant whichever wallet they restore into.
+///
+/// Refuses an empty mnemonic, whose identity anyone could derive, either text
+/// holding a zero byte, and an account index above [`MAX_ACCOUNT_INDEX`].
+pub fn identity_secret_from_mnemonic(
+    mnemonic: &str,
+    passphrase: &str,
+    account_index: u32,
+) -> Result<Vec<u8>> {
+    if mnemonic.is_empty() {
+        return Err(HostError::Malformed(
+            "an empty mnemonic derives an identity anyone can compute".to_owned(),
+        ));
+    }
+    // The zero byte is the separator: one inside either text would let two
+    // different inputs join to one secret, and so one identity.
+    if mnemonic.contains('\0') || passphrase.contains('\0') {
+        return Err(HostError::Malformed(
+            "a mnemonic or passphrase holding a zero byte is not one a wallet derives".to_owned(),
+        ));
+    }
+    if account_index > MAX_ACCOUNT_INDEX {
+        return Err(HostError::Malformed(format!(
+            "account index {account_index} is above the ZIP 32 maximum {MAX_ACCOUNT_INDEX}"
+        )));
+    }
+    let mut secret = mnemonic.as_bytes().to_vec();
+    secret.push(0);
+    secret.extend_from_slice(passphrase.as_bytes());
+    if account_index != 0 {
+        secret.push(0);
+        secret.extend_from_slice(&account_index.to_be_bytes());
+    }
+    Ok(secret)
+}
+
 /// Whether `key` is one the cipher can actually use: base64url, padded or not,
 /// decoding to exactly [`KEY_LENGTH_BYTES`] bytes.
 pub fn is_well_formed_key(key: &str) -> bool {

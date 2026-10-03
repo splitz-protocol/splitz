@@ -559,3 +559,38 @@ fn the_protocol_refuses_the_removal_the_plan_says_is_held_back() {
     assert_eq!(aside.len(), 1);
     assert_eq!(aside[0].code, code::PARTICIPANT_STILL_NAMED);
 }
+
+#[test]
+fn every_join_still_stating_them_is_listed_and_one_left_keeps_them_on() {
+    let (mut b, _) = taxi();
+    b.join("dee");
+    let first = b.joins["dee"].clone();
+    // Changing how Dee is paid restates her record in a second join.
+    b.join("dee");
+    let second = b.joins["dee"].clone();
+    assert_ne!(first, second);
+
+    let plan = b.plan("dee", "ana");
+    assert!(!plan.names_them());
+    assert_eq!(plan.joins, vec![first.clone(), second.clone()]);
+
+    // One withdrawn, one standing: she is still on the bill, and the plan now
+    // lists only the one left.
+    b.withdraw("ana", &first);
+    assert!(b.fold().bill.participants.iter().any(|p| p.id == "dee"));
+    assert_eq!(b.plan("dee", "ana").joins, vec![second.clone()]);
+
+    b.withdraw("ana", &second);
+    assert!(b.fold().bill.participants.iter().all(|p| p.id != "dee"));
+    assert!(b.plan("dee", "ana").joins.is_empty());
+}
+
+#[test]
+fn a_plan_whose_joins_changed_no_longer_stands() {
+    let (mut b, _) = taxi();
+    b.join("dee");
+    let before = b.plan("dee", "ana");
+    b.join("dee");
+    assert!(!before.same_as(&b.plan("dee", "ana")));
+    assert!(b.plan("dee", "ana").same_as(&b.plan("dee", "ana")));
+}

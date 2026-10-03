@@ -26,8 +26,29 @@ pub fn txid_key(txid: &str) -> String {
         .to_ascii_lowercase()
 }
 
+/// `digest_order_hex` — a 32-byte transaction id hex-encoded in the order its
+/// digest is computed in, as a wallet's own store commonly keeps it — in the
+/// order a send reports it and a block explorer shows it, which §14.7 compares
+/// (bytes reversed, lower case). `None` when it is not 64 hex digits.
+pub fn txid_in_send_order(digest_order_hex: &str) -> Option<String> {
+    let hex = txid_key(digest_order_hex);
+    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(
+        hex.as_bytes()
+            .chunks(2)
+            .rev()
+            .map(|pair| std::str::from_utf8(pair).unwrap_or_default())
+            .collect(),
+    )
+}
+
 /// Money this wallet received in one transaction: the sum of that
 /// transaction's outputs to this account, in zatoshi.
+///
+/// Only a transaction mined in a block and not expired is received (§14.7),
+/// and `txid` is in the order a send reports it: see [`txid_in_send_order`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IncomingTransaction {
     pub txid: String,
@@ -80,10 +101,30 @@ pub struct Arrivals {
     pub unbound: Vec<Arrival>,
 }
 
+impl Arrivals {
+    /// The proposal covering the payment `payment_id` on `bill_id`, or `None`.
+    ///
+    /// A payee MUST NOT withdraw a record this answers for (§14.7): its
+    /// transaction reached this wallet carrying what the record states, and
+    /// withdrawing it asks the payer to pay a debt a second time.
+    pub fn covering(&self, bill_id: &str, payment_id: &str) -> Option<&Arrival> {
+        self.arrived
+            .iter()
+            .find(|a| a.bill_id == bill_id && a.payment.id == payment_id)
+    }
+}
+
 /// Whether `zatoshi`, at the bill's `rate`, is worth at least 95% of what
 /// `payment` settles (§14.7): `zatoshi × rate × 100 ≥ amount × 95 × 10^8`,
 /// compared exactly. No rate in the payment's currency vouches for nothing.
-fn pays_for(zatoshi: i64, payment: &PaymentRecord, rate: Option<&ExchangeRate>) -> bool {
+///
+/// The test [`arrivals_for`] applies, for a screen asking it of any record: a
+/// worth rounded for display first answers differently near 95%.
+pub fn zatoshi_covers_payment(
+    zatoshi: i64,
+    payment: &PaymentRecord,
+    rate: Option<&ExchangeRate>,
+) -> bool {
     let Some(rate) = rate.filter(|r| r.currency == payment.currency) else {
         return false;
     };
@@ -116,6 +157,25 @@ enum Payer<'a> {
     Bound(&'a str),
     /// An unbound payer: the bill, and their id on it.
     Unbound(&'a str, &'a str),
+}
+
+/// The transactions [`arrivals_for`] reads memos for: every one a record on
+/// `bills` names that is to `me`, is `shieldedZec`, and is not confirmed —
+/// each id as [`txid_key`] compares it. Reading a memo is a read per
+/// transaction, so a wallet reads these and no others.
+pub fn memo_txids(bills: &[FoldedBill], me: &str) -> BTreeSet<String> {
+    bills
+        .iter()
+        .flat_map(|folded| {
+            folded.bill.payments.iter().filter_map(move |p| {
+                let reference = p.reference.as_deref()?;
+                (p.to == me
+                    && p.method == "shieldedZec"
+                    && !folded.bill.confirmed_payments.contains(&p.id))
+                .then(|| txid_key(reference))
+            })
+        })
+        .collect()
 }
 
 /// Matches unconfirmed ZEC payment records to `me` against the transactions
@@ -228,7 +288,9 @@ pub fn arrivals_for(bills: &[FoldedBill], me: &str, received: &[IncomingTransact
         let available = left[&a.txid];
         match a.payment.zatoshi {
             None => out.unstated.push(a),
-            Some(stated) if !pays_for(stated, &a.payment, rates[a.bill_id.as_str()]) => {
+            Some(stated)
+                if !zatoshi_covers_payment(stated, &a.payment, rates[a.bill_id.as_str()]) =>
+            {
                 out.underpriced.push(a)
             }
             Some(stated) if stated <= available => {

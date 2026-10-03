@@ -140,11 +140,19 @@ fn screen() -> Vec<String> {
 
 fn found(shown: &[String], reasons: &BTreeMap<String, String>) -> Vec<(ReviewRule, String)> {
     let (obligation, folded) = bill();
-    check_payer_review(&obligation, &folded, shown, reasons, &BTreeMap::new(), "")
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.rule, f.expected))
-        .collect()
+    check_payer_review(
+        &obligation,
+        &folded,
+        shown,
+        reasons,
+        &BTreeMap::new(),
+        "",
+        "",
+    )
+    .unwrap()
+    .into_iter()
+    .map(|f| (f.rule, f.expected))
+    .collect()
 }
 
 #[test]
@@ -261,7 +269,7 @@ fn lower_found(
     words: &str,
 ) -> Vec<(ReviewRule, String)> {
     let (obligation, folded) = bill_via(via);
-    check_payer_review(&obligation, &folded, shown, &reasons(), checked, words)
+    check_payer_review(&obligation, &folded, shown, &reasons(), checked, words, "")
         .unwrap()
         .into_iter()
         .map(|f| (f.rule, f.expected))
@@ -464,4 +472,70 @@ fn a_reference_prefix_counts_characters_not_bytes() {
         ),
         [(ReviewRule::PayeeReference, emoji_ref.clone())]
     );
+}
+
+#[test]
+fn a_payment_the_bill_does_not_explain_names_who_and_says_so() {
+    // §6's fabricated refund: Ben writes a refund of Ana's dinner onto
+    // himself, so he owes her 100.00 where the bill's debts explain 50.00.
+    let minute = Cell::new(0);
+    let host = |me: &'static str| Host {
+        me,
+        minute: &minute,
+        counter: Cell::new(me.as_bytes()[0]),
+    };
+    let (ana, ben) = (host("ana"), host("ben"));
+    let key = base64url_no_pad(&(0..CREATOR_KEY_BYTES as u8).collect::<Vec<u8>>());
+    let both = json!({"type": "equal", "among": ["ana", "ben"]});
+    let entries = vec![
+        create_bill(&ana, "Dinner", "EUR", "equal", &key, None).unwrap(),
+        join_bill(&ana, Some("Ana"), Some("u1ana0000000000000"), None, None).unwrap(),
+        join_bill(&ben, Some("Ben"), Some(BEN), None, None).unwrap(),
+        add_expense(&ana, "e1", "ana", 10_000, both.clone(), None).unwrap(),
+        add_expense(&ben, "e2", "ben", -10_000, both, None).unwrap(),
+        set_rate(&ana, "EUR", 51_234, None).unwrap(),
+    ];
+    let mut log = BillLog::new(&ana);
+    log.add(entries).unwrap();
+    let folded = log.fold().unwrap();
+    let owed = obligation_via(&ben, &folded, &BTreeMap::new())
+        .unwrap()
+        .unwrap();
+    assert_eq!(owed.settlements[0].unexplained(), 5000);
+
+    let words = "more than the bill explains";
+    let unexplained = |shown: &[&str], words: &str| -> Vec<String> {
+        let shown: Vec<String> = shown.iter().map(|s| s.to_string()).collect();
+        check_payer_review(
+            &owed,
+            &folded,
+            &shown,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            "",
+            words,
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.rule == ReviewRule::Unexplained)
+        .map(|f| f.expected)
+        .collect()
+    };
+    assert!(unexplained(&["Ana", words], words).is_empty());
+    assert_eq!(unexplained(&["Ana"], words), vec![words.to_owned()]);
+    assert_eq!(unexplained(&[words], words), vec!["Ana".to_owned()]);
+    assert_eq!(unexplained(&["Ana"], ""), vec!["unexplained".to_owned()]);
+}
+
+#[test]
+fn a_short_form_is_whole_or_ten_characters_and_an_ellipsis() {
+    use splitz_host::short_form;
+    assert_eq!(short_form("ab"), "ab");
+    assert_eq!(short_form("123456789012"), "123456789012");
+    assert_eq!(short_form("1234567890123"), "1234567890…");
+    assert_eq!(
+        short_form(&"😀".repeat(13)),
+        format!("{}…", "😀".repeat(10))
+    );
+    assert_eq!(short_form(BEN), format!("{}…", &BEN[..10]));
 }

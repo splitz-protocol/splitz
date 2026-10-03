@@ -91,13 +91,23 @@ class RemovalBlocker {
 
 /// What taking somebody off a bill needs, as one device sees it.
 class RemovalPlan {
-  const RemovalPlan({required this.edits, required this.blockers});
+  const RemovalPlan({
+    required this.edits,
+    required this.blockers,
+    this.joins = const [],
+  });
 
   /// Expenses this device can take them out of.
   final List<RemovalEdit> edits;
 
   /// What still names them once [edits] are written.
   final List<RemovalBlocker> blockers;
+
+  /// Every `joinBill` still stating them, in log order: the entries a
+  /// `voidEntry` must withdraw, all of them, to take them off. Each change to
+  /// how somebody is paid restates their record in another join, and one left
+  /// standing keeps them on the bill.
+  final List<String> joins;
 
   /// Whether any entry still in force names them.
   bool get namesThem => edits.isNotEmpty || blockers.isNotEmpty;
@@ -123,6 +133,7 @@ class RemovalPlan {
       for (final b in plan.blockers)
         [b.block.name, b.entryId, b.description, b.author, b.fromThem],
     ],
+    'joins': plan.joins,
   });
 }
 
@@ -257,6 +268,7 @@ RemovalPlan planRemoval({
 
   final edits = <RemovalEdit>[];
   final blockers = <RemovalBlocker>[];
+  final joins = <String>[];
   final read = <Object?>{};
   for (final entry in log) {
     final entryId = entry['id'];
@@ -338,7 +350,9 @@ RemovalPlan planRemoval({
             RemovalBlocker(RemovalBlock.confirmation, entryId: entryId),
           );
         }
+      case 'joinBill':
+        if (_map(entry['participant'])['id'] == id) joins.add(entryId);
     }
   }
-  return RemovalPlan(edits: edits, blockers: blockers);
+  return RemovalPlan(edits: edits, blockers: blockers, joins: joins);
 }

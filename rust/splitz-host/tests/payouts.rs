@@ -154,3 +154,19 @@ fn the_input_is_not_modified() {
     ranked_payouts(&p, &zec("zB"));
     assert_eq!(p, before);
 }
+
+#[test]
+fn a_first_payout_this_wallet_cannot_pay_is_passed_over_for_the_next_it_can() {
+    use splitz_host::payout_fallback;
+    let no = |why: &str| Some(why.to_owned());
+    // The first is payable: nothing is passed over.
+    assert_eq!(payout_fallback(&[None, no("x")]), None);
+    // The next payable one, in their order, and why the first was passed.
+    let next = payout_fallback(&[no("not on base"), None]).unwrap();
+    assert_eq!((next.index, next.passed_over.as_str()), (1, "not on base"));
+    assert_eq!(payout_fallback(&[no("a"), no("b"), None]).unwrap().index, 2);
+    // None payable, nothing declared, or only the first: no fallback.
+    assert_eq!(payout_fallback(&[no("a"), no("b")]), None);
+    assert_eq!(payout_fallback(&[]), None);
+    assert_eq!(payout_fallback(&[no("a")]), None);
+}

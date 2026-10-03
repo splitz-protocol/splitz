@@ -11,6 +11,7 @@ import 'support/fake_wallet.dart';
 
 const benOld = 'u1benold0000000000000000';
 const ben = 'u1ben1111111111111111111';
+const ben1 = ben;
 const dan = 'u1dan3333333333333333333';
 const eve = 'u1eve4444444444444444444';
 const eveLater = 'u1eve5555555555555555555';
@@ -389,5 +390,84 @@ void main() {
     test('a cash record needs nothing shown', () {
       expect(payee(record('cash'), const []), isEmpty);
     });
+  });
+
+  test('a payment the bill does not explain names who, and says so', () {
+    // §6's fabricated refund: Ben writes a refund of Ana's dinner onto
+    // himself, so he owes her 100.00 where the bill's debts explain 50.00.
+    final ana = FakeHost(me: 'ana');
+    final ben = FakeHost(me: 'ben');
+    final entries = [
+      splitz.createBill(
+        host: ana,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: fakeKey('ana'),
+      ),
+      splitz.joinBill(host: ana, name: 'Ana', payTo: 'u1ana0000000000000'),
+      splitz.joinBill(host: ben, name: 'Ben', payTo: ben1),
+      splitz.addExpense(
+        host: ana,
+        expenseId: 'e1',
+        paidBy: 'ana',
+        amount: 10000,
+        split: {
+          'type': 'equal',
+          'among': ['ana', 'ben'],
+        },
+      ),
+      splitz.addExpense(
+        host: ben,
+        expenseId: 'e2',
+        paidBy: 'ben',
+        amount: -10000,
+        split: {
+          'type': 'equal',
+          'among': ['ana', 'ben'],
+        },
+      ),
+      splitz.setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234),
+    ];
+    final folded = (splitz.BillLog(ana)..add(entries)).fold();
+    final owed = splitz.obligationFor(ben, folded)!;
+    expect(owed.settlements.single.unexplained, 5000);
+
+    List<(ReviewRule, String)> unexplained(List<String> shown, String words) =>
+        [
+          for (final f in checkPayerReview(
+            obligation: owed,
+            folded: folded,
+            visibleText: shown,
+            reasonWords: const {},
+            unexplainedWords: words,
+          ))
+            if (f.rule == ReviewRule.unexplained) (f.rule, f.expected),
+        ];
+    const words = 'more than the bill explains';
+    expect(unexplained(['Ana', words], words), isEmpty);
+    expect(unexplained(['Ana'], words), [(ReviewRule.unexplained, words)]);
+    expect(unexplained([words], words), [(ReviewRule.unexplained, 'Ana')]);
+    expect(unexplained(['Ana'], ''), [(ReviewRule.unexplained, 'unexplained')]);
+  });
+
+  test('a short form is one the check counts as shown', () {
+    expect(shortForm('ab'), 'ab');
+    expect(shortForm('123456789012'), '123456789012');
+    expect(shortForm('1234567890123'), '1234567890…');
+    expect(shortForm('😀' * 13), '${'😀' * 10}…');
+    // The review screen drew Ben's address short, and nothing is missing.
+    final b = bill();
+    final shown = [
+      for (final line in screen) line == 'u1ben11111…' ? shortForm(ben) : line,
+    ];
+    expect(
+      checkPayerReview(
+        obligation: b.obligation,
+        folded: b.folded,
+        visibleText: shown,
+        reasonWords: reasons,
+      ),
+      isEmpty,
+    );
   });
 }

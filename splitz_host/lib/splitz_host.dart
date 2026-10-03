@@ -17,9 +17,11 @@
 /// and two wallets should not have to agree about them to agree about money.
 library;
 
+export 'src/confirm_review.dart';
 export 'src/currencies.dart';
 export 'src/fold.dart';
 export 'src/keys.dart';
+export 'src/naming.dart';
 export 'src/payouts.dart';
 export 'src/pending_sends.dart';
 export 'src/pricing.dart';

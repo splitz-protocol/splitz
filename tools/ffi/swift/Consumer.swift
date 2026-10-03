@@ -246,12 +246,12 @@ func run(origin: String, downOrigin: String) async throws {
                   "at \(rateFigure(rate: owed!.rate)) EUR per ZEC, set by Ana"]
     let shown = try checkPayerReview(facts: ben.facts(), billId: billId, entries: ben.entries,
                                      obligation: owed!, visibleText: screen, reasonWords: [:],
-                                     via: [:], lowerWords: "")
+                                     via: [:], lowerWords: "", unexplainedWords: "")
     check("a screen showing every fact passes", shown.isEmpty, "\(screen)")
     let noAddress = try checkPayerReview(
         facts: ben.facts(), billId: billId, entries: ben.entries, obligation: owed!,
         visibleText: screen.map { $0 == "to u1ana" ? "to your contact" : $0 }, reasonWords: [:],
-        via: [:], lowerWords: "")
+        via: [:], lowerWords: "", unexplainedWords: "")
     check("one without the output's address is told exactly that",
           noAddress == [ReviewFinding(rule: .output, fact: "the address Ana is paid at",
                                       expected: "u1ana")],
@@ -280,6 +280,13 @@ func run(origin: String, downOrigin: String) async throws {
           pendingSendBlocks(billId: billId, note: note)?.txid ?? "nil")
     check("and the next send is still blocked",
           pendingSendBlocks(billId: billId, note: note) != nil, "blocked")
+    check("a note naming its transaction is not cleared while the wallet may still send it",
+          pendingSendNamedRefusal(billId: billId, note: note!, state: .waiting) == .waiting,
+          "\(String(describing: pendingSendNamedRefusal(billId: billId, note: note!, state: .waiting)))")
+    check("nor once it went through, and may be once it expired",
+          pendingSendNamedRefusal(billId: billId, note: note!, state: .mined) == .mined
+            && pendingSendNamedRefusal(billId: billId, note: note!, state: .expired) == nil,
+          "\(String(describing: pendingSendNamedRefusal(billId: billId, note: note!, state: .expired)))")
     check("nobody may say it never left while the wallet is still sending",
           pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: true, own: [])
             == .stillSending,
@@ -553,6 +560,125 @@ func run(origin: String, downOrigin: String) async throws {
     check("and nothing to ben, who did not write it",
           try failedSwapWithdrawals(facts: ben.facts(), billId: taxiId, entries: taxi,
                                     reference: "intent-1").isEmpty, "none")
+
+    print("a swap's deposit and its record come from the binding (§15.7)")
+    let taxiRate = ExchangeRate(currency: "EUR", minorUnitsPerZec: 51234,
+                           at: "2026-10-28T19:30:00.000Z", source: nil)
+    check("a debt is sized in zatoshi at the bill's rate, rounding up",
+          try fiatToZatoshi(amountMinorUnits: 4000, rate: taxiRate) == 7_807_316,
+          "\(try fiatToZatoshi(amountMinorUnits: 4000, rate: taxiRate))")
+    let deposit = try swapDeposit(billId: taxiId, quote: quote("0xbenbase", "base"), to: ben.me,
+                                  amountMinorUnits: 4000, rate: taxiRate, at: ana.now())
+    check("a deposit is one request to the quote's address for its zatoshi",
+          deposit.uri.hasPrefix("zcash:t1deposit?amount=0.07807316"), deposit.uri)
+    check("and its note carries the swap",
+          deposit.note.contains(#""reference":"intent-1""#), deposit.note)
+    var withMemo = quote("0xbenbase", "base")
+    withMemo.depositMemo = "123"
+    let needsMemo = await refusal {
+        _ = try swapDeposit(billId: taxiId, quote: withMemo, to: ben.me, amountMinorUnits: 4000,
+                            rate: taxiRate, at: ana.now())
+    }
+    check("one whose deposit needs a memo is refused", needsMemo != nil, needsMemo?.detail ?? "nil")
+    var withFloor = quote("0xbenbase", "base")
+    withFloor.minAmountOut = "39500000"
+    let swapEntry = try swapPaymentEntry(facts: ana.facts(), billId: taxiId, quote: withFloor,
+                                         to: ben.me, amountMinorUnits: 4000, rate: taxiRate,
+                                         seed: ana.seed)
+    check("its record names the asset, the chain and the floor",
+          swapEntry.contains(#""note":"at least 39.5 USDC on base""#), swapEntry)
+    check("base units read as whole tokens",
+          formatBaseUnits(baseUnits: "39990000", decimals: 6) == "39.99"
+            && formatBaseUnits(baseUnits: "x", decimals: 6) == nil, "39.99")
+
+    print("what every wallet derives, reads and asks before writing")
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    let derived = try identitySeedFromMnemonic(mnemonic: mnemonic, passphrase: "", accountIndex: 1)
+    check("a mnemonic derives the seed every wallet derives (§15.1)",
+          derived == "jWQijb3QECEvHgOUb4_W7UPiUujN7D-7Nq0jYg5mrKo", derived)
+    let noMnemonic = await refusal {
+        _ = try identitySeedFromMnemonic(mnemonic: "", passphrase: "", accountIndex: 0)
+    }
+    check("an empty mnemonic is refused", noMnemonic != nil, noMnemonic?.detail ?? "nil")
+    let digest = String(repeating: "00", count: 31) + "ab"
+    check("a txid in digest order is reversed (§14.7)",
+          txidInSendOrder(digestOrderHex: digest) == "ab" + String(repeating: "00", count: 31)
+            && txidInSendOrder(digestOrderHex: "abc") == nil,
+          txidInSendOrder(digestOrderHex: digest) ?? "nil")
+    check("a typed figure is read in integers (§2.1)",
+          parseAmountIn(text: "12.34", currency: "EUR") == 1234
+            && parseAmountIn(text: "1,000", currency: "KWD") == nil
+            && parseMinorUnits(text: "12.5", exponent: 2) == 1250,
+          "\(String(describing: parseAmountIn(text: "12.34", currency: "EUR")))")
+    let gold = await refusal {
+        _ = try createBillEntry(facts: ana.facts(), name: "Gold", currency: "XAU",
+                                splitMode: "equal", creatorKey: anaKey, billKey: nil,
+                                seed: ana.seed)
+    }
+    check("no bill is opened in a currency with no minor unit", gold != nil, gold?.detail ?? "nil")
+    let taxiFolded = try foldEntries(facts: ana.facts(), billId: taxiId, entries: taxi)
+    check("the creator is the one the fold names", taxiFolded.creatorId == ana.me,
+          taxiFolded.creatorId)
+    let benOff = try planRemoval(facts: ana.facts(), billId: taxiId, entries: taxi, id: ben.me,
+                                 me: ana.me)
+    check("taking ben off lists his join to withdraw", benOff.joins.count == 1, "\(benOff.joins)")
+    let off = try voidEntryFor(facts: ana.facts(), billId: taxiId, targetId: benOff.joins[0],
+                               seed: ana.seed)
+    let offRefused = try entryRefusal(facts: ana.facts(), billId: taxiId, entries: taxi, entry: off)
+    check("which is refused before it is written while the bill names him",
+          offRefused == "participant_still_named", offRefused ?? "nil")
+    let own = try voidEntryFor(facts: ana.facts(), billId: taxiId, targetId: try entryId(swapRecord),
+                               seed: ana.seed)
+    check("and ana withdrawing her own record is not",
+          try entryRefusal(facts: ana.facts(), billId: taxiId, entries: taxi, entry: own) == nil,
+          "none")
+
+    print("and the rest of what every wallet needs from the protocol")
+    let fallback = payoutFallback(cannotPay: ["not on base", nil])
+    check("a first payout this wallet cannot pay is passed over for the next it can (§14.8)",
+          fallback == PayoutFallback(index: 1, passedOver: "not on base")
+            && payoutFallback(cannotPay: [nil, "x"]) == nil,
+          "\(String(describing: fallback))")
+    let wrapped = TradableAsset(assetId: "nep141:near-zec", symbol: "ZEC", chain: "near", decimals: 8)
+    let native = TradableAsset(assetId: "nep141:zec.omft.near", symbol: "ZEC", chain: "zec", decimals: 8)
+    check("native ZEC is the one on its own chain",
+          zecAssetIn(assets: [wrapped, native]) == "nep141:zec.omft.near"
+            && zecAssetIn(assets: [wrapped]) == nil, "nep141:zec.omft.near")
+    check("a rate 5% from the live price is told by how much",
+          ratePercentOff(rate: 105, live: 100) == 5 && ratePercentOff(rate: 1, live: 0) == nil, "5")
+    check("names a reader cannot tell apart fold alike",
+          nameSkeleton(name: "\u{410}na") == nameSkeleton(name: "ana"), nameSkeleton(name: "\u{410}na"))
+    let names = try displayNames(facts: ana.facts(), billId: taxiId, entries: taxi)
+    check("every participant has a display name", Set(names.keys) == [ana.me, ben.me], "\(names)")
+    let corrected = try amendExpenseEntry(facts: ben.facts(), billId: taxiId, entries: taxi,
+                                          expenseId: "\(ben.me):t1", paidBy: nil, amount: 9000,
+                                          splitJson: nil, description: "taxi home", seed: ben.seed)
+    check("an expense is corrected from what the bill applies now",
+          try entryRefusal(facts: ben.facts(), billId: taxiId, entries: taxi, entry: corrected) == nil,
+          "none")
+    var unknownExpense: String?
+    do {
+        _ = try amendExpenseEntry(facts: ben.facts(), billId: taxiId, entries: taxi,
+                                  expenseId: "\(ben.me):t9", paidBy: nil, amount: 1, splitJson: nil,
+                                  description: nil, seed: ben.seed)
+    } catch SplitzError.Protocol(let code, _) { unknownExpense = code }
+    check("and one the bill does not apply is refused", unknownExpense == "unknown_entry",
+          unknownExpense ?? "nil")
+    let concerns = try concernsBeforeConfirming(facts: ben.facts(), billId: taxiId, entries: taxi,
+                                                paymentId: "\(ana.me):intent-1", live: nil)
+    check("ana paying by a rate she set is a concern before ben confirms it",
+          concerns == [.rateSetByPayer], "\(concerns)")
+    let toAna = try recordPaymentEntry(
+        facts: ben.facts(), billId: taxiId,
+        payment: PaymentDraft(paymentId: "p-memo", to: ana.me, amount: 1000, method: "shieldedZec",
+                              reference: String(repeating: "ab", count: 32), zatoshi: 2_000_000,
+                              paidAtRate: nil, note: nil),
+        seed: ben.seed)
+    let memos = try memoTxids(facts: ana.facts(), bills: [HeldBill(billId: taxiId, entries: taxi + [toAna])])
+    check("memos are read for the transactions a record to this device names",
+          try memos == [String(repeating: "ab", count: 32)]
+            && memoTxids(facts: ana.facts(), bills: [HeldBill(billId: taxiId, entries: taxi)]).isEmpty,
+          "\(memos)")
 }
 
 /// A signed entry's own id: the top-level one, not its payload's.

@@ -187,3 +187,74 @@ pub fn currency_exponent(currency: &str) -> Option<u32> {
         .ok()
         .map(|i| ISO_4217_EXPONENTS[i].1)
 }
+
+/// The most decimals [`parse_minor_units`] reads: a signed 64-bit amount holds
+/// 18 decimal digits in full. ISO 4217 exponents stop at 4.
+pub const MAX_PARSE_EXPONENT: u32 = 18;
+
+/// `text` a person typed, read as minor units at `exponent` decimals, or
+/// `None` when it is not one.
+///
+/// Integer arithmetic throughout: the figure is split on its separator and
+/// both halves read as whole numbers. Reading a float and multiplying rounds —
+/// `0.29 * 100` is not 29 in binary floating point — and that rounding is
+/// money. `.` and `,` both separate the fraction, but a `,` followed by
+/// exactly three digits is refused: `1,000` is a thousand to one reader and
+/// one to another, and a currency with three decimals makes both readings
+/// well formed. Only ASCII space, tab, carriage return and line feed are
+/// trimmed and only ASCII digits read, so every language reads one string
+/// alike. A figure with no digit, more fractional digits than `exponent`, or
+/// a value past a signed 64-bit integer (§2.2) is refused rather than rounded
+/// or wrapped, and so is an `exponent` past [`MAX_PARSE_EXPONENT`].
+pub fn parse_minor_units(text: &str, exponent: u32) -> Option<i64> {
+    if exponent > MAX_PARSE_EXPONENT {
+        return None;
+    }
+    let typed = text.trim_matches(|c| matches!(c, ' ' | '\t' | '\r' | '\n'));
+    let bytes = typed.as_bytes();
+    if bytes.len() >= 4
+        && bytes[bytes.len() - 4] == b','
+        && bytes[bytes.len() - 3..].iter().all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let normalised = typed.replace(',', ".");
+    let mut parts = normalised.split('.');
+    let whole = parts.next().unwrap_or("");
+    let fraction = parts.next().unwrap_or("");
+    if parts.next().is_some() {
+        return None;
+    }
+    let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+    if !digits(whole) || !digits(fraction) || (whole.is_empty() && fraction.is_empty()) {
+        return None;
+    }
+    if fraction.len() > exponent as usize {
+        return None;
+    }
+    let whole = whole.trim_start_matches('0');
+    // Past 19 digits of whole number nothing fits a signed 64-bit amount.
+    if whole.len() > 19 {
+        return None;
+    }
+    let scale = 10_i128.checked_pow(exponent)?;
+    let whole: i128 = if whole.is_empty() {
+        0
+    } else {
+        whole.parse().ok()?
+    };
+    let fraction: i128 = if fraction.is_empty() {
+        0
+    } else {
+        fraction.parse::<i128>().ok()? * 10_i128.pow(exponent - fraction.len() as u32)
+    };
+    let value = whole.checked_mul(scale)?.checked_add(fraction)?;
+    i64::try_from(value).ok()
+}
+
+/// `text` read as an amount in `currency` (§2.1): [`parse_minor_units`] at
+/// the exponent this register gives it, or `None` when the register gives it
+/// none — there is no scale at which a typed figure in it means anything.
+pub fn parse_amount_in(text: &str, currency: &str) -> Option<i64> {
+    parse_minor_units(text, currency_exponent(currency)?)
+}

@@ -5,6 +5,8 @@
 /// rule that causes them, and none can be invented.
 library;
 
+import 'dart:convert';
+
 import 'package:splitz_core/splitz_core.dart' as splitz;
 import 'package:splitz_host/splitz_host.dart';
 import 'package:test/test.dart';
@@ -193,5 +195,29 @@ void main() {
         }
       }
     });
+  });
+
+  test('a split reads back into the draft it came from, or not at all', () {
+    // One table, pinned in both host packages.
+    final cases =
+        jsonDecode(
+              r'''{"roundtrip":[{"type":"equal","among":["ana","ben"]},{"type":"exact","amounts":{"ana":600,"ben":400}},{"type":"percentage","basisPoints":{"ana":3333,"ben":6667}},{"type":"shares","shareCounts":{"ana":2,"ben":1}},{"type":"itemized","extraMinorUnits":150,"items":[{"description":"pizza","minorUnits":1200,"sharedBy":["ana","ben"]},{"description":"","minorUnits":300,"sharedBy":["ben"]}]}],"refused":[{"type":"weighted","among":["ana"]},{"among":["ana"]},{"type":"equal","among":["ana",7]},{"type":"equal","among":"ana"},{"type":"equal","among":["ana"],"note":"x"},{"type":"exact","amounts":{"ana":6.5}},{"type":"exact","amounts":{"ana":"600"}},{"type":"exact"},{"type":"itemized","extraMinorUnits":null,"items":[]},{"type":"itemized","items":[{"description":null,"minorUnits":1,"sharedBy":["ana"]}]},{"type":"itemized","items":[{"minorUnits":1}]},{"type":"itemized","items":[{"minorUnits":1,"sharedBy":["ana"],"tax":true}]},{"type":"itemized","items":"pizza"}]}''',
+            )
+            as Map<String, dynamic>;
+    for (final raw in cases['roundtrip'] as List) {
+      final split = raw as Map<String, dynamic>;
+      expect(
+        SplitDraft.fromSplit(split)?.toSplit(),
+        split,
+        reason: jsonEncode(split),
+      );
+    }
+    for (final raw in cases['refused'] as List) {
+      expect(
+        SplitDraft.fromSplit(raw as Map<String, dynamic>),
+        isNull,
+        reason: jsonEncode(raw),
+      );
+    }
   });
 }

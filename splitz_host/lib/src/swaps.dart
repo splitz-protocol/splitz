@@ -22,7 +22,9 @@ import 'dart:convert';
 import 'package:splitz_core/host.dart' as host;
 import 'package:splitz_core/splitz_core.dart' as protocol;
 
+import 'pending_sends.dart';
 import 'relay.dart' show JsonGet, JsonPost;
+import 'swap_watch.dart';
 
 /// The body of a swap provider's answer, refusing a status it uses to say no.
 ///
@@ -759,3 +761,120 @@ class OneClickSwaps implements SwapProvider {
     }
   }
 }
+
+/// The most decimals a token states: a provider's figure, held in a `uint8`
+/// by the token standards it reports. A larger one would size the rendering
+/// by whatever the provider answered.
+const maxTokenDecimals = 255;
+
+/// [baseUnits] of a token with [decimals] as whole tokens: `39990000` at 6
+/// decimals is `39.99`. Trailing fractional zeros are dropped, so one value
+/// has one rendering. Null when [baseUnits] is not decimal digits or
+/// [decimals] is outside 0..[maxTokenDecimals].
+String? formatBaseUnits(String baseUnits, int decimals) {
+  if (!RegExp(r'^[0-9]+$').hasMatch(baseUnits) ||
+      decimals < 0 ||
+      decimals > maxTokenDecimals) {
+    return null;
+  }
+  final digits = baseUnits.replaceFirst(RegExp(r'^0+(?=.)'), '');
+  if (decimals == 0) return digits;
+  final padded = digits.padLeft(decimals + 1, '0');
+  final whole = padded.substring(0, padded.length - decimals);
+  final fraction = padded
+      .substring(padded.length - decimals)
+      .replaceAll(RegExp(r'0+$'), '');
+  return fraction.isEmpty ? whole : '$whole.$fraction';
+}
+
+/// The `note` a swap's payment record carries (§9.2): the asset and the chain
+/// it is delivered on — which the reference alone does not name once the
+/// payee changes their payout — and, when the quote stated a floor, the least
+/// the recipient is guaranteed, since the record claims the whole debt.
+String swapRecordNote(
+  String assetSymbol,
+  String assetChain, {
+  String? guaranteed,
+}) => guaranteed == null
+    ? '$assetSymbol on $assetChain'
+    : 'at least $guaranteed $assetSymbol on $assetChain';
+
+/// What sending a swap's deposit takes: the request handed to the wallet, and
+/// the note stored before the wallet is called (§14.3), which carries the
+/// swap so its record can be written after a restart from the note alone.
+class SwapDeposit {
+  const SwapDeposit({required this.uri, required this.note});
+
+  final String uri;
+  final PendingSend note;
+}
+
+/// The deposit for [quote], settling [amountMinorUnits] of the debt to [to]
+/// on [billId] at the bill's [rate]; [at] is the wallet's §9.3 instant.
+///
+/// Answers the request to hand the wallet and the note to store before
+/// calling it (§14.3), which carries the swap so its record can be written
+/// after a restart from the note alone. The request carries no memo, so a
+/// quote whose deposit needs one is refused with [SwapException]: a deposit
+/// that arrives without the memo its provider requires is lost. Run
+/// [swapSendRefusal] first; this builds what that check let through.
+SwapDeposit swapDeposit({
+  required String billId,
+  required SwapQuote quote,
+  required String to,
+  required int amountMinorUnits,
+  required protocol.ExchangeRate rate,
+  required String at,
+}) {
+  final memo = quote.depositMemo;
+  if (memo != null && memo.isNotEmpty) {
+    throw const SwapException(
+      "this swap's deposit needs a memo a payment request cannot carry",
+    );
+  }
+  if (amountMinorUnits <= 0) {
+    throw ArgumentError.value(
+      amountMinorUnits,
+      'amountMinorUnits',
+      'a swap settles more than nothing',
+    );
+  }
+  final uri = protocol.renderUri([
+    protocol.Zip321Payment(
+      address: quote.depositAddress,
+      zatoshi: quote.amountInZatoshi,
+      label: 'swap to ${quote.asset.symbol}',
+    ),
+  ]);
+  final watch = SwapWatch(
+    billId: billId,
+    reference: quote.paymentReference,
+    to: to,
+    depositAddress: quote.depositAddress,
+    depositMemo: quote.depositMemo,
+    assetSymbol: quote.asset.symbol,
+    assetChain: quote.asset.chain,
+  );
+  return SwapDeposit(
+    uri: uri,
+    note: PendingSend(
+      billId: billId,
+      uri: uri,
+      carried: {to: amountMinorUnits},
+      at: at,
+      rate: rate,
+      swap: watch,
+      zatoshi: quote.amountInZatoshi,
+    ),
+  );
+}
+
+/// The id [assets] — a provider's own token list — names native ZEC by, the
+/// one a Zcash wallet's deposit is: symbol `ZEC` on chain `zec`, both read
+/// ignoring case. Null when the list carries none.
+///
+/// Read from the list rather than written down: a provider lists ZEC more
+/// than once (wrapped on other chains too), and quoting the wrong one asks for
+/// a deposit on a chain the wallet cannot send on.
+String? zecAssetIn(List<TradableAsset> assets) =>
+    assets.where((a) => a.answers('ZEC', 'zec')).firstOrNull?.assetId;

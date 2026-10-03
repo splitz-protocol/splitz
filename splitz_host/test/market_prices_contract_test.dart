@@ -269,4 +269,21 @@ void main() {
       expect(await checkZecPrices(prices, priced: 'EUR'), isEmpty);
     });
   });
+
+  test('a rate five percent or more from the live price is warned about', () {
+    for (final (rate, live, off) in [
+      (105, 100, 5),
+      (104, 100, 4),
+      (95, 100, -5),
+      (96, 100, -4),
+      (1, 3, -66),
+    ]) {
+      expect(ratePercentOff(rate, live), off, reason: '$rate $live');
+    }
+    expect(ratePercentOff(100, 0), isNull);
+    expect(ratePercentOff(9223372036854775807, 1), isNull);
+    expect(rateFarFromLive(105, 100) && rateFarFromLive(95, 100), isTrue);
+    expect(rateFarFromLive(104, 100) || rateFarFromLive(96, 100), isFalse);
+    expect(rateFarFromLive(100, 0), isFalse);
+  });
 }

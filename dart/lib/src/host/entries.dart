@@ -14,6 +14,7 @@ import 'dart:convert';
 
 import 'package:splitz_core/splitz_core.dart' as splitz;
 
+import 'bill_log.dart';
 import 'host.dart';
 
 /// The version every entry this layer writes carries.
@@ -38,6 +39,8 @@ Map<String, dynamic> createBill({
   required String creatorKey,
   String? billKey,
 }) {
+  // §2.1: a writer refuses what every reader refuses.
+  splitz.checkCurrency(currency);
   final entry = <String, dynamic>{
     'v': entryVersion,
     'author': host.me,
@@ -75,11 +78,42 @@ Map<String, dynamic> joinBill({
   // §9.1's own shape, passed through untouched and in the order given:
   // order is the preference order, and a reader that reorders it settles to
   // a different address than the one asked for.
-  if (payouts != null) participant['payouts'] = payouts;
+  if (payouts != null) {
+    payouts.forEach(_checkPayout);
+    participant['payouts'] = payouts;
+  }
   return _sealed(host, <String, dynamic>{
     'kind': 'joinBill',
     'participant': participant,
   });
+}
+
+/// Refuses a payout nobody could be paid by (§9.1): a `zec` payout with no
+/// address, or a `swap` missing its asset, chain or address. A reader takes
+/// such a payout as unpayable and sends the payer to the next preference
+/// without asking, so it is never written. A type §9.1 does not define is
+/// left to every reader, which refuses it (`bill_unknown_payout_method`).
+void _checkPayout(Map<String, dynamic> payout) {
+  bool blank(String field) {
+    final v = payout[field];
+    return v is! String || v.trim().isEmpty;
+  }
+
+  final missing = switch (payout['type']) {
+    'zec' => [if (blank('address')) 'address'],
+    'swap' => [
+        for (final f in const ['asset', 'chain', 'address'])
+          if (blank(f)) f,
+      ],
+    // A type §9.1 does not define is every reader's to refuse.
+    _ => const <String>[],
+  };
+  if (missing.isNotEmpty) {
+    throw splitz.SplitError(
+      splitz.SplitCode.billTypeError,
+      'A ${payout['type']} payout names its ${missing.join(', ')}',
+    );
+  }
 }
 
 /// [local] as an id [author] minted: `<author>:<local>`, or [local] itself
@@ -144,6 +178,22 @@ Map<String, dynamic> recordPayment({
   Map<String, dynamic>? paidAtRate,
   String? note,
 }) {
+  // §9.2: a payment of nothing records nothing, and while unconfirmed it
+  // still withholds the whole debt it names from this payer's request.
+  if (amount <= 0) {
+    throw splitz.SplitError(
+      splitz.SplitCode.negativeAmount,
+      'A payment is more than nothing, got $amount',
+    );
+  }
+  // §9.2: a swap is known only by its reference; without one neither side
+  // can find it again.
+  if (method == 'swap' && (reference == null || reference.trim().isEmpty)) {
+    throw const splitz.SplitError(
+      splitz.SplitCode.billTypeError,
+      'A swap payment names its swap in reference',
+    );
+  }
   final payment = <String, dynamic>{
     'id': authoredId(host.me, paymentId),
     'from': host.me,
@@ -227,6 +277,47 @@ Map<String, dynamic> amendEntry({
     'targetId': targetId,
     member: payload,
   });
+}
+
+/// Corrects the expense [expenseId] on [folded] (§10.4): an amendment of the
+/// entry that introduced it, its payload the expense as the bill reads it now
+/// with [paidBy], [amount], [split] and [description] replacing what they
+/// name.
+///
+/// An amendment replaces its target wholesale, so the payload starts from
+/// the expense as applied — after any amendment already standing — and never
+/// from the entry as first written: a field a later correction changed would
+/// otherwise be changed back. Refused with `unknown_entry` when the bill
+/// applies no such expense.
+Map<String, dynamic> amendExpense({
+  required BillHost host,
+  required FoldedBill folded,
+  required String expenseId,
+  String? paidBy,
+  int? amount,
+  Map<String, dynamic>? split,
+  String? description,
+}) {
+  final expense =
+      folded.bill.expenses.where((e) => e.id == expenseId).firstOrNull;
+  final targetId = folded.expenseEntries[expenseId];
+  if (expense == null || targetId == null) {
+    throw splitz.SplitError(
+      splitz.SplitCode.unknownEntry,
+      'The bill applies no expense $expenseId',
+    );
+  }
+  final payload = splitz.expenseToJson(expense);
+  if (paidBy != null) payload['paidBy'] = paidBy;
+  if (amount != null) payload['amount'] = amount;
+  if (split != null) payload['split'] = split;
+  if (description != null) payload['description'] = description;
+  return amendEntry(
+    host: host,
+    targetId: targetId,
+    member: 'expense',
+    payload: payload,
+  );
 }
 
 /// Withdraws an entry. Who may is §10.8's decision.

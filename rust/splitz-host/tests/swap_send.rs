@@ -534,3 +534,74 @@ fn a_payout_is_found_by_all_four_fields() {
     assert_eq!(declared_payout_index(&list, &no_chain), None);
     assert_eq!(declared_payout_index(&[], &a), None);
 }
+
+#[test]
+fn base_units_read_as_whole_tokens() {
+    use splitz_host::format_base_units;
+    assert_eq!(format_base_units("39990000", 6).as_deref(), Some("39.99"));
+    assert_eq!(format_base_units("1000000", 6).as_deref(), Some("1"));
+    assert_eq!(format_base_units("5", 6).as_deref(), Some("0.000005"));
+    assert_eq!(format_base_units("0", 6).as_deref(), Some("0"));
+    assert_eq!(format_base_units("007", 0).as_deref(), Some("7"));
+    for bad in ["", "1.5", "-1", "1e6", " 1"] {
+        assert_eq!(format_base_units(bad, 6), None, "{bad}");
+    }
+    assert_eq!(format_base_units("1", -1), None);
+    // A provider's decimals are a uint8; past that the rendering would be
+    // sized by whatever it answered.
+    let tiny = format_base_units("1", splitz_host::MAX_TOKEN_DECIMALS).unwrap();
+    assert_eq!(tiny.len(), 2 + 255);
+    assert!(tiny.starts_with("0.000") && tiny.ends_with('1'));
+    assert_eq!(format_base_units("1", 256), None);
+    assert_eq!(format_base_units("1", i32::MAX), None);
+}
+
+#[test]
+fn a_swap_record_names_its_asset_and_chain_and_the_floor_when_quoted() {
+    use splitz_host::swap_record_note;
+    assert_eq!(swap_record_note("USDC", "base", None), "USDC on base");
+    assert_eq!(
+        swap_record_note("USDC", "base", Some("39.5")),
+        "at least 39.5 USDC on base"
+    );
+}
+
+#[test]
+fn a_deposit_is_one_request_and_a_note_carrying_the_swap() {
+    let rate = splitz_core::ExchangeRate {
+        currency: "EUR".to_owned(),
+        minor_units_per_zec: 51_234,
+        at: "2026-10-28T19:30:00.000Z".to_owned(),
+        source: None,
+    };
+    let mut q = quote();
+    q.amount_in_zatoshi = 7_807_316;
+    let deposit =
+        splitz_host::swap_deposit("bill-1", &q, "ben", 4000, &rate, "2026-10-28T19:31:00.000Z")
+            .unwrap();
+    assert_eq!(
+        deposit.uri,
+        "zcash:t1deposit000000000000000000000000?amount=0.07807316&label=swap%20to%20USDC"
+    );
+    let note = deposit.note;
+    assert_eq!(note.uri, deposit.uri);
+    assert_eq!(note.carried.get("ben"), Some(&4000));
+    assert_eq!(note.zatoshi, Some(7_807_316));
+    assert_eq!(note.rate, Some(rate.clone()));
+    let watch = note.swap.expect("the note carries the swap");
+    assert_eq!(watch.reference, REFERENCE);
+    assert_eq!(
+        (watch.asset_symbol.as_str(), watch.asset_chain.as_str()),
+        ("USDC", "base")
+    );
+
+    // A deposit that needs a memo, and a debt of nothing, are refused.
+    let mut memo = q.clone();
+    memo.deposit_memo = Some("123".to_owned());
+    assert!(splitz_host::swap_deposit("bill-1", &memo, "ben", 4000, &rate, "t").is_err());
+    assert!(splitz_host::swap_deposit("bill-1", &q, "ben", 0, &rate, "t").is_err());
+    // An empty memo is no memo.
+    let mut empty = q.clone();
+    empty.deposit_memo = Some(String::new());
+    assert!(splitz_host::swap_deposit("bill-1", &empty, "ben", 4000, &rate, "t").is_ok());
+}

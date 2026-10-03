@@ -481,3 +481,31 @@ impl ZecPrices for AgreeingZecPrices<'_> {
         Ok(agreed_price(a, b, self.tolerance_bp))
     }
 }
+
+/// How far a rate may sit from a live price, in whole percent either way,
+/// before a host warns about it (§14.2).
+pub const RATE_WARNING_PERCENT: i64 = 5;
+
+/// How far `rate` sits from `live` — both minor units per ZEC — in whole
+/// percent of `live`, truncated toward zero; positive when `rate` is above.
+/// `None` when `live` is not a price, or the figure is past a 64-bit integer.
+pub fn rate_percent_off(rate: i64, live: i64) -> Option<i64> {
+    if live <= 0 {
+        return None;
+    }
+    let off = (i128::from(rate) - i128::from(live)) * 100 / i128::from(live);
+    i64::try_from(off).ok()
+}
+
+/// Whether `rate` is [`RATE_WARNING_PERCENT`] or more from `live`: what a
+/// host warns the payer and the payee about (§14.2). False with no live price.
+pub fn rate_far_from_live(rate: i64, live: i64) -> bool {
+    rate_percent_off(rate, live).is_some_and(|off| off.abs() >= RATE_WARNING_PERCENT)
+}
+
+/// Whether `me` opened `folded`'s bill and has set it no rate (§7): while
+/// that holds, the latest rate by anybody decides, and one dated far ahead
+/// outranks every correction after it. A creator's own rate closes that.
+pub fn creator_rate_missing(folded: &splitz_core::host::FoldedBill, me: &str) -> bool {
+    folded.creator_id == me && folded.rate_author.as_deref() != Some(folded.creator_id.as_str())
+}

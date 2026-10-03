@@ -73,14 +73,18 @@ void main() {
         ),
       );
       expect(await vic.store.read(b.billId), isEmpty);
+      // §9.4: and the key is discarded, so the bill's real invite is not
+      // refused as a conflict with it.
+      expect(await vic.keys.readBillKey(b.billId), isNull);
     });
 
-    test('the bill\'s own key merges it', () async {
+    test('the bill\'s own key merges it, and is kept', () async {
       final b = await sealedForOthers();
       final vic = Device(FakeWallet(id: 'vic', payTo: 'u1vic'), b.relay);
       await vic.keys.storeBillKey(b.billId, b.key);
       final pulled = await vic.sync.pull(b.billId);
       expect(pulled.entries, hasLength(2));
+      expect(await vic.keys.readBillKey(b.billId), b.key);
     });
 
     // Anybody holding the real key can seal a create that only states the

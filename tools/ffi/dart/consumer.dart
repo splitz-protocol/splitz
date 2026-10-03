@@ -325,6 +325,27 @@ void main(List<String> args) {
   );
   final txid = 'ab' * 32;
   final note = pendingSendNote(billId, owed, ben.now());
+  final named = pendingSendAfter(
+    billId,
+    note,
+    SendEnded.unresolved,
+    txid,
+    false,
+  )!;
+  check(
+    'a note naming its transaction is not cleared while the wallet may still send it',
+    pendingSendNamedRefusal(billId, named, TransactionState.waiting) ==
+        NamedSendRefusal.waiting,
+    '${pendingSendNamedRefusal(billId, named, TransactionState.waiting)}',
+  );
+  check(
+    'nor once it went through, and may be once it expired',
+    pendingSendNamedRefusal(billId, named, TransactionState.mined) ==
+            NamedSendRefusal.mined &&
+        pendingSendNamedRefusal(billId, named, TransactionState.expired) ==
+            null,
+    '${pendingSendNamedRefusal(billId, named, TransactionState.expired)}',
+  );
   check(
     'nobody may say it never left while the wallet is still sending',
     pendingSendUnsentRefusal(billId, note, true, const []) ==
@@ -366,6 +387,7 @@ void main(List<String> args) {
     const {},
     const {},
     '',
+    '',
   );
   check('a screen showing every fact passes', shown.isEmpty, '$screen');
   final noAddress = checkPayerReview(
@@ -376,6 +398,7 @@ void main(List<String> args) {
     [for (final l in screen) l == 'to u1ana' ? 'to your contact' : l],
     const {},
     const {},
+    '',
     '',
   );
   check(
@@ -756,13 +779,18 @@ void main(List<String> args) {
     ),
     setRateEntry(ana.facts(), taxiId, 'EUR', 51234, null, ana.signingSeed()),
   ];
-  SwapQuote quote(String recipient, String chain) => SwapQuote(
+  SwapQuote quote(
+    String recipient,
+    String chain, {
+    String? memo,
+    String? floor,
+  }) => SwapQuote(
     depositAddress: 't1deposit',
     recipient: recipient,
-    depositMemo: null,
+    depositMemo: memo,
     amountInZatoshi: 7807316,
     amountOut: '39990000',
-    minAmountOut: null,
+    minAmountOut: floor,
     asset: TradableAsset(
       assetId: 'nep141:$chain-usdc',
       symbol: 'USDC',
@@ -870,6 +898,276 @@ void main(List<String> args) {
     'and nothing to ben, who did not write it',
     failedSwapWithdrawals(ben.facts(), taxiId, taxi, 'intent-1').isEmpty,
     'none',
+  );
+
+  print('a swap\'s deposit and its record come from the binding (§15.7)');
+  const eur = ExchangeRate(
+    currency: 'EUR',
+    minorUnitsPerZec: 51234,
+    at: '2026-10-28T19:30:00.000Z',
+    source: null,
+  );
+  check(
+    'a debt is sized in zatoshi at the bill\'s rate, rounding up',
+    fiatToZatoshi(4000, eur) == 7807316,
+    '${fiatToZatoshi(4000, eur)}',
+  );
+  final deposit = swapDeposit(
+    taxiId,
+    quote('0xbenbase', 'base'),
+    ben.me,
+    4000,
+    eur,
+    ana.now(),
+  );
+  check(
+    'a deposit is one request to the quote\'s address for its zatoshi',
+    deposit.uri.startsWith('zcash:t1deposit?amount=0.07807316'),
+    deposit.uri,
+  );
+  check(
+    'and its note carries the swap',
+    deposit.note.contains('"reference":"intent-1"'),
+    deposit.note,
+  );
+  final needsMemo = refusedBy(
+    () => swapDeposit(
+      taxiId,
+      quote('0xbenbase', 'base', memo: '123'),
+      ben.me,
+      4000,
+      eur,
+      ana.now(),
+    ),
+  );
+  check(
+    'one whose deposit needs a memo is refused',
+    needsMemo != null,
+    '${needsMemo?.detail}',
+  );
+  final swapEntry = swapPaymentEntry(
+    ana.facts(),
+    taxiId,
+    quote('0xbenbase', 'base', floor: '39500000'),
+    ben.me,
+    4000,
+    eur,
+    ana.signingSeed(),
+  );
+  check(
+    'its record names the asset, the chain and the floor',
+    swapEntry.contains('"note":"at least 39.5 USDC on base"'),
+    swapEntry,
+  );
+  check(
+    'base units read as whole tokens',
+    formatBaseUnits('39990000', 6) == '39.99' &&
+        formatBaseUnits('x', 6) == null,
+    '${formatBaseUnits('39990000', 6)}',
+  );
+
+  print('what every wallet derives, reads and asks before writing');
+  const mnemonic =
+      'abandon abandon abandon abandon abandon abandon abandon abandon '
+      'abandon abandon abandon about';
+  final derived = identitySeedFromMnemonic(mnemonic, '', 1);
+  check(
+    'a mnemonic derives the seed every wallet derives (§15.1)',
+    derived == 'jWQijb3QECEvHgOUb4_W7UPiUujN7D-7Nq0jYg5mrKo',
+    derived,
+  );
+  final noMnemonic = refusedBy(() => identitySeedFromMnemonic('', '', 0));
+  check(
+    'an empty mnemonic is refused',
+    noMnemonic != null,
+    '${noMnemonic?.detail}',
+  );
+  final digest = '${'00' * 31}ab';
+  check(
+    'a txid in digest order is reversed (§14.7)',
+    txidInSendOrder(digest) == 'ab${'00' * 31}' &&
+        txidInSendOrder('abc') == null,
+    '${txidInSendOrder(digest)}',
+  );
+  check(
+    'a typed figure is read in integers (§2.1)',
+    parseAmountIn('12.34', 'EUR') == 1234 &&
+        parseAmountIn('1,000', 'KWD') == null &&
+        parseMinorUnits('12.5', 2) == 1250,
+    '${parseAmountIn('12.34', 'EUR')}',
+  );
+  final gold = refusedBy(
+    () => createBillEntry(
+      ana.facts(),
+      'Gold',
+      'XAU',
+      'equal',
+      anaKey,
+      null,
+      ana.signingSeed(),
+    ),
+  );
+  check(
+    'no bill is opened in a currency with no minor unit',
+    gold != null,
+    '${gold?.detail}',
+  );
+  final taxiFolded = foldEntries(ana.facts(), taxiId, taxi);
+  check(
+    'the creator is the one the fold names',
+    taxiFolded.creatorId == ana.me,
+    taxiFolded.creatorId,
+  );
+  final benOff = planRemoval(ana.facts(), taxiId, taxi, ben.me, ana.me);
+  check(
+    'taking ben off lists his join to withdraw',
+    benOff.joins.length == 1,
+    '${benOff.joins}',
+  );
+  final off = voidEntryFor(
+    ana.facts(),
+    taxiId,
+    benOff.joins.single,
+    ana.signingSeed(),
+  );
+  check(
+    'which is refused before it is written while the bill names him',
+    entryRefusal(ana.facts(), taxiId, taxi, off) == 'participant_still_named',
+    '${entryRefusal(ana.facts(), taxiId, taxi, off)}',
+  );
+  final own = voidEntryFor(
+    ana.facts(),
+    taxiId,
+    (jsonDecode(swapRecord) as Map)['id'] as String,
+    ana.signingSeed(),
+  );
+  check(
+    'and ana withdrawing her own record is not',
+    entryRefusal(ana.facts(), taxiId, taxi, own) == null,
+    'none',
+  );
+
+  print('and the rest of what every wallet needs from the protocol');
+  final fallback = payoutFallback(['not on base', null]);
+  check(
+    'a first payout this wallet cannot pay is passed over for the next it can (§14.8)',
+    fallback?.index == 1 &&
+        fallback?.passedOver == 'not on base' &&
+        payoutFallback([null, 'x']) == null,
+    '${fallback?.index}',
+  );
+  const wrapped = TradableAsset(
+    assetId: 'nep141:near-zec',
+    symbol: 'ZEC',
+    chain: 'near',
+    decimals: 8,
+  );
+  check(
+    'native ZEC is the one on its own chain',
+    zecAssetIn([
+              wrapped,
+              const TradableAsset(
+                assetId: 'nep141:zec.omft.near',
+                symbol: 'ZEC',
+                chain: 'zec',
+                decimals: 8,
+              ),
+            ]) ==
+            'nep141:zec.omft.near' &&
+        zecAssetIn([wrapped]) == null,
+    'nep141:zec.omft.near',
+  );
+  check(
+    'a rate 5% from the live price is told by how much',
+    ratePercentOff(105, 100) == 5 && ratePercentOff(1, 0) == null,
+    '${ratePercentOff(105, 100)}',
+  );
+  check(
+    'names a reader cannot tell apart fold alike',
+    nameSkeleton('\u0410na') == nameSkeleton('ana'),
+    nameSkeleton('\u0410na'),
+  );
+  final names = displayNames(ana.facts(), taxiId, taxi);
+  check(
+    'every participant has a display name',
+    names.keys.toSet().containsAll([ana.me, ben.me]) && names.length == 2,
+    '$names',
+  );
+  final corrected = amendExpenseEntry(
+    ben.facts(),
+    taxiId,
+    taxi,
+    '${ben.me}:t1',
+    null,
+    9000,
+    null,
+    'taxi home',
+    ben.signingSeed(),
+  );
+  check(
+    'an expense is corrected from what the bill applies now',
+    entryRefusal(ben.facts(), taxiId, taxi, corrected) == null,
+    'none',
+  );
+  String? unknownExpense;
+  try {
+    amendExpenseEntry(
+      ben.facts(),
+      taxiId,
+      taxi,
+      '${ben.me}:t9',
+      null,
+      1,
+      null,
+      null,
+      ben.signingSeed(),
+    );
+  } on SplitzErrorExceptionProtocol catch (e) {
+    unknownExpense = e.code;
+  }
+  check(
+    'and one the bill does not apply is refused',
+    unknownExpense == 'unknown_entry',
+    '$unknownExpense',
+  );
+  final concerns = concernsBeforeConfirming(
+    ben.facts(),
+    taxiId,
+    taxi,
+    '${ana.me}:intent-1',
+    null,
+  );
+  check(
+    'ana paying by a rate she set is a concern before ben confirms it',
+    concerns.length == 1 && concerns.single == PaymentConcern.rateSetByPayer,
+    '$concerns',
+  );
+  final toAna = recordPaymentEntry(
+    ben.facts(),
+    taxiId,
+    PaymentDraft(
+      paymentId: 'p-memo',
+      to: ana.me,
+      amount: 1000,
+      method: 'shieldedZec',
+      reference: 'ab' * 32,
+      zatoshi: 2000000,
+      paidAtRate: null,
+      note: null,
+    ),
+    ben.signingSeed(),
+  );
+  final memos = memoTxids(ana.facts(), [
+    HeldBill(billId: taxiId, entries: [...taxi, toAna]),
+  ]);
+  check(
+    'memos are read for the transactions a record to this device names',
+    memos.length == 1 &&
+        memos.single == 'ab' * 32 &&
+        memoTxids(ana.facts(), [
+          HeldBill(billId: taxiId, entries: taxi),
+        ]).isEmpty,
+    '$memos',
   );
 
   print(

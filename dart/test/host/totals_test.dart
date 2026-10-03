@@ -180,6 +180,7 @@ void main() {
   /// [f] with [bound] as the ids §10.7 bound, as a verifying fold reports it.
   FoldedBill boundTo(FoldedBill f, Set<String> bound) => FoldedBill(
         bill: f.bill,
+        creatorId: f.creatorId,
         setAside: f.setAside,
         withdrawn: f.withdrawn,
         replacedAddresses: f.replacedAddresses,
@@ -217,6 +218,7 @@ void main() {
     final y = _bill('Y').log.fold();
     final other = FoldedBill(
       bill: y.bill,
+      creatorId: y.creatorId,
       setAside: y.setAside,
       withdrawn: y.withdrawn,
       replacedAddresses: y.replacedAddresses,

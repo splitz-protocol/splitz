@@ -84,6 +84,34 @@ abstract interface class SecretStore {
   Future<void> delete(String key);
 }
 
+/// [inner], scoped to one wallet account: every name is `<name>@<account>`.
+///
+/// A bill key is named by its bill alone, so on a store several accounts
+/// share, one account forgetting a bill deletes the key every other account
+/// opens it with (§15.3). One of these per account keeps them apart.
+class AccountSecretStore implements SecretStore {
+  AccountSecretStore(this.inner, {required this.account}) {
+    if (account.isEmpty) {
+      throw ArgumentError.value(account, 'account', 'an account is named');
+    }
+  }
+
+  final SecretStore inner;
+  final String account;
+
+  String _scoped(String key) => '$key@$account';
+
+  @override
+  Future<String?> read(String key) => inner.read(_scoped(key));
+
+  @override
+  Future<void> write(String key, String value) =>
+      inner.write(_scoped(key), value);
+
+  @override
+  Future<void> delete(String key) => inner.delete(_scoped(key));
+}
+
 /// Secrets held in memory only.
 ///
 /// For tests, and for nothing else: a bill key that does not outlive the

@@ -149,6 +149,14 @@ pub fn create_bill_entry(
             transient: false,
         });
     }
+    // §2.1: a code the ISO 4217 register gives no exponent has no scale at
+    // which a typed figure means anything, so no bill is opened in it.
+    if splitz_core::is_currency(&currency) && splitz_host::currency_exponent(&currency).is_none() {
+        return Err(SplitzError::Host {
+            detail: format!("{currency} has no ISO 4217 minor unit; amounts in it cannot be typed"),
+            transient: false,
+        });
+    }
     build(&facts, &seed, None, |host| {
         create_bill(
             host,
@@ -813,6 +821,32 @@ pub fn identity_seed_from_secret(secret: ffi::SecretBytes) -> Result<String> {
             transient: false,
         });
     }
+    Ok(splitz_host::base64url_encode(
+        &splitz_host::identity_seed_from(&secret),
+    ))
+}
+
+/// A 32-byte transaction id hex-encoded in digest order, as a wallet's own
+/// store commonly keeps it, in the order a send reports it and §14.7 compares
+/// (bytes reversed, lower case). `None` when it is not 64 hex digits.
+#[uniffi::export]
+pub fn txid_in_send_order(digest_order_hex: String) -> Option<String> {
+    splitz_core::host::txid_in_send_order(&digest_order_hex)
+}
+
+/// The seed a BIP39 wallet account signs with (§15.1), from its mnemonic,
+/// passphrase and ZIP 32 account index.
+///
+/// Every wallet derives the same seed from the same three, so one person is
+/// one participant whichever wallet they restore into. Refuses an empty
+/// mnemonic and an account index of 2^31 or more.
+#[uniffi::export]
+pub fn identity_seed_from_mnemonic(
+    mnemonic: String,
+    passphrase: String,
+    account_index: u32,
+) -> Result<String> {
+    let secret = splitz_host::identity_secret_from_mnemonic(&mnemonic, &passphrase, account_index)?;
     Ok(splitz_host::base64url_encode(
         &splitz_host::identity_seed_from(&secret),
     ))
@@ -1498,7 +1532,7 @@ pub fn pending_send_records(
 /// them, the fold refuses it with `participant_still_named`, and a refused
 /// withdrawal is still written and synced. `entries` are folded with
 /// signatures checked, as `fold_entries` folds them; the bill's creator is
-/// the author of the create `bill_id` names.
+/// the one the fold names.
 #[uniffi::export]
 pub fn plan_removal(
     facts: HostFacts,
@@ -1518,15 +1552,7 @@ pub fn plan_removal(
     let folded = BillLog::with_entries(&host, parsed.clone())
         .for_bill(bill_id.clone())
         .fold()?;
-    let creator = parsed
-        .iter()
-        .find(|e| {
-            e.get("kind").and_then(Value::as_str) == Some("createBill")
-                && e.get("id").and_then(Value::as_str) == Some(bill_id.as_str())
-        })
-        .and_then(|e| e.get("author").and_then(Value::as_str))
-        .unwrap_or_default();
-    let plan = splitz_host::plan_removal(&folded, creator, &parsed, &id, &me);
+    let plan = splitz_host::plan_removal(&folded, &folded.creator_id, &parsed, &id, &me);
     Ok(convert::removal_plan(&plan))
 }
 
@@ -1597,7 +1623,11 @@ fn host_removal_plan(plan: ffi::RemovalPlan) -> Result<splitz_host::RemovalPlan>
             from_them: b.from_them,
         })
         .collect();
-    Ok(splitz_host::RemovalPlan { edits, blockers })
+    Ok(splitz_host::RemovalPlan {
+        edits,
+        blockers,
+        joins: plan.joins,
+    })
 }
 
 // --- what the payer is shown before sending (§14.2) -------------------------
@@ -1656,6 +1686,7 @@ pub fn check_payer_review(
     reason_words: HashMap<String, String>,
     via: HashMap<String, i64>,
     lower_words: String,
+    unexplained_words: String,
 ) -> Result<Vec<ffi::ReviewFinding>> {
     let obligation = payer_obligation(&obligation)?;
     let folded = folded_bill(&facts, &bill_id, &entries)?;
@@ -1668,6 +1699,7 @@ pub fn check_payer_review(
         &reason_words,
         &via,
         &lower_words,
+        &unexplained_words,
     )?;
     Ok(found.into_iter().map(review_finding).collect())
 }
@@ -1731,6 +1763,7 @@ fn review_finding(f: splitz_host::ReviewFinding) -> ffi::ReviewFinding {
             splitz_host::ReviewRule::ReplacedAddress => ffi::ReviewRule::ReplacedAddress,
             splitz_host::ReviewRule::Awaiting => ffi::ReviewRule::Awaiting,
             splitz_host::ReviewRule::LowerPreference => ffi::ReviewRule::LowerPreference,
+            splitz_host::ReviewRule::Unexplained => ffi::ReviewRule::Unexplained,
             splitz_host::ReviewRule::Rate => ffi::ReviewRule::Rate,
             splitz_host::ReviewRule::Output => ffi::ReviewRule::Output,
             splitz_host::ReviewRule::PayeeZec => ffi::ReviewRule::PayeeZec,
@@ -1975,4 +2008,364 @@ pub fn failed_swap_withdrawals(
     Ok(splitz_host::failed_swap_withdrawals(
         &folded, &facts.me, &reference,
     ))
+}
+
+/// The zatoshi `amount_minor_units` of `rate`'s currency is worth at `rate`
+/// (§7.1), rounded up: the figure a swap's deposit is sized at, and the one
+/// [`swap_send_refusal`] checks a quote against to the zatoshi.
+#[uniffi::export]
+pub fn fiat_to_zatoshi(amount_minor_units: i64, rate: ffi::ExchangeRate) -> Result<i64> {
+    let rate = decode_rate(&rate_json(&rate))?;
+    Ok(splitz_core::fiat_to_zatoshi(
+        amount_minor_units,
+        &rate,
+        None,
+        splitz_core::RateRounding::Up,
+    )?)
+}
+
+/// What sending a swap's deposit takes (§14.3, §15.7): the request to hand
+/// the wallet, and the note to store before calling it.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct SwapDepositPlan {
+    pub uri: String,
+    /// The pending-send note, as [`pending_send_note`] writes one, carrying
+    /// the swap so its record can be written after a restart from the note.
+    pub note: String,
+}
+
+/// The deposit for `quote`, settling `amount_minor_units` owed to `to` on
+/// `bill_id` at the bill's `rate`; `at` is the wallet's §9.3 instant. Run
+/// [`swap_send_refusal`] first. Refused when the deposit needs a memo, which a
+/// payment request cannot carry, and for an amount of nothing.
+#[uniffi::export]
+pub fn swap_deposit(
+    bill_id: String,
+    quote: ffi::SwapQuote,
+    to: String,
+    amount_minor_units: i64,
+    rate: ffi::ExchangeRate,
+    at: String,
+) -> Result<SwapDepositPlan> {
+    let rate = decode_rate(&rate_json(&rate))?;
+    let deposit = splitz_host::swap_deposit(
+        &bill_id,
+        &convert::quote_back(&quote),
+        &to,
+        amount_minor_units,
+        &rate,
+        &at,
+    )?;
+    Ok(SwapDepositPlan {
+        uri: deposit.uri,
+        note: deposit.note.to_json().to_string(),
+    })
+}
+
+/// The payment record for a swap sent from `quote` (§9.2): its id and
+/// reference are the provider's reference, it states the zatoshi that left
+/// and `rate` as `paidAtRate`, and its note names the asset and chain and,
+/// when the quote stated one, the least the recipient is guaranteed.
+#[allow(clippy::too_many_arguments)]
+#[uniffi::export]
+pub fn swap_payment_entry(
+    facts: HostFacts,
+    bill_id: String,
+    quote: ffi::SwapQuote,
+    to: String,
+    amount_minor_units: i64,
+    rate: ffi::ExchangeRate,
+    seed: String,
+) -> Result<String> {
+    let reference = quote
+        .reference
+        .clone()
+        .unwrap_or_else(|| quote.deposit_address.clone());
+    let guaranteed = quote
+        .min_amount_out
+        .as_deref()
+        .and_then(|floor| splitz_host::format_base_units(floor, quote.asset.decimals));
+    let note = splitz_host::swap_record_note(
+        &quote.asset.symbol,
+        &quote.asset.chain,
+        guaranteed.as_deref(),
+    );
+    let paid_at_rate = rate_json(&rate);
+    build(&facts, &seed, Some(&bill_id), |host| {
+        record_payment(
+            host,
+            &reference,
+            &to,
+            amount_minor_units,
+            "swap",
+            Some(&reference),
+            Some(quote.amount_in_zatoshi),
+            Some(paid_at_rate.clone()),
+            Some(&note),
+        )
+    })
+}
+
+/// `base_units` of a token with `decimals` as whole tokens — `39990000` at 6
+/// decimals is `39.99` — or `None` when it is not decimal digits.
+#[uniffi::export]
+pub fn format_base_units(base_units: String, decimals: i32) -> Option<String> {
+    splitz_host::format_base_units(&base_units, decimals)
+}
+
+/// `text` a person typed, read as minor units of `currency` at the exponent
+/// its ISO 4217 register gives (§2.1), or `None` when it is not a figure, is
+/// past a signed 64-bit amount, has more decimals than the currency, or the
+/// register gives the currency no minor unit. Integer arithmetic throughout:
+/// a float would round, and the rounding would be money.
+#[uniffi::export]
+pub fn parse_amount_in(text: String, currency: String) -> Option<i64> {
+    splitz_host::parse_amount_in(&text, &currency)
+}
+
+/// `text` read as minor units at `exponent` decimals — a percentage's basis
+/// points at 2 — or `None`, by [`parse_amount_in`]'s rules.
+#[uniffi::export]
+pub fn parse_minor_units(text: String, exponent: u32) -> Option<i64> {
+    splitz_host::parse_minor_units(&text, exponent)
+}
+
+/// Whether the send `note` holds may be cleared on a person's word that
+/// nothing left the wallet, when the note names the transaction it built:
+/// `state` is where the wallet's history shows that transaction. `None` when
+/// it may, and for a note naming none, which [`pending_send_unsent_refusal`]
+/// decides (§14.3).
+#[uniffi::export]
+pub fn pending_send_named_refusal(
+    bill_id: String,
+    note: String,
+    state: Option<ffi::TransactionState>,
+) -> Option<ffi::NamedSendRefusal> {
+    let held = PendingSend::held(&bill_id, &note);
+    let state = state.map(|s| match s {
+        ffi::TransactionState::Mined => splitz_host::TransactionState::Mined,
+        ffi::TransactionState::Waiting => splitz_host::TransactionState::Waiting,
+        ffi::TransactionState::Expired => splitz_host::TransactionState::Expired,
+    });
+    splitz_host::named_send_refusal(&held, state).map(|r| match r {
+        splitz_host::NamedSendRefusal::Waiting => ffi::NamedSendRefusal::Waiting,
+        splitz_host::NamedSendRefusal::Mined => ffi::NamedSendRefusal::Mined,
+    })
+}
+
+/// The §12 code the fold would set `entry` aside with were it appended to
+/// `entries`, or `None` when it would apply (§10.8, "Asking before writing").
+///
+/// Folded with signatures checked, as `fold_entries` folds, so pass `entry`
+/// signed as it would be written. `unknown_participant`, `unknown_entry` and
+/// `unknown_payment` wait on an entry this device may not hold yet and apply
+/// once a sync brings it; any other refusal is written, synced and refused on
+/// every device for good, so write nothing on one.
+#[uniffi::export]
+pub fn entry_refusal(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    entry: String,
+) -> Result<Option<String>> {
+    let parsed = parse_entries(&entries)?;
+    let candidate = parse(&entry, "an entry")?;
+    let mut all = parsed.clone();
+    all.push(candidate.clone());
+    let verified = Signer.prepare(all.iter(), &bill_id);
+    let verify = |e: &Value, key: &str| verified.verify(e, key);
+    let host = FactHost {
+        facts: &facts,
+        sign: None,
+        verify: Some(&verify),
+    };
+    Ok(BillLog::with_entries(&host, parsed)
+        .for_bill(bill_id)
+        .refusal_of(&candidate)?)
+}
+
+/// The payout to settle a debt by when this wallet cannot pay the recipient's
+/// first (§14.8), and why the first was passed over.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct PayoutFallback {
+    /// The position, in the recipient's declared order, of the payout to pay
+    /// by: what `obligation_via` takes for them.
+    pub index: u32,
+    /// Why the first could not be paid, to show the payer.
+    pub passed_over: String,
+}
+
+/// `cannot_pay` holds, for each of a recipient's declared payouts in their
+/// order, why this wallet cannot pay by it, or `None` when it can. The next
+/// payout it can pay, in the recipient's order, when it cannot pay the first;
+/// `None` when it can pay the first, or none at all (§14.8).
+#[uniffi::export]
+pub fn payout_fallback(cannot_pay: Vec<Option<String>>) -> Option<PayoutFallback> {
+    splitz_host::payout_fallback(&cannot_pay).map(|f| PayoutFallback {
+        index: u32::try_from(f.index).unwrap_or(u32::MAX),
+        passed_over: f.passed_over,
+    })
+}
+
+/// The id `assets` — the provider's token list, as `swap_assets_from_tokens`
+/// reads it — names native ZEC by: symbol `ZEC` on chain `zec`. `None` when it
+/// carries none. A provider lists ZEC wrapped on other chains too, and quoting
+/// one of those asks for a deposit the wallet cannot send.
+#[uniffi::export]
+pub fn zec_asset_in(assets: Vec<ffi::TradableAsset>) -> Option<String> {
+    let assets: Vec<splitz_host::TradableAsset> = assets
+        .into_iter()
+        .map(|a| splitz_host::TradableAsset {
+            asset_id: a.asset_id,
+            symbol: a.symbol,
+            chain: a.chain,
+            decimals: a.decimals,
+        })
+        .collect();
+    splitz_host::zec_asset_in(&assets)
+}
+
+/// Corrects the expense `expense_id` on the bill `entries` fold to (§10.4):
+/// an amendment of the entry that introduced it, its payload the expense as
+/// the bill reads it now with each given field replaced.
+///
+/// An amendment replaces its target wholesale, so the payload starts from the
+/// expense as applied, after any correction already standing, never from the
+/// entry as first written. Refused with `unknown_entry` when the bill applies
+/// no such expense.
+#[allow(clippy::too_many_arguments)]
+#[uniffi::export]
+pub fn amend_expense_entry(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    expense_id: String,
+    paid_by: Option<String>,
+    amount: Option<i64>,
+    split_json: Option<String>,
+    description: Option<String>,
+    seed: String,
+) -> Result<String> {
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    let split = match split_json {
+        Some(text) => Some(parse(&text, "a split")?),
+        None => None,
+    };
+    build(&facts, &seed, Some(&bill_id), |host| {
+        splitz_core::host::amend_expense(
+            host,
+            &folded,
+            &expense_id,
+            paid_by.as_deref(),
+            amount,
+            split.clone(),
+            description.as_deref(),
+        )
+    })
+}
+
+/// How far `rate` sits from `live` — both minor units per ZEC — in whole
+/// percent of `live`, truncated toward zero; positive when `rate` is above.
+/// `None` when `live` is not a price. A host warns at 5 or more either way
+/// (§14.2).
+#[uniffi::export]
+pub fn rate_percent_off(rate: i64, live: i64) -> Option<i64> {
+    splitz_host::rate_percent_off(rate, live)
+}
+
+/// Why a payment wants the payee's own look rather than a one-tap confirm
+/// (§14.7).
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaymentConcern {
+    /// The payer set the bill's rate.
+    RateSetByPayer,
+    /// The record was priced at a rate other than the bill's.
+    PricedAtAnotherRate,
+    /// The rate it is priced at is 5% or more from a live price.
+    RateFarFromLive,
+}
+
+/// The concerns the payment `payment_id` on the bill `entries` fold to raises
+/// before its payee confirms it; empty when none does. `live` is a live price
+/// of one ZEC in the payment's currency, or `None` when none could be read.
+/// A host leaves every payment with a concern out of a one-tap confirm.
+/// Refused with `unknown_payment` for a payment the bill does not hold.
+#[uniffi::export]
+pub fn concerns_before_confirming(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    payment_id: String,
+    live: Option<i64>,
+) -> Result<Vec<PaymentConcern>> {
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    let Some(payment) = folded.bill.payments.iter().find(|p| p.id == payment_id) else {
+        return Err(SplitzError::Protocol {
+            code: code::UNKNOWN_PAYMENT.to_owned(),
+            detail: format!("The bill holds no payment {payment_id}"),
+        });
+    };
+    Ok(
+        splitz_host::concerns_before_confirming(payment, &folded, live)
+            .into_iter()
+            .map(|c| match c {
+                splitz_host::PaymentConcern::RateSetByPayer => PaymentConcern::RateSetByPayer,
+                splitz_host::PaymentConcern::PricedAtAnotherRate => {
+                    PaymentConcern::PricedAtAnotherRate
+                }
+                splitz_host::PaymentConcern::RateFarFromLive => PaymentConcern::RateFarFromLive,
+            })
+            .collect(),
+    )
+}
+
+/// What each participant on the bill `entries` fold to is called on screen,
+/// by id: their name, qualified where a reader could not tell it from
+/// another's — the organiser as such, anybody else by the last eight
+/// characters of their id (§9.1).
+#[uniffi::export]
+pub fn display_names(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<HashMap<String, String>> {
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    Ok(folded
+        .bill
+        .participants
+        .iter()
+        .map(|p| {
+            (
+                p.id.clone(),
+                splitz_host::display_name_of(&folded.bill, &p.id, Some(&folded.creator_id)),
+            )
+        })
+        .collect())
+}
+
+/// `name` as a reader sees it: case folded, invisible and combining marks
+/// removed, spaces collapsed, and letters that render as Latin ones mapped to
+/// them. Two names with one skeleton cannot be told apart (§9.1).
+#[uniffi::export]
+pub fn name_skeleton(name: String) -> String {
+    splitz_host::name_skeleton(&name)
+}
+
+/// The transactions [`arrivals_of`] reads memos for, across `bills`: every
+/// one a record names that is to this device, is `shieldedZec`, and is not
+/// confirmed. A wallet reads these memos and no others (§14.7).
+#[uniffi::export]
+pub fn memo_txids(facts: HostFacts, bills: Vec<ffi::HeldBill>) -> Result<Vec<String>> {
+    let folded = fold_held(&facts, bills)?;
+    Ok(splitz_core::host::memo_txids(&folded, &facts.me)
+        .into_iter()
+        .collect())
+}
+
+/// `value` — an address or a reference — as a narrow review screen may show
+/// it and `check_payer_review` / `check_payee_review` still count it as shown:
+/// whole, or its first 10 characters and an ellipsis (§14.2).
+#[uniffi::export]
+pub fn short_form(value: String) -> String {
+    splitz_host::short_form(&value)
 }

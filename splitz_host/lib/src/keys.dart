@@ -171,6 +171,61 @@ List<int> identitySeedFrom(List<int> secret) => hashing.sha256.convert([
   ...secret,
 ]).bytes;
 
+/// The highest ZIP 32 account index: account indices are below 2^31.
+const maxAccountIndex = 0x7fffffff;
+
+/// The identity secret of a BIP39 wallet account (§15.1): [mnemonic] and
+/// [passphrase], UTF-8, joined by a zero byte, and for any ZIP 32 account but
+/// account 0, a zero byte and [accountIndex] as four big-endian bytes.
+///
+/// The passphrase is part of it because it selects another wallet from one
+/// mnemonic; the account index because two accounts of one mnemonic are two
+/// people to a bill. Neither text may hold a zero byte, so no two inputs join
+/// to the same bytes. Every wallet derives the same bytes, so one person
+/// is one participant whichever wallet they restore into.
+///
+/// Throws [ArgumentError] for an empty mnemonic, whose identity anyone could
+/// derive, and for either text holding a zero byte; [RangeError] for an
+/// account index outside 0..[maxAccountIndex].
+List<int> identitySecretFromMnemonic({
+  required String mnemonic,
+  required String passphrase,
+  int accountIndex = 0,
+}) {
+  if (mnemonic.isEmpty) {
+    throw ArgumentError.value(
+      mnemonic,
+      'mnemonic',
+      'an empty mnemonic derives an identity anyone can compute',
+    );
+  }
+  // The zero byte is the separator: one inside either text would let two
+  // different inputs join to one secret, and so one identity.
+  if (mnemonic.contains('\u0000') || passphrase.contains('\u0000')) {
+    throw ArgumentError(
+      'a mnemonic or passphrase holding a zero byte is not one a wallet derives',
+    );
+  }
+  RangeError.checkValueInInterval(
+    accountIndex,
+    0,
+    maxAccountIndex,
+    'accountIndex',
+  );
+  return [
+    ...utf8.encode(mnemonic),
+    0,
+    ...utf8.encode(passphrase),
+    if (accountIndex != 0) ...[
+      0,
+      (accountIndex >> 24) & 0xff,
+      (accountIndex >> 16) & 0xff,
+      (accountIndex >> 8) & 0xff,
+      accountIndex & 0xff,
+    ],
+  ];
+}
+
 /// Raised when an invite carries a different key for a bill this device
 /// already holds.
 class BillKeyConflict implements Exception {

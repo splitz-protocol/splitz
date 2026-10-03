@@ -92,6 +92,10 @@ void main() {
     final folded = d.log.fold();
 
     expect(folded.bill.participants.map((p) => p.id), ['ana', 'ben']);
+
+    // A reviewed request stands until the bill changes under it.
+    final reviewed = obligationFor(d.ben, folded)!;
+    expect(requestStands(d.ben, d.log.fold(), reviewed), isTrue);
     expect(folded.setAside, isEmpty);
 
     // §4: 90.00 split evenly is 45.00 each; ana paid, so ben owes ana 45.00.
@@ -110,6 +114,63 @@ void main() {
     expect(benOwes.unpayable, isEmpty);
     expect(benOwes.isComplete, isTrue);
     expect(benOwes.uri, startsWith('zcash:u1ana'));
+  });
+
+  test('a reviewed request stops standing once the bill changes under it', () {
+    final d = dinner();
+    final reviewed = obligationFor(d.ben, d.log.fold())!;
+    d.ana.tick();
+    final more = addExpense(
+      host: d.ana,
+      expenseId: 'x2',
+      paidBy: 'ana',
+      amount: 1000,
+      split: const {
+        'type': 'equal',
+        'among': ['ana', 'ben'],
+      },
+    );
+    expect(d.log.add([more]), isEmpty);
+    expect(requestStands(d.ben, d.log.fold(), reviewed), isFalse);
+  });
+
+  test('a refusal is known before the entry is written', () {
+    final d = dinner();
+    String idOf(String kind, [String? author]) => d.log.entries.firstWhere(
+          (e) => e['kind'] == kind && (author == null || e['author'] == author),
+        )['id'] as String;
+    final expense = idOf('addExpense');
+    final benJoin = idOf('joinBill', 'ben');
+
+    // Ben withdrawing Ana's expense is §10.8's to refuse.
+    expect(
+      d.log.refusalOf(voidEntry(host: d.ben, targetId: expense)),
+      splitz.SplitCode.unauthorizedEntry,
+    );
+    // Taking Ben off while the dinner names him.
+    expect(
+      d.log.refusalOf(voidEntry(host: d.ana, targetId: benJoin)),
+      splitz.SplitCode.participantStillNamed,
+    );
+    // An entry this device has not seen yet: written, it applies later.
+    final later = d.log.refusalOf(voidEntry(host: d.ana, targetId: 'not-yet'));
+    expect(later, splitz.SplitCode.unknownEntry);
+    expect(codesAnEntryOutgrows, contains(later));
+    // Ana withdrawing her own expense applies.
+    expect(d.log.refusalOf(voidEntry(host: d.ana, targetId: expense)), isNull);
+    // A second create on a log that names no bill leaves it opening none.
+    final unnamed = BillLog(d.ana, entries: d.log.entries);
+    expect(
+      unnamed.refusalOf(createBill(
+        host: d.ben,
+        name: 'Other',
+        currency: 'EUR',
+        creatorKey: fakeKey('ben'),
+      )),
+      splitz.SplitCode.ambiguousCreate,
+    );
+    // Nothing was written by asking.
+    expect(d.log.entries.where((e) => e['kind'] == 'voidEntry'), isEmpty);
   });
 
   test('a recipient with no address is reported, never dropped', () {

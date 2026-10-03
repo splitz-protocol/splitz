@@ -79,6 +79,7 @@ List<String> _ids(List<Arrival> arrivals) =>
 /// payer is rather than how a key comes to be bound.
 FoldedBill _bound(FoldedBill f, Map<String, String> bound) => FoldedBill(
       bill: f.bill,
+      creatorId: f.creatorId,
       setAside: f.setAside,
       withdrawn: f.withdrawn,
       replacedAddresses: f.replacedAddresses,
@@ -151,6 +152,24 @@ void main() {
       [IncomingTransaction(' $_t1 ', 20000)],
     );
     expect(found.arrived, hasLength(1));
+  });
+
+  test('a record that arrived is one the payee may not withdraw', () {
+    final b = _bill('Dinner');
+    _paid(b, 'p1', _t1);
+    _paid(b, 'p2', _t2, zatoshi: 20001);
+    final billId = b.log.fold().bill.id;
+    final found = arrivalsFor(
+      [b.log.fold()],
+      'ana',
+      const [IncomingTransaction(_t1, 20000), IncomingTransaction(_t2, 20000)],
+    );
+    expect(found.covering(billId, 'ben:p1')?.txid, _t1);
+    // Short of what it states, it is not evidence, and stays the payee's to
+    // dispute; another id or another bill is not covered either.
+    expect(found.covering(billId, 'ben:p2'), isNull);
+    expect(found.covering(billId, 'ben:p9'), isNull);
+    expect(found.covering('another-bill', 'ben:p1'), isNull);
   });
 
   test('a record claiming more ZEC than arrived is short', () {
@@ -291,6 +310,24 @@ void main() {
     expect(txidKey('\u{00A0}abcd'), '\u{00A0}abcd');
     expect(txidKey('\u{0130}BC'), '\u{0130}bc');
   });
+
+  test(
+    'a txid in digest order is reversed into the order a send reports',
+    () {
+      // Reversed outside this package, in Python, byte pair by byte pair.
+      const digest =
+          '00112233445566778899aabbccddeeff0123456789abcdef0f1e2d3c4b5a6978';
+      const sent =
+          '78695a4b3c2d1e0fefcdab8967452301ffeeddccbbaa99887766554433221100';
+      expect(txidInSendOrder(digest), sent);
+      expect(txidInSendOrder(sent), digest);
+      expect(txidInSendOrder(' ${digest.toUpperCase()}\n'), sent);
+      expect(txidInSendOrder(digest.substring(2)), isNull);
+      expect(txidInSendOrder('${digest}00'), isNull);
+      expect(txidInSendOrder(digest.replaceAll('0', 'g')), isNull);
+      expect(txidInSendOrder(''), isNull);
+    },
+  );
 
   test('a transaction two payers name is evidence for neither', () {
     final b = _bill('Dinner');
@@ -437,5 +474,46 @@ void main() {
     test('memos the wallet could not read decide nothing', () {
       expect(ids(withMemos(null).arrived), ['ben:p1']);
     });
+  });
+
+  test('the 95% line is exact at the boundary', () {
+    const payment = splitz.PaymentRecord(
+      id: 'p',
+      from: 'ben',
+      to: 'ana',
+      amount: 1000,
+      currency: 'EUR',
+      method: 'shieldedZec',
+      at: '2026-10-28T19:30:00.000Z',
+    );
+    splitz.ExchangeRate rate(String currency, [int per = 100000]) =>
+        splitz.ExchangeRate(
+          currency: currency,
+          minorUnitsPerZec: per,
+          at: '2026-10-28T19:30:00.000Z',
+        );
+    // 10.00 EUR at 1000.00 a ZEC: 95% is 950000 zatoshi exactly.
+    expect(zatoshiCoversPayment(950000, payment, rate('EUR')), isTrue);
+    expect(zatoshiCoversPayment(949999, payment, rate('EUR')), isFalse);
+    expect(zatoshiCoversPayment(950000, payment, rate('USD')), isFalse);
+    expect(zatoshiCoversPayment(950000, payment, null), isFalse);
+    expect(
+      zatoshiCoversPayment(
+        9223372036854775807,
+        payment,
+        rate('EUR', 9223372036854775807),
+      ),
+      isTrue,
+    );
+  });
+
+  test('memos are read for the transactions candidates name, and no others',
+      () {
+    final b = _bill('Dinner');
+    _paid(b, 'p1', ' ${_t1.toUpperCase()} ');
+    _paid(b, 'p2', _t2, method: 'cash');
+    final folded = b.log.fold();
+    expect(memoTxids([folded], 'ana'), {_t1});
+    expect(memoTxids([folded], 'ben'), isEmpty);
   });
 }

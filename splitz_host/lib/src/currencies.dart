@@ -180,3 +180,58 @@ const Map<String, int> iso4217Exponents = {
 /// it none — which is every code that is not an ISO 4217 currency with a minor
 /// unit.
 int? currencyExponent(String currency) => iso4217Exponents[currency];
+
+/// The most decimals [parseMinorUnits] reads: a signed 64-bit amount holds 18
+/// decimal digits in full. ISO 4217 exponents stop at 4.
+const maxParseExponent = 18;
+
+/// [text] a person typed, read as minor units at [exponent] decimals, or null
+/// when it is not one.
+///
+/// Integer arithmetic throughout: the figure is split on its separator and
+/// both halves read as whole numbers. Reading a double and multiplying rounds
+/// — `0.29 * 100` is not 29 in binary floating point — and that rounding is
+/// money. `.` and `,` both separate the fraction, but a `,` followed by
+/// exactly three digits is refused: `1,000` is a thousand to one reader and
+/// one to another, and a currency with three decimals makes both readings
+/// well formed. Only ASCII space, tab, carriage return and line feed are
+/// trimmed and only ASCII digits read, so every language reads one string
+/// alike. A figure with no digit, more fractional digits than [exponent], or
+/// a value past a signed 64-bit integer (§2.2) is refused rather than
+/// rounded or wrapped, and so is an [exponent] outside 0..[maxParseExponent].
+int? parseMinorUnits(String text, {required int exponent}) {
+  if (exponent < 0 || exponent > maxParseExponent) return null;
+  const space = {0x20, 0x09, 0x0d, 0x0a};
+  var start = 0, end = text.length;
+  while (start < end && space.contains(text.codeUnitAt(start))) {
+    start++;
+  }
+  while (end > start && space.contains(text.codeUnitAt(end - 1))) {
+    end--;
+  }
+  final typed = text.substring(start, end);
+  if (RegExp(r',[0-9]{3}$').hasMatch(typed)) return null;
+  final parts = typed.replaceAll(',', '.').split('.');
+  if (parts.length > 2) return null;
+  final whole = parts[0];
+  final fraction = parts.length == 2 ? parts[1] : '';
+  final digits = RegExp(r'^[0-9]*$');
+  if (!digits.hasMatch(whole) || !digits.hasMatch(fraction)) return null;
+  if (whole.isEmpty && fraction.isEmpty) return null;
+  if (fraction.length > exponent) return null;
+  final scaled = fraction.padRight(exponent, '0');
+  final value =
+      BigInt.parse(whole.isEmpty ? '0' : whole) *
+          BigInt.from(10).pow(exponent) +
+      BigInt.parse(scaled.isEmpty ? '0' : scaled);
+  if (value > BigInt.parse('9223372036854775807')) return null;
+  return value.toInt();
+}
+
+/// [text] read as an amount in [currency] (§2.1): [parseMinorUnits] at the
+/// exponent this register gives it, or null when the register gives it none —
+/// there is no scale at which a typed figure in it means anything.
+int? parseAmountIn(String text, String currency) {
+  final exponent = currencyExponent(currency);
+  return exponent == null ? null : parseMinorUnits(text, exponent: exponent);
+}

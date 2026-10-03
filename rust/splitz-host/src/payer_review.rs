@@ -57,6 +57,9 @@ pub enum ReviewRule {
     Awaiting,
     /// Every recipient paid by a preference other than their first (§14.8).
     LowerPreference,
+    /// Every recipient paid more than the debts the bill records explain
+    /// (§6).
+    Unexplained,
     /// The rate the request was priced at, and who set it.
     Rate,
     /// The ZEC amount and address of every output.
@@ -111,6 +114,7 @@ pub fn check_payer_review(
     reason_words: &BTreeMap<String, String>,
     via: &BTreeMap<String, i64>,
     lower_words: &str,
+    unexplained_words: &str,
 ) -> splitz_core::Result<Vec<ReviewFinding>> {
     let text = visible_text.join("\n");
     let names: BTreeMap<&str, &str> = folded
@@ -207,6 +211,30 @@ pub fn check_payer_review(
                 lower_words.to_owned()
             },
             !lower_words.is_empty() && text.contains(lower_words),
+        );
+    }
+
+    for s in &obligation.settlements {
+        if s.unexplained() <= 0 {
+            continue;
+        }
+        let who = name(&s.to);
+        let shown = text.contains(&who);
+        need(
+            ReviewRule::Unexplained,
+            "who is paid more than their debts explain".to_owned(),
+            who.clone(),
+            shown,
+        );
+        need(
+            ReviewRule::Unexplained,
+            format!("that part of what {who} is paid is unexplained"),
+            if unexplained_words.is_empty() {
+                "unexplained".to_owned()
+            } else {
+                unexplained_words.to_owned()
+            },
+            !unexplained_words.is_empty() && text.contains(unexplained_words),
         );
     }
 
@@ -333,6 +361,21 @@ fn shows_number(text: &str, number: &str) -> bool {
 
 /// The shortest prefix of an address a screen may show in its place.
 const ADDRESS_PREFIX_LENGTH: usize = 10;
+
+/// `value` — an address or a reference — as a narrow screen may show it and
+/// these checks still count it as shown (§14.2): whole when it is at most two
+/// characters longer than the shortest prefix allowed, otherwise that prefix
+/// and an ellipsis. Characters are Unicode scalar values (§2.3).
+pub fn short_form(value: &str) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() <= ADDRESS_PREFIX_LENGTH + 2 {
+        return value.to_owned();
+    }
+    format!(
+        "{}…",
+        chars[..ADDRESS_PREFIX_LENGTH].iter().collect::<String>()
+    )
+}
 
 /// True when `address` occurs in `text` whole, or as a prefix of at least 10
 /// characters that stops agreeing with it on a character that is not an

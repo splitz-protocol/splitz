@@ -25,6 +25,68 @@ void main() {
       expect(log.fold().bill.id, create['id']);
     });
 
+    test('the creator is the bill\'s own, not the first create a log lists',
+        () {
+      final ana = FakeHost(me: 'ana');
+      final aaa = FakeHost(me: 'aaa');
+      final mine = createBill(
+        host: ana,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: fakeKey('ana'),
+      );
+      // A create for another bill, by somebody whose id sorts first, pushed
+      // into the same log ahead of the real one.
+      final foreign = createBill(
+        host: aaa,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: fakeKey('aaa'),
+      );
+      final folded = BillLog(
+        ana,
+        entries: [foreign, mine],
+        billId: mine['id'] as String,
+      ).fold();
+      expect(folded.bill.id, mine['id']);
+      expect(folded.creatorId, 'ana');
+    });
+
+    test('a currency every reader refuses is refused before it is written', () {
+      final ana = FakeHost(me: 'ana');
+      for (final bad in ['usd', 'US', 'USDT', 'U5D', '']) {
+        expect(
+          () => createBill(
+            host: ana,
+            name: 'Dinner',
+            currency: bad,
+            creatorKey: fakeKey('ana'),
+          ),
+          throwsA(
+            isA<splitz.SplitError>().having(
+              (e) => e.code,
+              'code',
+              'bill_bad_currency',
+            ),
+          ),
+          reason: bad,
+        );
+      }
+      // Shape is all the core checks: a code with no minor unit is the
+      // reader's register to refuse (§2.1).
+      for (final good in ['USD', 'JPY', 'XAU']) {
+        expect(
+          createBill(
+            host: ana,
+            name: 'Dinner',
+            currency: good,
+            creatorKey: fakeKey('ana'),
+          )['currency'],
+          good,
+        );
+      }
+    });
+
     test('two bills opened at one instant by one person are two bills', () {
       final ana = FakeHost(me: 'ana');
       final first = createBill(

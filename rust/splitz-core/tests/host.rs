@@ -15,8 +15,8 @@ use std::collections::BTreeSet;
 use splitz_core::host::{
     accept_scan, add_expense, authored_id, base64url_no_pad, confirm_payment, create_bill,
     delta_for, invite_for, join_bill, obligation_for, read_scan, record_payment, record_send,
-    set_rate, settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned,
-    SendResult, Sent, SignEntry, VerifyEntry,
+    request_stands, set_rate, settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog,
+    Scanned, SendResult, Sent, SignEntry, VerifyEntry,
 };
 use splitz_core::{
     check_entry, net_balances, participant_id, sha256_hex, signing_message, Delta, Invite,
@@ -160,6 +160,38 @@ fn a_create_entry_opens_a_bill_and_its_id_is_the_bill() {
         Some(splitz_core::derive_bill_id(&create).unwrap().as_str())
     );
     check_entry(&create).expect("a create this layer wrote passes ingress");
+}
+
+#[test]
+fn the_creator_is_the_bills_own_not_the_first_create_a_log_lists() {
+    let ana = FakeHost::new("ana");
+    let aaa = FakeHost::new("aaa");
+    let mine = create_bill(&ana, "Dinner", "EUR", "equal", &fake_key("ana"), None).unwrap();
+    // A create for another bill, by somebody whose id sorts first, pushed into
+    // the same log ahead of the real one.
+    let foreign = create_bill(&aaa, "Dinner", "EUR", "equal", &fake_key("aaa"), None).unwrap();
+    let id = mine.get("id").and_then(Value::as_str).unwrap().to_owned();
+    let mut log = BillLog::new(&ana).for_bill(id.clone());
+    log.add(vec![foreign, mine]).unwrap();
+    let folded = log.fold().unwrap();
+    assert_eq!(folded.bill.id, id);
+    assert_eq!(folded.creator_id, "ana");
+}
+
+#[test]
+fn a_currency_every_reader_refuses_is_refused_before_it_is_written() {
+    let ana = FakeHost::new("ana");
+    for bad in ["usd", "US", "USDT", "U5D", ""] {
+        let refused =
+            create_bill(&ana, "Dinner", bad, "equal", &fake_key("ana"), None).expect_err(bad);
+        assert_eq!(refused.code, "bill_bad_currency", "{bad}");
+    }
+    // Shape is all the core checks: a code with no minor unit is the
+    // reader's register to refuse (§2.1).
+    for good in ["USD", "JPY", "XAU"] {
+        let create = create_bill(&ana, "Dinner", good, "equal", &fake_key("ana"), None).unwrap();
+        assert_eq!(create.get("currency").and_then(Value::as_str), Some(good));
+    }
 }
 
 #[test]
@@ -360,6 +392,67 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
     assert!(refused.bill.payments.is_empty());
     assert_eq!(refused.set_aside.len(), 1);
     assert_eq!(refused.set_aside[0].code, "unauthorized_entry");
+}
+
+#[test]
+fn a_reviewed_request_stands_until_the_bill_changes_under_it() {
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let mut log = BillLog::new(&ben);
+    assert!(log.add(dinner(&ana, &ben)).unwrap().is_empty());
+    let none = std::collections::BTreeMap::new();
+    let reviewed = obligation_for(&ben, &log.fold().unwrap()).unwrap().unwrap();
+    assert!(reviewed.uri().is_some());
+    assert!(request_stands(&ben, &log.fold().unwrap(), &reviewed, &none).unwrap());
+
+    // An expense merged after the review changes what ben owes.
+    ana.tick();
+    let more = add_expense(
+        &ana,
+        "x2",
+        "ana",
+        1000,
+        json!({"type": "equal", "among": ["ana", "ben"]}),
+        None,
+    )
+    .unwrap();
+    assert!(log.add(vec![more]).unwrap().is_empty());
+    assert!(!request_stands(&ben, &log.fold().unwrap(), &reviewed, &none).unwrap());
+}
+
+#[test]
+fn a_refusal_is_known_before_the_entry_is_written() {
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let mut log = BillLog::new(&ana);
+    assert!(log.add(dinner(&ana, &ben)).unwrap().is_empty());
+    let id_of = |kind: &str, author: Option<&str>| {
+        log.entries()
+            .into_iter()
+            .find(|e| e["kind"] == kind && author.is_none_or(|a| e["author"] == a))
+            .and_then(|e| e["id"].as_str().map(str::to_owned))
+            .unwrap()
+    };
+    let expense = id_of("addExpense", None);
+    let ben_join = id_of("joinBill", Some("ben"));
+    let ask =
+        |who: &FakeHost, target: &str| log.refusal_of(&void_entry(who, target).unwrap()).unwrap();
+    assert_eq!(ask(&ben, &expense).as_deref(), Some("unauthorized_entry"));
+    assert_eq!(
+        ask(&ana, &ben_join).as_deref(),
+        Some("participant_still_named")
+    );
+    let later = ask(&ana, "not-yet");
+    assert_eq!(later.as_deref(), Some("unknown_entry"));
+    assert!(splitz_core::host::CODES_AN_ENTRY_OUTGROWS.contains(&later.as_deref().unwrap()));
+    assert_eq!(ask(&ana, &expense), None);
+    assert!(log.entries().iter().all(|e| e["kind"] != "voidEntry"));
+    // A second create on a log that names no bill leaves it opening none.
+    let other = create_bill(&ben, "Other", "EUR", "equal", &fake_key("ben"), None).unwrap();
+    assert_eq!(
+        log.refusal_of(&other).unwrap().as_deref(),
+        Some("ambiguous_create")
+    );
 }
 
 #[test]
@@ -1105,4 +1198,42 @@ fn an_id_is_written_under_its_author_once_whatever_the_author_holds() {
     // still writes the same id for one, in both implementations.
     assert_eq!(authored_id("ben:t1", "ben:t1:ana"), "ben:t1:ana");
     assert_eq!(authored_id("ben:t1", "ana"), "ben:t1:ana");
+}
+
+#[test]
+fn a_second_correction_keeps_what_the_first_one_changed() {
+    use splitz_core::host::amend_expense;
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let mut log = BillLog::new(&ana);
+    assert!(log.add(dinner(&ana, &ben)).unwrap().is_empty());
+    let id = log.fold().unwrap().bill.expenses[0].id.clone();
+    ana.tick();
+    let first = amend_expense(
+        &ana,
+        &log.fold().unwrap(),
+        &id,
+        None,
+        None,
+        None,
+        Some("supper"),
+    );
+    log.add(vec![first.unwrap()]).unwrap();
+    ana.tick();
+    let second = amend_expense(
+        &ana,
+        &log.fold().unwrap(),
+        &id,
+        None,
+        Some(6000),
+        None,
+        None,
+    );
+    log.add(vec![second.unwrap()]).unwrap();
+    let folded = log.fold().unwrap();
+    assert!(folded.set_aside.is_empty(), "{:?}", folded.set_aside);
+    let e = &folded.bill.expenses[0];
+    assert_eq!((e.amount, e.description.as_str()), (6000, "supper"));
+    let missing = amend_expense(&ana, &folded, "ana:x9", None, Some(1), None, None);
+    assert_eq!(missing.unwrap_err().code, "unknown_entry");
 }

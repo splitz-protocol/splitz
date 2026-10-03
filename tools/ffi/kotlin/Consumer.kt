@@ -217,11 +217,11 @@ fun main(args: Array<String>) {
     val zec = renderAmount(owed.request.payments.single().zatoshi)
     val screen = listOf("Pay Ana $zec ZEC", "to u1ana",
                         "at ${rateFigure(owed.rate)} EUR per ZEC, set by Ana")
-    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "")
+    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "", "")
     check("a screen showing every fact passes", shown.isEmpty(), "$screen")
     val noAddress = checkPayerReview(ben.facts(), billId, ben.entries, owed,
                                      screen.map { if (it == "to u1ana") "to your contact" else it },
-                                     mapOf(), mapOf(), "")
+                                     mapOf(), mapOf(), "", "")
     check("one without the output's address is told exactly that",
           noAddress == listOf(ReviewFinding(ReviewRule.OUTPUT, "the address Ana is paid at", "u1ana")),
           "$noAddress")
@@ -242,6 +242,13 @@ fun main(args: Array<String>) {
     check("one built and not broadcast keeps its note, naming the transaction",
           pendingSendBlocks(billId, note)?.txid == txid, "${pendingSendBlocks(billId, note)?.txid}")
     check("and the next send is still blocked", pendingSendBlocks(billId, note) != null, "blocked")
+    check("a note naming its transaction is not cleared while the wallet may still send it",
+          pendingSendNamedRefusal(billId, note!!, TransactionState.WAITING) == NamedSendRefusal.WAITING,
+          "${pendingSendNamedRefusal(billId, note, TransactionState.WAITING)}")
+    check("nor once it went through, and may be once it expired",
+          pendingSendNamedRefusal(billId, note, TransactionState.MINED) == NamedSendRefusal.MINED &&
+              pendingSendNamedRefusal(billId, note, TransactionState.EXPIRED) == null,
+          "${pendingSendNamedRefusal(billId, note, TransactionState.EXPIRED)}")
     check("nobody may say it never left while the wallet is still sending",
           pendingSendUnsentRefusal(billId, note!!, true, listOf()) == UnsentClaimRefusal.StillSending,
           "${pendingSendUnsentRefusal(billId, note, true, listOf())}")
@@ -495,6 +502,90 @@ fun main(args: Array<String>) {
           "${failedSwapWithdrawals(ana.facts(), taxiId, taxi, "intent-1")}")
     check("and nothing to ben, who did not write it",
           failedSwapWithdrawals(ben.facts(), taxiId, taxi, "intent-1").isEmpty(), "none")
+
+    println("a swap's deposit and its record come from the binding (§15.7)")
+    val eur = ExchangeRate("EUR", 51234L, "2026-10-28T19:30:00.000Z", null)
+    check("a debt is sized in zatoshi at the bill's rate, rounding up",
+          fiatToZatoshi(4000L, eur) == 7_807_316L, "${fiatToZatoshi(4000L, eur)}")
+    val deposit = swapDeposit(taxiId, quote("0xbenbase", "base"), ben.me, 4000L, eur, ana.now())
+    check("a deposit is one request to the quote's address for its zatoshi",
+          deposit.uri.startsWith("zcash:t1deposit?amount=0.07807316"), deposit.uri)
+    check("and its note carries the swap", deposit.note.contains("\"reference\":\"intent-1\""), deposit.note)
+    val needsMemo = refusal {
+        swapDeposit(taxiId, quote("0xbenbase", "base").copy(depositMemo = "123"), ben.me, 4000L, eur, ana.now())
+    }
+    check("one whose deposit needs a memo is refused", needsMemo != null, "${needsMemo?.detail}")
+    val swapEntry = swapPaymentEntry(ana.facts(), taxiId,
+        quote("0xbenbase", "base").copy(minAmountOut = "39500000"), ben.me, 4000L, eur, ana.seed)
+    check("its record names the asset, the chain and the floor",
+          swapEntry.contains("\"note\":\"at least 39.5 USDC on base\""), swapEntry)
+    check("base units read as whole tokens",
+          formatBaseUnits("39990000", 6) == "39.99" && formatBaseUnits("x", 6) == null, "39.99")
+
+    println("what every wallet derives, reads and asks before writing")
+    val mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+    check("a mnemonic derives the seed every wallet derives (§15.1)",
+          identitySeedFromMnemonic(mnemonic, "", 1u) == "jWQijb3QECEvHgOUb4_W7UPiUujN7D-7Nq0jYg5mrKo",
+          identitySeedFromMnemonic(mnemonic, "", 1u))
+    val noMnemonic = refusal { identitySeedFromMnemonic("", "", 0u) }
+    check("an empty mnemonic is refused", noMnemonic != null, "${noMnemonic?.detail}")
+    check("a txid in digest order is reversed (§14.7)",
+          txidInSendOrder("00".repeat(31) + "ab") == "ab" + "00".repeat(31) && txidInSendOrder("abc") == null,
+          "${txidInSendOrder("00".repeat(31) + "ab")}")
+    check("a typed figure is read in integers (§2.1)",
+          parseAmountIn("12.34", "EUR") == 1234L && parseAmountIn("1,000", "KWD") == null &&
+              parseMinorUnits("12.5", 2u) == 1250L,
+          "${parseAmountIn("12.34", "EUR")}")
+    val gold = refusal { createBillEntry(ana.facts(), "Gold", "XAU", "equal", anaKey, null, ana.seed) }
+    check("no bill is opened in a currency with no minor unit", gold != null, "${gold?.detail}")
+    val taxiFolded = foldEntries(ana.facts(), taxiId, taxi)
+    check("the creator is the one the fold names", taxiFolded.creatorId == ana.me, taxiFolded.creatorId)
+    val benOff = planRemoval(ana.facts(), taxiId, taxi, ben.me, ana.me)
+    check("taking ben off lists his join to withdraw", benOff.joins.size == 1, "${benOff.joins}")
+    val off = voidEntryFor(ana.facts(), taxiId, benOff.joins.single(), ana.seed)
+    check("which is refused before it is written while the bill names him",
+          entryRefusal(ana.facts(), taxiId, taxi, off) == "participant_still_named",
+          "${entryRefusal(ana.facts(), taxiId, taxi, off)}")
+    check("and ana withdrawing her own record is not",
+          entryRefusal(ana.facts(), taxiId, taxi, voidEntryFor(ana.facts(), taxiId, swapRecordId, ana.seed)) == null,
+          "none")
+
+    println("and the rest of what every wallet needs from the protocol")
+    check("a first payout this wallet cannot pay is passed over for the next it can (§14.8)",
+          payoutFallback(listOf("not on base", null)) == PayoutFallback(1u, "not on base") &&
+              payoutFallback(listOf(null, "x")) == null,
+          "${payoutFallback(listOf("not on base", null))}")
+    val wrapped = TradableAsset("nep141:near-zec", "ZEC", "near", 8)
+    check("native ZEC is the one on its own chain",
+          zecAssetIn(listOf(wrapped, TradableAsset("nep141:zec.omft.near", "ZEC", "zec", 8))) ==
+              "nep141:zec.omft.near" && zecAssetIn(listOf(wrapped)) == null,
+          "nep141:zec.omft.near")
+    check("a rate 5% from the live price is told by how much",
+          ratePercentOff(105L, 100L) == 5L && ratePercentOff(1L, 0L) == null, "${ratePercentOff(105L, 100L)}")
+    check("names a reader cannot tell apart fold alike",
+          nameSkeleton("\u0410na") == nameSkeleton("ana"), nameSkeleton("\u0410na"))
+    check("every participant has a display name",
+          displayNames(ana.facts(), taxiId, taxi).keys == setOf(ana.me, ben.me),
+          "${displayNames(ana.facts(), taxiId, taxi)}")
+    val corrected = amendExpenseEntry(ben.facts(), taxiId, taxi, "${ben.me}:t1", null, 9000L, null,
+        "taxi home", ben.seed)
+    check("an expense is corrected from what the bill applies now",
+          entryRefusal(ben.facts(), taxiId, taxi, corrected) == null, "none")
+    val unknownExpense = try {
+        amendExpenseEntry(ben.facts(), taxiId, taxi, "${ben.me}:t9", null, 1L, null, null, ben.seed); null
+    } catch (e: SplitzException.Protocol) { e }
+    check("and one the bill does not apply is refused", unknownExpense?.code == "unknown_entry",
+          "${unknownExpense?.code}")
+    check("ana paying by a rate she set is a concern before ben confirms it",
+          concernsBeforeConfirming(ben.facts(), taxiId, taxi, "${ana.me}:intent-1", null) ==
+              listOf(PaymentConcern.RATE_SET_BY_PAYER),
+          "${concernsBeforeConfirming(ben.facts(), taxiId, taxi, "${ana.me}:intent-1", null)}")
+    val toAna = recordPaymentEntry(ben.facts(), taxiId,
+        PaymentDraft("p-memo", ana.me, 1000L, "shieldedZec", "ab".repeat(32), 2_000_000L, null, null), ben.seed)
+    check("memos are read for the transactions a record to this device names",
+          memoTxids(ana.facts(), listOf(HeldBill(taxiId, taxi + toAna))) == listOf("ab".repeat(32)) &&
+              memoTxids(ana.facts(), listOf(HeldBill(taxiId, taxi))).isEmpty(),
+          "${memoTxids(ana.facts(), listOf(HeldBill(taxiId, taxi + toAna)))}")
 
     println(if (failures == 0)
         "CONSUMER RESULT: kotlin drives a whole bill with no callbacks, $failures failures"

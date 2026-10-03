@@ -435,4 +435,34 @@ void main() {
       }
     });
   });
+
+  group('§14.3: clearing a note that names its transaction', () {
+    final named = _send().sentAs('ab' * 32);
+
+    test(
+      'refused while the wallet may still send it, or once it went through',
+      () {
+        expect(
+          namedSendRefusal(named, state: TransactionState.waiting),
+          NamedSendRefusal.waiting,
+        );
+        expect(
+          namedSendRefusal(named, state: TransactionState.mined),
+          NamedSendRefusal.mined,
+        );
+      },
+    );
+
+    test('allowed once it expired, or the history does not hold it', () {
+      expect(namedSendRefusal(named, state: TransactionState.expired), isNull);
+      expect(namedSendRefusal(named, state: null), isNull);
+    });
+
+    test('a note naming none is the other rule\'s', () {
+      expect(
+        namedSendRefusal(_send(), state: TransactionState.waiting),
+        isNull,
+      );
+    });
+  });
 }

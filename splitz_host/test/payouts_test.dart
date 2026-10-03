@@ -105,4 +105,17 @@ void main() {
       expect(_keys(declared), ['zec::zA', 'cash::']);
     });
   });
+
+  test(
+    'a first payout this wallet cannot pay is passed over for the next it can',
+    () {
+      expect(payoutFallback([null, 'x']), isNull);
+      final next = payoutFallback(['not on base', null])!;
+      expect([next.index, next.passedOver], [1, 'not on base']);
+      expect(payoutFallback(['a', 'b', null])!.index, 2);
+      expect(payoutFallback(['a', 'b']), isNull);
+      expect(payoutFallback([]), isNull);
+      expect(payoutFallback(['a']), isNull);
+    },
+  );
 }

@@ -513,6 +513,60 @@ fn a_method_the_protocol_does_not_define_is_set_aside_at_the_fold() {
 }
 
 #[test]
+fn a_payout_nobody_could_be_paid_by_is_not_written() {
+    let ana = FakeHost::new("ana");
+    let join = |payouts: Vec<Value>| join_bill(&ana, Some("Ana"), None, None, Some(payouts));
+    for bad in [
+        json!({"type": "zec"}),
+        json!({"type": "zec", "address": "  "}),
+        json!({"type": "swap", "asset": "USDC", "address": "0xa"}),
+        json!({"type": "swap", "asset": "", "chain": "base", "address": "0xa"}),
+        json!({"type": "swap", "asset": "USDC", "chain": "base", "address": 7}),
+    ] {
+        let refused = join(vec![json!({"type": "cash"}), bad.clone()]).unwrap_err();
+        assert_eq!(refused.code, "bill_type_error", "{bad}");
+    }
+    let honest = vec![
+        json!({"type": "zec", "address": "u1ana"}),
+        json!({"type": "swap", "asset": "USDC", "chain": "base", "address": "0xa"}),
+        json!({"type": "cash"}),
+    ];
+    assert_eq!(
+        join(honest.clone()).unwrap()["participant"]["payouts"],
+        Value::Array(honest)
+    );
+    // A type §9.1 does not define is left for every reader to refuse.
+    assert!(join(vec![json!({"type": "venmo"})]).is_ok());
+}
+
+#[test]
+fn a_payment_of_nothing_or_a_swap_naming_none_is_not_written() {
+    let ana = FakeHost::new("ana");
+    let write = |amount: i64, method: &str, reference: Option<&str>| {
+        record_payment(
+            &ana, "p", "ben", amount, method, reference, None, None, None,
+        )
+    };
+    for amount in [0, -1] {
+        assert_eq!(
+            write(amount, "cash", None).unwrap_err().code,
+            "negative_amount"
+        );
+    }
+    for reference in [None, Some(""), Some("  ")] {
+        assert_eq!(
+            write(100, "swap", reference).unwrap_err().code,
+            "bill_type_error",
+            "{reference:?}"
+        );
+    }
+    // One unit, a swap that names its intent, and cash naming nothing are all
+    // honest records.
+    assert!(write(1, "cash", None).is_ok());
+    assert!(write(100, "swap", Some("intent-1")).is_ok());
+}
+
+#[test]
 fn a_payment_to_oneself_is_set_aside_whichever_method_it_claims() {
     for method in ["shieldedZec", "swap", "cash"] {
         let ana = FakeHost::new("ana");
@@ -523,7 +577,7 @@ fn a_payment_to_oneself_is_set_aside_whichever_method_it_claims() {
             "ana",
             100,
             method,
-            None,
+            Some(&format!("r-{method}")),
             None,
             None,
             None,

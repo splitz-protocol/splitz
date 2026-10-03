@@ -243,6 +243,29 @@ fn a_transaction_id_is_matched_whatever_its_case_and_padding() {
 }
 
 #[test]
+fn a_record_that_arrived_is_one_the_payee_may_not_withdraw() {
+    let mut b = Bill::new("Dinner");
+    b.paid("p1", T1, Some(20_000), "shieldedZec");
+    b.paid("p2", T2, Some(20_001), "shieldedZec");
+    let folded = b.folded();
+    let bill_id = folded.bill.id.clone();
+    let found = arrivals_for(
+        std::slice::from_ref(&folded),
+        "ana",
+        &[received(T1, 20_000), received(T2, 20_000)],
+    );
+    assert_eq!(
+        found.covering(&bill_id, "ben:p1").map(|a| a.txid.as_str()),
+        Some(T1)
+    );
+    // Short of what it states, it is not evidence, and stays the payee's to
+    // dispute; another id or another bill is not covered either.
+    assert!(found.covering(&bill_id, "ben:p2").is_none());
+    assert!(found.covering(&bill_id, "ben:p9").is_none());
+    assert!(found.covering("another-bill", "ben:p1").is_none());
+}
+
+#[test]
 fn a_record_claiming_more_zec_than_arrived_is_short() {
     let mut b = Bill::new("Dinner");
     b.paid("p1", T1, Some(20_001), "shieldedZec");
@@ -362,6 +385,24 @@ fn a_txid_is_compared_with_ascii_space_trimmed_and_ascii_lower_cased_nothing_wid
     assert_eq!(txid_key("abcd\u{FEFF}"), "abcd\u{FEFF}");
     assert_eq!(txid_key("\u{00A0}abcd"), "\u{00A0}abcd");
     assert_eq!(txid_key("\u{0130}BC"), "\u{0130}bc");
+}
+
+#[test]
+fn a_txid_in_digest_order_is_reversed_into_the_order_a_send_reports() {
+    use splitz_core::host::txid_in_send_order;
+    // Reversed outside this crate, in Python, byte pair by byte pair.
+    let digest = "00112233445566778899aabbccddeeff0123456789abcdef0f1e2d3c4b5a6978";
+    let sent = "78695a4b3c2d1e0fefcdab8967452301ffeeddccbbaa99887766554433221100";
+    assert_eq!(txid_in_send_order(digest).as_deref(), Some(sent));
+    assert_eq!(txid_in_send_order(sent).as_deref(), Some(digest));
+    assert_eq!(
+        txid_in_send_order(&format!(" {}\n", digest.to_uppercase())).as_deref(),
+        Some(sent)
+    );
+    assert_eq!(txid_in_send_order(&digest[2..]), None);
+    assert_eq!(txid_in_send_order(&format!("{digest}00")), None);
+    assert_eq!(txid_in_send_order(&digest.replace('0', "g")), None);
+    assert_eq!(txid_in_send_order(""), None);
 }
 
 #[test]
@@ -495,4 +536,73 @@ fn no_memo_at_all_is_not() {
 #[test]
 fn memos_the_wallet_could_not_read_decide_nothing() {
     assert_eq!(payment_ids(&with_memos(None).arrived), ["ben:p1"]);
+}
+
+#[test]
+fn the_ninety_five_percent_line_is_exact_at_the_boundary() {
+    use splitz_core::host::zatoshi_covers_payment;
+    use splitz_core::{ExchangeRate, PaymentRecord};
+    let payment = PaymentRecord {
+        id: "p".into(),
+        from: "ben".into(),
+        to: "ana".into(),
+        amount: 1000,
+        currency: "EUR".into(),
+        method: "shieldedZec".into(),
+        at: "2026-10-28T19:30:00.000Z".into(),
+        zatoshi: None,
+        paid_at_rate: None,
+        reference: None,
+        note: None,
+    };
+    let rate = |currency: &str| ExchangeRate {
+        currency: currency.into(),
+        minor_units_per_zec: 100_000,
+        at: "2026-10-28T19:30:00.000Z".into(),
+        source: None,
+    };
+    // 10.00 EUR at 1000.00 a ZEC: 95% is 950000 zatoshi exactly.
+    assert!(zatoshi_covers_payment(
+        950_000,
+        &payment,
+        Some(&rate("EUR"))
+    ));
+    assert!(!zatoshi_covers_payment(
+        949_999,
+        &payment,
+        Some(&rate("EUR"))
+    ));
+    assert!(!zatoshi_covers_payment(
+        950_000,
+        &payment,
+        Some(&rate("USD"))
+    ));
+    assert!(!zatoshi_covers_payment(950_000, &payment, None));
+    // A product past i128 is worth more than any amount.
+    let huge = ExchangeRate {
+        minor_units_per_zec: i64::MAX,
+        ..rate("EUR")
+    };
+    assert!(zatoshi_covers_payment(i64::MAX, &payment, Some(&huge)));
+}
+
+#[test]
+fn memos_are_read_for_the_transactions_candidates_name_and_no_others() {
+    use splitz_core::host::memo_txids;
+    let mut b = Bill::new("Dinner");
+    b.paid(
+        "p1",
+        &format!(" {} ", T1.to_uppercase()),
+        Some(20_000),
+        "shieldedZec",
+    );
+    b.paid("p2", T2, Some(20_000), "cash");
+    let folded = b.folded();
+    assert_eq!(
+        memo_txids(std::slice::from_ref(&folded), "ana")
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec![T1.to_owned()]
+    );
+    assert!(memo_txids(std::slice::from_ref(&folded), "ben").is_empty());
 }

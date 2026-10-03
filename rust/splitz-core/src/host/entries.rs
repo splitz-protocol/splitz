@@ -54,6 +54,8 @@ pub fn create_bill(
     creator_key: &str,
     bill_key: Option<&str>,
 ) -> Result<Value> {
+    // §2.1: a writer refuses what every reader refuses.
+    crate::money::check_currency(currency)?;
     let mut entry = Map::new();
     entry.insert("v".to_owned(), Value::from(ENTRY_VERSION));
     entry.insert("author".to_owned(), Value::from(host.me()));
@@ -78,6 +80,37 @@ pub fn create_bill(
     let value = Value::Object(entry);
     let id = derive_bill_id(&value)?;
     Ok(with_id(value, id))
+}
+
+/// Refuses a payout nobody could be paid by (§9.1): a `zec` payout with no
+/// address, or a `swap` missing its asset, chain or address. A reader takes
+/// such a payout as unpayable and sends the payer to the next preference
+/// without asking, so it is never written. A type §9.1 does not define is
+/// left to every reader, which refuses it (`bill_unknown_payout_method`).
+fn check_payout(payout: &Value) -> Result<()> {
+    let blank = |field: &str| {
+        payout
+            .get(field)
+            .and_then(Value::as_str)
+            .is_none_or(|v| v.trim().is_empty())
+    };
+    let kind = payout.get("type").and_then(Value::as_str).unwrap_or("");
+    let fields: &[&str] = match kind {
+        "zec" => &["address"],
+        "swap" => &["asset", "chain", "address"],
+        "cash" => &[],
+        // A type §9.1 does not define is every reader's to refuse.
+        _ => &[],
+    };
+    let missing: Vec<&str> = fields.iter().copied().filter(|f| blank(f)).collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(crate::error::SplitError::new(
+            crate::error::code::BILL_TYPE_ERROR,
+            format!("A {kind} payout names its {}", missing.join(", ")),
+        ))
+    }
 }
 
 /// Joins a bill, or restates this device's own participant record.
@@ -107,6 +140,9 @@ pub fn join_bill(
     // order is the preference order, and a reader that reorders it settles to
     // a different address than the one asked for.
     if let Some(payouts) = payouts {
+        for payout in &payouts {
+            check_payout(payout)?;
+        }
         participant.insert("payouts".to_owned(), Value::Array(payouts));
     }
     let mut body = Map::new();
@@ -190,6 +226,22 @@ pub fn record_payment(
     paid_at_rate: Option<Value>,
     note: Option<&str>,
 ) -> Result<Value> {
+    // §9.2: a payment of nothing records nothing, and while unconfirmed it
+    // still withholds the whole debt it names from this payer's request.
+    if amount <= 0 {
+        return Err(crate::error::SplitError::new(
+            crate::error::code::NEGATIVE_AMOUNT,
+            format!("A payment is more than nothing, got {amount}"),
+        ));
+    }
+    // §9.2: a swap is known only by its reference; without one neither side
+    // can find it again.
+    if method == "swap" && reference.is_none_or(|r| r.trim().is_empty()) {
+        return Err(crate::error::SplitError::new(
+            crate::error::code::BILL_TYPE_ERROR,
+            "A swap payment names its swap in reference",
+        ));
+    }
     let mut payment = Map::new();
     payment.insert(
         "id".to_owned(),
@@ -287,6 +339,50 @@ pub fn amend_entry(
     body.insert("targetId".to_owned(), Value::from(target_id));
     body.insert(member.to_owned(), payload);
     sealed(host, body)
+}
+
+/// Corrects the expense `expense_id` on `folded` (§10.4): an amendment of
+/// the entry that introduced it, its payload the expense as the bill reads it
+/// now with `paid_by`, `amount`, `split` and `description` replacing what they
+/// name.
+///
+/// An amendment replaces its target wholesale, so the payload starts from the
+/// expense as applied — after any amendment already standing — and never from
+/// the entry as first written: a field a later correction changed would
+/// otherwise be changed back. Refused with `unknown_entry` when the bill
+/// applies no such expense.
+#[allow(clippy::too_many_arguments)]
+pub fn amend_expense(
+    host: &dyn BillHost,
+    folded: &super::bill_log::FoldedBill,
+    expense_id: &str,
+    paid_by: Option<&str>,
+    amount: Option<i64>,
+    split: Option<Value>,
+    description: Option<&str>,
+) -> Result<Value> {
+    let expense = folded.bill.expenses.iter().find(|e| e.id == expense_id);
+    let target = folded.expense_entries.get(expense_id);
+    let (Some(expense), Some(target)) = (expense, target) else {
+        return Err(crate::error::SplitError::new(
+            crate::error::code::UNKNOWN_ENTRY,
+            format!("The bill applies no expense {expense_id}"),
+        ));
+    };
+    let mut payload = crate::serialization::expense_to_json(expense);
+    if let Some(paid_by) = paid_by {
+        payload["paidBy"] = Value::from(paid_by);
+    }
+    if let Some(amount) = amount {
+        payload["amount"] = Value::from(amount);
+    }
+    if let Some(split) = split {
+        payload["split"] = split;
+    }
+    if let Some(description) = description {
+        payload["description"] = Value::from(description);
+    }
+    amend_entry(host, target, "expense", payload)
 }
 
 /// Withdraws an entry. Who may is §10.8's decision.

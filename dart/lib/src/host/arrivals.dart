@@ -31,8 +31,23 @@ String txidKey(String txid) {
   ]);
 }
 
+/// [digestOrderHex] — a 32-byte transaction id hex-encoded in the order its
+/// digest is computed in, as a wallet's own store commonly keeps it — in the
+/// order a send reports it and a block explorer shows it, which §14.7 compares
+/// (bytes reversed, lower case). Null when it is not 64 hex digits.
+String? txidInSendOrder(String digestOrderHex) {
+  final hex = txidKey(digestOrderHex);
+  if (hex.length != 64 || !RegExp(r'^[0-9a-f]+$').hasMatch(hex)) return null;
+  return [
+    for (var i = hex.length - 2; i >= 0; i -= 2) hex.substring(i, i + 2),
+  ].join();
+}
+
 /// Money this wallet received in one transaction: the sum of that
 /// transaction's outputs to this account, in zatoshi.
+///
+/// Only a transaction mined in a block and not expired is received (§14.7),
+/// and [txid] is in the order a send reports it: see [txidInSendOrder].
 class IncomingTransaction {
   const IncomingTransaction(this.txid, this.zatoshi, {this.memos});
 
@@ -107,7 +122,30 @@ class Arrivals {
   /// the record's bill's (§8.5). Not proposed: the transaction was sent, but
   /// nothing says it was sent for this bill.
   final List<Arrival> unbound;
+
+  /// The proposal covering the payment [paymentId] on [billId], or null.
+  ///
+  /// A payee MUST NOT withdraw a record this answers for (§14.7): its
+  /// transaction reached this wallet carrying what the record states, and
+  /// withdrawing it asks the payer to pay a debt a second time.
+  Arrival? covering(String billId, String paymentId) => arrived
+      .where((a) => a.billId == billId && a.payment.id == paymentId)
+      .firstOrNull;
 }
+
+/// The transactions [arrivalsFor] reads memos for: every one a record on
+/// [bills] names that is to [me], is `shieldedZec`, and is not confirmed —
+/// each id as [txidKey] compares it. Reading a memo is a read per
+/// transaction, so a wallet reads these and no others.
+Set<String> memoTxids(List<FoldedBill> bills, String me) => {
+      for (final folded in bills)
+        for (final p in folded.bill.payments)
+          if (p.to == me &&
+              p.method == 'shieldedZec' &&
+              p.reference != null &&
+              !folded.bill.confirmedPayments.contains(p.id))
+            txidKey(p.reference!),
+    };
 
 /// Matches unconfirmed ZEC payment records to [me] against the transactions
 /// [received], across every one of [bills] at once (§14.7).
@@ -210,7 +248,7 @@ Arrivals arrivalsFor(
       unbound.add(a);
     } else if (stated == null) {
       unstated.add(a);
-    } else if (!_paysFor(stated, a.payment, rates[a.billId])) {
+    } else if (!zatoshiCoversPayment(stated, a.payment, rates[a.billId])) {
       underpriced.add(a);
     } else if (stated <= left[a.txid]!) {
       left[a.txid] = _use(left[a.txid]!, stated);
@@ -232,7 +270,10 @@ Arrivals arrivalsFor(
 /// Whether [zatoshi], at the bill's [rate], is worth at least 95% of what
 /// [payment] settles (§14.7): `zatoshi × rate × 100 ≥ amount × 95 × 10^8`,
 /// compared exactly. No rate in the payment's currency vouches for nothing.
-bool _paysFor(
+///
+/// The test [arrivalsFor] applies, for a screen asking it of any record: a
+/// worth rounded for display first answers differently near 95%.
+bool zatoshiCoversPayment(
   int zatoshi,
   splitz.PaymentRecord payment,
   splitz.ExchangeRate? rate,

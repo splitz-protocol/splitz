@@ -73,6 +73,47 @@ pub trait SecretStore {
     fn delete(&self, key: &str) -> Result<()>;
 }
 
+/// `inner`, scoped to one wallet account: every name is `<name>@<account>`.
+///
+/// A bill key is named by its bill alone, so on a store several accounts
+/// share, one account forgetting a bill deletes the key every other account
+/// opens it with (§15.3). One of these per account keeps them apart.
+pub struct AccountSecretStore<'a> {
+    inner: &'a dyn SecretStore,
+    account: String,
+}
+
+impl<'a> AccountSecretStore<'a> {
+    /// Refuses an empty account, which would scope nothing.
+    pub fn new(inner: &'a dyn SecretStore, account: &str) -> Result<Self> {
+        if account.is_empty() {
+            return Err(crate::error::HostError::Malformed(
+                "an account is named".to_owned(),
+            ));
+        }
+        Ok(Self {
+            inner,
+            account: account.to_owned(),
+        })
+    }
+
+    fn scoped(&self, key: &str) -> String {
+        format!("{key}@{}", self.account)
+    }
+}
+
+impl SecretStore for AccountSecretStore<'_> {
+    fn read(&self, key: &str) -> Result<Option<String>> {
+        self.inner.read(&self.scoped(key))
+    }
+    fn write(&self, key: &str, value: &str) -> Result<()> {
+        self.inner.write(&self.scoped(key), value)
+    }
+    fn delete(&self, key: &str) -> Result<()> {
+        self.inner.delete(&self.scoped(key))
+    }
+}
+
 /// Secrets held in memory only.
 ///
 /// For tests, and for nothing else: §15.3 requires a value written to outlive

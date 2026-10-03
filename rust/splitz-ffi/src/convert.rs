@@ -86,6 +86,7 @@ pub(crate) fn set_aside(s: &splitz_core::SetAside) -> ffi::SetAside {
 pub(crate) fn folded(f: &splitz_core::host::FoldedBill) -> ffi::FoldedBill {
     ffi::FoldedBill {
         bill: bill(&f.bill),
+        creator_id: f.creator_id.clone(),
         set_aside: f.set_aside.iter().map(set_aside).collect(),
         withdrawn: f.withdrawn.clone(),
         replaced_addresses: f
@@ -313,5 +314,6 @@ pub(crate) fn removal_plan(p: &splitz_host::RemovalPlan) -> ffi::RemovalPlan {
                 from_them: b.from_them,
             })
             .collect(),
+        joins: p.joins.clone(),
     }
 }

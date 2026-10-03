@@ -39,13 +39,24 @@ class SplitsSync {
   /// everything this device writes then reaches nobody else. The bill's own
   /// create names the key it was made with, so a log that disagrees is not
   /// merged and a held log is not sealed under a key that is not its own.
-  void _refuseForeignKey(
+  Future<void> _refuseForeignKey(
     String billId,
     String key,
     List<Map<String, dynamic>> entries,
-  ) {
+  ) async {
     for (final e in entries) {
       if (protocol.createRefusesKey(e, billId, key)) {
+        // §9.4: discarded too, while it is still the key held. It opens only
+        // what its maker sealed for this device, and kept it would refuse
+        // the bill's real invite as a conflict. A key chosen since the sync
+        // began stays.
+        String? held;
+        try {
+          held = await _keys.readBillKey(billId);
+        } on StateError {
+          held = null;
+        }
+        if (held == key) await _keys.forgetBill(billId);
         throw SplitsSyncException(
           protocol.describeCode(protocol.SplitCode.inviteKeyMismatch)!,
           code: protocol.SplitCode.inviteKeyMismatch,
@@ -88,7 +99,7 @@ class SplitsSync {
     final entries = await _store.read(billId);
     if (entries.isEmpty) return entries;
     final key = await _requireKey(billId);
-    _refuseForeignKey(billId, key, entries);
+    await _refuseForeignKey(billId, key, entries);
     final blobs = [
       for (final entry in entries) await _sealing.seal(entry, key),
     ];
@@ -130,7 +141,7 @@ class SplitsSync {
       }
     }
 
-    _refuseForeignKey(billId, key, entries);
+    await _refuseForeignKey(billId, key, entries);
 
     // Merged only while this device still holds the bill's key. A bill
     // forgotten while the fetch was in flight is not written back: it would

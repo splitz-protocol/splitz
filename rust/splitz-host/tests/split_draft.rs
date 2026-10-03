@@ -212,3 +212,26 @@ fn every_kind_names_the_wire_type_the_protocol_reads() {
         assert_eq!(draft.to_split()["type"], kind.wire_type());
     }
 }
+
+/// One table, pinned in both host packages.
+const FROM_SPLIT_CASES: &str = r#"{"roundtrip":[{"type":"equal","among":["ana","ben"]},{"type":"exact","amounts":{"ana":600,"ben":400}},{"type":"percentage","basisPoints":{"ana":3333,"ben":6667}},{"type":"shares","shareCounts":{"ana":2,"ben":1}},{"type":"itemized","extraMinorUnits":150,"items":[{"description":"pizza","minorUnits":1200,"sharedBy":["ana","ben"]},{"description":"","minorUnits":300,"sharedBy":["ben"]}]}],"refused":[{"type":"weighted","among":["ana"]},{"among":["ana"]},{"type":"equal","among":["ana",7]},{"type":"equal","among":"ana"},{"type":"equal","among":["ana"],"note":"x"},{"type":"exact","amounts":{"ana":6.5}},{"type":"exact","amounts":{"ana":"600"}},{"type":"exact"},{"type":"itemized","extraMinorUnits":null,"items":[]},{"type":"itemized","items":[{"description":null,"minorUnits":1,"sharedBy":["ana"]}]},{"type":"itemized","items":[{"minorUnits":1}]},{"type":"itemized","items":[{"minorUnits":1,"sharedBy":["ana"],"tax":true}]},{"type":"itemized","items":"pizza"}]}"#;
+
+#[test]
+fn a_split_reads_back_into_the_draft_it_came_from_or_not_at_all() {
+    let cases: serde_json::Value = serde_json::from_str(FROM_SPLIT_CASES).unwrap();
+    for split in cases["roundtrip"].as_array().unwrap() {
+        assert_eq!(
+            splitz_host::SplitDraft::from_split(split)
+                .map(|d| d.to_split())
+                .as_ref(),
+            Some(split),
+            "{split}"
+        );
+    }
+    for split in cases["refused"].as_array().unwrap() {
+        assert!(
+            splitz_host::SplitDraft::from_split(split).is_none(),
+            "{split}"
+        );
+    }
+}

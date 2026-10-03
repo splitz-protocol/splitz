@@ -471,3 +471,30 @@ fn cash_swaps_another_payers_record_and_no_transaction_are_not_this_rules() {
         assert_eq!(refusal(&p, "me", Some(TransactionState::Mined)), None);
     }
 }
+
+#[test]
+fn a_note_naming_its_transaction_is_held_while_it_waits_or_once_it_went_through() {
+    use splitz_host::{named_send_refusal, NamedSendRefusal, TransactionState};
+    let named = PendingSend {
+        txid: Some("ab".repeat(32)),
+        ..send("b1")
+    };
+    assert_eq!(
+        named_send_refusal(&named, Some(TransactionState::Waiting)),
+        Some(NamedSendRefusal::Waiting)
+    );
+    assert_eq!(
+        named_send_refusal(&named, Some(TransactionState::Mined)),
+        Some(NamedSendRefusal::Mined)
+    );
+    assert_eq!(
+        named_send_refusal(&named, Some(TransactionState::Expired)),
+        None
+    );
+    assert_eq!(named_send_refusal(&named, None), None);
+    // A note naming none is unsent_claim_refusal's.
+    assert_eq!(
+        named_send_refusal(&send("b1"), Some(TransactionState::Waiting)),
+        None
+    );
+}

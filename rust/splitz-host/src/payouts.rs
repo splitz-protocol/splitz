@@ -36,3 +36,31 @@ pub fn ranked_payouts(who: &Participant, first: &Payout) -> Vec<Payout> {
         .chain(declared.iter().filter(|p| !replaced(p)).cloned())
         .collect()
 }
+
+/// The payout a payer's wallet settles a debt by when it cannot pay by the
+/// recipient's first (§14.8), and why it passed the first over.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PayoutFallback {
+    /// The position, in the recipient's declared order, of the payout to pay
+    /// by.
+    pub index: usize,
+    /// Why the first could not be paid, in the wallet's words: what §14.8
+    /// requires the payer be shown.
+    pub passed_over: String,
+}
+
+/// `cannot_pay` holds, for each of a recipient's declared payouts in their
+/// order, why this wallet cannot pay by it, or `None` when it can — what the
+/// wallet can pay is the wallet's to say. Answers the next payout it can pay,
+/// in the recipient's order, when it cannot pay the first (§14.8); `None` when
+/// it can pay the first, or none at all.
+pub fn payout_fallback(cannot_pay: &[Option<String>]) -> Option<PayoutFallback> {
+    let first = cannot_pay.first()?.as_ref()?;
+    cannot_pay
+        .iter()
+        .position(Option::is_none)
+        .map(|index| PayoutFallback {
+            index,
+            passed_over: first.clone(),
+        })
+}

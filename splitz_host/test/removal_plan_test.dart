@@ -455,6 +455,44 @@ void main() {
     });
   });
 
+  group('their joins', () {
+    test('every join still stating them is listed; one left keeps them on', () {
+      final (b, _) = _taxi();
+      b.join('dee');
+      final first = b.joins['dee']!;
+      // Changing how Dee is paid restates her record in a second join.
+      b.join('dee');
+      final second = b.joins['dee']!;
+      expect(second, isNot(first));
+
+      final plan = b.plan('dee');
+      expect(plan.namesThem, isFalse);
+      expect(plan.joins, [first, second]);
+
+      // One withdrawn, one standing: she is still on the bill, and the plan
+      // lists only the one left.
+      b.withdraw('ana', first);
+      expect(b.fold().bill.participants.map((p) => p.id), contains('dee'));
+      expect(b.plan('dee').joins, [second]);
+
+      b.withdraw('ana', second);
+      expect(
+        b.fold().bill.participants.map((p) => p.id),
+        isNot(contains('dee')),
+      );
+      expect(b.plan('dee').joins, isEmpty);
+    });
+
+    test('a plan whose joins changed no longer stands', () {
+      final (b, _) = _taxi();
+      b.join('dee');
+      final before = b.plan('dee');
+      b.join('dee');
+      expect(before.sameAs(b.plan('dee')), isFalse);
+      expect(b.plan('dee').sameAs(b.plan('dee')), isTrue);
+    });
+  });
+
   group('the same plan', () {
     test('read twice is the same', () {
       final (b, _) = _taxi();

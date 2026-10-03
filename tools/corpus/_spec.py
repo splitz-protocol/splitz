@@ -956,7 +956,7 @@ def canonical_json(value):
 
 # --- Section 11.2: scanned payloads ----------------------------------------
 
-PAYLOAD_CAP = 2331          # a version-40 QR code, byte mode, EC level M
+PAYLOAD_CAP = 2322          # 2331, a version-40 QR code in byte mode at EC level M, less "splitzd1:"
 
 # Sections 10.1 and 11.2. Stated here rather than inherited from a JSON
 # library: one

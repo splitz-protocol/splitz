@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:splitz_core/host.dart' as host;
 import 'package:splitz_core/splitz_core.dart' as splitz;
 
 import 'currencies.dart';
@@ -421,3 +422,32 @@ class AgreeingZecPrices implements ZecPrices {
     return agreedPrice(a, b, toleranceBp);
   }
 }
+
+/// How far a rate may sit from a live price, in whole percent either way,
+/// before a host warns about it (§14.2).
+const rateWarningPercent = 5;
+
+/// How far [rate] sits from [live] — both minor units per ZEC — in whole
+/// percent of [live], truncated toward zero; positive when [rate] is above.
+/// Null when [live] is not a price, or the figure is past a 64-bit integer.
+int? ratePercentOff(int rate, int live) {
+  if (live <= 0) return null;
+  final off =
+      (BigInt.from(rate) - BigInt.from(live)) *
+      BigInt.from(100) ~/
+      BigInt.from(live);
+  return off.isValidInt ? off.toInt() : null;
+}
+
+/// Whether [rate] is [rateWarningPercent] or more from [live]: what a host
+/// warns the payer and the payee about (§14.2). False with no live price.
+bool rateFarFromLive(int rate, int live) {
+  final off = ratePercentOff(rate, live);
+  return off != null && off.abs() >= rateWarningPercent;
+}
+
+/// Whether [me] opened [folded]'s bill and has set it no rate (§7): while
+/// that holds, the latest rate by anybody decides, and one dated far ahead
+/// outranks every correction after it. A creator's own rate closes that.
+bool creatorRateMissing(host.FoldedBill folded, String me) =>
+    folded.creatorId == me && folded.rateAuthor != folded.creatorId;

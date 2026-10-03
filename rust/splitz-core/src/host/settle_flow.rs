@@ -144,6 +144,23 @@ pub fn obligation_for(host: &dyn BillHost, folded: &FoldedBill) -> Result<Option
     obligation_via(host, folded, &BTreeMap::new())
 }
 
+/// Whether `reviewed` is still the request `folded` asks of this payer, with
+/// the same payout choices `via` (§14.2).
+///
+/// Read immediately before the wallet is called: an entry merged after the
+/// payer reviewed the request — an expense, a new rate, a changed address —
+/// changes what is owed or where it goes, and the request they saw is no
+/// longer the one the bill asks for. A host sends only while this holds.
+pub fn request_stands(
+    host: &dyn BillHost,
+    folded: &FoldedBill,
+    reviewed: &PayerObligation,
+    via: &BTreeMap<String, i64>,
+) -> Result<bool> {
+    let now = obligation_via(host, folded, via)?;
+    Ok(now.as_ref().and_then(PayerObligation::uri) == reviewed.uri())
+}
+
 /// `obligation_for`, with the payer's choice of payout for the recipients
 /// `via` names (§14.8).
 ///

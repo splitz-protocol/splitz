@@ -378,4 +378,98 @@ void main() {
       expect(declaredPayoutIndex(const [], a), isNull);
     });
   });
+
+  test('base units read as whole tokens', () {
+    expect(formatBaseUnits('39990000', 6), '39.99');
+    expect(formatBaseUnits('1000000', 6), '1');
+    expect(formatBaseUnits('5', 6), '0.000005');
+    expect(formatBaseUnits('0', 6), '0');
+    expect(formatBaseUnits('007', 0), '7');
+    for (final bad in ['', '1.5', '-1', '1e6', ' 1']) {
+      expect(formatBaseUnits(bad, 6), isNull, reason: bad);
+    }
+    expect(formatBaseUnits('1', -1), isNull);
+    // A provider's decimals are a uint8; past that the rendering would be
+    // sized by whatever it answered.
+    final tiny = formatBaseUnits('1', maxTokenDecimals)!;
+    expect(tiny.length, 2 + 255);
+    expect(tiny, allOf(startsWith('0.000'), endsWith('1')));
+    expect(formatBaseUnits('1', 256), isNull);
+    expect(formatBaseUnits('1', 0x7fffffff), isNull);
+  });
+
+  test(
+    'a swap record names its asset and chain, and the floor when quoted',
+    () {
+      expect(swapRecordNote('USDC', 'base'), 'USDC on base');
+      expect(
+        swapRecordNote('USDC', 'base', guaranteed: '39.5'),
+        'at least 39.5 USDC on base',
+      );
+    },
+  );
+
+  test('a deposit is one request and a note carrying the swap', () {
+    const eur = protocol.ExchangeRate(
+      currency: 'EUR',
+      minorUnitsPerZec: 51234,
+      at: '2026-10-28T19:30:00.000Z',
+    );
+    final deposit = swapDeposit(
+      billId: 'bill-1',
+      quote: quote(amountInZatoshi: 7807316),
+      to: 'ben',
+      amountMinorUnits: 4000,
+      rate: eur,
+      at: '2026-10-28T19:31:00.000Z',
+    );
+    expect(
+      deposit.uri,
+      'zcash:t1deposit000000000000000000000000?amount=0.07807316'
+      '&label=swap%20to%20USDC',
+    );
+    final note = deposit.note;
+    expect(note.uri, deposit.uri);
+    expect(note.carried, {'ben': 4000});
+    expect(note.zatoshi, 7807316);
+    expect(note.rate, eur);
+    expect(note.swap?.reference, reference);
+    expect([note.swap?.assetSymbol, note.swap?.assetChain], ['USDC', 'base']);
+
+    // A deposit that needs a memo, and a debt of nothing, are refused.
+    expect(
+      () => swapDeposit(
+        billId: 'bill-1',
+        quote: quote(memo: '123'),
+        to: 'ben',
+        amountMinorUnits: 4000,
+        rate: eur,
+        at: 't',
+      ),
+      throwsA(isA<SwapException>()),
+    );
+    expect(
+      () => swapDeposit(
+        billId: 'bill-1',
+        quote: quote(),
+        to: 'ben',
+        amountMinorUnits: 0,
+        rate: eur,
+        at: 't',
+      ),
+      throwsArgumentError,
+    );
+    // An empty memo is no memo.
+    expect(
+      swapDeposit(
+        billId: 'bill-1',
+        quote: quote(memo: ''),
+        to: 'ben',
+        amountMinorUnits: 4000,
+        rate: eur,
+        at: 't',
+      ).uri,
+      startsWith('zcash:t1deposit'),
+    );
+  });
 }

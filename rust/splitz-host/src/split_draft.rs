@@ -95,6 +95,78 @@ impl SplitDraft {
         }
     }
 
+    /// The draft `split` was built from, so an expense can be corrected in
+    /// the form it was written in, or `None` when `split` is not one this
+    /// draft can hold whole: a type §4 does not define, a figure that is not
+    /// an integer, an id that is not a string, or a member this draft does not
+    /// carry.
+    ///
+    /// §10.4 replaces an expense wholesale, so a reading that dropped or
+    /// guessed at anything would rewrite the expense when it is saved. What
+    /// this answers becomes `split` again under [`SplitDraft::to_split`], ids
+    /// in their sorted order.
+    pub fn from_split(split: &Value) -> Option<SplitDraft> {
+        let fields = split.as_object()?;
+        let only = |keys: &[&str]| fields.keys().all(|k| keys.contains(&k.as_str()));
+        let ids = |raw: Option<&Value>| -> Option<BTreeSet<String>> {
+            raw?.as_array()?
+                .iter()
+                .map(|x| x.as_str().map(str::to_owned))
+                .collect()
+        };
+        let weights = |raw: Option<&Value>| -> Option<BTreeMap<String, i64>> {
+            raw?.as_object()?
+                .iter()
+                .map(|(k, v)| v.as_i64().map(|n| (k.clone(), n)))
+                .collect()
+        };
+        let mut draft;
+        match fields.get("type")?.as_str()? {
+            "equal" if only(&["type", "among"]) => {
+                draft = SplitDraft::new(SplitKind::Equal);
+                draft.among = ids(fields.get("among"))?;
+            }
+            "exact" if only(&["type", "amounts"]) => {
+                draft = SplitDraft::new(SplitKind::Exact);
+                draft.amounts = weights(fields.get("amounts"))?;
+            }
+            "percentage" if only(&["type", "basisPoints"]) => {
+                draft = SplitDraft::new(SplitKind::Percentage);
+                draft.basis_points = weights(fields.get("basisPoints"))?;
+            }
+            "shares" if only(&["type", "shareCounts"]) => {
+                draft = SplitDraft::new(SplitKind::Shares);
+                draft.share_counts = weights(fields.get("shareCounts"))?;
+            }
+            "itemized" if only(&["type", "items", "extraMinorUnits"]) => {
+                draft = SplitDraft::new(SplitKind::Itemized);
+                draft.extra_minor_units = match fields.get("extraMinorUnits") {
+                    None => 0,
+                    Some(v) => v.as_i64()?,
+                };
+                for item in fields.get("items")?.as_array()? {
+                    let item = item.as_object()?;
+                    if !item
+                        .keys()
+                        .all(|k| matches!(k.as_str(), "description" | "minorUnits" | "sharedBy"))
+                    {
+                        return None;
+                    }
+                    draft.items.push(DraftItem {
+                        description: match item.get("description") {
+                            None => String::new(),
+                            Some(v) => v.as_str()?.to_owned(),
+                        },
+                        minor_units: item.get("minorUnits")?.as_i64()?,
+                        shared_by: ids(item.get("sharedBy"))?,
+                    });
+                }
+            }
+            _ => return None,
+        }
+        Some(draft)
+    }
+
     /// The §4 payload this would become.
     ///
     /// Built whatever state the form is in: it is the protocol's job to say a

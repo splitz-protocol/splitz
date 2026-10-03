@@ -70,6 +70,16 @@ pub enum TransactionState {
     Expired,
 }
 
+/// Why a person may not clear a pending-send note that names its transaction
+/// (§14.3).
+#[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NamedSendRefusal {
+    /// The wallet still holds the transaction and may broadcast it.
+    Waiting,
+    /// The wallet shows it went through: record it rather than clear it.
+    Mined,
+}
+
 /// Why this device may not withdraw its own record of a shielded payment
 /// (§14.4).
 #[derive(uniffi::Enum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +193,10 @@ pub struct Identities {
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct FoldedBill {
     pub bill: Bill,
+    /// Who opened the bill: the author of the one `createBill` the fold kept
+    /// (§10.1). Decide the creator's powers (§10.4, §10.8) from this, never
+    /// from whichever create a log lists first.
+    pub creator_id: String,
     pub set_aside: Vec<SetAside>,
     pub withdrawn: Vec<String>,
     pub replaced_addresses: Vec<ReplacedAddress>,
@@ -401,6 +415,9 @@ pub enum ReviewRule {
     Awaiting,
     /// Every recipient paid by a preference other than their first (§14.8).
     LowerPreference,
+    /// Every recipient paid more than the debts the bill records explain
+    /// (§6).
+    Unexplained,
     /// The rate the request was priced at, and who set it.
     Rate,
     /// The ZEC amount and address of every output.
@@ -632,6 +649,9 @@ pub struct RemovalPlan {
     /// Expenses this device can take them out of.
     pub edits: Vec<RemovalEdit>,
     /// What still names them once `edits` are written. Empty with `edits`
-    /// when nothing names them, and the `voidEntry` of their join applies.
+    /// when nothing names them, and the `voidEntry` of their joins applies.
     pub blockers: Vec<RemovalBlocker>,
+    /// Every `joinBill` still stating them, in log order: write a `voidEntry`
+    /// for each. One left standing keeps them on the bill.
+    pub joins: Vec<String>,
 }

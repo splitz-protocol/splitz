@@ -37,6 +37,75 @@ import 'support/fake_host.dart';
 
 void main() {
   group('correcting an expense', () {
+    test('built from the entry as first written, a correction undoes one', () {
+      final b = billWithExpense();
+      b.ana.tick();
+      b.log.add([
+        amendExpense(
+          host: b.ana,
+          folded: b.log.fold(),
+          expenseId: 'ana:x1',
+          description: 'supper',
+        ),
+      ]);
+      b.ana.tick();
+      b.log.add([
+        amendEntry(
+          host: b.ana,
+          targetId: b.expense['id'] as String,
+          member: 'expense',
+          payload: <String, dynamic>{
+            ...b.expense['expense'] as Map<String, dynamic>,
+            'amount': 6000,
+          },
+        ),
+      ]);
+      expect(b.log.fold().bill.expenses.single.description, 'dinner');
+    });
+
+    test('a second correction keeps what the first one changed', () {
+      final b = billWithExpense();
+      b.ana.tick();
+      b.log.add([
+        amendExpense(
+          host: b.ana,
+          folded: b.log.fold(),
+          expenseId: 'ana:x1',
+          description: 'supper',
+        ),
+      ]);
+      b.ana.tick();
+      // Built from the entry as first written, this would say 'dinner' again.
+      b.log.add([
+        amendExpense(
+          host: b.ana,
+          folded: b.log.fold(),
+          expenseId: 'ana:x1',
+          amount: 6000,
+        ),
+      ]);
+      final folded = b.log.fold();
+      expect(folded.setAside, isEmpty);
+      final e = folded.bill.expenses.single;
+      expect([e.amount, e.description], [6000, 'supper']);
+      expect(e.split['among'], ['ana', 'ben']);
+      expect(
+        () => amendExpense(
+          host: b.ana,
+          folded: folded,
+          expenseId: 'ana:x9',
+          amount: 1,
+        ),
+        throwsA(
+          isA<splitz.SplitError>().having(
+            (x) => x.code,
+            'code',
+            splitz.SplitCode.unknownEntry,
+          ),
+        ),
+      );
+    });
+
     test('an amendment replaces the entry it names', () {
       final b = billWithExpense();
       b.ana.tick();

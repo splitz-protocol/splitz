@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:test/test.dart';
@@ -162,6 +163,131 @@ void main() {
       );
     },
   );
+
+  group('a mnemonic derives the same identity in every wallet (§15.1)', () {
+    const mnemonic =
+        'abandon abandon abandon abandon abandon abandon abandon abandon '
+        'abandon abandon abandon about';
+    String seedOf(String passphrase, int account) => base64UrlEncode(
+      identitySeedFrom(
+        identitySecretFromMnemonic(
+          mnemonic: mnemonic,
+          passphrase: passphrase,
+          accountIndex: account,
+        ),
+      ),
+    ).replaceAll('=', '');
+
+    test('pinned against seeds computed outside this package', () {
+      expect(seedOf('', 0), 'Bsu7QAZyG9usbFpPUrQUo5ni3MtX7JeU-rUHoWKUPKY');
+      expect(
+        seedOf('TREZOR', 0),
+        'NoXrjBFhw-SnV_XZyW7Pe9JyZ5s3G17lAWIl76cxbVU',
+      );
+      expect(seedOf('', 1), 'jWQijb3QECEvHgOUb4_W7UPiUujN7D-7Nq0jYg5mrKo');
+      expect(
+        seedOf('', maxAccountIndex),
+        'W0O2YQssPQfLgQT0BSukqsP17xenAYEbLGWwi6Ln7q4',
+      );
+      expect(
+        seedOf('pässwörd', 5),
+        'mQ-gPUEwIqxWeL6LWOJNH3azGQVVfUOET30BZPpzRa0',
+      );
+    });
+
+    test('account 0 carries no index, account 1 does', () {
+      expect(identitySecretFromMnemonic(mnemonic: 'm', passphrase: 'p'), [
+        0x6d,
+        0,
+        0x70,
+      ]);
+      expect(
+        identitySecretFromMnemonic(
+          mnemonic: 'm',
+          passphrase: 'p',
+          accountIndex: 1,
+        ),
+        [0x6d, 0, 0x70, 0, 0, 0, 0, 1],
+      );
+    });
+
+    test('an empty mnemonic and an index past ZIP 32 are refused', () {
+      expect(
+        () => identitySecretFromMnemonic(mnemonic: '', passphrase: 'p'),
+        throwsArgumentError,
+      );
+      expect(
+        () => identitySecretFromMnemonic(
+          mnemonic: 'm',
+          passphrase: 'p',
+          accountIndex: 0x80000000,
+        ),
+        throwsRangeError,
+      );
+      expect(
+        () => identitySecretFromMnemonic(
+          mnemonic: 'm',
+          passphrase: 'p',
+          accountIndex: -1,
+        ),
+        throwsRangeError,
+      );
+      // A zero byte is the separator, so one inside either text would let two
+      // inputs join to one secret: account 1 of (m, p) and account 0 of
+      // (m, "p\0\0\0\0\x01") are the same bytes.
+      for (final (mnemonic, passphrase) in [
+        ('m', 'p\u0000\u0000\u0000\u0000\u0001'),
+        ('a\u0000b', ''),
+        ('a', 'b\u0000'),
+      ]) {
+        expect(
+          () => identitySecretFromMnemonic(
+            mnemonic: mnemonic,
+            passphrase: passphrase,
+          ),
+          throwsArgumentError,
+        );
+      }
+      expect(identitySecretFromMnemonic(mnemonic: 'm', passphrase: ''), [
+        0x6d,
+        0,
+      ]);
+    });
+  });
+
+  group('two accounts on one store', () {
+    const key = 'Ag0fRP6k8Q3m4m0yS5Yq0R1Ff7lM0nq8yLw4X0nNw5c';
+    test('unscoped, one forgetting a bill deletes the other\'s key', () async {
+      final shared = InMemorySecretStore();
+      final a = SplitsKeys(store: shared, random: Random(1));
+      final b = SplitsKeys(store: shared, random: Random(2));
+      await a.storeBillKey('bill', key);
+      await b.storeBillKey('bill', key);
+      await a.forgetBill('bill');
+      expect(await b.readBillKey('bill'), isNull);
+    });
+
+    test('scoped, each keeps its own', () async {
+      final shared = InMemorySecretStore();
+      final a = SplitsKeys(
+        store: AccountSecretStore(shared, account: 'acct-a'),
+        random: Random(1),
+      );
+      final b = SplitsKeys(
+        store: AccountSecretStore(shared, account: 'acct-b'),
+        random: Random(2),
+      );
+      await a.storeBillKey('bill', key);
+      await b.storeBillKey('bill', key);
+      await a.forgetBill('bill');
+      expect(await a.readBillKey('bill'), isNull);
+      expect(await b.readBillKey('bill'), key);
+      expect(
+        () => AccountSecretStore(shared, account: ''),
+        throwsArgumentError,
+      );
+    });
+  });
 }
 
 List<int> _hex(String hex) => [

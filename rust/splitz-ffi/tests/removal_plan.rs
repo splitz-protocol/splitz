@@ -184,3 +184,48 @@ fn a_split_without_them_crosses_as_json() {
         Err(SplitzError::Host { .. })
     ));
 }
+
+#[test]
+fn every_join_is_listed_the_creator_is_the_folds_and_a_refusal_is_asked_first() {
+    let (ana, ben, bill_id, mut entries) = bill();
+    let first_join = id_of(&entries[2]);
+    // Ben restates how he is paid: a second join.
+    let again = ben.join(4, &bill_id);
+    entries.push(again.clone());
+    let taxi = ana.expense(5, &bill_id, "taxi", &[&ana.me, &ben.me]);
+    entries.push(taxi.clone());
+
+    let folded = splitz_ffi::fold_entries(ana.facts(9), bill_id.clone(), entries.clone()).unwrap();
+    assert_eq!(folded.creator_id, ana.me);
+
+    let plan = plan_removal(
+        ana.facts(9),
+        bill_id.clone(),
+        entries.clone(),
+        ben.me.clone(),
+        ana.me.clone(),
+    )
+    .unwrap();
+    assert_eq!(plan.joins, vec![first_join.clone(), id_of(&again)]);
+
+    // Taking Ben off while the taxi names him is refused before it is written,
+    // and Ana withdrawing her own taxi is not.
+    let off = void_entry_for(ana.facts(10), bill_id.clone(), first_join, ana.seed.clone()).unwrap();
+    assert_eq!(
+        splitz_ffi::entry_refusal(ana.facts(10), bill_id.clone(), entries.clone(), off)
+            .unwrap()
+            .as_deref(),
+        Some("participant_still_named")
+    );
+    let own = void_entry_for(
+        ana.facts(10),
+        bill_id.clone(),
+        id_of(&taxi),
+        ana.seed.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        splitz_ffi::entry_refusal(ana.facts(10), bill_id, entries, own).unwrap(),
+        None
+    );
+}

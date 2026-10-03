@@ -102,6 +102,23 @@ void main() {
   });
 
   group('what the client reads', () {
+    test('native ZEC is found in the provider\'s own token list', () async {
+      final assets = await live().swaps.tradableAssets();
+      expect(zecAssetIn(assets), 'nep141:zec.omft.near');
+      // Listed again wrapped on NEAR, which a Zcash wallet cannot send on.
+      expect(
+        assets.where((a) => a.symbol == 'ZEC').map((a) => a.chain),
+        containsAll(['zec', 'near']),
+      );
+      expect(
+        zecAssetIn([
+          for (final a in assets)
+            if (a.chain != 'zec') a,
+        ]),
+        isNull,
+      );
+    });
+
     test('every field it reads is one the schema declares', () {
       for (final path in [
         'TokenResponse.assetId',

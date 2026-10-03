@@ -404,6 +404,7 @@ void main() {
             to: 'ana',
             amount: 100,
             method: method,
+            reference: 'r-$method',
           )
         ]);
         expect(
@@ -412,6 +413,105 @@ void main() {
           reason: 'a $method payment to oneself pads a settlement history',
         );
       }
+    });
+
+    test('a payout nobody could be paid by is not written', () {
+      final ana = FakeHost(me: 'ana');
+      Map<String, dynamic> join(List<Map<String, dynamic>> payouts) =>
+          joinBill(host: ana, name: 'Ana', payouts: payouts);
+      for (final bad in [
+        {'type': 'zec'},
+        {'type': 'zec', 'address': '  '},
+        {'type': 'swap', 'asset': 'USDC', 'address': '0xa'},
+        {'type': 'swap', 'asset': '', 'chain': 'base', 'address': '0xa'},
+        {'type': 'swap', 'asset': 'USDC', 'chain': 'base', 'address': 7},
+      ]) {
+        expect(
+          () => join([
+            {'type': 'cash'},
+            bad,
+          ]),
+          throwsA(
+            isA<splitz.SplitError>().having(
+              (e) => e.code,
+              'code',
+              splitz.SplitCode.billTypeError,
+            ),
+          ),
+          reason: '$bad',
+        );
+      }
+      final honest = [
+        {'type': 'zec', 'address': 'u1ana'},
+        {'type': 'swap', 'asset': 'USDC', 'chain': 'base', 'address': '0xa'},
+        {'type': 'cash'},
+      ];
+      expect(join(honest)['participant']['payouts'], honest);
+      // A type §9.1 does not define is left for every reader to refuse.
+      expect(
+        join([
+          {'type': 'venmo'},
+        ])['participant']['payouts'],
+        [
+          {'type': 'venmo'},
+        ],
+      );
+    });
+
+    test('a payment of nothing, or a swap naming none, is not written', () {
+      final bill = threeLaneBill();
+      Matcher refusedWith(String code) =>
+          throwsA(isA<splitz.SplitError>().having((e) => e.code, 'code', code));
+      for (final amount in [0, -1]) {
+        expect(
+          () => recordPayment(
+            host: bill.ana,
+            paymentId: 'p$amount',
+            to: 'ben',
+            amount: amount,
+            method: 'cash',
+          ),
+          refusedWith(splitz.SplitCode.negativeAmount),
+          reason: '$amount',
+        );
+      }
+      for (final reference in [null, '', '  ']) {
+        expect(
+          () => recordPayment(
+            host: bill.ana,
+            paymentId: 's',
+            to: 'ben',
+            amount: 100,
+            method: 'swap',
+            reference: reference,
+          ),
+          refusedWith(splitz.SplitCode.billTypeError),
+          reason: '$reference',
+        );
+      }
+      // One unit, a swap that names its intent, and cash naming nothing are
+      // all honest records.
+      expect(
+        recordPayment(
+          host: bill.ana,
+          paymentId: 'one',
+          to: 'ben',
+          amount: 1,
+          method: 'cash',
+        )['payment']['amount'],
+        1,
+      );
+      expect(
+        recordPayment(
+          host: bill.ana,
+          paymentId: 'sw',
+          to: 'ben',
+          amount: 100,
+          method: 'swap',
+          reference: 'intent-1',
+        )['payment']['reference'],
+        'intent-1',
+      );
     });
 
     test('a zatoshi leg of zero is set aside', () {

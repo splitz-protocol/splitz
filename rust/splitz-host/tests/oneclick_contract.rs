@@ -135,6 +135,18 @@ fn the_token_list_carries_zec_on_its_own_chain() {
     assert_eq!(zec[0].chain, "zec");
     assert_eq!(zec[0].decimals, 8);
     assert!(assets.iter().any(|a| a.asset_id == usdc_on_base().asset_id));
+    // Native ZEC, not the copy wrapped on NEAR the list also carries.
+    assert_eq!(
+        splitz_host::zec_asset_in(&assets).as_deref(),
+        Some("nep141:zec.omft.near")
+    );
+    let wrapped_only: Vec<_> = assets
+        .iter()
+        .filter(|a| a.chain != "zec")
+        .cloned()
+        .collect();
+    assert!(wrapped_only.iter().any(|a| a.symbol == "ZEC"));
+    assert_eq!(splitz_host::zec_asset_in(&wrapped_only), None);
 }
 
 #[test]

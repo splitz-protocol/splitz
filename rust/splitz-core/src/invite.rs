@@ -314,12 +314,15 @@ pub fn render_invite(invite: &Invite) -> Result<String> {
 
 // --- §11.2 scanned payloads -------------------------------------------------
 
-/// What a version-40 QR code holds in byte mode at error-correction level M.
+/// The most characters of encoded body a payload carries: 2331, what a
+/// version-40 QR code holds in byte mode at error-correction level M, less the
+/// 9 characters of the longer prefix, `splitzd1:`, so the whole scanned string
+/// fits a code at that level whichever prefix it carries.
 ///
 /// Enforced on decode as well as encode: a cap applied only when writing
 /// bounds what an implementation emits rather than what it accepts, which is
 /// the wrong direction for a trust boundary.
-pub const PAYLOAD_CAP: usize = 2331;
+pub const PAYLOAD_CAP: usize = 2322;
 
 /// The payload format version this crate writes and the highest it reads.
 pub const PAYLOAD_VERSION: i64 = 1;

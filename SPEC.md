@@ -81,6 +81,15 @@ therefore also refuse a code for which its own ISO 4217 register gives no
 exponent. That register is the reader's, not this protocol's. The requirement
 is stated here so that it is not independently forgotten by every reader.
 
+A figure a person types is read in integers, never through floating point
+(`0.29 * 100` is not 29 in binary floating point, and that rounding is money):
+`parseAmountIn` / `parse_amount_in` read it at the exponent the host's register
+gives, and refuse a figure with no digit, more decimals than the currency has,
+a value past a signed 64-bit integer, a `,` followed by exactly three digits
+(`1,000` is a thousand to one reader and one to another), and any code the
+register gives no exponent. Only ASCII white space is trimmed and only ASCII
+digits read, so one string reads alike in every language.
+
 Arithmetic between two currencies MUST be refused with `currency_mismatch`
 rather than converted.
 
@@ -840,6 +849,17 @@ payment's own, an entry's own field, and a rate's — MUST be an ISO 4217
 alpha-3 code in upper case (`bill_bad_currency`, §2.1). An empty one other
 than the bill's is not a code, and is refused as `bill_bad_currency`.
 
+A display **`name`** is chosen by whoever joins, and two people can choose
+one a reader cannot tell apart, by accident or to pass as somebody already on
+the bill. A host SHOULD show such a name qualified: the bill's creator as the
+organiser, anybody else with the last eight characters of their id, or the
+whole id when another's last eight match. Two names collide when their
+skeletons match — case folded, invisible format characters and combining marks
+removed, white space collapsed, and fullwidth, mathematical, Cyrillic and Greek
+letters that render as Latin ones mapped to them (`nameSkeleton` /
+`name_skeleton`, `displayNameOf` / `display_name_of`, `display_names` in the
+binding).
+
 **Participant ids** MUST be unique within a document (`duplicate_participant`).
 
 **`identityKey`** on a participant is the Ed25519 public key that alone may
@@ -850,7 +870,11 @@ Optional; absent means the identity is unclaimed.
 **`payouts`** on a participant is how they want to be paid, most preferred
 first: a list of `{"type": "zec", "address": …}`, `{"type": "swap", "asset": …,
 "chain": …, "address": …}` or `{"type": "cash"}`. Optional; empty means none is
-declared and `payTo` stands in.
+declared and `payTo` stands in. A host MUST NOT write a `zec` payout with no
+`address`, or a `swap` payout missing its `asset`, `chain` or `address`, or
+naming any of them as an empty or white-space string (`bill_type_error`): a
+payer takes such a payout as one it cannot pay and moves to the next
+preference (§14.8), so the person is paid in a way they did not ask for first.
 
 A reader MUST refuse a `type` it does not define
 (`bill_unknown_payout_method`) rather than skip it. **Skipping settles to the
@@ -964,7 +988,15 @@ another asset on another chain, which this bill cannot see.
 on the destination chain — and the chain it names is the `chain` of the `swap`
 payout being settled, which the payment does not repeat. A reader that shows a
 reference as a Zcash transaction because it looks like a txid is wrong for
-every swap.
+every swap. A host MUST NOT write a `swap` payment with no `reference`, or one
+that is only white space (`bill_type_error`): neither side could find the swap
+again.
+
+A host MUST NOT write a payment whose `amount` is zero or less
+(`negative_amount`). A reader still accepts a zero `amount`, so a log another
+writer produced folds alike everywhere; but a payment of nothing records
+nothing, and while unconfirmed it withholds the whole debt it names from its
+payer's next request (§14.4).
 
 A UI **MUST NOT** present a `swap` payment as confirmed on the strength of the
 ZEC leg alone: that the deposit was sent is not that the recipient was paid,
@@ -1109,7 +1141,9 @@ the joiner writes afterwards reaches nobody else. **A reader holding a key for a
 bill whose create states `keyDigest` MUST refuse the key when the digest is not
 its own** (`invite_key_mismatch`): a scanned bill code carrying such a key is
 refused, and a log opened under such a key is not merged, nor is a held log
-sealed under it. A create stating no digest commits to no key, and a reader can
+sealed under it. The key is then discarded while it is still the one held: it
+opens only what its maker sealed for this device, and kept, it would refuse
+the bill's real invite as a conflict. A create stating no digest commits to no key, and a reader can
 check nothing.
 
 ### 9.5 Every other entry's id
@@ -1249,7 +1283,11 @@ ahead, and every correction then loses to it; the creator is the one
 participant every reader can verify (§10.7), and a creator's rate is replaced
 by the creator's next one. A `setRate` may be amended and withdrawn like
 any other entry; when none survives, the bill has no rate and §7's conversions
-are unavailable rather than guessed at.
+are unavailable rather than guessed at. While the creator has set none, the creator's host SHOULD
+set one from a price it can read (`creatorRateMissing` /
+`creator_rate_missing`), asking again just before writing and writing nothing
+when the creator priced the bill by hand meanwhile: until then a rate somebody
+else dated far ahead stands against every correction.
 
 **A `setRate` MUST be in the bill's currency**, and one that is not is set
 aside with `rate_currency_mismatch`. Every amount on the bill is in that
@@ -1565,7 +1603,10 @@ differing as evidence that their bills differ.
 - An `amendEntry` MUST carry a payload of the same kind as its target, and is
   otherwise set aside with `amend_kind_mismatch`. An amendment replaces its
   target wholesale, so one carrying no payload silently deletes what it claims
-  to correct.
+  to correct. For the same reason a host MUST build a correction from what
+  the bill applies now, after any amendment already standing, and not from
+  the entry as first written, or a second correction undoes the first
+  (`amendExpense` / `amend_expense`, `amend_expense_entry` in the binding).
 - An `amendEntry` MUST keep the id its target is about — a join's
   `participant.id`, an expense's `id`, a payment's `id`, a confirmation's
   `paymentId` — and is otherwise set aside with `amend_kind_mismatch`. A
@@ -1967,7 +2008,13 @@ parties' balances, so without this rule any holder of the invite could write
 **Asking before writing.** An implementation SHOULD expose this rule as a
 question a caller can ask before appending a `voidEntry`: given an author, the
 entry they mean to withdraw and the bill's creator, either the refusal or
-nothing.
+nothing. `BillLog.refusalOf` / `refusal_of` in both host packages, and
+`entry_refusal` in the binding, answer it for any entry by folding the log
+with the entry in it, so the answer is the fold's own: the §12 code it would
+be set aside with, or nothing. `unknown_participant`, `unknown_entry` and
+`unknown_payment` wait on an entry the device may not hold yet and apply once
+it arrives (`codesAnEntryOutgrows` / `CODES_AN_ENTRY_OUTGROWS`); a host writes
+nothing on any other.
 
 A withdrawal the fold refuses is otherwise still written, still synced, and
 looks to its author exactly like one that worked — the entry is in the log and
@@ -1998,7 +2045,11 @@ on the bill twice. They return, in log order:
   author did not create (with its author), one whose split needs a person's
   choice — `exact` and `percentage` figures that must still add up, an item
   only they shared, shares that leave nobody a share — a payment from or to
-  them, and a confirmation they wrote.
+  them, and a confirmation they wrote;
+- **every `joinBill` not withdrawn that states them** (`joins`): each change
+  to how somebody is paid restates their record in another join, and they
+  stay on the bill while any one of them stands, so taking them off withdraws
+  every one.
 
 Each expense is written again as a new `addExpense` with the entry it replaces
 withdrawn, never as an amendment: the rule above counts an amended entry as
@@ -2143,10 +2194,10 @@ printable ASCII (`!` to `~`) or a `#`, with `invite_bad_link`.
 scans it holds a bill rather than an id. `splitzd1:<base64url>` carries a
 joiner's answer: the entries the inviter has not seen. Two scans, no network.
 
-**A payload is capped at 2331 characters of encoded body in both
+**A payload is capped at 2322 characters of encoded body in both
 directions** — the base64url after the prefix, not the whole scanned string.
 The prefix is fixed and known, so measuring it would make the two prefixes
-carry different amounts. Refusing to encode
+carry different amounts; the cap leaves room for the longer of them instead. Refusing to encode
 past it (`payload_too_large`) keeps a device from producing a code no camera
 can read; refusing to *decode* past it keeps a stranger's code from handing a
 device more work than a QR code could have carried. A cap enforced only on
@@ -2192,8 +2243,11 @@ inside an itemised split, at **nine**: body, `log`, the entry, `expense`,
 `split`, `items`, the item, `sharedBy`, the id.
 
 2331 is what a version-40 QR code holds in byte mode at error-correction level
-M. **The cap is that ceiling rather than a fraction of it, because the format
-starts near it.** Every entry carries an 86-character signature; the
+M, and the scanned string is the prefix and the body together: 2322 is that
+less the 9 characters of `splitzd1:`, so a body at the cap renders at level M
+behind either prefix. A body of 2331 behind `splitz1:` is 2339 characters,
+which no version-40 code at M holds. **The cap is that ceiling rather than a
+fraction of it, because the format starts near it.** Every entry carries an 86-character signature; the
 `createBill` a 43-character creator key and a 22-character nonce; a joiner's
 participant a 43-character identity key (§10.7); a payout address about 106; and
 base64url adds a third again.
@@ -2214,8 +2268,8 @@ is six characters.
 | three participants with payout addresses, no expenses | `three_payable_participants_and_no_expenses` | **2188** |
 | three participants with payout addresses, one expense | `three_payable_participants_and_one_expense` | refused |
 
-The headroom on the third row is 220 characters, so the free text on an
-expense is part of the budget: the same bill with a 172-character description
+The headroom on the third row is 211 characters, so the free text on an
+expense is part of the budget: the same bill with a 165-character description
 is refused.
 
 **The second half of that table is the number a wallet plans against.** A
@@ -2449,10 +2503,19 @@ nothing to omit.
 - Every pay-to address the fold recorded as replaced (§10.3).
 - Every debt with a payment recorded and not yet confirmed (§10.5).
 - Every recipient paid by a preference other than their first (§14.8).
+- Every recipient paid more than the debts the bill records explain, and that
+  it is so (§6): a refund somebody else attributed to the payer is the one
+  thing coverage cannot account for.
 - The rate the request was priced at, who set it, and the ZEC amount and
   address of every output. A participant owed money can set the rate, and a
   request stated only in the bill's currency hides what that rate did to the
   ZEC it asks for.
+
+A host SHOULD also compare the rate with a live price where it can read one,
+and warn when they are 5% or more apart (`ratePercentOff` / `rate_percent_off`,
+`rateFarFromLive` / `rate_far_from_live`), saying so when it has no live price
+to compare; and SHOULD warn a payer when whoever set the rate is somebody the
+request pays. Both are figures a person with a stake in them chose.
 
 A payee MUST be shown the same before confirming a payment: the ZEC the
 record says was sent, the rate it was priced at, and its reference. A
@@ -2466,8 +2529,9 @@ screen displays, and answers each fact above that the text does not contain:
 every unpayable recipient's name and the wallet's words for its reason, the
 name of every participant whose address was replaced, every participant a
 pending payment is owed to or went to, every recipient the payer chose to pay
-by a lower preference with the wallet's words for it, the rate figure and who
-set it, and each output's ZEC amount and address.
+by a lower preference with the wallet's words for it, every recipient paid
+more than the bill's debts explain with the wallet's words for that, the rate
+figure and who set it, and each output's ZEC amount and address.
 
 **An address or a reference counts as shown** when the text holds it whole,
 or holds its first 10 characters and then stops agreeing with it on a
@@ -2481,6 +2545,14 @@ and reference that it carries must be shown, written and matched as above. A
 `shieldedZec` or `swap` record that lacks one must say so in the wallet's own
 words for a missing figure. A `cash` record carries none of them and needs
 nothing shown.
+
+**What was shown is what is sent.** Immediately before the wallet is called,
+a host MUST work the request out again from the bill as it holds it then, with
+the payout choices the payer made, and MUST NOT send when it differs from the
+request the payer reviewed (`requestStands` / `request_stands`; through the
+binding, `obligation_via` again and its `uri` compared). An entry merged in
+between — an expense, a rate, a replaced address — changes what is owed or
+where it goes, and the payer would send a request they never saw.
 
 ### 14.3 A send has three outcomes, not two
 
@@ -2514,7 +2586,14 @@ after the note's `at`, compared to the second. A send killed after its
 broadcast and mined before the app came back is no longer waiting, and its
 note may name no transaction: clearing it pays the debt twice. A note that
 will not read names no instant and is held only by what is still sending.
-`unsentClaimRefusal` implements the check in both host packages.
+`unsentClaimRefusal` implements the check in both host packages. A note that
+names its transaction is decided by where the wallet's history shows that
+transaction instead: the host MUST NOT remove it on that word while the
+transaction is neither mined nor expired, since the wallet may still broadcast
+it, or once it is mined, since it went through and is recorded rather than
+cleared; expired, or absent from the history, it can no longer land
+(`namedSendRefusal` / `named_send_refusal`, `pending_send_named_refusal` in
+the binding).
 
 ### 14.4 A pending payment withholds the whole debt
 
@@ -2597,6 +2676,16 @@ with `walletReceived`, and computes the proposals with `arrivalsFor` /
 transactions it received, each as a transaction id and the zatoshi that
 transaction paid this account.
 
+- Only a transaction mined in a block and not expired is received. A host
+  MUST NOT pass one still in the mempool, or one that expired unmined: it may
+  never be mined, and confirming a debt against it settles the bill with
+  money that never arrived.
+- A transaction id is the hex of its id in the byte order a send reports it
+  and a block explorer shows it, which is the reverse of the order its
+  digest is computed in. A wallet that stores ids in digest order MUST reverse
+  them first (`txidInSendOrder` / `txid_in_send_order`): a record carries the
+  order a send reported, and an id in the other order matches nothing, with
+  nothing to say so.
 - A record is a candidate when it is to this participant, its method is
   `shieldedZec`, it is not confirmed, and its `reference` names a received
   transaction. Transaction ids are compared with ASCII space, tab, carriage
@@ -2643,7 +2732,18 @@ its reference — before a confirmation is written. A host SHOULD also show
 when the transaction arrived: a payment sent from a wallet that wrote no
 memo, or one whose memos the host cannot read, is told apart from one made
 before the debt existed by that alone. A host MAY write every
-`arrived` confirmation on one acceptance.
+`arrived` confirmation on one acceptance, and SHOULD leave out of it every
+payment a concern makes worth the payee's own look: the payer set the bill's
+rate, the record is priced at a rate other than the bill's, or that rate is 5%
+or more from a live price (`concernsBeforeConfirming` /
+`concerns_before_confirming`).
+
+**The payee does not withdraw what arrived.** A payee's host MUST NOT write a
+`voidEntry` (§10.8) of a record its wallet proposes as `arrived`
+(`Arrivals.covering` / `covering`): the transaction reached the payee carrying
+what the record states, and withdrawing it asks the payer to pay the debt a
+second time. A `short`, `unstated`, `disputed`, `underpriced` or `unbound`
+record is not evidence, and stays the payee's to withdraw.
 
 ### 14.8 Paying by a lower preference
 
@@ -2653,10 +2753,17 @@ payment alone and for any reason: a swap to an asset their wallet cannot
 reach, an address no request can carry, cash to somebody far away, or simply
 preferring it. A wallet MAY make that choice itself when it cannot pay by the
 first payout, taking the next one it can in the recipient's order; it MUST
-show the payer which payout it passed over and why (§14.2).
+show the payer which payout it passed over and why (§14.2). What it can pay
+is the wallet's to say; the order is the protocol's: `payoutFallback` /
+`payout_fallback` takes the wallet's reason for each declared payout, or none
+where it can pay, and answers the next it can pay and why the first was passed
+over.
 
 A payer MUST NOT change how a debt is paid while a send that carries it is
-unresolved (§14.3): it may still land, and a second way would pay it twice.
+unresolved (§14.3): it may still land, and a second way would pay it twice. A
+note held for the bill is the test (`PendingSends.of`, `pending_send_blocks`
+in the binding): while one stands, no record of paying another way is written
+and no other lane is opened.
 
 `choosePayouts` / `choose_payouts` takes a bill and the payer's choices,
 each a participant id and the index of one of that participant's declared
@@ -2720,6 +2827,17 @@ The device itself: who it speaks as, what it can spend, where its secrets go.
   is a stranger to every bill naming it after a restore. No secret — a
   hardware account keeps none on the phone — means the identity is random and
   unrecoverable; it still signs correctly.
+- A wallet whose account comes from a BIP39 mnemonic MUST supply as its
+  identity secret the mnemonic and the BIP39 passphrase, each UTF-8 encoded,
+  joined by one zero byte, and for any ZIP 32 account index other than 0, one
+  further zero byte and the index as four big-endian bytes
+  (`identitySecretFromMnemonic` / `identity_secret_from_mnemonic`; the binding
+  answers the seed directly with `identity_seed_from_mnemonic`). The index is
+  below 2^31; an empty mnemonic derives an identity anyone can compute, and a
+  zero byte inside either text would let two inputs join to one secret, so
+  both are refused. One layout in every wallet is what makes one person one participant
+  whichever wallet they restore into, and the index is what keeps two accounts
+  of one mnemonic two people rather than one key linking them on every bill.
 - `now` MUST produce a §9.3 instant. It MUST be read when an entry is written
   and MUST NOT be read while folding: §10.2 orders a log by instant, so a fold
   that consulted a clock would answer differently for one unchanged entry set.
@@ -2767,6 +2885,11 @@ Where this layer's secrets live — a platform keychain in a shipped build.
   store with one slot for every key hands one bill's key to every bill and
   makes the account's signing seed the bytes of some bill's key, which
   anybody holding that bill's invite then holds.
+- **Each wallet account's secrets are its own.** A device holding several
+  accounts MUST keep their secrets apart — one store per account, or every
+  name scoped to it (`AccountSecretStore`, which writes `<name>@<account>`). A
+  bill key is named by its bill alone, so on a store the accounts share, one
+  account forgetting a bill deletes the key every other account opens it with.
 
 ### 15.4 `BillStorage`
 
@@ -2789,6 +2912,12 @@ Durable storage for this device's bills, **as raw entries**.
   a year of crashes. It MUST NOT remove a write still in flight in the process
   that calls it: a sweep that raced a write would delete the entry being
   saved.
+- Entries are stored in clear: §11.3 seals what a relay carries, not what a
+  device holds. A host SHOULD keep its bill storage out of the platform's
+  cloud backup and device-to-device transfer, or encrypt it under a key that
+  stays on the device. A backup restored elsewhere hands every bill, and who
+  owes whom on it, to whoever holds the backup, without the bill keys the
+  keychain kept back.
 
 ### 15.5 `SplitsRelay`
 
@@ -2851,6 +2980,14 @@ Settles a debt whose payout is owed in some asset other than ZEC.
   provider does not carry is refused before a person is asked to send anything.
 - `quote` MUST be given a refund address, and it is the payer's own. A quote
   arranged without one risks the deposit if the swap fails.
+- Where a quote states the least the recipient is guaranteed, a host SHOULD
+  show it to the payer in whole tokens (`formatBaseUnits` /
+  `format_base_units`) before the deposit is sent: the record claims the whole
+  debt, and slippage can deliver less. The record's `note` carries it too.
+- The asset a quote sells is native ZEC, as the provider's own token list names
+  it: symbol `ZEC` on chain `zec` (`zecAssetIn` / `zec_asset_in`). A provider
+  lists ZEC wrapped on other chains too, and quoting one of those asks for a
+  deposit the wallet cannot send.
 - `statusOf` reports whether the swap is in flight, delivered, or will not
   complete. A transaction hash it reports is on the **destination** chain, and
   MUST NOT be recorded as the §10.5 payment for a debt settled on this one.
@@ -2867,6 +3004,16 @@ Settles a debt whose payout is owed in some asset other than ZEC.
   converts the debt to the quote's ZEC. A quote taken before any of these
   changed sends money the bill no longer asks for, or to an address the payee
   no longer uses, and a deposit cannot be taken back.
+- The deposit is sized at the bill's rate, rounded up (§7.1;
+  `fiat_to_zatoshi` in the binding), and sent as one payment request to the
+  quote's deposit address for the quote's zatoshi, with the note §14.3 asks
+  for written first and carrying the swap, so its record can be written after
+  a restart from the note alone (`swapDeposit` / `swap_deposit`). Its record
+  is a `swap` payment whose id and `reference` are the provider's reference,
+  stating the zatoshi sent, the bill's rate as `paidAtRate`, and a `note`
+  naming the asset and chain and, when the quote stated a floor, the least the
+  recipient is guaranteed (`swapRecordNote` / `swap_record_note`; the binding
+  writes the whole entry with `swap_payment_entry`).
 - When `statusOf` reports a swap will not complete, the payer's device MUST
   withdraw (§10.8) each unconfirmed `swap` payment record it wrote carrying
   that swap's `reference`. While such a record stands the debt reads as paid
