@@ -455,6 +455,138 @@ void main() {
     });
   });
 
+  group('whole or not at all', () {
+    test('only shared expenses name them: the plan takes them off', () {
+      final (b, _) = _taxi();
+      expect(b.plan('ben').complete, isTrue);
+    });
+
+    test('something they paid for keeps them on: not complete, though the '
+        'shared ones are still listed', () {
+      final (b, _) = _taxi();
+      b.expense(
+        'ben',
+        'hotel',
+        'ben',
+        2000,
+        _equal(['ana', 'ben']),
+        description: 'Hotel',
+      );
+      final plan = b.plan('ben');
+      expect(plan.edits, hasLength(1));
+      expect(plan.blockers.single.block, RemovalBlock.paidFor);
+      expect(plan.complete, isFalse);
+    });
+
+    test('somebody on nothing is complete with nothing to write', () {
+      final b = _Bill()..join('ben');
+      final plan = b.plan('ben');
+      expect(plan.namesThem, isFalse);
+      expect(plan.complete, isTrue);
+      expect(plan.shareChanges, isEmpty);
+    });
+  });
+
+  group('what a removal moves', () {
+    test('an even split: their share, shared by the rest', () {
+      // 30.00 among three is 10.00 each; among two, 15.00.
+      final (b, _) = _taxi();
+      expect(b.plan('ben').shareChanges, {
+        'ana': 500,
+        'ben': -1000,
+        'cai': 500,
+      });
+    });
+
+    test('a split with a remainder takes exactly their share and sums to '
+        'zero', () {
+      // 10.00 among three is 3.34, 3.33, 3.33 (§3, the extra cent to the
+      // first id); among two, 5.00 each.
+      final b = _Bill()
+        ..join('ben')
+        ..join('cai');
+      b.expense('ana', 'cab', 'ana', 1000, _equal(['ana', 'ben', 'cai']));
+      final changes = b.plan('ben').shareChanges;
+      expect(changes, {'ana': 166, 'ben': -333, 'cai': 167});
+      expect(changes.values.fold<int>(0, (a, v) => a + v), 0);
+    });
+
+    test('shares: the rest take it in proportion', () {
+      // 40.00 in shares 2:1:1 is 20.00, 10.00, 10.00; without Ben, 2:1 is
+      // 26.67 and 13.33.
+      final b = _Bill()
+        ..join('ben')
+        ..join('cai');
+      b.expense('ana', 'villa', 'ana', 4000, {
+        'type': 'shares',
+        'shareCounts': {'ana': 2, 'ben': 1, 'cai': 1},
+      });
+      expect(b.plan('ben').shareChanges, {
+        'ana': 667,
+        'ben': -1000,
+        'cai': 333,
+      });
+    });
+
+    test('several expenses add up, per person', () {
+      final (b, _) = _taxi();
+      b.expense('ana', 'cab', 'ana', 1000, _equal(['ana', 'ben', 'cai']));
+      // 500 + 166 for Ana, 500 + 167 for Cai, 1000 + 333 off Ben.
+      expect(b.plan('ben').shareChanges, {
+        'ana': 666,
+        'ben': -1333,
+        'cai': 667,
+      });
+    });
+
+    test('what is not restated moves nothing', () {
+      // Ben paid for the hotel: it stays as it is, and only the taxi moves.
+      final (b, _) = _taxi();
+      b.expense('ben', 'hotel', 'ben', 2000, _equal(['ana', 'ben']));
+      expect(b.plan('ben').shareChanges, {
+        'ana': 500,
+        'ben': -1000,
+        'cai': 500,
+      });
+    });
+
+    test('a running total past §2.2 is refused, not wrapped', () {
+      // Two halves of the largest amount still fit; three do not.
+      RemovalEdit edit(int n) => RemovalEdit(
+        entryId: 'e$n',
+        seen: protocol.Expense(
+          id: 'x$n',
+          description: '',
+          paidBy: 'x',
+          amount: protocol.maxAmount,
+          currency: 'USD',
+          at: '2026-10-05T00:00:00Z',
+          split: _equal(['x', 'y']),
+        ),
+        author: 'x',
+        split: _equal(['x']),
+      );
+      RemovalPlan of(int n) => RemovalPlan(
+        edits: [for (var i = 0; i < n; i++) edit(i)],
+        blockers: [],
+      );
+      expect(of(2).shareChanges, {
+        'x': 9223372036854775806,
+        'y': -9223372036854775806,
+      });
+      expect(
+        () => of(3).shareChanges,
+        throwsA(
+          isA<protocol.SplitError>().having(
+            (e) => e.code,
+            'code',
+            'amount_overflow',
+          ),
+        ),
+      );
+    });
+  });
+
   group('their joins', () {
     test('every join still stating them is listed; one left keeps them on', () {
       final (b, _) = _taxi();

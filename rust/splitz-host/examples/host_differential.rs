@@ -8,15 +8,16 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Value};
 use splitz_core::host::{
-    add_expense, create_bill, join_bill, obligation_for, set_rate, settle, BillLog, SendResult,
+    add_expense, create_bill, join_bill, obligation_for, record_payment, set_rate, settle, BillLog,
+    SendResult,
 };
 use splitz_core::{decode_bill, signing_message, SetAside};
 use splitz_host::{
     activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, component_encode,
-    is_well_formed_key, query_encode, BillEvent, BillStorage, BillStore, DraftItem, HostError,
-    HttpTransport, InMemoryBillStorage, InMemorySecretStore, OneClickSwaps, Sealing, Signer,
-    SplitDraft, SplitKind, SplitsKeys, SwapProvider, SwapQuote, SwapWatch, SystemRandomness,
-    TradableAsset, WalletAccount,
+    is_well_formed_key, plan_removal, query_encode, BillEvent, BillStorage, BillStore, DraftItem,
+    HostError, HttpTransport, InMemoryBillStorage, InMemorySecretStore, OneClickSwaps,
+    RemovalBlock, Sealing, Signer, SplitDraft, SplitKind, SplitsKeys, SwapProvider, SwapQuote,
+    SwapWatch, SystemRandomness, TradableAsset, WalletAccount,
 };
 
 /// A provider that answers with one scripted body and records its URLs.
@@ -404,10 +405,128 @@ fn settle_records(op: &Value) -> Value {
     })
 }
 
+/// One removal planned on a generated bill: the plan, whether it is whole,
+/// and what writing it moves, or the code that refused it.
+fn removal_plan(op: &Value) -> Value {
+    let people: Vec<&str> = op["people"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    let instants: Vec<String> = op["instants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i.as_str().unwrap().to_owned())
+        .collect();
+    let mut step = 0usize;
+    let mut at = |who: &str| {
+        let host = DiffHost {
+            me: who.to_owned(),
+            at: instants[step].clone(),
+            txid: String::new(),
+        };
+        step += 1;
+        host
+    };
+
+    let built = (|| -> splitz_core::Result<Vec<Value>> {
+        let mut entries = vec![create_bill(
+            &at(people[0]),
+            "Trip",
+            "EUR",
+            "equal",
+            op["creatorKey"].as_str().unwrap(),
+            None,
+        )?];
+        for p in &people {
+            let pay_to = format!("u1{p}");
+            entries.push(join_bill(&at(p), Some(p), Some(&pay_to), None, None)?);
+        }
+        for e in op["expenses"].as_array().unwrap() {
+            entries.push(add_expense(
+                &at(e["author"].as_str().unwrap()),
+                e["id"].as_str().unwrap(),
+                e["paidBy"].as_str().unwrap(),
+                e["amount"].as_i64().unwrap(),
+                e["split"].clone(),
+                None,
+            )?);
+        }
+        for p in op["payments"].as_array().unwrap() {
+            entries.push(record_payment(
+                &at(p["from"].as_str().unwrap()),
+                p["id"].as_str().unwrap(),
+                p["to"].as_str().unwrap(),
+                p["amount"].as_i64().unwrap(),
+                "cash",
+                None,
+                None,
+                None,
+                None,
+            )?);
+        }
+        Ok(entries)
+    })();
+    let entries = match built {
+        Ok(entries) => entries,
+        Err(e) => return json!({ "built": false, "error": e.code }),
+    };
+    let me = op["me"].as_str().unwrap();
+    let host = DiffHost {
+        me: me.to_owned(),
+        at: instants.last().unwrap().clone(),
+        txid: String::new(),
+    };
+    let mut log = BillLog::new(&host);
+    if let Err(e) = log.add(entries) {
+        return json!({ "built": true, "folded": false, "error": e.code });
+    }
+    let folded = match log.fold() {
+        Ok(folded) => folded,
+        Err(e) => return json!({ "built": true, "folded": false, "error": e.code }),
+    };
+    let plan = plan_removal(
+        &folded,
+        &folded.creator_id,
+        &log.entries(),
+        op["target"].as_str().unwrap(),
+        me,
+    );
+    let moved = match plan.share_changes() {
+        Ok(moved) => json!(moved),
+        Err(e) => json!({ "error": e.code }),
+    };
+    let block = |b: RemovalBlock| match b {
+        RemovalBlock::Unapplied => "unapplied",
+        RemovalBlock::PaidFor => "paidFor",
+        RemovalBlock::AddedByAnother => "addedByAnother",
+        RemovalBlock::SplitByHand => "splitByHand",
+        RemovalBlock::Payment => "payment",
+        RemovalBlock::Confirmation => "confirmation",
+    };
+    json!({
+        "built": true,
+        "folded": true,
+        "namesThem": plan.names_them(),
+        "complete": plan.complete(),
+        "edits": plan.edits.iter()
+            .map(|e| json!([e.entry_id, e.author, e.split]))
+            .collect::<Vec<_>>(),
+        "blockers": plan.blockers.iter()
+            .map(|b| json!([block(b.block), b.entry_id, b.description, b.author, b.from_them]))
+            .collect::<Vec<_>>(),
+        "joins": plan.joins,
+        "shareChanges": moved,
+    })
+}
+
 fn answer(op: &Value) -> Value {
     let name = op.get("op").and_then(Value::as_str).unwrap_or("");
     match name {
         "settle_records" => settle_records(op),
+        "removal_plan" => removal_plan(op),
         "public_key" => {
             let seed = base64url_decode(op["seed"].as_str().unwrap()).unwrap_or_default();
             json!(Signer.public_key_from_seed(&seed))

@@ -1302,8 +1302,8 @@ owed nothing turns every payer's request into whatever figure they chose.
 bound (§10.7)**, and sets aside a `setRate` from any other with
 `unauthorized_entry`: anybody holding the invite can put themselves on the
 bill with an unsigned join, so "a participant" alone admits them. A wallet
-MUST show a payer the rate a request was priced at and who set it (§14.2), and
-the bill's creator may withdraw any `setRate` (§10.8).
+MUST show a payer the rate a request was priced at (§14.2), and the bill's
+creator may withdraw any `setRate` (§10.8).
 
 **`sig`** carries the author's signature when the transport provides one.
 When present it MUST be a string, and an entry whose `sig` is anything else is
@@ -2059,6 +2059,19 @@ writing and write nothing when the plan differs from the one the person
 agreed to (`RemovalPlan.sameAs` / `same_as`, `same_removal_plan` in the
 binding).
 
+**Whole or not at all.** A host SHOULD write the restated expenses only when
+nothing else names the participant — `RemovalPlan.complete` / `complete()`,
+and `complete` on the binding's plan — and then withdraw every join with
+them. Written alone they leave the participant on the bill, still owed what
+they paid and sharing in nothing else; taking somebody out of one expense is
+an edit of that expense. What writing them moves is
+`RemovalPlan.shareChanges` / `share_changes` (`removal_share_changes` in the
+binding): for each participant, how much more they owe in the bill's minor
+units, every restated expense split by §4 before and after. The participant
+taken out has minus their share, the figures sum to zero, an unchanged
+participant is left out, and a running total past §2.2's bounds is refused
+with `amount_overflow`.
+
 **What all of this rests on.** These rules name participant **ids**, and an id
 is unauthenticated until §10.7 binds a key to it. For a participant who has
 published no key, an entry authored as them is admitted unverified, so the
@@ -2506,8 +2519,8 @@ nothing to omit.
 - Every recipient paid more than the debts the bill records explain, and that
   it is so (§6): a refund somebody else attributed to the payer is the one
   thing coverage cannot account for.
-- The rate the request was priced at, who set it, and the ZEC amount and
-  address of every output. A participant owed money can set the rate, and a
+- The rate the request was priced at, and the ZEC amount and address of
+  every output. A participant owed money can set the rate, and a
   request stated only in the bill's currency hides what that rate did to the
   ZEC it asks for.
 
@@ -2531,7 +2544,7 @@ name of every participant whose address was replaced, every participant a
 pending payment is owed to or went to, every recipient the payer chose to pay
 by a lower preference with the wallet's words for it, every recipient paid
 more than the bill's debts explain with the wallet's words for that, the rate
-figure and who set it, and each output's ZEC amount and address.
+figure, and each output's ZEC amount and address.
 
 **An address or a reference counts as shown** when the text holds it whole,
 or holds its first 10 characters and then stops agreeing with it on a

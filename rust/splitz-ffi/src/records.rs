@@ -418,7 +418,7 @@ pub enum ReviewRule {
     /// Every recipient paid more than the debts the bill records explain
     /// (§6).
     Unexplained,
-    /// The rate the request was priced at, and who set it.
+    /// The rate the request was priced at.
     Rate,
     /// The ZEC amount and address of every output.
     Output,
@@ -654,4 +654,18 @@ pub struct RemovalPlan {
     /// Every `joinBill` still stating them, in log order: write a `voidEntry`
     /// for each. One left standing keeps them on the bill.
     pub joins: Vec<String>,
+    /// Whether writing `edits` and withdrawing `joins` takes them off the
+    /// bill: `blockers` is empty. Offer the `edits` only when this holds
+    /// (§10.8). Not read back by `same_removal_plan`.
+    pub complete: bool,
+}
+
+/// How much more one participant owes once a plan's edits are written, in
+/// the bill's minor units (`removal_share_changes`).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct ShareChange {
+    pub participant_id: String,
+    /// Positive for taking on a share; minus their share for the person
+    /// taken out.
+    pub minor_units: i64,
 }

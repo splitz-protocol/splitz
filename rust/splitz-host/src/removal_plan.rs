@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use splitz_core::host::FoldedBill;
-use splitz_core::{payload_for, Expense};
+use splitz_core::{checked_add, checked_sub, code, payload_for, split_expense, Expense, Result};
 
 /// One expense to write again without the person, withdrawing `entry_id`.
 #[derive(Debug, Clone, PartialEq)]
@@ -95,6 +95,42 @@ impl RemovalPlan {
     /// Whether any entry still in force names them.
     pub fn names_them(&self) -> bool {
         !self.edits.is_empty() || !self.blockers.is_empty()
+    }
+
+    /// Whether writing `edits` and withdrawing `joins` takes them off the
+    /// bill: nothing else names them. A host offers the `edits` only when
+    /// this holds (§10.8): written alone they leave the person on the bill,
+    /// owed what they paid and sharing in nothing else.
+    pub fn complete(&self) -> bool {
+        self.blockers.is_empty()
+    }
+
+    /// How much more each participant owes once `edits` are written, in the
+    /// bill's minor units: positive for the others taking on a share, and
+    /// minus their share for the person taken out. Every expense is split as
+    /// §4 splits it before and after, so the figures sum to zero.
+    /// Participants whose share does not change are left out.
+    ///
+    /// Refuses with `amount_overflow` when a running total leaves the range
+    /// §2.2 allows.
+    pub fn share_changes(&self) -> Result<BTreeMap<String, i64>> {
+        let mut change: BTreeMap<String, i64> = BTreeMap::new();
+        for e in &self.edits {
+            let before = split_expense(e.seen.amount, &e.seen.split)?;
+            let after = split_expense(e.seen.amount, &e.split)?;
+            let ids: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
+            for id in ids {
+                let delta = checked_sub(
+                    after.get(id).copied().unwrap_or(0),
+                    before.get(id).copied().unwrap_or(0),
+                    code::AMOUNT_OVERFLOW,
+                )?;
+                let total = change.entry(id.clone()).or_insert(0);
+                *total = checked_add(*total, delta, code::AMOUNT_OVERFLOW)?;
+            }
+        }
+        change.retain(|_, v| *v != 0);
+        Ok(change)
     }
 
     /// Whether `other` writes exactly what this does and is held back by the

@@ -325,6 +325,68 @@ def a_settle_case(rng: random.Random) -> dict:
     }
 
 
+def a_removal_case(rng: random.Random) -> dict:
+    """A bill, and one participant planning to take another off it (§10.8).
+
+    Expenses come in every split §4 defines that a removal can change —
+    `equal`, `shares`, `exact`, `percentage` — written by anybody and paid for
+    by anybody, so the plan meets each of its answers: an expense restated, one
+    they paid for, one written by somebody else, one only a person can
+    redivide. A payment from or to them sometimes keeps them on as well. Both
+    runners build the entries from this, plan, and report the plan, whether it
+    is whole, and what writing it moves.
+    """
+    n = rng.randrange(2, 5)
+    who = PEOPLE[:n]
+
+    def a_split(amount: int) -> dict:
+        among = sorted(rng.sample(who, rng.randrange(1, n + 1)))
+        kind = rng.choice(["equal", "equal", "shares", "exact", "percentage"])
+        if kind == "equal":
+            return {"type": "equal", "among": among}
+        if kind == "shares":
+            return {"type": "shares",
+                    "shareCounts": {p: rng.randrange(0, 4) for p in among}}
+        if kind == "exact":
+            cuts = sorted(rng.randrange(0, amount + 1)
+                          for _ in range(len(among) - 1))
+            parts = [b - a for a, b in zip([0] + cuts, cuts + [amount])]
+            return {"type": "exact", "amounts": dict(zip(among, parts))}
+        cuts = sorted(rng.randrange(0, 10001) for _ in range(len(among) - 1))
+        parts = [b - a for a, b in zip([0] + cuts, cuts + [10000])]
+        return {"type": "percentage", "basisPoints": dict(zip(among, parts))}
+
+    expenses = []
+    for i in range(rng.randrange(1, 6)):
+        amount = rng.randrange(1, 200000)
+        expenses.append({
+            "id": f"x{i}",
+            "author": rng.choice(who),
+            "paidBy": rng.choice(who),
+            "amount": amount,
+            "split": a_split(amount),
+        })
+    target = rng.choice(who[1:])
+    payments = []
+    if rng.random() < 0.25:
+        other = rng.choice([p for p in who if p != target])
+        frm, to = (target, other) if rng.random() < 0.5 else (other, target)
+        payments.append({"id": "p0", "from": frm, "to": to,
+                         "amount": rng.randrange(1, 50000)})
+    steps = 1 + n + len(expenses) + len(payments)
+    return {
+        "op": "removal_plan",
+        "people": who,
+        "expenses": expenses,
+        "payments": payments,
+        "target": target,
+        "me": rng.choice([who[0], who[0], rng.choice(who)]),
+        "creatorKey": b64(bytes(rng.randrange(256) for _ in range(32))),
+        "instants": [f"2026-10-28T20:{i // 60:02}:{i % 60:02}Z"
+                     for i in range(steps)],
+    }
+
+
 def main() -> int:
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 400
@@ -337,10 +399,14 @@ def main() -> int:
             "well_formed_key", "b64_round_trip", "seal_open", "open_raw",
             "store_read", "store_merge", "activity", "split_draft",
             "swap_encode", "swap_status", "swap_quote", "swap_watch",
-            "settle_records",
+            "settle_records", "removal_plan",
         ])
         if op == "settle_records":
             json.dump(a_settle_case(rng), out)
+            out.write("\n")
+            continue
+        if op == "removal_plan":
+            json.dump(a_removal_case(rng), out)
             out.write("\n")
             continue
         if op == "public_key":

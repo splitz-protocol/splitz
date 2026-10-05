@@ -252,6 +252,44 @@ void main(List<String> args) {
             }),
     '${unpaid.edits.map((e) => e.splitJson).toList()}',
   );
+  // 90.00 between two is 45.00 each; Ana alone takes it all.
+  final moved = removalShareChanges(unpaid);
+  check(
+    'the plan takes him off whole, and his 45.00 moves to her',
+    unpaid.complete &&
+        moved.length == 2 &&
+        moved.every(
+          (c) =>
+              c.minorUnits == (c.participantId == ana.me ? 4500 : -4500) &&
+              (c.participantId == ana.me || c.participantId == ben.me),
+        ),
+    '${unpaid.complete} ${moved.map((c) => '${c.participantId}:${c.minorUnits}').toList()}',
+  );
+  String? unsplit;
+  try {
+    removalShareChanges(
+      RemovalPlan(
+        edits: [
+          RemovalEdit(
+            entryId: unpaid.edits.single.entryId,
+            seen: unpaid.edits.single.seen,
+            author: unpaid.edits.single.author,
+            splitJson: '{"type":"equal","among":[]}',
+          ),
+        ],
+        blockers: unpaid.blockers,
+        joins: unpaid.joins,
+        complete: unpaid.complete,
+      ),
+    );
+  } on SplitzErrorExceptionProtocol catch (e) {
+    unsplit = e.code;
+  }
+  check(
+    'and a plan whose split divides nothing is refused',
+    unsplit == 'empty_split',
+    '$unsplit',
+  );
   check(
     'and the plan still stands while the bill has not moved',
     sameRemovalPlan(
@@ -504,6 +542,11 @@ void main(List<String> args) {
         paidPlan.blockers.single.block == RemovalBlock.payment &&
         paidPlan.blockers.single.fromThem,
     '${paidPlan.blockers.map((b) => b.block).toList()}',
+  );
+  check(
+    'and is no longer whole: he cannot come off',
+    !paidPlan.complete,
+    '${paidPlan.complete}',
   );
   check(
     'so the plan ana saw before no longer stands',

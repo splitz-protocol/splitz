@@ -112,6 +112,36 @@ class RemovalPlan {
   /// Whether any entry still in force names them.
   bool get namesThem => edits.isNotEmpty || blockers.isNotEmpty;
 
+  /// Whether writing [edits] and withdrawing [joins] takes them off the bill:
+  /// nothing else names them. A host offers the [edits] only when this holds
+  /// (§10.8): written alone they leave the person on the bill, owed what they
+  /// paid and sharing in nothing else.
+  bool get complete => blockers.isEmpty;
+
+  /// How much more each participant owes once [edits] are written, in the
+  /// bill's minor units: positive for the others taking on a share, and
+  /// minus their share for the person taken out. Every expense is split as
+  /// §4 splits it before and after, so the figures sum to zero. Participants
+  /// whose share does not change are left out.
+  ///
+  /// Throws `amount_overflow` when a running total leaves the range §2.2
+  /// allows.
+  Map<String, int> get shareChanges {
+    final change = <String, int>{};
+    for (final e in edits) {
+      final before = protocol.splitExpense(e.seen.amount, e.seen.split);
+      final after = protocol.splitExpense(e.seen.amount, e.split);
+      for (final id in {...before.keys, ...after.keys}) {
+        final delta = protocol.checkedSubtract(after[id] ?? 0, before[id] ?? 0);
+        change[id] = protocol.checkedAdd(change[id] ?? 0, delta);
+      }
+    }
+    return {
+      for (final id in change.keys.toList()..sort())
+        if (change[id] != 0) id: change[id]!,
+    };
+  }
+
   /// Whether [other] writes exactly what this does and is held back by the
   /// same things: what a person confirmed is still what would be written.
   bool sameAs(RemovalPlan other) => _fingerprint(this) == _fingerprint(other);

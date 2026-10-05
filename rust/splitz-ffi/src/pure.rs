@@ -1577,6 +1577,23 @@ pub fn same_removal_plan(
     )
 }
 
+/// How much more each participant owes once `plan`'s edits are written, in
+/// the bill's minor units, ordered by participant id: positive for the others
+/// taking on a share, minus their share for the person taken out, summing to
+/// zero. Unchanged participants are left out. Refuses with `amount_overflow`
+/// past §2.2's range.
+#[uniffi::export]
+pub fn removal_share_changes(plan: ffi::RemovalPlan) -> Result<Vec<ffi::ShareChange>> {
+    Ok(host_removal_plan(plan)?
+        .share_changes()?
+        .into_iter()
+        .map(|(participant_id, minor_units)| ffi::ShareChange {
+            participant_id,
+            minor_units,
+        })
+        .collect())
+}
+
 /// `split` without `id` in it, the others sharing what was theirs, as JSON;
 /// `None` when that leaves nobody or needs a choice only a person can make
 /// (§4.4).

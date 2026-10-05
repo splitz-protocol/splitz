@@ -215,6 +215,16 @@ func run(origin: String, downOrigin: String) async throws {
           try unpaid.blockers.isEmpty && unpaid.edits.map(\.entryId) == [entryId(dinner)]
             && unpaid.edits[0].splitJson == onlyAna,
           "\(unpaid.edits.map(\.splitJson))")
+    // 90.00 between two is 45.00 each; Ana alone takes it all.
+    let moved = Dictionary(uniqueKeysWithValues:
+        try removalShareChanges(plan: unpaid).map { ($0.participantId, $0.minorUnits) })
+    check("the plan takes him off whole, and his 45.00 moves to her",
+          unpaid.complete && moved == [ana.me: 4500, ben.me: -4500], "\(unpaid.complete) \(moved)")
+    var unsplitPlan = unpaid
+    unsplitPlan.edits[0].splitJson = #"{"type":"equal","among":[]}"#
+    var unsplit: String?
+    do { _ = try removalShareChanges(plan: unsplitPlan) } catch SplitzError.Protocol(let code, _) { unsplit = code }
+    check("and a plan whose split divides nothing is refused", unsplit == "empty_split", unsplit ?? "nil")
     let replanned = try planRemoval(facts: ana.facts(), billId: billId, entries: ana.entries,
                                     id: ben.me, me: ana.me)
     check("and the plan still stands while the bill has not moved",
@@ -359,6 +369,7 @@ func run(origin: String, downOrigin: String) async throws {
     check("once he has paid, taking ben off is blocked by the payment",
           paidPlan.blockers.map(\.block) == [.payment] && paidPlan.blockers[0].fromThem,
           "\(paidPlan.blockers.map(\.block))")
+    check("and is no longer whole: he cannot come off", !paidPlan.complete, "\(paidPlan.complete)")
     check("so the plan ana saw before no longer stands",
           try sameRemovalPlan(confirmed: unpaid, now: paidPlan) == .changed, "changed")
     let confirmScreen = ["Ben says he paid you",

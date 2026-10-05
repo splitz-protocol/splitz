@@ -4,8 +4,8 @@
 use serde_json::{json, Value};
 use splitz_ffi::{
     add_expense_entry, create_bill_entry, fold_entries, identity_key_from_seed, join_bill_entry,
-    plan_removal, same_removal_plan, split_without, void_entry_for, HostFacts, RemovalBlock,
-    RemovalPlanStanding, SplitzError,
+    plan_removal, removal_share_changes, same_removal_plan, split_without, void_entry_for,
+    HostFacts, RemovalBlock, RemovalPlanStanding, ShareChange, SplitzError,
 };
 
 struct Device {
@@ -101,6 +101,20 @@ fn the_creator_is_offered_their_expense_and_the_plan_holds_until_written() {
     };
     let first = plan(&entries);
     assert!(first.blockers.is_empty());
+    assert!(first.complete);
+    // 30.00 between two is 15.00 each; Ana alone takes it all.
+    let mut moved = vec![
+        ShareChange {
+            participant_id: ana.me.clone(),
+            minor_units: 1500,
+        },
+        ShareChange {
+            participant_id: ben.me.clone(),
+            minor_units: -1500,
+        },
+    ];
+    moved.sort_by(|a, b| a.participant_id.cmp(&b.participant_id));
+    assert_eq!(removal_share_changes(first.clone()).unwrap(), moved);
     assert_eq!(first.edits.len(), 1);
     assert_eq!(first.edits[0].entry_id, id_of(&taxi));
     let split: Value = serde_json::from_str(&first.edits[0].split_json).unwrap();
@@ -153,6 +167,8 @@ fn what_they_paid_for_is_a_blocker() {
     entries.push(hotel.clone());
     let plan = plan_removal(ana.facts(9), bill_id, entries, ben.me.clone(), ana.me).unwrap();
     assert!(plan.edits.is_empty());
+    assert!(!plan.complete);
+    assert_eq!(removal_share_changes(plan.clone()).unwrap(), vec![]);
     assert_eq!(plan.blockers.len(), 1);
     assert_eq!(plan.blockers[0].block, RemovalBlock::PaidFor);
     assert_eq!(plan.blockers[0].entry_id, id_of(&hotel));
@@ -228,4 +244,22 @@ fn every_join_is_listed_the_creator_is_the_folds_and_a_refusal_is_asked_first() 
         splitz_ffi::entry_refusal(ana.facts(10), bill_id, entries, own).unwrap(),
         None
     );
+}
+
+#[test]
+fn share_changes_refuse_a_plan_that_does_not_split() {
+    let (ana, ben, bill_id, mut entries) = bill();
+    entries.push(ana.expense(4, &bill_id, "taxi", &[&ana.me, &ben.me]));
+    let plan = plan_removal(ana.facts(9), bill_id, entries, ben.me.clone(), ana.me).unwrap();
+    let with = |split: &str| {
+        let mut p = plan.clone();
+        p.edits[0].split_json = split.to_owned();
+        removal_share_changes(p)
+    };
+    assert!(with(&plan.edits[0].split_json).is_ok());
+    assert!(matches!(
+        with(r#"{"type":"equal","among":[]}"#),
+        Err(SplitzError::Protocol { code, .. }) if code == "empty_split"
+    ));
+    assert!(matches!(with("{"), Err(SplitzError::Host { .. })));
 }

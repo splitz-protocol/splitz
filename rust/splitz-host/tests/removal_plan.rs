@@ -10,8 +10,11 @@ use splitz_core::host::{
     add_expense, amend_entry, base64url_no_pad, confirm_payment, create_bill, join_bill,
     record_payment, void_entry, BillLog, FoldedBill, CREATOR_KEY_BYTES,
 };
-use splitz_host::{plan_removal, split_without, RemovalBlock, RemovalPlan, WalletBillHost};
-use std::collections::HashMap;
+use splitz_core::Expense;
+use splitz_host::{
+    plan_removal, split_without, RemovalBlock, RemovalEdit, RemovalPlan, WalletBillHost,
+};
+use std::collections::{BTreeMap, HashMap};
 use support::FakeWallet;
 
 fn fake_key(who: &str) -> String {
@@ -593,4 +596,158 @@ fn a_plan_whose_joins_changed_no_longer_stands() {
     b.join("dee");
     assert!(!before.same_as(&b.plan("dee", "ana")));
     assert!(b.plan("dee", "ana").same_as(&b.plan("dee", "ana")));
+}
+
+// Whole or not at all, and what a removal moves.
+
+#[test]
+fn only_shared_expenses_name_them_the_plan_takes_them_off() {
+    let (b, _) = taxi();
+    assert!(b.plan("ben", "ana").complete());
+}
+
+#[test]
+fn something_they_paid_for_keeps_them_on_though_the_shared_ones_are_listed() {
+    let (mut b, _) = taxi();
+    b.expense(
+        "ben",
+        "hotel",
+        "ben",
+        2000,
+        equal(&["ana", "ben"]),
+        Some("Hotel"),
+    );
+    let plan = b.plan("ben", "ana");
+    assert_eq!(plan.edits.len(), 1);
+    assert_eq!(plan.blockers[0].block, RemovalBlock::PaidFor);
+    assert!(!plan.complete());
+}
+
+#[test]
+fn somebody_on_nothing_is_complete_with_nothing_to_write() {
+    let mut b = Bill::new();
+    b.join("ben");
+    let plan = b.plan("ben", "ana");
+    assert!(!plan.names_them());
+    assert!(plan.complete());
+    assert!(plan.share_changes().unwrap().is_empty());
+}
+
+fn changes(pairs: &[(&str, i64)]) -> BTreeMap<String, i64> {
+    pairs.iter().map(|(k, v)| ((*k).to_owned(), *v)).collect()
+}
+
+#[test]
+fn an_even_split_their_share_shared_by_the_rest() {
+    // 30.00 among three is 10.00 each; among two, 15.00.
+    let (b, _) = taxi();
+    assert_eq!(
+        b.plan("ben", "ana").share_changes().unwrap(),
+        changes(&[("ana", 500), ("ben", -1000), ("cai", 500)])
+    );
+}
+
+#[test]
+fn a_split_with_a_remainder_takes_exactly_their_share_and_sums_to_zero() {
+    // 10.00 among three is 3.34, 3.33, 3.33 (§3, the extra cent to the first
+    // id); among two, 5.00 each.
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cai");
+    b.expense(
+        "ana",
+        "cab",
+        "ana",
+        1000,
+        equal(&["ana", "ben", "cai"]),
+        None,
+    );
+    let moved = b.plan("ben", "ana").share_changes().unwrap();
+    assert_eq!(moved, changes(&[("ana", 166), ("ben", -333), ("cai", 167)]));
+    assert_eq!(moved.values().sum::<i64>(), 0);
+}
+
+#[test]
+fn shares_the_rest_take_it_in_proportion() {
+    // 40.00 in shares 2:1:1 is 20.00, 10.00, 10.00; without Ben, 2:1 is
+    // 26.67 and 13.33.
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cai");
+    b.expense(
+        "ana",
+        "villa",
+        "ana",
+        4000,
+        json!({"type": "shares", "shareCounts": {"ana": 2, "ben": 1, "cai": 1}}),
+        None,
+    );
+    assert_eq!(
+        b.plan("ben", "ana").share_changes().unwrap(),
+        changes(&[("ana", 667), ("ben", -1000), ("cai", 333)])
+    );
+}
+
+#[test]
+fn several_expenses_add_up_per_person() {
+    let (mut b, _) = taxi();
+    b.expense(
+        "ana",
+        "cab",
+        "ana",
+        1000,
+        equal(&["ana", "ben", "cai"]),
+        None,
+    );
+    // 500 + 166 for Ana, 500 + 167 for Cai, 1000 + 333 off Ben.
+    assert_eq!(
+        b.plan("ben", "ana").share_changes().unwrap(),
+        changes(&[("ana", 666), ("ben", -1333), ("cai", 667)])
+    );
+}
+
+#[test]
+fn what_is_not_restated_moves_nothing() {
+    // Ben paid for the hotel: it stays as it is, and only the taxi moves.
+    let (mut b, _) = taxi();
+    b.expense("ben", "hotel", "ben", 2000, equal(&["ana", "ben"]), None);
+    assert_eq!(
+        b.plan("ben", "ana").share_changes().unwrap(),
+        changes(&[("ana", 500), ("ben", -1000), ("cai", 500)])
+    );
+}
+
+#[test]
+fn a_running_total_past_the_bound_is_refused_not_wrapped() {
+    // Two halves of the largest amount still fit; three do not.
+    let edit = |n: usize| RemovalEdit {
+        entry_id: format!("e{n}"),
+        seen: Expense {
+            id: format!("x{n}"),
+            description: String::new(),
+            paid_by: "x".into(),
+            amount: i64::MAX,
+            currency: "USD".into(),
+            at: "2026-10-05T00:00:00Z".into(),
+            split: equal(&["x", "y"]),
+        },
+        author: Some("x".into()),
+        split: equal(&["x"]),
+    };
+    let of = |n: usize| RemovalPlan {
+        edits: (0..n).map(edit).collect(),
+        blockers: vec![],
+        joins: vec![],
+    };
+    assert_eq!(
+        of(2).share_changes().unwrap(),
+        changes(&[
+            ("x", 9_223_372_036_854_775_806),
+            ("y", -9_223_372_036_854_775_806)
+        ])
+    );
+    assert_eq!(
+        of(3).share_changes().unwrap_err().code,
+        code::AMOUNT_OVERFLOW
+    );
 }

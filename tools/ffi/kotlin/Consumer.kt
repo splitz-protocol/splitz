@@ -184,6 +184,16 @@ fun main(args: Array<String>) {
           unpaid.blockers.isEmpty() && unpaid.edits.map { it.entryId } == listOf(dinnerId) &&
               unpaid.edits.single().splitJson == """{"type":"equal","among":["${ana.me}"]}""",
           "${unpaid.edits.map { it.splitJson }}")
+    // 90.00 between two is 45.00 each; Ana alone takes it all.
+    val moved = removalShareChanges(unpaid).associate { it.participantId to it.minorUnits }
+    check("the plan takes him off whole, and his 45.00 moves to her",
+          unpaid.complete && moved == mapOf(ana.me to 4500L, ben.me to -4500L), "${unpaid.complete} $moved")
+    val unsplit = try {
+        removalShareChanges(unpaid.copy(edits = listOf(
+            unpaid.edits.single().copy(splitJson = """{"type":"equal","among":[]}"""))))
+        null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("and a plan whose split divides nothing is refused", unsplit == "empty_split", "$unsplit")
     check("and the plan still stands while the bill has not moved",
           sameRemovalPlan(unpaid, planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me)) ==
               RemovalPlanStanding.STANDS,
@@ -314,6 +324,7 @@ fun main(args: Array<String>) {
           paidPlan.blockers.map { it.block } == listOf(RemovalBlock.PAYMENT) &&
               paidPlan.blockers.single().fromThem,
           "${paidPlan.blockers.map { it.block }}")
+    check("and is no longer whole: he cannot come off", !paidPlan.complete, "${paidPlan.complete}")
     check("so the plan ana saw before no longer stands",
           sameRemovalPlan(unpaid, paidPlan) == RemovalPlanStanding.CHANGED, "changed")
     val confirmScreen = listOf("Ben says he paid you",

@@ -194,6 +194,19 @@ check("her expense is offered, split without him, and nothing blocks it",
         unpaid.edits[0].entry_id === JSON.parse(dinner).id &&
         JSON.stringify(JSON.parse(unpaid.edits[0].split_json)) === onlyAna,
       JSON.stringify(unpaid.edits.map((e) => e.split_json)));
+// 90.00 between two is 45.00 each; Ana alone takes it all.
+const moved = Object.fromEntries(splitz.removal_share_changes(unpaid)
+  .map((c) => [c.participant_id, Number(c.minor_units)]));
+check("the plan takes him off whole, and his 45.00 moves to her",
+      unpaid.complete && Object.keys(moved).length === 2 &&
+        moved[ana.me] === 4500 && moved[ben.me] === -4500,
+      `${unpaid.complete} ${JSON.stringify(moved)}`);
+let unsplit;
+try {
+  splitz.removal_share_changes({ ...unpaid, edits: [{ ...unpaid.edits[0],
+    split_json: JSON.stringify({ type: "equal", among: [] }) }] });
+} catch (e) { unsplit = e.code; }
+check("and a plan whose split divides nothing is refused", unsplit === "empty_split", `${unsplit}`);
 check("and the plan still stands while the bill has not moved",
       splitz.same_removal_plan(unpaid,
         splitz.plan_removal(ana.facts(), billId, ana.entries, ben.me, ana.me)) ===
@@ -320,6 +333,7 @@ check("once he has paid, taking ben off is blocked by the payment",
       paidPlan.blockers.length === 1 &&
         paidPlan.blockers[0].block === splitz.RemovalBlock.Payment && paidPlan.blockers[0].from_them,
       JSON.stringify(paidPlan.blockers.map((b) => b.block)));
+check("and is no longer whole: he cannot come off", !paidPlan.complete, `${paidPlan.complete}`);
 check("so the plan ana saw before no longer stands",
       splitz.same_removal_plan(unpaid, paidPlan) === splitz.RemovalPlanStanding.Changed, "changed");
 const confirmScreen = ["Ben says he paid you",

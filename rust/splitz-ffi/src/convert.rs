@@ -315,5 +315,6 @@ pub(crate) fn removal_plan(p: &splitz_host::RemovalPlan) -> ffi::RemovalPlan {
             })
             .collect(),
         joins: p.joins.clone(),
+        complete: p.complete(),
     }
 }

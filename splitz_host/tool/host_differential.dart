@@ -349,10 +349,90 @@ Future<Map<String, Object?>> settleRecords(Map<String, dynamic> op) async {
   };
 }
 
+/// One removal planned on a generated bill: the plan, whether it is whole,
+/// and what writing it moves, or the code that refused it.
+Map<String, Object?> removalPlan(Map<String, dynamic> op) {
+  final people = [for (final p in op['people'] as List) p as String];
+  final instants = [for (final i in op['instants'] as List) i as String];
+  var step = 0;
+  DiffHost at(String who) => DiffHost(me: who, at: instants[step++], txid: '');
+
+  final List<Map<String, dynamic>> entries;
+  try {
+    entries = [
+      seam.createBill(
+        host: at(people.first),
+        name: 'Trip',
+        currency: 'EUR',
+        creatorKey: op['creatorKey'] as String,
+      ),
+      for (final p in people)
+        seam.joinBill(host: at(p), name: p, payTo: 'u1$p'),
+      for (final e in op['expenses'] as List)
+        seam.addExpense(
+          host: at(e['author'] as String),
+          expenseId: e['id'] as String,
+          paidBy: e['paidBy'] as String,
+          amount: e['amount'] as int,
+          split: (e['split'] as Map).cast<String, dynamic>(),
+        ),
+      for (final p in op['payments'] as List)
+        seam.recordPayment(
+          host: at(p['from'] as String),
+          paymentId: p['id'] as String,
+          to: p['to'] as String,
+          amount: p['amount'] as int,
+          method: 'cash',
+        ),
+    ];
+  } on protocol.SplitError catch (e) {
+    return {'built': false, 'error': e.code};
+  }
+  final me = op['me'] as String;
+  final log = seam.BillLog(DiffHost(me: me, at: instants.last, txid: ''));
+  log.add(entries);
+  final seam.FoldedBill folded;
+  try {
+    folded = log.fold();
+  } on protocol.SplitError catch (e) {
+    return {'built': true, 'folded': false, 'error': e.code};
+  }
+  final plan = planRemoval(
+    folded: folded,
+    creatorId: folded.creatorId,
+    log: log.entries,
+    id: op['target'] as String,
+    me: me,
+  );
+  Object? moved;
+  try {
+    moved = plan.shareChanges;
+  } on protocol.SplitError catch (e) {
+    moved = {'error': e.code};
+  }
+  return {
+    'built': true,
+    'folded': true,
+    'namesThem': plan.namesThem,
+    'complete': plan.complete,
+    'edits': [
+      for (final e in plan.edits) [e.entryId, e.author, e.split],
+    ],
+    'blockers': [
+      for (final b in plan.blockers)
+        [b.block.name, b.entryId, b.description, b.author, b.fromThem],
+    ],
+    'joins': plan.joins,
+    'shareChanges': moved,
+  };
+}
+
 Future<Object?> answer(Map<String, dynamic> op) async {
   switch (op['op'] as String) {
     case 'settle_records':
       return settleRecords(op);
+    case 'removal_plan':
+      return removalPlan(op);
     case 'public_key':
       return signer.publicKeyFromSeed(
         SplitsSigner.decode(op['seed'] as String),
