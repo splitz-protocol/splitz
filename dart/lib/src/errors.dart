@@ -81,6 +81,8 @@ abstract final class SplitCode {
   static const swapMissingReference = 'swap_missing_reference';
   static const restatementStale = 'restatement_stale';
   static const restatementSuperseded = 'restatement_superseded';
+  static const billNotClosed = 'bill_not_closed';
+  static const billClosed = 'bill_closed';
   static const participantIdNotDerived = 'participant_id_not_derived';
 
   // §11 invites, payloads and sealing
@@ -159,10 +161,13 @@ const Map<String, String> _plainMessages = {
   'bill_ambiguous_entry': 'Part of this bill is damaged.',
   'bill_bad_currency': 'This bill\'s currency isn\'t valid.',
   'bill_bad_participant_id': 'Part of this bill is damaged.',
+  'bill_closed':
+      'The bill is closed for settling. Reopen it to change expenses.',
   'bill_future_version': 'This bill needs a newer app. Update to open it.',
   'bill_missing_currency': 'This bill has no currency.',
   'bill_missing_entry_payload': 'Part of this bill is damaged.',
   'bill_missing_version': 'This bill can\'t be read.',
+  'bill_not_closed': 'The bill isn\'t closed for settling yet.',
   'bill_not_scalar_values': 'This bill is damaged.',
   'bill_type_error': 'This bill is damaged.',
   'bill_unknown_confirmation_method':

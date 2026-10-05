@@ -34,6 +34,7 @@ export 'splitz_core.dart'
 
 export 'src/host/arrivals.dart';
 export 'src/host/bill_log.dart';
+export 'src/host/closing.dart';
 export 'src/host/entries.dart';
 export 'src/host/host.dart';
 export 'src/host/lanes.dart';

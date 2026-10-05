@@ -51,9 +51,10 @@ pub use invite::{
     SEALED_VERSION, TAG_BYTES,
 };
 pub use log::{
-    check_entry, confirmation_rule, derive_bill_id, derive_entry_id, fold_log, merge_logs,
-    order_entries, owns_id, payload_for, payment_digest, FoldResult, MergeResult, ReplacedAddress,
-    SetAside, BILL_ID_DOMAIN, ENTRY_ID_DOMAIN, ENTRY_KINDS, PAYMENT_DIGEST_DOMAIN,
+    check_entry, close_digest, confirmation_rule, derive_bill_id, derive_entry_id, fold_log,
+    merge_logs, order_entries, owns_id, payload_for, payment_digest, FoldResult, MergeResult,
+    ReplacedAddress, SetAside, BILL_ID_DOMAIN, CLOSE_DIGEST_DOMAIN, ENTRY_ID_DOMAIN, ENTRY_KINDS,
+    PAYMENT_DIGEST_DOMAIN,
 };
 pub use model::{Bill, Expense, Participant, PaymentRecord, Payout};
 pub use money::{

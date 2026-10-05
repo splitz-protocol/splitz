@@ -82,6 +82,53 @@ def cases():
          [rerouted], bill(THREE, [pay("p1", "ana", "cai", 5)],
                           confirmed=["p1"]), "ana")
 
+    # Section 14.4: a payment counts first against the payer's own settlement
+    # to that creditor. Dee owes three people; netting has each settlement
+    # cover parts of the others' debts. Paying ben and cai exactly what their
+    # settlements ask holds nothing else back, so ana is still asked for.
+    DEE = who("dee", ADDRESSES[3])
+    FOUR = [ANA, BEN, CAI, DEE]
+    netted = [
+        dict(settle("dee", "ana", 240),
+             covers=[{"from": "dee", "to": "ana", "amount": 30},
+                     {"from": "dee", "to": "cai", "amount": 195},
+                     {"from": "dee", "to": "ben", "amount": 15}]),
+        dict(settle("dee", "ben", 180),
+             covers=[{"from": "dee", "to": "ana", "amount": 180}]),
+        dict(settle("dee", "cai", 180),
+             covers=[{"from": "dee", "to": "ben", "amount": 180}]),
+    ]
+    case("a_payment_matching_its_own_settlement_holds_no_other",
+         netted, bill(FOUR, [pay("p1", "dee", "ben", 180),
+                             pay("p2", "dee", "cai", 180)]), "dee")
+    # Paid cai 20 beyond his own settlement: that much may be a debt netting
+    # moved, so every settlement covering cai waits on it.
+    case("a_payment_beyond_its_own_settlement_holds_those_covering_it",
+         netted, bill(FOUR, [pay("p1", "dee", "cai", 200)]), "dee")
+
+    # Section 14.4's bound. Netting moved the debt ana paid ben onto cai, and
+    # the settlement to cai names no covers: what is pending already meets
+    # what she owes, so asking for cai's 1000 overpays by exactly that.
+    case("a_debt_netting_moved_is_held_when_no_covers_name_it",
+         [settle("ana", "cai", 1000)],
+         bill(THREE, [pay("p1", "ana", "ben", 1000)]), "ana")
+    # Less pending than the settlement asks still holds the whole of it:
+    # requesting 1000 over 300 pending overpays by 300.
+    case("a_settlement_larger_than_what_is_left_owed_waits_whole",
+         [settle("ana", "cai", 1000)],
+         bill(THREE, [pay("p1", "ana", "ben", 300)]), "ana")
+    # In plan order, each settlement is carried while what is left owed
+    # covers it: 1200 owed less 300 pending holds cai's 1000 and carries
+    # dee's 200.
+    case("a_smaller_settlement_after_a_held_one_is_still_carried",
+         [settle("ana", "cai", 1000), settle("ana", "dee", 200)],
+         bill(FOUR, [pay("p1", "ana", "ben", 300)]), "ana")
+    # Pending money within the payer's own settlement to its payee leaves the
+    # rest of the debt its full room.
+    case("a_payment_within_its_own_settlement_leaves_the_rest_carried",
+         [settle("ana", "ben", 300), settle("ana", "cai", 1000)],
+         bill(THREE, [pay("p1", "ana", "ben", 300)]), "ana")
+
     # Section 14.4 withholds for a record the payer wrote. Ben is owed on a
     # debt the settlement to cai covers; a record he wrote himself, saying ana
     # paid him, is his word and not hers, and holds nothing back.

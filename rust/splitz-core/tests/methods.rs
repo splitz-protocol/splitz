@@ -10,9 +10,9 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use splitz_core::host::{
-    add_expense, amend_entry, base64url_no_pad, create_bill, join_bill, lane_for, obligation_for,
-    obligation_via, payment_id_for_send, record_payment, set_rate, settle, BillHost, BillLog,
-    SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
+    add_expense, amend_entry, base64url_no_pad, close_for, create_bill, join_bill, lane_for,
+    obligation_for, obligation_via, payment_id_for_send, record_payment, set_rate, settle,
+    BillHost, BillLog, SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
 };
 use splitz_core::model::Participant;
 use splitz_core::net_balances;
@@ -127,6 +127,9 @@ fn three_lane_bill_with<'a>(
 
     let mut log = BillLog::new(ana);
     log.add(entries).unwrap();
+    // §14.9: settled only once its creator has closed it.
+    let close = close_for(ana, &log.fold().unwrap()).unwrap();
+    log.add(vec![close]).unwrap();
     log
 }
 

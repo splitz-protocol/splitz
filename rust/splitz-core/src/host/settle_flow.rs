@@ -237,6 +237,15 @@ pub fn settle(
     log: &mut BillLog<'_>,
     obligation: &PayerObligation,
 ) -> Result<Settled> {
+    // §14.9: nothing is paid on a bill its creator has not closed.
+    if let Some(refused) = super::closing::settle_refusal(&log.fold()?) {
+        return Ok(Settled {
+            result: SendResult::Failed,
+            txid: None,
+            detail: Some(refused.to_owned()),
+            records: Vec::new(),
+        });
+    }
     let Some(uri) = obligation.uri() else {
         return Ok(Settled {
             result: SendResult::Failed,

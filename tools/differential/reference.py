@@ -85,7 +85,8 @@ def answer(op):
             # to catch, and it must show as a divergence rather than a crash.
             _spec.decode_bill(r["bill"])
             return {"bill": r["bill"], "setAside": r["setAside"],
-                    "withdrawn": r["withdrawn"]}
+                    "withdrawn": r["withdrawn"],
+                    "closeEntry": r["closeEntry"]}
         return attempt(fold)
 
     if kind == "merge":

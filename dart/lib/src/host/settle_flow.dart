@@ -8,6 +8,7 @@ library;
 import 'package:splitz_core/splitz_core.dart' as splitz;
 
 import 'bill_log.dart';
+import 'closing.dart';
 import 'entries.dart';
 import 'host.dart';
 
@@ -228,6 +229,10 @@ Future<Settled> settle(
   BillLog log,
   PayerObligation obligation,
 ) async {
+  // §14.9: nothing is paid on a bill its creator has not closed.
+  if (settleRefusal(log.fold()) case final refused?) {
+    return Settled(result: SendResult.failed, detail: refused);
+  }
   final uri = obligation.uri;
   if (uri == null) {
     return const Settled(

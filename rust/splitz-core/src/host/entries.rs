@@ -463,6 +463,17 @@ pub fn amend_expense(
     amend_entry(host, target, "expense", payload)
 }
 
+/// A close of the bill for settling (§10.9), over the expenses whose digest is
+/// `covers`: `FoldedBill::closed_over` as the writer's device folds it.
+pub fn close_bill(host: &dyn BillHost, covers: &str) -> Result<Value> {
+    let mut close = Map::new();
+    close.insert("covers".to_owned(), Value::from(covers));
+    let mut body = Map::new();
+    body.insert("kind".to_owned(), Value::from("closeBill"));
+    body.insert("close".to_owned(), Value::Object(close));
+    sealed(host, body)
+}
+
 /// Withdraws an entry. Who may is §10.8's decision.
 pub fn void_entry(host: &dyn BillHost, target_id: &str) -> Result<Value> {
     let mut body = Map::new();

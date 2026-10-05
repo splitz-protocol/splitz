@@ -78,6 +78,9 @@ MESSAGES = {
     "swap_missing_reference": "Add the swap's reference to record it.",
     "restatement_stale": "Someone changed this expense before it was written again.",
     "restatement_superseded": "Someone already wrote this expense again.",
+    # §14.9 settling waits for the creator's close
+    "bill_not_closed": "The bill isn't closed for settling yet.",
+    "bill_closed": "The bill is closed for settling. Reopen it to change expenses.",
     "participant_id_not_derived": "This person's id doesn't match their key.",
     # §11 invites, payloads and sealing
     "invite_not_an_invite": "This isn't a bill invite.",

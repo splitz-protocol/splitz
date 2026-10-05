@@ -16,7 +16,7 @@ use crate::money::{check_currency, checked_add, checked_balance, checked_sub, is
 use crate::sha256::sha256;
 use crate::zip321::{base64url, unbase64url};
 
-pub const ENTRY_KINDS: [&str; 8] = [
+pub const ENTRY_KINDS: [&str; 9] = [
     "createBill",
     "joinBill",
     "addExpense",
@@ -25,9 +25,10 @@ pub const ENTRY_KINDS: [&str; 8] = [
     "recordPayment",
     "confirmPayment",
     "setRate",
+    "closeBill",
 ];
 
-const PAYLOAD_NAMES: [&str; 4] = ["rate", "expense", "payment", "confirmation"];
+const PAYLOAD_NAMES: [&str; 5] = ["rate", "expense", "payment", "confirmation", "close"];
 
 /// Every member that is a payload, including the one no kind lists as
 /// ambiguous (§10.1).
@@ -35,7 +36,14 @@ const PAYLOAD_NAMES: [&str; 4] = ["rate", "expense", "payment", "confirmation"];
 /// `PAYLOAD_NAMES` drives the ambiguity check and omits `participant`; the
 /// type check at ingress must not, because an `amendEntry` may carry any of
 /// them and every later pass indexes what it finds.
-const PAYLOAD_MEMBERS: [&str; 5] = ["rate", "expense", "payment", "confirmation", "participant"];
+const PAYLOAD_MEMBERS: [&str; 6] = [
+    "rate",
+    "expense",
+    "payment",
+    "confirmation",
+    "close",
+    "participant",
+];
 
 /// The domain separator the bill id digest covers.
 pub const BILL_ID_DOMAIN: &str = "splitz-bill-id-v1";
@@ -66,6 +74,7 @@ pub fn payload_for(kind: &str) -> Option<&'static str> {
         "recordPayment" => Some("payment"),
         "confirmPayment" => Some("confirmation"),
         "setRate" => Some("rate"),
+        "closeBill" => Some("close"),
         _ => None,
     }
 }
@@ -119,6 +128,19 @@ pub const PAYMENT_DIGEST_DOMAIN: &str = "splitz-payment-v1";
 /// record the bill holds under that id still says this.
 pub fn payment_digest(payment: &Value) -> Result<String> {
     derive_id(PAYMENT_DIGEST_DOMAIN, payment)
+}
+
+/// The domain separator a close's digest covers (§10.9).
+pub const CLOSE_DIGEST_DOMAIN: &str = "splitz-close-v1";
+
+/// What a close covers (§10.9): the digest of the bill's expenses as the
+/// fold materialised them, in the bill's order. Any expense added, corrected
+/// or withdrawn since gives another digest, and the close no longer holds.
+pub fn close_digest(expenses: &[Value]) -> Result<String> {
+    derive_id(
+        CLOSE_DIGEST_DOMAIN,
+        &serde_json::json!({ "expenses": expenses }),
+    )
 }
 
 fn derive_id(domain: &str, entry: &Value) -> Result<String> {
@@ -631,6 +653,9 @@ pub struct FoldResult {
     pub rate_entry: Option<String>,
     /// Who wrote that `setRate` (§14.2: a payer is shown who set the rate).
     pub rate_author: Option<String>,
+    /// The creator's close the bill is closed by (§10.9), or none while it is
+    /// open: no close, or none covering the expenses as they now stand.
+    pub close_entry: Option<String>,
     /// The entries in force, in §10.2's order: admitted at ingress, not
     /// withdrawn or replaced, not a withdrawal, and not a restatement that
     /// does not apply. What §10.8's still-named check reads, whether or not
@@ -1647,6 +1672,58 @@ pub fn fold_log_verified(
         }
     }
 
+    // §10.9. The creator's latest close by §10.2's order decides, withdrawn
+    // or not: it closes the bill while it is live and covers the expenses
+    // exactly as they stand. Withdrawn, it is a reopen, and an earlier close
+    // never comes back into force. Nothing about it is dated: an expense
+    // written after the close, by any clock, changes the digest and reopens
+    // the bill.
+    let over = close_digest(&expenses)?;
+    let mut close_entry: Option<String> = None;
+    for entry in &entries {
+        let id = field(entry, "id");
+        if field(entry, "kind") != "closeBill" || unapplied.contains(id) {
+            continue;
+        }
+        let author = field(entry, "author");
+        if voided.contains(id) {
+            let by_creator =
+                author == creator && (verify.is_none() || identities.bound.contains_key(author));
+            if by_creator {
+                close_entry = None;
+            }
+            continue;
+        }
+        let applied = first_applied(versions(entry), &mut set_aside, |version| {
+            if author != creator {
+                return Err(SplitError::new(
+                    code::UNAUTHORIZED_ENTRY,
+                    "Only the creator closes a bill",
+                ));
+            }
+            if verify.is_some() && !identities.bound.contains_key(author) {
+                return Err(SplitError::new(
+                    code::UNAUTHORIZED_ENTRY,
+                    "Closes with no bound key",
+                ));
+            }
+            let covers = version
+                .get("close")
+                .and_then(|c| c.get("covers"))
+                .and_then(Value::as_str);
+            if !is_b64url_of_length(covers, 16) {
+                return Err(SplitError::new(
+                    code::BILL_TYPE_ERROR,
+                    "A close names no digest",
+                ));
+            }
+            Ok(covers.unwrap_or_default().to_owned())
+        });
+        if let Some((covers, _)) = applied {
+            close_entry = (covers == over).then(|| id.to_owned());
+        }
+    }
+
     // §10.2. Total: two rows sharing an id are ordered by their code.
     set_aside.sort_by(|a, b| {
         a.id.as_bytes()
@@ -1685,6 +1762,7 @@ pub fn fold_log_verified(
         payment_entries,
         rate_entry,
         rate_author,
+        close_entry,
         in_force: entries_in_force,
         amendment_of,
     })

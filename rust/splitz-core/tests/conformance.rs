@@ -417,6 +417,7 @@ fn log() {
             "paymentEntries": r.payment_entries,
             "rateEntry": r.rate_entry,
             "rateAuthor": r.rate_author,
+            "closeEntry": r.close_entry,
             "withdrawn": r.withdrawn,
             // The reason is prose (SPEC.md §12); only the code is compared.
             "setAside": r.set_aside.iter().map(|a| json!({
@@ -667,6 +668,48 @@ fn writers() {
             None => splitz_core::host::check_written_payment(&c["payment"])?,
         }
         Ok(json!({"accepted": true}))
+    });
+}
+
+/// A participant reading a log, for the cases that ask what a host would
+/// write as them. It writes with a fixed clock and sends nothing.
+struct Reader(String);
+
+impl splitz_core::host::BillHost for Reader {
+    fn me(&self) -> &str {
+        &self.0
+    }
+    fn now(&self) -> String {
+        "2026-10-28T20:00:00.000Z".to_owned()
+    }
+    fn random_bytes(&self, byte_count: usize) -> Vec<u8> {
+        vec![7; byte_count]
+    }
+    fn broadcast(&self, _uri: &str) -> splitz_core::host::Sent {
+        splitz_core::host::Sent::failed(Some("the corpus sends nothing".to_owned()))
+    }
+}
+
+#[test]
+fn closing() {
+    use splitz_core::error::SplitError;
+    use splitz_core::host::{close_for, expense_refusal, reopen_for, settle_refusal, BillLog};
+    run_cases("closing.json", |c| {
+        let actor = Reader(c["actor"].as_str().expect("an actor").to_owned());
+        let entries = c["log"].as_array().expect("a log").clone();
+        let folded = BillLog::with_entries(&actor, entries).fold()?;
+        match c["op"].as_str() {
+            Some("settle") => match settle_refusal(&folded) {
+                Some(code) => Err(SplitError::new(code, "")),
+                None => Ok(json!({"accepted": true})),
+            },
+            Some("expense") => match expense_refusal(&folded) {
+                Some(code) => Err(SplitError::new(code, "")),
+                None => Ok(json!({"accepted": true})),
+            },
+            Some("close") => close_for(&actor, &folded).map(|_| json!({"accepted": true})),
+            _ => reopen_for(&actor, &folded).map(|e| json!({"reopens": e.is_some()})),
+        }
     });
 }
 

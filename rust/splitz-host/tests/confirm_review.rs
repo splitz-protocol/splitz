@@ -42,6 +42,8 @@ fn bill(rate_by: &str) -> FoldedBill {
         rate_author: Some(rate_by.into()),
         in_force: vec![],
         amendment_of: BTreeMap::new(),
+        close_entry: None,
+        closed_over: String::new(),
     }
 }
 

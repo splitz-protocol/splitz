@@ -80,6 +80,8 @@ pub mod code {
     pub const SWAP_MISSING_REFERENCE: &str = "swap_missing_reference";
     pub const RESTATEMENT_STALE: &str = "restatement_stale";
     pub const RESTATEMENT_SUPERSEDED: &str = "restatement_superseded";
+    pub const BILL_NOT_CLOSED: &str = "bill_not_closed";
+    pub const BILL_CLOSED: &str = "bill_closed";
     pub const PARTICIPANT_ID_NOT_DERIVED: &str = "participant_id_not_derived";
 
     // §11 invites, payloads and sealing
@@ -179,6 +181,10 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
     ("bill_bad_currency", "This bill's currency isn't valid."),
     ("bill_bad_participant_id", "Part of this bill is damaged."),
     (
+        "bill_closed",
+        "The bill is closed for settling. Reopen it to change expenses.",
+    ),
+    (
         "bill_future_version",
         "This bill needs a newer app. Update to open it.",
     ),
@@ -188,6 +194,7 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
         "Part of this bill is damaged.",
     ),
     ("bill_missing_version", "This bill can't be read."),
+    ("bill_not_closed", "The bill isn't closed for settling yet."),
     ("bill_not_scalar_values", "This bill is damaged."),
     ("bill_type_error", "This bill is damaged."),
     (

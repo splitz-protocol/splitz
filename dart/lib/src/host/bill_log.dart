@@ -43,6 +43,8 @@ class FoldedBill {
     this.rateAuthor,
     this.inForce = const [],
     this.amendmentOf = const {},
+    this.closeEntry,
+    this.closedOver = '',
   });
 
   final splitz.Bill bill;
@@ -97,6 +99,16 @@ class FoldedBill {
 
   /// The amendment §10.4 would apply to each entry, by the entry's id.
   final Map<String, String> amendmentOf;
+
+  /// The creator's close the bill is closed by (§10.9), or null while open.
+  final String? closeEntry;
+
+  /// The digest of the expenses as they stand (§10.9): what a close written
+  /// now covers.
+  final String closedOver;
+
+  /// Whether the bill is closed for settling (§10.9, §14.9).
+  bool get closed => closeEntry != null;
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -188,6 +200,11 @@ class BillLog {
       rateAuthor: result.rateAuthor,
       inForce: result.inForce,
       amendmentOf: result.amendmentOf,
+      closeEntry: result.closeEntry,
+      closedOver: splitz.closeDigest([
+        for (final e in result.bill['expenses'] as List)
+          (e as Map).cast<String, dynamic>(),
+      ]),
     );
   }
 

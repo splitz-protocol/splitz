@@ -27,6 +27,7 @@ const Set<String> entryKinds = {
   'recordPayment',
   'confirmPayment',
   'setRate',
+  'closeBill',
 };
 
 /// The payload each kind carries, and no other.
@@ -36,6 +37,7 @@ const Map<String, String> payloadForKind = {
   'recordPayment': 'payment',
   'confirmPayment': 'confirmation',
   'setRate': 'rate',
+  'closeBill': 'close',
 };
 
 const List<String> _payloadNames = [
@@ -43,6 +45,7 @@ const List<String> _payloadNames = [
   'expense',
   'payment',
   'confirmation',
+  'close',
 ];
 
 /// Every member that is a payload, including the one no kind lists as
@@ -176,6 +179,15 @@ const String paymentDigestDomain = 'splitz-payment-v1';
 /// again, or amended since, is a payment nobody confirmed.
 String paymentDigest(Map<String, dynamic> payment) =>
     _deriveId(paymentDigestDomain, payment);
+
+/// The domain separator a close's digest covers (§10.9).
+const String closeDigestDomain = 'splitz-close-v1';
+
+/// What a close covers (§10.9): the digest of the bill's expenses as the fold
+/// materialised them, in the bill's order. Any expense added, corrected or
+/// withdrawn since gives another digest, and the close no longer holds.
+String closeDigest(List<Map<String, dynamic>> expenses) =>
+    _deriveId(closeDigestDomain, {'expenses': expenses});
 
 /// `value` as a map, or an empty one.
 ///
@@ -507,9 +519,14 @@ class FoldResult {
     required this.paymentEntries,
     required this.rateEntry,
     required this.rateAuthor,
+    this.closeEntry,
     this.inForce = const [],
     this.amendmentOf = const {},
   });
+
+  /// The creator's close the bill is closed by (§10.9), or null while it is
+  /// open: no close, or none covering the expenses as they now stand.
+  final String? closeEntry;
 
   /// The materialised bill, as a wire-form map.
   final Map<String, dynamic> bill;
@@ -1309,6 +1326,39 @@ FoldResult foldLog(List<Object?> rawEntries,
     }
   }
 
+  // §10.9. The creator's latest close by §10.2's order decides, withdrawn or
+  // not: it closes the bill while it is live and covers the expenses exactly
+  // as they stand. Withdrawn, it is a reopen, and an earlier close never comes
+  // back into force. Nothing about it is dated: an expense written after the
+  // close, by any clock, changes the digest and reopens the bill.
+  final over = closeDigest(expenses);
+  String? closeEntry;
+  for (final e in entries) {
+    if (e['kind'] != 'closeBill' || unapplied.contains(e['id'])) continue;
+    if (voided.contains(e['id'])) {
+      final byCreator = e['author'] == creator &&
+          (verify == null || identities.bound.containsKey(e['author']));
+      if (byCreator) closeEntry = null;
+      continue;
+    }
+    final result = applied(e, (version) {
+      if (e['author'] != creator) {
+        raise(SplitCode.unauthorizedEntry, 'Only the creator closes a bill');
+      }
+      if (verify != null && !identities.bound.containsKey(e['author'])) {
+        raise(SplitCode.unauthorizedEntry, 'Closes with no bound key');
+      }
+      final covers = _mapOf(version['close'])['covers'];
+      if (!_isB64UrlOfLength(covers, 16)) {
+        raise(SplitCode.billTypeError, 'A close names no digest');
+      }
+      return covers as String;
+    });
+    if (result != null) {
+      closeEntry = result.$1 == over ? e['id'] as String : null;
+    }
+  }
+
   setAside.sort((a, b) {
     final byId = compareUtf8(a.id, b.id);
     return byId != 0 ? byId : compareUtf8(a.code, b.code);
@@ -1349,5 +1399,6 @@ FoldResult foldLog(List<Object?> rawEntries,
         target: e['id'] as String,
     },
     rateAuthor: rateAuthor,
+    closeEntry: closeEntry,
   );
 }

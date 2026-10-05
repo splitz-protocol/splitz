@@ -1233,20 +1233,20 @@ union.
 ### 10.1 Entries
 
 `createBill`, `joinBill`, `addExpense`, `amendEntry`, `voidEntry`,
-`recordPayment`, `confirmPayment`, `setRate`.
+`recordPayment`, `confirmPayment`, `setRate`, `closeBill`.
 
 Each carries `id`, `author`, `kind`, `at`, and only the payload its kind uses.
 An unrecognised kind is refused with `bill_unknown_entry_kind`.
 
 **An entry MUST carry the payload its kind uses and no other.** One carrying
-more than one of `expense`, `payment` and `confirmation` is refused
+more than one of `rate`, `expense`, `payment`, `confirmation` and `close` is refused
 with `bill_ambiguous_entry`, because the currency fallback of §9.1 and the fold
 of §10.3 would otherwise read different ones.
 
 One carrying none is refused with `bill_missing_entry_payload`, and MUST be
 refused before it reaches a log: `joinBill` needs `participant`, `addExpense`
-`expense`, `recordPayment` `payment`, `confirmPayment` `confirmation`,
-and `voidEntry` and `amendEntry` a `targetId`.
+`expense`, `recordPayment` `payment`, `confirmPayment` `confirmation`, `setRate`
+`rate`, `closeBill` `close`, and `voidEntry` and `amendEntry` a `targetId`.
 
 **Admitting one is not the harmless no-op it appears to be.** Removing a member
 makes an entry's canonical encoding sort *higher* than the same entry with it:
@@ -2162,6 +2162,48 @@ bound by the invite, and every participant who joins with a key is bound by
 the id that key derives. A wallet that wants these rules to mean something
 must have every participant publish a key on joining.
 
+### 10.9 Closing a bill for settling
+
+A bill is paid once, after everything on it is known. The creator says when
+that is by writing a `closeBill`:
+
+```json
+{"kind": "closeBill", "close": {"covers": "<digest>"}}
+```
+
+```
+covers = base64url( SHA-256( "splitz-close-v1" || canonical({"expenses": E}) )[0..16] )
+```
+
+where `E` is the bill's `expenses` exactly as §10.3 materialises them, in the
+bill's order, and `canonical` is §9's encoding. The fold reports the bill
+**closed**, naming the close (`closeEntry`), while a close in force:
+
+- was written by the creator — any other author's is set aside with
+  `unauthorized_entry`, and so is the creator's when a verifying fold has not
+  bound the creator's key;
+- carries `covers` as 16 bytes of base64url — otherwise it is set aside with
+  `bill_type_error`;
+- covers the expenses as they now stand;
+- and is the creator's latest close by §10.2's order, counting one withdrawn.
+
+A withdrawn close is a reopen: it stays the latest, so the bill reads open
+even when its expenses return to what an earlier close covered, and two
+closes over one set of expenses take one reopen. A close set aside decides
+nothing. A later close over fewer expenses than the bill now holds leaves it
+open, whatever an earlier close covered.
+
+**A close is not dated against the expenses.** Only one close against another is put in §10.2's order. Any expense added, corrected or withdrawn
+after the creator closed the bill gives another digest, and the bill is open
+again, whatever `at` that expense carries. Deciding by time would let a clock
+set back keep a bill closed over an expense it never saw. A close is withdrawn
+by the creator alone (§10.8's default: its author), which reopens the bill; a
+fresh close over the expenses as they stand closes it again.
+
+Payments and confirmations do not change what a close covers. A payment is
+admitted to an open bill exactly as to a closed one: one somebody already made
+is a fact, and §14.9 is what keeps a host from starting one.
+
 ## 11. Invites
 
 ### 11.1 Invite URI
@@ -2496,7 +2538,8 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `zip321_fiat_too_many_digits`, `zip321_no_address`,
 `zip321_not_canonical`, `zip321_memo_undeliverable`, `address_invalid`,
 `payout_not_declared`, `obligation_mixed_payers`, `payment_not_positive`,
-`payout_incomplete`, `swap_missing_reference`.
+`payout_incomplete`, `swap_missing_reference`, `bill_not_closed`,
+`bill_closed`.
 
 **The code is part of the protocol; the message that accompanies it is prose
 and is not.** A user-facing string MUST be derived from the code.
@@ -2713,13 +2756,32 @@ paid is still in the plan §6 produces.
   any covered creditor stop the payer settling. Netting
   reroutes a debt the payer has already paid onto somebody else, and matching
   on the payee alone asks for it again.
+- A pending payment counts first against the payer's own settlement to the
+  person it paid. Only what was paid **beyond** that settlement withholds
+  another settlement covering that person; a payer with no settlement to
+  them has all of it beyond. Paying several people exactly what their
+  settlements ask therefore holds back no other debt — counting every
+  payment against every settlement that covers its payee would leave a
+  payer who owes three people unable to pay the third after paying two
+  (`withholdings` in both packages; `vectors/withholdings.json`).
+- What a request carries, plus every payment the payer recorded that is not
+  confirmed, MUST NOT exceed the payer's debt in the plan. Netting can move
+  a debt already paid onto a creditor no settlement's `covers` names, and
+  the rules above then hold nothing back. A host takes the payer's
+  settlements in the plan's order and carries each one only while the debt
+  less everything pending and everything already carried covers it; one
+  that does not fit is withheld whole, and names the recipients paid beyond
+  their own settlement. Later expenses can leave more pending than is owed,
+  and the request then carries nothing.
 - Where the amount pending is **less** than the debt, the **whole** debt is
   withheld rather than the remainder. Requesting the remainder overpays by the
   pending amount if that payment lands.
 - What is owed and what is pending are reported as two quantities. On a part
   payment they differ, and presenting the debt as the amount in flight states
-  something untrue. The pending amount is the sum over the payee and every
-  creditor the settlement covers.
+  something untrue. The pending amount is what is pending to the payee plus,
+  for every other creditor the settlement covers, what was paid to them
+  beyond their own settlement. For a settlement the bound alone withholds,
+  it is what was paid beyond their own settlement to every creditor.
 - Each withheld debt names the recipients its pending records were paid to.
   Under §6.3 that can be somebody other than the payee, and a payer told only
   "pending to Ana" looks for a payment to Ana that was sent to Ben.
@@ -2886,6 +2948,83 @@ The choice changes no entry. Every other device keeps reading the order the
 recipient declared, and a payment made this way is recorded as any other.
 A choice for somebody this payer does not currently owe is not a refusal:
 it changes nothing the request carries.
+
+### 14.9 Settling waits for the creator's close
+
+A host MUST NOT start a payment on a bill that is not closed (§10.9): it MUST
+NOT send a request, send a swap deposit, or write a record of a cash payment,
+and refuses each with `bill_not_closed` (`settleRefusal` /
+`settle_refusal`). A debt read off an open bill can still change, and money
+sent against it cannot be taken back.
+
+A host MUST NOT write an expense, a correction or a withdrawal of one on a
+closed bill, and refuses with `bill_closed` (`expenseRefusal` /
+`expense_refusal`). The fold would admit it and reopen the bill (§10.9); a
+host refuses so that what is owed changes only when the creator reopens it.
+
+A host writes a close only for the bill's creator (`closeFor` / `close_for`),
+over the digest its own fold reports (`closedOver` / `closed_over`), and a
+reopening as the withdrawal of the close in force (`reopenFor` /
+`reopen_for`). Both refuse anybody else with `unauthorized_entry`: every fold
+sets their entry aside, and writing it would tell them the bill was closed
+when it is not.
+
+### 14.10 One transaction for a request and a swap
+
+A payer who owes some people in ZEC and one person in another asset MAY pay
+all of them in one transaction: the request's outputs, and the swap's deposit
+as one more output (`combinedSend` / `combined_send`). One review shows every
+output, ZEC and deposit alike, and one send settles them.
+
+- The deposit is added only when it needs no memo — a request carries none to
+  a deposit, and one sent without the memo its provider requires is lost — and
+  never for a payee the request already pays.
+- The swap leg is held to everything a deposit sent alone is (`swapSendRefusal`
+  / `swap_send_refusal`): the quote is unexpired, the payee still asks to be
+  paid that way, and the bill still owes that amount at the bill's rate.
+- One §14.3 note covers the transaction. Its zatoshi are the request's outputs
+  and the deposit together, which is what a person's word that nothing left is
+  checked against. Once it lands, the request's payees are recorded under the
+  transaction's id and the swap under its provider's reference, from the note
+  alone if the app restarted in between (`PendingSends.recordsFor` records the
+  request's half; the swap's record is written as for a deposit sent alone).
+
+A payer whose swap cannot join the request — a memo, an expired quote, a
+second payee in another asset — sends them one after another; §14.4 holds none
+of them back on account of the others when each pays exactly its own
+settlement.
+
+### 14.11 Somebody added before they joined
+
+A creator may put a name on a bill for somebody who has not joined yet: a
+`joinBill` written for them, which states no key and which §10.7 binds to
+nobody. When the person joins from their own device, under the id their key
+derives and perhaps another name, the bill holds them twice. A host MAY offer
+the creator to merge the added name into them (`planMerge` / `plan_merge`):
+every expense naming the added name restated naming the person — as payer,
+and in the split — then the added name's joins withdrawn, written in one
+merge as §10.8's removal is.
+
+- A host MUST refuse to merge a participant whose record states an
+  `identityKey`, or to whom §10.7 binds one: they joined as themselves, and
+  folding them into somebody else hands their debts and credits to another
+  person.
+- Only the creator's merge is complete. Anybody else's would restate
+  expenses they did not write and withdraw a join they may not (§10.8).
+- In a split, a figure (`amounts`, `basisPoints`, `shareCounts`) is added
+  onto the person's, so every other figure and the total stand. A list
+  (`among`, an item's `sharedBy`) names the person in the added name's place;
+  one that already names both is left to a person to edit, because one place
+  for two names changes everybody else's share.
+- A restatement MUST leave every other participant's share of that expense,
+  as §4 splits it, exactly as it was, and give the person the added name's
+  share and their own summed. §3 gives leftover units by id and by largest
+  remainder, so a name or a figure moved onto the person can carry a unit
+  across somebody else; such an expense is left to a person to edit.
+- An expense the creator cannot restate, a payment to or from the added name,
+  or a confirmation by them holds the merge back, as each holds back a
+  removal. A merge changes expenses, so §14.9 refuses it while the bill is
+  closed.
 
 ## 15. The wallet seam
 

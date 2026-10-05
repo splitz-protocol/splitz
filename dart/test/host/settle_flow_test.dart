@@ -33,6 +33,8 @@ import 'support/fake_host.dart';
   final log = BillLog(ana);
   final refused = log.add([create, joinAna, joinBen, expense, rate]);
   expect(refused, isEmpty, reason: 'every entry this package writes is valid');
+  // §14.9: settled only once its creator has closed it.
+  expect(log.add([closeFor(ana, log.fold())]), isEmpty);
   return (log: log, ana: ana, ben: ben);
 }
 
@@ -83,6 +85,7 @@ import 'support/fake_host.dart';
   final log = BillLog(ana);
   final refused = log.add([create, joinAna, joinBen, joinCat, e1, e2, rate]);
   expect(refused, isEmpty, reason: 'every entry this package writes is valid');
+  expect(log.add([closeFor(ana, log.fold())]), isEmpty);
   return (log: log, ana: ana);
 }
 
@@ -199,6 +202,7 @@ void main() {
     final rate = setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234);
 
     final log = BillLog(ana)..add([create, joinAna, joinBen, expense, rate]);
+    log.add([closeFor(ana, log.fold())]);
     final benOwes = obligationFor(ben, log.fold())!;
 
     // The debt exists and cannot be carried. Both facts survive.
@@ -332,6 +336,13 @@ void main() {
           entry: setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234)));
       final log = BillLog(ben, billId: entries.first['id'] as String);
       expect(log.add(entries), isEmpty);
+      ana.tick();
+      expect(
+          log.add([
+            await signEntry(
+                billId: billId, host: ana, entry: closeFor(ana, log.fold())),
+          ]),
+          isEmpty);
       for (var i = 0; i < 5; i++) {
         ben.tick();
       }
@@ -478,6 +489,7 @@ void main() {
     final rate = setRate(host: ana, currency: 'EUR', minorUnitsPerZec: 51234);
     final log = BillLog(ana);
     expect(log.add([create, joinAna, joinBen, joinCat, e1, e2, rate]), isEmpty);
+    expect(log.add([closeFor(ana, log.fold())]), isEmpty);
 
     final owed = obligationFor(ana, log.fold())!;
     expect(owed.settlements.map((s) => s.to), ['ben', 'cat']);

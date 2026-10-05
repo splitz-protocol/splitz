@@ -13,10 +13,10 @@ use std::cell::Cell;
 use std::collections::BTreeSet;
 
 use splitz_core::host::{
-    accept_scan, add_expense, authored_id, base64url_no_pad, confirm_payment, create_bill,
-    delta_for, invite_for, join_bill, obligation_for, read_scan, record_payment, record_send,
-    request_stands, set_rate, settle, shareable_bill, sign_entry, void_entry, BillHost, BillLog,
-    Scanned, SendResult, Sent, SignEntry, VerifyEntry,
+    accept_scan, add_expense, authored_id, base64url_no_pad, close_for, confirm_payment,
+    create_bill, delta_for, invite_for, join_bill, obligation_for, read_scan, record_payment,
+    record_send, request_stands, set_rate, settle, shareable_bill, sign_entry, void_entry,
+    BillHost, BillLog, Scanned, SendResult, Sent, SignEntry, VerifyEntry,
 };
 use splitz_core::{
     check_entry, net_balances, participant_id, sha256_hex, signing_message, Delta, Invite,
@@ -315,7 +315,16 @@ fn dinner(ana: &FakeHost, ben: &FakeHost) -> Vec<Value> {
     let expense = add_expense(ana, "x1", "ana", 9000, equal_split(&["ana", "ben"]), None).unwrap();
     ana.tick();
     let rate = set_rate(ana, "EUR", 51234, None).unwrap();
-    vec![create, join_ana, join_ben, expense, rate]
+    closed(ana, vec![create, join_ana, join_ben, expense, rate])
+}
+
+/// `entries`, closed for settling by their creator (§14.9).
+fn closed(creator: &FakeHost, mut entries: Vec<Value>) -> Vec<Value> {
+    let mut log = BillLog::new(creator);
+    log.add(entries.clone()).unwrap();
+    creator.tick();
+    entries.push(close_for(creator, &log.fold().unwrap()).unwrap());
+    entries
 }
 
 #[test]
@@ -363,6 +372,11 @@ fn the_record_of_a_send_is_signed_so_a_verifying_fold_keeps_it() {
         ana.tick();
         let rate = set_rate(&ana, "EUR", 51234, None).unwrap();
         entries.push(sign_entry(&ana, &rate, &bill_id).unwrap());
+        // §14.9: closed by its creator, signed like everything else.
+        let open = BillLog::with_entries(&ben, entries.clone()).for_bill(bill_id.clone());
+        ana.tick();
+        let close = close_for(&ana, &open.fold().unwrap()).unwrap();
+        entries.push(sign_entry(&ana, &close, &bill_id).unwrap());
         for _ in 0..5 {
             ben.tick();
         }
@@ -973,7 +987,10 @@ fn two_debts(ana: &FakeHost, ben: &FakeHost, cat: &FakeHost) -> Vec<Value> {
     .unwrap();
     ana.tick();
     let rate = set_rate(ana, "EUR", 51234, None).unwrap();
-    vec![create, join_ana, join_ben, join_cat, e1, e2, rate]
+    closed(
+        ana,
+        vec![create, join_ana, join_ben, join_cat, e1, e2, rate],
+    )
 }
 
 /// `FakeHost`, with a ZIP 321 reader that refuses one address.

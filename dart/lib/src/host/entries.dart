@@ -392,6 +392,18 @@ Map<String, dynamic> amendExpense({
   );
 }
 
+/// A close of the bill for settling (§10.9), over the expenses whose digest
+/// is [covers]: [FoldedBill.closedOver] as the writer's device folds it.
+Map<String, dynamic> closeBill({
+  required BillHost host,
+  required String covers,
+}) {
+  return _sealed(host, <String, dynamic>{
+    'kind': 'closeBill',
+    'close': <String, dynamic>{'covers': covers},
+  });
+}
+
 /// Withdraws an entry. Who may is §10.8's decision.
 Map<String, dynamic> voidEntry({
   required BillHost host,

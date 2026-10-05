@@ -209,6 +209,35 @@ def log(rng, corrupt=0, pair=None):
     # Withdrawals and amendments name an id, so they are appended after
     # sealing and the log is sealed again to fix their own.
     extra = []
+    # Section 10.9: closes over the expenses as they stand, or over a stale
+    # digest, by the creator or anybody, and a reopen. Appended before the
+    # withdrawal and the amendment below, which can move the digest after a
+    # close was written.
+    if rng.random() < 0.5:
+        try:
+            over = _spec.close_digest(_spec.fold(sealed)["bill"]["expenses"])
+        except _spec.Refused:
+            over = "A" * 22     # a log no reader folds still takes a close
+        for _ in range(rng.randint(1, 2)):
+            extra.append({"v": 1,
+                          "author": IDS[0] if rng.random() < 0.8
+                          else rng.choice(among),
+                          "kind": "closeBill", "at": at(n),
+                          "close": {"covers": over if rng.random() < 0.75
+                                    else "A" * 22}})
+            n += 1
+    if extra:
+        sealed = _spec.seal_log(sealed + extra)
+        if sealed is None:
+            return None
+        extra = []
+        # A reopen: the latest close withdrawn by its author.
+        if rng.random() < 0.4:
+            last = [e for e in sealed if e["kind"] == "closeBill"][-1]
+            extra.append({"v": 1, "author": last["author"],
+                          "kind": "voidEntry", "at": at(n),
+                          "targetId": last["id"]})
+            n += 1
     if rng.random() < 0.45:
         target = rng.choice(sealed[1:]) if len(sealed) > 1 else sealed[0]
         extra.append({"v": 1, "author": rng.choice([target["author"]] + among),

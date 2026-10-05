@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
-  "count": 94,
+  "count": 96,
   "cases": [
     {
       "name": "address_invalid",
@@ -53,6 +53,11 @@
       "expect": "Part of this bill is damaged."
     },
     {
+      "name": "bill_closed",
+      "code": "bill_closed",
+      "expect": "The bill is closed for settling. Reopen it to change expenses."
+    },
+    {
       "name": "bill_future_version",
       "code": "bill_future_version",
       "expect": "This bill needs a newer app. Update to open it."
@@ -71,6 +76,11 @@
       "name": "bill_missing_version",
       "code": "bill_missing_version",
       "expect": "This bill can't be read."
+    },
+    {
+      "name": "bill_not_closed",
+      "code": "bill_not_closed",
+      "expect": "The bill isn't closed for settling yet."
     },
     {
       "name": "bill_not_scalar_values",

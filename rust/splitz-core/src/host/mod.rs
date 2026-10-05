@@ -16,6 +16,7 @@
 
 pub mod arrivals;
 pub mod bill_log;
+pub mod closing;
 pub mod entries;
 #[allow(clippy::module_inception)]
 pub mod host;
@@ -29,10 +30,12 @@ pub use arrivals::{
     Arrivals, IncomingTransaction,
 };
 pub use bill_log::{BillLog, FoldedBill, CODES_AN_ENTRY_OUTGROWS};
+pub use closing::{close_for, expense_refusal, reopen_for, settle_refusal};
 pub use entries::{
     add_expense, amend_entry, amend_expense, authored_id, base64url_no_pad, check_written_payment,
-    check_written_payout, confirm_payment, create_bill, join_bill, record_payment, restate_expense,
-    set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION, NONCE_BYTES,
+    check_written_payout, close_bill, confirm_payment, create_bill, join_bill, record_payment,
+    restate_expense, set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION,
+    NONCE_BYTES,
 };
 pub use host::{BillHost, SendResult, Sent, SignEntry, VerifyEntry};
 pub use lanes::{lane_for, SettleLane};

@@ -74,6 +74,8 @@ import 'support/fake_host.dart';
     ...extra,
   ];
   final log = BillLog(ana, entries: entries);
+  // §14.9: settled only once its creator has closed it.
+  log.add([closeFor(ana, log.fold())]);
   return (log: log, folded: log.fold(), ana: ana);
 }
 
@@ -634,6 +636,7 @@ void main() {
         ),
         setRate(host: ana, currency: 'USD', minorUnitsPerZec: 100000),
       ]);
+      log.add([closeFor(ana, log.fold())]);
       final owed = obligationFor(ana, log.fold())!;
       expect(owed.uri, isNull);
 

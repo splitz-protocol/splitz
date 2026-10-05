@@ -1810,11 +1810,11 @@ def settle_bill(bill, exact_limit=DEFAULT_EXACT_LIMIT):
 # --- Section 10: the log ----------------------------------------------------
 
 ENTRY_KINDS = ("createBill", "joinBill", "addExpense", "amendEntry", "voidEntry",
-               "recordPayment", "confirmPayment", "setRate")
+               "recordPayment", "confirmPayment", "setRate", "closeBill")
 PAYLOAD_FOR = {"joinBill": "participant", "addExpense": "expense",
                "recordPayment": "payment", "confirmPayment": "confirmation",
-               "setRate": "rate"}
-PAYLOADS = ("rate", "expense", "payment", "confirmation")
+               "setRate": "rate", "closeBill": "close"}
+PAYLOADS = ("rate", "expense", "payment", "confirmation", "close")
 # Every member that is a payload. PAYLOADS drives the ambiguity check and
 # omits `participant`; the type check at ingress must not, because an
 # amendEntry may carry any of them and every later pass indexes what it finds.
@@ -1856,6 +1856,15 @@ def derive_entry_id(entry):
 
 
 PAYMENT_DIGEST_DOMAIN = "splitz-payment-v1"
+CLOSE_DIGEST_DOMAIN = "splitz-close-v1"
+
+
+def close_digest(expenses):
+    """Section 10.9. What a close covers: the digest of the bill's expenses
+    as the fold materialised them, in the bill's order. Any expense added,
+    corrected or withdrawn since gives another digest, and the close no
+    longer holds."""
+    return _derive_id(CLOSE_DIGEST_DOMAIN, {"expenses": expenses})
 
 
 def payment_digest(payment):
@@ -2743,6 +2752,37 @@ def fold(entries, bill_id=None, verify=None):
         for e in confirmed_by[pay["id"]]:
             aside(e, "amount_overflow", "would carry a balance out of range")
 
+    # Section 10.9. The creator's latest close by section 10.2's order
+    # decides, withdrawn or not: it closes the bill while it is live and
+    # covers the expenses exactly as they stand. Withdrawn, it is a reopen,
+    # and an earlier close never comes back into force. Nothing about it is
+    # dated: an expense written after the close, by any clock, changes the
+    # digest and reopens the bill.
+    over = close_digest(expenses)
+    close_entry = None
+    for e in entries:
+        if e["kind"] != "closeBill" or e["id"] in unapplied:
+            continue
+        if e["id"] in voided:
+            if e["author"] == creator and (verify is None
+                                           or e["author"] in bound):
+                close_entry = None
+            continue
+
+        def close(version, e=e):
+            if e["author"] != creator:
+                raise Refused("unauthorized_entry")
+            if verify is not None and e["author"] not in bound:
+                raise Refused("unauthorized_entry")
+            covers = version.get("close", {}).get("covers")
+            if not _b64url_len(covers, 16):
+                raise Refused("bill_type_error")
+            return covers
+
+        result = applied(e, close)
+        if result is not None:
+            close_entry = e["id"] if result[0] == over else None
+
     return {
         "bill": {"v": BILL_VERSION, "id": create["id"], "name": create.get("name", ""),
                 "currency": currency, "splitMode": mode,
@@ -2767,11 +2807,42 @@ def fold(entries, bill_id=None, verify=None):
         "paymentEntries": _sorted_map(payment_entries),
         "rateEntry": rate_entry,
         "rateAuthor": rate_author,
+        "closeEntry": close_entry,
         "withdrawn": sorted(voided),
         # Section 10.2. Total: rows sharing an id are ordered by code.
         "setAside": sorted(set_aside, key=lambda r: (r["id"].encode("utf-8"),
                                                     r["code"].encode("utf-8"))),
     }
+
+
+# --- Section 14.9: settling waits for the creator's close --------------------
+
+def check_settle(folded):
+    """Section 14.9. No payment starts on a bill its creator has not closed."""
+    if folded["closeEntry"] is None:
+        raise Refused("bill_not_closed")
+
+
+def check_expense(folded):
+    """Section 14.9. No expense is written on a bill closed for settling."""
+    if folded["closeEntry"] is not None:
+        raise Refused("bill_closed")
+
+
+def check_close(folded, actor):
+    """Section 14.9. A close is written for the creator alone."""
+    if actor != folded["creator"]:
+        raise Refused("unauthorized_entry")
+
+
+def reopens(folded, actor):
+    """Section 14.9. Whether a reopening is written: none on an open bill,
+    and for the creator alone on a closed one."""
+    if folded["closeEntry"] is None:
+        return False
+    if actor != folded["creator"]:
+        raise Refused("unauthorized_entry")
+    return True
 
 
 # --- Section 10.6: what a signature covers ------------------------------------
@@ -2919,21 +2990,50 @@ def withholdings(plan, bill, payer, recorded_by=None):
             continue
         pending[p["to"]] = _in_range(pending.get(p["to"], 0) + p["amount"])
 
+    # What was paid to each creditor beyond this payer's own settlement to
+    # them. A payment is that settlement's first; only the rest can be a debt
+    # netting moved onto somebody else.
+    own = {}
+    for s in mine:
+        own[s["to"]] = _in_range(own.get(s["to"], 0) + s["amount"])
+    beyond = {t: v - own.get(t, 0) for t, v in pending.items()
+              if v > own.get(t, 0)}
+
+    # What the request may still carry: the payer's debt less everything
+    # pending. Netting can move a debt already paid onto a creditor no
+    # settlement's covers name, and only this bound stops it being asked for
+    # again. Negative when later expenses left more pending than is owed.
+    room = _checked_sum(own.values()) - _checked_sum(pending.values())
+    beyond_to = _by_id(beyond)
+
     carried, awaiting = [], []
     for s in mine:
-        # The payee, and every creditor whose debt this settlement covers
-        # (section 6.3): netting can reroute a debt already paid onto
-        # somebody else.
-        owed_to = {s["to"]} | {c["to"] for c in s.get("covers") or ()}
-        paid_to = _by_id(t for t in owed_to if t in pending)
+        # The payee's own pending payments, and what was paid beyond their
+        # own settlement to any other creditor this one covers (section 6.3):
+        # netting can reroute a debt already paid onto somebody else.
+        held = {}
+        if s["to"] in pending:
+            held[s["to"]] = pending[s["to"]]
+        for c in s.get("covers") or ():
+            if c["to"] != s["to"] and c["to"] in beyond:
+                held[c["to"]] = beyond[c["to"]]
+        paid_to = _by_id(held)
         if paid_to:
             # Who the unconfirmed money went to, which is not the payee when
             # netting rerouted the debt: the payment to confirm, or to take
             # back, is theirs.
             awaiting.append({"to": s["to"], "owed": s["amount"],
-                             "paid": _checked_sum([pending[t] for t in paid_to]),
+                             "paid": _checked_sum([held[t] for t in paid_to]),
                              "paidTo": paid_to})
+        elif s["amount"] > room:
+            # Only money paid beyond some settlement can leave too little
+            # room: what was paid within one is that settlement's, and it is
+            # held above.
+            awaiting.append({"to": s["to"], "owed": s["amount"],
+                             "paid": _checked_sum([beyond[t] for t in beyond_to]),
+                             "paidTo": beyond_to})
         else:
+            room -= s["amount"]
             carried.append(s)
     return {"carried": carried, "awaiting": awaiting}
 

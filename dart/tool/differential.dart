@@ -118,6 +118,7 @@ Map<String, Object?> answer(Map<String, dynamic> op) {
             for (final a in r.setAside) {'id': a.id, 'code': a.code},
           ],
           'withdrawn': r.withdrawn,
+          'closeEntry': r.closeEntry,
         };
       });
 

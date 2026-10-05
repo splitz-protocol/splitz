@@ -51,6 +51,8 @@ fn folded(expenses: Vec<Expense>, authors: &[(&str, &str)]) -> FoldedBill {
         rate_author: None,
         in_force: vec![],
         amendment_of: BTreeMap::new(),
+        close_entry: None,
+        closed_over: String::new(),
     }
 }
 

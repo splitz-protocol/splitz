@@ -1,6 +1,6 @@
 {
   "description": "What a request carries and what is held back. SPEC.md section 14.",
-  "count": 15,
+  "count": 21,
   "cases": [
     {
       "name": "a_rerouted_debt_already_paid_is_not_asked_for_again",
@@ -220,6 +220,552 @@
           }
         ],
         "awaiting": []
+      }
+    },
+    {
+      "name": "a_payment_matching_its_own_settlement_holds_no_other",
+      "plan": [
+        {
+          "from": "dee",
+          "to": "ana",
+          "amount": 240,
+          "covers": [
+            {
+              "from": "dee",
+              "to": "ana",
+              "amount": 30
+            },
+            {
+              "from": "dee",
+              "to": "cai",
+              "amount": 195
+            },
+            {
+              "from": "dee",
+              "to": "ben",
+              "amount": 15
+            }
+          ]
+        },
+        {
+          "from": "dee",
+          "to": "ben",
+          "amount": 180,
+          "covers": [
+            {
+              "from": "dee",
+              "to": "ana",
+              "amount": 180
+            }
+          ]
+        },
+        {
+          "from": "dee",
+          "to": "cai",
+          "amount": 180,
+          "covers": [
+            {
+              "from": "dee",
+              "to": "ben",
+              "amount": 180
+            }
+          ]
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "dee",
+            "to": "ben",
+            "amount": 180,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          },
+          {
+            "id": "p2",
+            "from": "dee",
+            "to": "cai",
+            "amount": 180,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "dee",
+      "expect": {
+        "carried": [
+          {
+            "from": "dee",
+            "to": "ana",
+            "amount": 240,
+            "covers": [
+              {
+                "from": "dee",
+                "to": "ana",
+                "amount": 30
+              },
+              {
+                "from": "dee",
+                "to": "cai",
+                "amount": 195
+              },
+              {
+                "from": "dee",
+                "to": "ben",
+                "amount": 15
+              }
+            ]
+          }
+        ],
+        "awaiting": [
+          {
+            "to": "ben",
+            "owed": 180,
+            "paid": 180,
+            "paidTo": [
+              "ben"
+            ]
+          },
+          {
+            "to": "cai",
+            "owed": 180,
+            "paid": 180,
+            "paidTo": [
+              "cai"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_payment_beyond_its_own_settlement_holds_those_covering_it",
+      "plan": [
+        {
+          "from": "dee",
+          "to": "ana",
+          "amount": 240,
+          "covers": [
+            {
+              "from": "dee",
+              "to": "ana",
+              "amount": 30
+            },
+            {
+              "from": "dee",
+              "to": "cai",
+              "amount": 195
+            },
+            {
+              "from": "dee",
+              "to": "ben",
+              "amount": 15
+            }
+          ]
+        },
+        {
+          "from": "dee",
+          "to": "ben",
+          "amount": 180,
+          "covers": [
+            {
+              "from": "dee",
+              "to": "ana",
+              "amount": 180
+            }
+          ]
+        },
+        {
+          "from": "dee",
+          "to": "cai",
+          "amount": 180,
+          "covers": [
+            {
+              "from": "dee",
+              "to": "ben",
+              "amount": 180
+            }
+          ]
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "dee",
+            "to": "cai",
+            "amount": 200,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "dee",
+      "expect": {
+        "carried": [
+          {
+            "from": "dee",
+            "to": "ben",
+            "amount": 180,
+            "covers": [
+              {
+                "from": "dee",
+                "to": "ana",
+                "amount": 180
+              }
+            ]
+          }
+        ],
+        "awaiting": [
+          {
+            "to": "ana",
+            "owed": 240,
+            "paid": 20,
+            "paidTo": [
+              "cai"
+            ]
+          },
+          {
+            "to": "cai",
+            "owed": 180,
+            "paid": 200,
+            "paidTo": [
+              "cai"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_debt_netting_moved_is_held_when_no_covers_name_it",
+      "plan": [
+        {
+          "from": "ana",
+          "to": "cai",
+          "amount": 1000
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 1000,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "ana",
+      "expect": {
+        "carried": [],
+        "awaiting": [
+          {
+            "to": "cai",
+            "owed": 1000,
+            "paid": 1000,
+            "paidTo": [
+              "ben"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_settlement_larger_than_what_is_left_owed_waits_whole",
+      "plan": [
+        {
+          "from": "ana",
+          "to": "cai",
+          "amount": 1000
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 300,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "ana",
+      "expect": {
+        "carried": [],
+        "awaiting": [
+          {
+            "to": "cai",
+            "owed": 1000,
+            "paid": 300,
+            "paidTo": [
+              "ben"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_smaller_settlement_after_a_held_one_is_still_carried",
+      "plan": [
+        {
+          "from": "ana",
+          "to": "cai",
+          "amount": 1000
+        },
+        {
+          "from": "ana",
+          "to": "dee",
+          "amount": 200
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 300,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "ana",
+      "expect": {
+        "carried": [
+          {
+            "from": "ana",
+            "to": "dee",
+            "amount": 200
+          }
+        ],
+        "awaiting": [
+          {
+            "to": "cai",
+            "owed": 1000,
+            "paid": 300,
+            "paidTo": [
+              "ben"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_payment_within_its_own_settlement_leaves_the_rest_carried",
+      "plan": [
+        {
+          "from": "ana",
+          "to": "ben",
+          "amount": 300
+        },
+        {
+          "from": "ana",
+          "to": "cai",
+          "amount": 1000
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "ben",
+            "name": "Ben",
+            "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          },
+          {
+            "id": "cai",
+            "name": "Cai",
+            "payTo": "u187vrwl4ampyxd5m6aj38n4ndkmj8v6gs97hkt23aps3sn5k89a0gk2smluexgdprcrtm56ezc5c7tjwlrnnl79tjtrxmqd42c5mpyz7g"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "ana",
+            "to": "ben",
+            "amount": 300,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "ana",
+      "expect": {
+        "carried": [
+          {
+            "from": "ana",
+            "to": "cai",
+            "amount": 1000
+          }
+        ],
+        "awaiting": [
+          {
+            "to": "ben",
+            "owed": 300,
+            "paid": 300,
+            "paidTo": [
+              "ben"
+            ]
+          }
+        ]
       }
     },
     {

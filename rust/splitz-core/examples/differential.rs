@@ -131,6 +131,7 @@ fn answer(op: &Value) -> Value {
                     .map(|a| json!({"id": a.id, "code": a.code}))
                     .collect::<Vec<_>>(),
                 "withdrawn": r.withdrawn,
+                "closeEntry": r.close_entry,
             }))
         }),
 

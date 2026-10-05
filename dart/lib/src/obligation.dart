@@ -271,20 +271,48 @@ Withholdings withholdings(
     pending[p.to] = checkedAdd(pending[p.to] ?? 0, p.amount);
   }
 
+  // What was paid to each creditor beyond this payer's own settlement to
+  // them. A payment is that settlement's first; only the rest can be a debt
+  // netting moved onto somebody else.
+  final own = <String, int>{};
+  for (final s in mine) {
+    own[s.to] = checkedAdd(own[s.to] ?? 0, s.amount);
+  }
+  final beyond = <String, int>{
+    for (final MapEntry(:key, :value) in pending.entries)
+      if (value > (own[key] ?? 0)) key: value - (own[key] ?? 0),
+  };
+
+  // What the request may still carry: the payer's debt less everything
+  // pending. Netting can move a debt already paid onto a creditor no
+  // settlement's covers name, and only this bound stops it being asked for
+  // again. Negative when later expenses left more pending than is owed.
+  var room =
+      checkedSum([for (final s in mine) s.amount]) - checkedSum(pending.values);
+  final beyondTo = sortedUtf8(beyond.keys);
+
   final carried = <Settlement>[];
   final awaiting = <Awaiting>[];
   for (final s in mine) {
-    // The payee, and every creditor whose debt this settlement covers (§6.3):
-    // netting can reroute a debt already paid onto somebody else.
-    final owedTo = {s.to, for (final c in s.covers) c.to};
-    final paidTo = sortedUtf8([
-      for (final t in owedTo)
-        if (pending.containsKey(t)) t
-    ]);
+    // The payee's own pending payments, and what was paid beyond their own
+    // settlement to any other creditor this one covers (§6.3): netting can
+    // reroute a debt already paid onto somebody else.
+    final held = <String, int>{
+      if (pending[s.to] case final paid?) s.to: paid,
+      for (final c in s.covers)
+        if (c.to != s.to && beyond.containsKey(c.to)) c.to: beyond[c.to]!,
+    };
+    final paidTo = sortedUtf8(held.keys);
     if (paidTo.isNotEmpty) {
       awaiting.add(Awaiting(s.to, s.amount,
-          checkedSum([for (final t in paidTo) pending[t]!]), paidTo));
+          checkedSum([for (final t in paidTo) held[t]!]), paidTo));
+    } else if (s.amount > room) {
+      // Only money paid beyond some settlement can leave too little room:
+      // what was paid within one is that settlement's, and it is held above.
+      awaiting.add(Awaiting(s.to, s.amount,
+          checkedSum([for (final t in beyondTo) beyond[t]!]), beyondTo));
     } else {
+      room -= s.amount;
       carried.add(s);
     }
   }

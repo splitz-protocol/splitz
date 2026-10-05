@@ -1,6 +1,6 @@
 //! One payer's obligation as a payment request (SPEC.md §8.5).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use crate::address::parse_address;
 use crate::error::{code, Result, SplitError};
@@ -308,27 +308,66 @@ pub fn withholdings(
         *held = checked_add(*held, p.amount, code::AMOUNT_OVERFLOW)?;
     }
 
+    // What was paid to each creditor beyond this payer's own settlement to
+    // them. A payment is that settlement's first; only the rest can be a debt
+    // netting moved onto somebody else.
+    let mut own: BTreeMap<&str, i64> = BTreeMap::new();
+    for s in plan.iter().filter(|s| s.from == payer) {
+        let sum = own.entry(s.to.as_str()).or_insert(0);
+        *sum = checked_add(*sum, s.amount, code::AMOUNT_OVERFLOW)?;
+    }
+    let beyond: BTreeMap<&str, i64> = pending
+        .iter()
+        .filter_map(|(t, paid)| {
+            let mine = own.get(t).copied().unwrap_or(0);
+            (*paid > mine).then(|| (*t, paid - mine))
+        })
+        .collect();
+
+    // What the request may still carry: the payer's debt less everything
+    // pending. Netting can move a debt already paid onto a creditor no
+    // settlement's covers name, and only this bound stops it being asked for
+    // again. Negative when later expenses left more pending than is owed.
+    let mut room = checked_sum(own.values().copied(), code::AMOUNT_OVERFLOW)?
+        - checked_sum(pending.values().copied(), code::AMOUNT_OVERFLOW)?;
+    let beyond_paid = checked_sum(beyond.values().copied(), code::AMOUNT_OVERFLOW)?;
+
     let mut carried = Vec::new();
     let mut awaiting = Vec::new();
     for s in plan.iter().filter(|s| s.from == payer) {
-        // The payee, and every creditor whose debt this settlement covers
-        // (§6.3): netting can reroute a debt already paid onto somebody else.
-        let mut owed_to: BTreeSet<&str> = BTreeSet::new();
-        owed_to.insert(s.to.as_str());
-        owed_to.extend(s.covers.iter().map(|c| c.to.as_str()));
-        let paid_to: Vec<&str> = owed_to
-            .iter()
-            .copied()
-            .filter(|t| pending.contains_key(t))
-            .collect();
-        if !paid_to.is_empty() {
+        // The payee's own pending payments, and what was paid beyond their
+        // own settlement to any other creditor this one covers (§6.3):
+        // netting can reroute a debt already paid onto somebody else.
+        let mut held: BTreeMap<&str, i64> = BTreeMap::new();
+        if let Some(paid) = pending.get(s.to.as_str()) {
+            held.insert(s.to.as_str(), *paid);
+        }
+        for c in &s.covers {
+            if c.to != s.to {
+                if let Some(extra) = beyond.get(c.to.as_str()) {
+                    held.insert(c.to.as_str(), *extra);
+                }
+            }
+        }
+        if !held.is_empty() {
             awaiting.push(Awaiting {
                 to: s.to.clone(),
                 owed: s.amount,
-                paid: checked_sum(paid_to.iter().map(|t| pending[t]), code::AMOUNT_OVERFLOW)?,
-                paid_to: paid_to.iter().map(|t| (*t).to_owned()).collect(),
+                paid: checked_sum(held.values().copied(), code::AMOUNT_OVERFLOW)?,
+                paid_to: held.keys().map(|t| (*t).to_owned()).collect(),
+            });
+        } else if s.amount > room {
+            // Only money paid beyond some settlement can leave too little
+            // room: what was paid within one is that settlement's, and it is
+            // held above.
+            awaiting.push(Awaiting {
+                to: s.to.clone(),
+                owed: s.amount,
+                paid: beyond_paid,
+                paid_to: beyond.keys().map(|t| (*t).to_owned()).collect(),
             });
         } else {
+            room -= s.amount;
             carried.push(s.clone());
         }
     }

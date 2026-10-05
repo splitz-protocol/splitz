@@ -6,7 +6,7 @@ SPEC.md sections 9.4, 10 and 10.5.
 import json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (_strict_json, MAX_ENTRY_AMOUNT, ADDRESSES, check_entry, derive_bill_id, derive_entry_id,
-                   payment_digest, participant_id,
+                   payment_digest, participant_id, close_digest,
                    seal_log, merge, order, fold, balances,
                    canonical_json, b64url, Refused, stand_in,
                    non_canonical)
@@ -1377,6 +1377,89 @@ def sealed(entries):
             "that carries it, so a pair of entries naming each other has no "
             "fixed point")
     return out
+
+
+# Section 10.9: closing a bill for settling. A close names the digest of the
+# expenses it closes over, so the bill is closed exactly while they stand.
+def closing(eid, author, minute, covers):
+    return {"v": 1, "id": eid, "author": author, "kind": "closeBill",
+            "at": AT(minute), "close": {"covers": covers}}
+
+
+E2 = {"v": 1, "id": "e2", "author": "ben", "kind": "addExpense", "at": AT(6),
+      "expense": {"id": "ben:x2", "description": "taxi", "paidBy": "ben",
+                  "amount": 1200, "at": AT(6),
+                  "split": {"type": "equal", "among": ["ana", "ben"]}}}
+# The same taxi dated before the close: no clock reopens a bill the close did
+# not cover, and none keeps it shut.
+E2_EARLY = dict(E2, id="e2b", at=AT(1), expense=dict(E2["expense"], at=AT(1)))
+
+
+def _over(entries):
+    return close_digest(fold(sealed(entries))["bill"]["expenses"])
+
+
+OVER = _over(BASE)
+OVER_TAXI = _over(BASE + [E2])
+
+CLOSE_CASES = [
+    ("a_bill_its_creator_closed_is_closed",
+     BASE + [closing("c1", "ana", 5, OVER)], None),
+    ("a_close_by_anybody_else_is_set_aside",
+     BASE + [closing("c1", "ben", 5, OVER)], None),
+    ("an_expense_added_after_the_close_reopens_it",
+     BASE + [closing("c1", "ana", 5, OVER), E2], None),
+    ("an_expense_dated_before_the_close_it_did_not_cover_reopens_it",
+     BASE + [closing("c1", "ana", 5, OVER), E2_EARLY], None),
+    ("a_withdrawn_close_reopens_it",
+     BASE + [closing("c1", "ana", 5, OVER), void("v1", "ana", "c1", 6)], None),
+    ("a_close_over_the_expenses_as_they_now_stand_closes_it_again",
+     BASE + [closing("c1", "ana", 5, OVER), E2,
+             closing("c2", "ana", 7, OVER_TAXI)], None),
+    ("a_close_naming_no_digest_is_set_aside",
+     BASE + [closing("c1", "ana", 5, 123)], None),
+    ("an_open_bill_names_no_close", BASE, None),
+    # A close is withdrawn by its author, the creator, alone.
+    ("a_close_withdrawn_by_anybody_else_stands",
+     BASE + [closing("c1", "ana", 5, OVER), void("v1", "ben", "c1", 6)], None),
+    # An amendment rewriting what a close covers: §10.4 names no subject for
+    # a close, so whether it stands is decided the same way in every reader.
+    ("an_amendment_of_a_close_is_decided_by_every_reader_alike",
+     BASE + [closing("c1", "ana", 5, OVER_TAXI),
+             {"v": 1, "id": "am1", "author": "ana", "kind": "amendEntry",
+              "at": AT(6), "targetId": "c1", "close": {"covers": OVER}}], None),
+    # The creator's latest close decides, withdrawn or not. A reopen is not
+    # undone by the expenses returning to what an older close covered.
+    ("a_reopen_stands_when_the_expenses_return_to_an_older_close",
+     BASE + [closing("c1", "ana", 5, OVER), E2,
+             closing("c2", "ana", 7, OVER_TAXI), void("v1", "ana", "c2", 8),
+             void("v2", "ben", "e2", 9)], None),
+    ("an_expense_withdrawn_after_a_later_close_leaves_it_open",
+     BASE + [closing("c1", "ana", 5, OVER), E2,
+             closing("c2", "ana", 7, OVER_TAXI), void("v2", "ben", "e2", 8)],
+     None),
+    ("two_closes_over_one_set_of_expenses_take_one_reopen",
+     BASE + [closing("c1", "ana", 5, OVER), closing("c2", "ana", 6, OVER),
+             void("v1", "ana", "c2", 7)], None),
+    ("a_later_close_over_fewer_expenses_leaves_it_open",
+     BASE + [E2, closing("c1", "ana", 7, OVER_TAXI),
+             closing("c2", "ana", 8, OVER)], None),
+    ("with_no_later_close_withdrawing_the_new_expense_closes_it_again",
+     BASE + [closing("c1", "ana", 5, OVER), E2, void("v2", "ben", "e2", 7)],
+     None),
+    ("a_close_by_anybody_else_withdrawn_reopens_nothing",
+     BASE + [closing("c1", "ana", 5, OVER), closing("c2", "ben", 6, OVER),
+             void("v1", "ben", "c2", 7)], None),
+    # Refused closes take their place in the one ordered list of what the
+    # fold set aside, among rows other passes refused.
+    ("refused_closes_are_ordered_with_every_other_refusal",
+     BASE + [rate("rz", "zed", 100000, 5), rate("ry", "yan", 100000, 5),
+             closing("c1", "ben", 6, OVER), closing("c2", "ana", 6, 7),
+             closing("c3", "dee", 6, OVER)], None),
+]
+
+
+FOLD_CASES += CLOSE_CASES
 
 
 def main():

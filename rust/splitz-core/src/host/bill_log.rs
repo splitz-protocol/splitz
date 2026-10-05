@@ -74,6 +74,18 @@ pub struct FoldedBill {
     pub in_force: Vec<String>,
     /// The amendment §10.4 would apply to each entry, by the entry's id.
     pub amendment_of: BTreeMap<String, String>,
+    /// The creator's close the bill is closed by (§10.9), or none while open.
+    pub close_entry: Option<String>,
+    /// The digest of the expenses as they stand (§10.9): what a close written
+    /// now covers.
+    pub closed_over: String,
+}
+
+impl FoldedBill {
+    /// Whether the bill is closed for settling (§10.9, §14.9).
+    pub fn closed(&self) -> bool {
+        self.close_entry.is_some()
+    }
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -184,6 +196,13 @@ impl<'h> BillLog<'h> {
                 fold_log_verified(&self.entries, self.bill_id.as_deref(), Some(verify))?
             }
         };
+        let expenses = result
+            .bill
+            .get("expenses")
+            .and_then(serde_json::Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let closed_over = crate::log::close_digest(&expenses)?;
         Ok(FoldedBill {
             bill: decode_bill(&result.bill)?,
             creator_id: result.creator.clone(),
@@ -200,6 +219,8 @@ impl<'h> BillLog<'h> {
             rate_author: result.rate_author,
             in_force: result.in_force,
             amendment_of: result.amendment_of,
+            close_entry: result.close_entry,
+            closed_over,
         })
     }
 

@@ -10,13 +10,23 @@ import 'dart:io';
 import 'package:splitz_core/splitz_core.dart';
 import 'package:splitz_core/host.dart'
     show
+        BillHost,
+        BillLog,
+        Broadcast,
+        Clock,
         ProposedOutput,
+        Randomness,
         ScanRefused,
         ScannedBill,
         checkProposal,
         checkWrittenPayment,
         checkWrittenPayout,
-        readScan;
+        closeFor,
+        expenseRefusal,
+        readScan,
+        reopenFor,
+        settleRefusal;
+import 'dart:typed_data';
 import 'package:test/test.dart';
 
 /// The corpus lives at the repository root, one level above this package, so a
@@ -334,6 +344,7 @@ void main() {
       'paymentEntries': r.paymentEntries,
       'rateEntry': r.rateEntry,
       'rateAuthor': r.rateAuthor,
+      'closeEntry': r.closeEntry,
       'withdrawn': r.withdrawn,
       'setAside': [
         // The reason is prose (SPEC.md §12); only the code is compared.
@@ -569,6 +580,26 @@ void main() {
     produce({'accepted': true});
   });
 
+  runCases('closing.json', (c, produce) {
+    final actor = _Reader(c['actor'] as String);
+    final folded =
+        BillLog(actor, entries: (c['log'] as List).cast<Map<String, dynamic>>())
+            .fold();
+    switch (c['op']) {
+      case 'settle':
+        if (settleRefusal(folded) case final code?) throw SplitError(code, '');
+        produce({'accepted': true});
+      case 'expense':
+        if (expenseRefusal(folded) case final code?) throw SplitError(code, '');
+        produce({'accepted': true});
+      case 'close':
+        closeFor(actor, folded);
+        produce({'accepted': true});
+      default:
+        produce({'reopens': reopenFor(actor, folded) != null});
+    }
+  });
+
   runCases('rate.json', (c, produce) {
     final rate = rateOf((c['rate'] as Map).cast<String, dynamic>());
     if (c['direction'] == 'zatoshiToFiat') {
@@ -684,4 +715,20 @@ bool _standIn(Set<String> verifies, Map<String, dynamic> entry, String key) {
     if (entry['sig'] is String) '${entry['id']}|${entry['sig']}',
   ];
   return names.any((n) => verifies.contains(n) || verifies.contains('$n@$key'));
+}
+
+/// A participant reading a log, for the cases that ask what a host would
+/// write as them. It writes with a fixed clock and sends nothing.
+class _Reader extends BillHost {
+  _Reader(this.me);
+  @override
+  final String me;
+  @override
+  Clock get now => () => DateTime.utc(2026, 10, 28, 20);
+  @override
+  Randomness get randomBytes =>
+      (n) => Uint8List.fromList(List<int>.filled(n, 7));
+  @override
+  Broadcast get broadcast =>
+      (uri) async => throw StateError('the corpus sends nothing');
 }
