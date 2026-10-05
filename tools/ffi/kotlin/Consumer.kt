@@ -214,6 +214,26 @@ fun main(args: Array<String>) {
     val notSplit = refusal { splitWithout("{", ben.me) }
     check("text that is not a split is refused", notSplit != null, "${notSplit?.detail}")
 
+    println("the bill is paid only once ana, its creator, closes it (§14.9)")
+    check("an open bill refuses every payment",
+          settleRefusalOf(ana.facts(), billId, ana.entries) == "bill_not_closed",
+          "${settleRefusalOf(ana.facts(), billId, ana.entries)}")
+    val benCloses = try {
+        closeEntryFor(ben.facts(), billId, ana.entries, ben.seed); null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("only the creator closes it", benCloses == "unauthorized_entry", "$benCloses")
+    check("and an open bill has nothing to reopen",
+          reopenEntryFor(ana.facts(), billId, ana.entries, ana.seed) == null, "reopened")
+    ana.add(closeEntryFor(ana.facts(), billId, ana.entries, ana.seed))
+    check("closed, a payment may start",
+          settleRefusalOf(ana.facts(), billId, ana.entries) == null &&
+              foldEntries(ana.facts(), billId, ana.entries).closeEntry != null,
+          "${settleRefusalOf(ana.facts(), billId, ana.entries)}")
+    check("and no expense may be written until she reopens it",
+          expenseRefusalOf(ana.facts(), billId, ana.entries) == "bill_closed" &&
+              reopenEntryFor(ana.facts(), billId, ana.entries, ana.seed) != null,
+          "${expenseRefusalOf(ana.facts(), billId, ana.entries)}")
+
     println("ben owes half of it")
     ben.take(ana)
     val owed = obligationOf(ben.facts(), billId, ben.entries)
@@ -446,7 +466,7 @@ fun main(args: Array<String>) {
           history.map { it.kind }.containsAll(listOf(
               BillEventKind.OPENED, BillEventKind.JOINED, BillEventKind.EXPENSE_ADDED,
               BillEventKind.PRICED, BillEventKind.PAYMENT_RECORDED,
-              BillEventKind.PAYMENT_CONFIRMED)),
+              BillEventKind.PAYMENT_CONFIRMED, BillEventKind.CLOSED_FOR_SETTLING)),
           "${history.map { it.kind }.toSet()}")
     check("newest first", history.first().at >= history.last().at,
           "${history.first().at} .. ${history.last().at}")
@@ -544,6 +564,38 @@ fun main(args: Array<String>) {
           declaredPayoutIndex(listOf(onBase, onArb), onArb) == 1u &&
               declaredPayoutIndex(listOf(onBase, onArb), onArb.copy(chain = null)) == null,
           "${declaredPayoutIndex(listOf(onBase, onArb), onArb)}")
+    println("a request and a swap in one transaction (§14.10)")
+    val noZec = refusal {
+        combinedSend(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000L,
+            "2026-10-29T22:00:00.000Z")
+    }
+    check("a bill paying nobody in ZEC has no request for a swap to join",
+          noZec != null, "${noZec?.detail}")
+    val cat = Device(120)
+    val catZec = "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+    val withCat = taxi +
+        joinBillEntry(cat.facts(), taxiId, "Cat", catZec, cat.key, listOf(), cat.seed) +
+        addExpenseEntry(cat.facts(), taxiId, "t2", cat.me, 2000,
+            """{"type":"equal","among":["${ana.me}","${cat.me}"]}""", null, cat.seed)
+    val both = combinedSend(ana.facts(), taxiId, withCat, quote("0xbenbase", "base"), ben.me, 4000L,
+        "2026-10-29T22:00:00.000Z")
+    check("one request carries cat's ZEC and ben's deposit",
+          both.uri.contains("t1deposit") && both.uri.contains(catZec) &&
+              Regex("address").findAll(both.uri).count() == 2,
+          both.uri)
+    val toCatTwice = refusal {
+        combinedSend(ana.facts(), taxiId, withCat, quote("0xbenbase", "base"), cat.me, 1000L,
+            "2026-10-29T22:00:00.000Z")
+    }
+    check("and a swap to somebody the request already pays is refused",
+          toCatTwice != null, "${toCatTwice?.detail}")
+    val late = refusal {
+        combinedSend(ana.facts(), taxiId, withCat, quote("0xbenbase", "base"), ben.me, 4000L,
+            "2026-10-30T00:00:00.000Z")
+    }
+    check("and a quote that expired before the send is refused, ZEC and all",
+          late != null && late.detail.contains("Expired"), "${late?.detail}")
+
     val swapRecord = recordPaymentEntry(ana.facts(), taxiId,
         PaymentDraft("intent-1", ben.me, 4000L, "swap", "intent-1", 7_807_316L, null, null), ana.seed)
     val swapRecordId = entryId(swapRecord)
@@ -604,6 +656,34 @@ fun main(args: Array<String>) {
     check("and ana withdrawing her own record is not",
           entryRefusal(ana.facts(), taxiId, taxi, voidEntryFor(ana.facts(), taxiId, swapRecordId, ana.seed)) == null,
           "none")
+
+    println("a name added by hand, merged into the person who joined (§14.11)")
+    val joe = Device(140)
+    var trip = taxi + addPersonEntry(ana.facts(), taxiId, taxi, "jo", "Jo")
+    trip = trip + addExpenseEntry(ana.facts(), taxiId, "m1", "jo", 1200,
+        """{"type":"equal","among":["${ana.me}","jo"]}""", "boat", ana.seed)
+    trip = trip + joinBillEntry(joe.facts(), taxiId, "Joseph", null, joe.key, listOf(), joe.seed)
+    val merge = planMerge(ana.facts(), taxiId, trip, "jo", joe.me, ana.me)
+    check("the hand-added name merges into joe whole, as payer too",
+          merge.complete && merge.edits.single().paidBy == joe.me, "${merge.edits.map { it.paidBy }}")
+    val mergeWritten = removalEntries(ana.facts(), taxiId, merge, ana.seed)
+    val merged = foldEntries(ana.facts(), taxiId, trip + mergeWritten)
+    val mergeIds = mergeWritten.map { entryId(it) }.toSet()
+    check("written, jo is off the bill and joe paid the boat",
+          merged.setAside.none { it.id in mergeIds } &&
+              merged.bill.participants.none { it.id == "jo" } &&
+              merged.bill.expenses.any { it.paidBy == joe.me && it.amount == 1200L },
+          "${merged.setAside}")
+    val keyed = try {
+        planMerge(ana.facts(), taxiId, trip, joe.me, "jo", ana.me); null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("somebody who joined with a key of their own is never merged",
+          keyed == "unauthorized_entry", "$keyed")
+    val twice = try {
+        addPersonEntry(ana.facts(), taxiId, trip, "jo", "Jo"); null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("and a name already on the bill is not added twice",
+          twice == "duplicate_participant", "$twice")
 
     println("and the rest of what every wallet needs from the protocol")
     check("a first payout this wallet cannot pay is passed over for the next it can (§14.8)",

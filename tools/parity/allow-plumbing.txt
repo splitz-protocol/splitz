@@ -18,6 +18,7 @@ dart::SealingException   # Rust returns `HostError::Sealing`. One enum for every
 dart::SplitsRelayException  # `HostError::Relay { transient }` — §15.5's "could retrying succeed" is a field there and a constructor argument here.
 dart::SplitsSyncException   # `HostError::Sync`.
 dart::SwapException         # `HostError::Swap { transient }`.
+dart::SwapRefused           # `HostError::SwapRefused`, carrying the `SwapSendRefusal` a combined send's swap leg was refused with.
 dart::BillKeyConflict       # `HostError::KeyConflict`, naming the bill.
 dart::BillStorageUnreadable # `HostError::Unreadable`, naming the key: §15.4's read raising on a value that is there and cannot be read.
 dart::SendInFlight          # `HostError::SendInFlight { pending }`, carrying the earlier send when one is written down.

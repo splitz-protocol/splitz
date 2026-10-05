@@ -243,6 +243,26 @@ func run(origin: String, downOrigin: String) async throws {
     let notSplit = await refusal { _ = try splitWithout(splitJson: "{", id: ben.me) }
     check("text that is not a split is refused", notSplit != nil, notSplit?.detail ?? "nil")
 
+    print("the bill is paid only once ana, its creator, closes it (§14.9)")
+    let open = try settleRefusalOf(facts: ana.facts(), billId: billId, entries: ana.entries)
+    check("an open bill refuses every payment", open == "bill_not_closed", open ?? "nil")
+    var benCloses: String?
+    do {
+        _ = try closeEntryFor(facts: ben.facts(), billId: billId, entries: ana.entries, seed: ben.seed)
+    } catch SplitzError.Protocol(let code, _) { benCloses = code }
+    check("only the creator closes it", benCloses == "unauthorized_entry", benCloses ?? "nil")
+    check("and an open bill has nothing to reopen",
+          try reopenEntryFor(facts: ana.facts(), billId: billId, entries: ana.entries, seed: ana.seed) == nil,
+          "reopened")
+    try ana.add(try closeEntryFor(facts: ana.facts(), billId: billId, entries: ana.entries, seed: ana.seed))
+    let closedNow = try settleRefusalOf(facts: ana.facts(), billId: billId, entries: ana.entries)
+    let closeEntry = try foldEntries(facts: ana.facts(), billId: billId, entries: ana.entries).closeEntry
+    check("closed, a payment may start", closedNow == nil && closeEntry != nil, closedNow ?? "nil")
+    let noExpense = try expenseRefusalOf(facts: ana.facts(), billId: billId, entries: ana.entries)
+    let reopening = try reopenEntryFor(facts: ana.facts(), billId: billId, entries: ana.entries, seed: ana.seed)
+    check("and no expense may be written until she reopens it",
+          noExpense == "bill_closed" && reopening != nil, noExpense ?? "nil")
+
     print("ben owes half of it")
     try ben.take(ana)
     let owed = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries)
@@ -606,6 +626,47 @@ func run(origin: String, downOrigin: String) async throws {
           declaredPayoutIndex(payouts: [onBase, onArb], payout: onArb) == 1
             && declaredPayoutIndex(payouts: [onBase, onArb], payout: noChain) == nil,
           "\(String(describing: declaredPayoutIndex(payouts: [onBase, onArb], payout: onArb)))")
+    print("a request and a swap in one transaction (§14.10)")
+    let combinedAt = "2026-10-29T22:00:00.000Z"
+    let noZec = await refusal {
+        _ = try combinedSend(facts: ana.facts(), billId: taxiId, entries: taxi,
+                             quote: quote("0xbenbase", "base"), to: ben.me,
+                             amountMinorUnits: 4000, at: combinedAt)
+    }
+    check("a bill paying nobody in ZEC has no request for a swap to join",
+          noZec != nil && !(noZec!.detail.hasPrefix("threw")), noZec?.detail ?? "nil")
+    let cat = try Device(120)
+    let catZec = "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+    let withCat = taxi + [
+        try joinBillEntry(facts: cat.facts(), billId: taxiId, name: "Cat", payTo: catZec,
+                          identityKey: cat.key, payouts: [], seed: cat.seed),
+        try addExpenseEntry(facts: cat.facts(), billId: taxiId, expenseId: "t2", paidBy: cat.me,
+                            amount: 2000,
+                            splitJson: #"{"type":"equal","among":[""# + ana.me + #"",""# + cat.me + #""]}"#,
+                            description: nil, seed: cat.seed),
+    ]
+    let both = try combinedSend(facts: ana.facts(), billId: taxiId, entries: withCat,
+                                quote: quote("0xbenbase", "base"), to: ben.me,
+                                amountMinorUnits: 4000, at: combinedAt)
+    check("one request carries cat's ZEC and ben's deposit",
+          both.uri.contains("t1deposit") && both.uri.contains(catZec) &&
+              both.uri.components(separatedBy: "address").count - 1 == 2,
+          both.uri)
+    let toCatTwice = await refusal {
+        _ = try combinedSend(facts: ana.facts(), billId: taxiId, entries: withCat,
+                             quote: quote("0xbenbase", "base"), to: cat.me,
+                             amountMinorUnits: 1000, at: combinedAt)
+    }
+    check("and a swap to somebody the request already pays is refused",
+          toCatTwice != nil && !(toCatTwice!.detail.hasPrefix("threw")), toCatTwice?.detail ?? "nil")
+    let late = await refusal {
+        _ = try combinedSend(facts: ana.facts(), billId: taxiId, entries: withCat,
+                             quote: quote("0xbenbase", "base"), to: ben.me,
+                             amountMinorUnits: 4000, at: "2026-10-30T00:00:00.000Z")
+    }
+    check("and a quote that expired before the send is refused, ZEC and all",
+          late?.detail.contains("Expired") ?? false, late?.detail ?? "nil")
+
     let swapRecord = try recordPaymentEntry(
         facts: ana.facts(), billId: taxiId,
         payment: PaymentDraft(paymentId: "intent-1", to: ben.me, amount: 4000, method: "swap",
@@ -697,6 +758,46 @@ func run(origin: String, downOrigin: String) async throws {
     check("and ana withdrawing her own record is not",
           try entryRefusal(facts: ana.facts(), billId: taxiId, entries: taxi, entry: own) == nil,
           "none")
+
+    print("a name added by hand, merged into the person who joined (§14.11)")
+    let joe = try Device(140)
+    var trip = taxi
+    trip.append(try addPersonEntry(facts: ana.facts(), billId: taxiId, entries: taxi,
+                                   id: "jo", name: "Jo"))
+    trip.append(try addExpenseEntry(
+        facts: ana.facts(), billId: taxiId, expenseId: "m1", paidBy: "jo", amount: 1200,
+        splitJson: #"{"type":"equal","among":[""# + ana.me + #"","jo"]}"#,
+        description: "boat", seed: ana.seed))
+    trip.append(try joinBillEntry(facts: joe.facts(), billId: taxiId, name: "Joseph",
+                                  payTo: nil, identityKey: joe.key, payouts: [], seed: joe.seed))
+    let merge = try planMerge(facts: ana.facts(), billId: taxiId, entries: trip,
+                              from: "jo", into: joe.me, me: ana.me)
+    check("the hand-added name merges into joe whole, as payer too",
+          merge.complete && merge.edits.count == 1 && merge.edits[0].paidBy == joe.me,
+          "\(merge.edits.map(\.paidBy))")
+    let mergeWritten = try removalEntries(facts: ana.facts(), billId: taxiId, plan: merge,
+                                          seed: ana.seed)
+    let merged = try foldEntries(facts: ana.facts(), billId: taxiId, entries: trip + mergeWritten)
+    let mergeIds = Set(try mergeWritten.map { try entryId($0) })
+    check("written, jo is off the bill and joe paid the boat",
+          merged.setAside.allSatisfy { !mergeIds.contains($0.id) } &&
+              merged.bill.participants.allSatisfy { $0.id != "jo" } &&
+              merged.bill.expenses.contains { $0.paidBy == joe.me && $0.amount == 1200 },
+          "\(merged.setAside)")
+    var keyed: String?
+    do {
+        _ = try planMerge(facts: ana.facts(), billId: taxiId, entries: trip,
+                          from: joe.me, into: "jo", me: ana.me)
+    } catch SplitzError.Protocol(let code, _) { keyed = code }
+    check("somebody who joined with a key of their own is never merged",
+          keyed == "unauthorized_entry", keyed ?? "nil")
+    var twice: String?
+    do {
+        _ = try addPersonEntry(facts: ana.facts(), billId: taxiId, entries: trip,
+                               id: "jo", name: "Jo")
+    } catch SplitzError.Protocol(let code, _) { twice = code }
+    check("and a name already on the bill is not added twice",
+          twice == "duplicate_participant", twice ?? "nil")
 
     print("and the rest of what every wallet needs from the protocol")
     let fallback = payoutFallback(cannotPay: ["not on base", nil])

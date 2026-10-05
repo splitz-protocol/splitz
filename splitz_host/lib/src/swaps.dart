@@ -82,6 +82,17 @@ class SwapException implements Exception {
   String toString() => 'SwapException: $message';
 }
 
+/// A swap leg [combinedSend] will not put in a transaction, and why: the
+/// refusal [swapSendRefusal] gives a deposit sent alone.
+class SwapRefused implements Exception {
+  const SwapRefused(this.refusal);
+
+  final SwapSendRefusal refusal;
+
+  @override
+  String toString() => 'SwapRefused: ${refusal.refused.name}';
+}
+
 /// An asset a provider will deliver, named by both halves.
 ///
 /// **Asset and chain are read together, never separately.** One symbol exists
@@ -864,6 +875,77 @@ SwapDeposit swapDeposit({
       at: at,
       rate: rate,
       swap: watch,
+      zatoshi: quote.amountInZatoshi,
+    ),
+  );
+}
+
+/// One transaction paying [obligation]'s request and the deposit for
+/// [quote] (§14.10): every ZEC payee the request carries, and the swap that
+/// settles [amountMinorUnits] of the debt to [to], from one review and one
+/// send.
+///
+/// The note it answers carries all of it: the ZEC payees and what each is
+/// sent, and the swap and what its deposit takes, so a restart records each
+/// half from the note (§14.3).
+///
+/// [bill] is the bill as the store holds it now, and [obligation] this
+/// payer's obligation read from it. Refuses with [SwapException] a request
+/// that carries nobody in ZEC and a swap to a payee the request already pays,
+/// which would be paid twice; then with [SwapRefused] whatever
+/// [swapSendRefusal] refuses the swap leg at [at], as it would a deposit sent
+/// alone.
+SwapDeposit combinedSend({
+  required String billId,
+  required protocol.Bill bill,
+  required host.PayerObligation obligation,
+  required SwapQuote quote,
+  required String to,
+  required int amountMinorUnits,
+  required String at,
+}) {
+  final zec = obligation.carriedTo;
+  if (zec.isEmpty || obligation.request.payments.isEmpty) {
+    throw const SwapException('the request carries nobody to pay in ZEC');
+  }
+  if (zec.containsKey(to)) {
+    throw const SwapException('the request already pays this payee');
+  }
+  final refusal = swapSendRefusal(
+    quote,
+    now: at,
+    bill: bill,
+    obligation: obligation,
+    to: to,
+    amountMinorUnits: amountMinorUnits,
+  );
+  if (refusal != null) throw SwapRefused(refusal);
+  final alone = swapDeposit(
+    billId: billId,
+    quote: quote,
+    to: to,
+    amountMinorUnits: amountMinorUnits,
+    rate: obligation.rate,
+    at: at,
+  );
+  final uri = protocol.renderUri([
+    ...obligation.request.payments,
+    protocol.Zip321Payment(
+      address: quote.depositAddress,
+      zatoshi: quote.amountInZatoshi,
+      label: 'swap to ${quote.asset.symbol}',
+    ),
+  ]);
+  return SwapDeposit(
+    uri: uri,
+    note: PendingSend(
+      billId: billId,
+      uri: uri,
+      carried: {...zec, to: amountMinorUnits},
+      at: at,
+      sent: obligation.carriedZatoshi,
+      rate: obligation.rate,
+      swap: alone.note.swap,
       zatoshi: quote.amountInZatoshi,
     ),
   );

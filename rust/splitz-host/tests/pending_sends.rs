@@ -338,6 +338,10 @@ fn refuses_what_cannot_be_recorded() {
         asset_symbol: "USDC".to_owned(),
         asset_chain: "base".to_owned(),
     });
+    // A deposit sent alone, as `swap_deposit` writes it: no ZEC outputs, the
+    // deposit's zatoshi. One beside a request records its request half.
+    swap.sent = std::collections::BTreeMap::new();
+    swap.zatoshi = Some(78100);
     assert_eq!(
         sends.records_for(&host, &mut log, &swap, TXID),
         Err(Unrecordable::IsASwap)

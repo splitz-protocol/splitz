@@ -24,6 +24,10 @@ enum BillEventKind {
   paymentConfirmed,
   priced,
 
+  /// The creator closed the bill for settling (§10.9). A withdrawal of it,
+  /// which reopens the bill, is an [entryWithdrawn] naming it.
+  closedForSettling,
+
   /// An entry kind this reader does not name. Shown rather than hidden: an
   /// entry that vanished silently is indistinguishable from one that was
   /// never sent.
@@ -261,6 +265,9 @@ BillEvent _event(
         amount: _whole(rate?['minorUnitsPerZec']),
         description: _text(rate?['source']),
       );
+
+    case 'closeBill':
+      return make(BillEventKind.closedForSettling);
 
     default:
       return make(BillEventKind.other);

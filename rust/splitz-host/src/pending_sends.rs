@@ -162,7 +162,11 @@ impl PendingSend {
         if self.is_damaged() || self.carried.is_empty() {
             return Err(Unrecordable::DetailsLost);
         }
-        if self.swap.is_some() {
+        // A deposit sent alone is recorded by its provider's reference, not a
+        // transaction id. One sent beside a request (§14.10) leaves the
+        // request's half to record here, and the swap to its own record.
+        let swap_to = self.swap.as_ref().map(|s| s.to.as_str());
+        if swap_to.is_some() && self.sent.is_empty() {
             return Err(Unrecordable::IsASwap);
         }
         let recorded: BTreeSet<String> = log
@@ -176,7 +180,10 @@ impl PendingSend {
         let carried: BTreeMap<String, i64> = self
             .carried
             .iter()
-            .filter(|(to, _)| !recorded.contains(&payment_id_for_send(host.me(), &id, to)))
+            .filter(|(to, _)| {
+                Some(to.as_str()) != swap_to
+                    && !recorded.contains(&payment_id_for_send(host.me(), &id, to))
+            })
             .map(|(to, amount)| (to.clone(), *amount))
             .collect();
         record_send(host, log, &carried, &id, &self.sent, self.rate.as_ref())
@@ -293,19 +300,24 @@ pub struct OwnTransaction {
 /// What `send` sends out of the account in all, in zatoshi: its outputs'
 /// ZEC, or a swap deposit's. `None` when the note does not say.
 fn send_total(send: &PendingSend) -> Option<i64> {
-    if send.sent.is_empty() {
-        return send.zatoshi;
+    if send.sent.is_empty() && send.zatoshi.is_none() {
+        return None;
     }
-    send.sent.values().try_fold(
-        0i64,
-        |total, &z| {
-            if z < 0 {
-                None
-            } else {
-                total.checked_add(z)
-            }
-        },
-    )
+    // Its outputs' ZEC, a swap deposit's, or both when one transaction carried
+    // a request and a deposit (§14.10).
+    send.sent
+        .values()
+        .chain(send.zatoshi.iter())
+        .try_fold(
+            0i64,
+            |total, &z| {
+                if z < 0 {
+                    None
+                } else {
+                    total.checked_add(z)
+                }
+            },
+        )
 }
 
 /// Why a person may not say a send left nothing in the wallet (§14.3).

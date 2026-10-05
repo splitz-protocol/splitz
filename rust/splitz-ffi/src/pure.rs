@@ -193,6 +193,39 @@ pub fn join_bill_entry(
     })
 }
 
+/// The `joinBill` that puts `name` on the bill under `id`, for somebody not
+/// here to join from a device of their own (§10.7, §14.11): written as them
+/// and **unsigned**, because this device holds no key of theirs and signing
+/// one authored by them would assert something false. §10.7 binds nothing to
+/// it; they bind their own identity by joining with their own key, and the
+/// creator may then merge this name into them (`plan_merge`).
+///
+/// Refused with `duplicate_participant` when `entries` already fold to
+/// somebody under `id`, or `id` is this device's own.
+#[uniffi::export]
+pub fn add_person_entry(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    id: String,
+    name: String,
+) -> Result<String> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    if id == facts.me || folded.bill.participant(&id).is_some() {
+        return Err(SplitzError::Protocol {
+            code: splitz_core::code::DUPLICATE_PARTICIPANT.to_owned(),
+            detail: "somebody on this bill already goes by that".to_owned(),
+        });
+    }
+    let as_them = HostFacts { me: id, ..facts };
+    let host = FactHost {
+        facts: &as_them,
+        sign: None,
+        verify: None,
+    };
+    Ok(join_bill(&host, Some(&name), None, None, None)?.to_string())
+}
+
 /// `first`, then every payout `who` declares that it does not take the place
 /// of, in their declared order (§9.1): the list to write when one way of
 /// being paid is set or changed.
@@ -362,6 +395,88 @@ pub fn set_rate_entry(
     build(&facts, &seed, Some(&bill_id), |host| {
         set_rate(host, &currency, minor_units_per_zec, source.as_deref())
     })
+}
+
+/// The bill as the creator's device folds `entries`, verified, for the
+/// entries §10.9 and §14.9 write and refuse.
+fn folded_for(
+    facts: &HostFacts,
+    bill_id: &str,
+    entries: &[String],
+) -> Result<splitz_core::host::FoldedBill> {
+    let parsed = parse_entries(entries)?;
+    let verified = Signer.prepare(parsed.iter(), bill_id);
+    let verify = |entry: &Value, key: &str| verified.verify(entry, key);
+    let host = FactHost {
+        facts,
+        sign: None,
+        verify: Some(&verify),
+    };
+    Ok(BillLog::with_entries(&host, parsed)
+        .for_bill(bill_id.to_owned())
+        .fold()?)
+}
+
+/// The close of the bill for settling (§10.9), over the expenses as
+/// `entries` fold them. Refused with `unauthorized_entry` unless this account
+/// is the bill's creator.
+#[uniffi::export]
+pub fn close_entry_for(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    seed: String,
+) -> Result<String> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    build(&facts, &seed, Some(&bill_id), |host| {
+        splitz_core::host::close_for(host, &folded)
+    })
+}
+
+/// The withdrawal of the close the bill is closed by, reopening it (§14.9),
+/// or none when it is open. Refused with `unauthorized_entry` unless this
+/// account is the bill's creator.
+#[uniffi::export]
+pub fn reopen_entry_for(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    seed: String,
+) -> Result<Option<String>> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    if folded.close_entry.is_none() {
+        return Ok(None);
+    }
+    build(&facts, &seed, Some(&bill_id), |host| {
+        splitz_core::host::reopen_for(host, &folded)
+            .map(|entry| entry.expect("a closed bill has a close to withdraw"))
+    })
+    .map(Some)
+}
+
+/// Why no payment may start on the bill now — `bill_not_closed` while its
+/// creator has not closed it — or none when one may (§14.9). Every way of
+/// paying asks this first: the request, a swap, a cash record.
+#[uniffi::export]
+pub fn settle_refusal_of(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<Option<String>> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    Ok(splitz_core::host::settle_refusal(&folded).map(str::to_owned))
+}
+
+/// Why no expense may be added or corrected now — `bill_closed` while the
+/// bill is closed for settling — or none when one may (§14.9).
+#[uniffi::export]
+pub fn expense_refusal_of(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<Option<String>> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    Ok(splitz_core::host::expense_refusal(&folded).map(str::to_owned))
 }
 
 #[uniffi::export]
@@ -1632,6 +1747,38 @@ pub fn plan_removal(
     Ok(convert::removal_plan(&plan))
 }
 
+/// What merging `from` — somebody the creator added before the person joined
+/// under their own key — into `into` needs, as the device whose participant
+/// id is `me` sees it: every expense naming `from` written again naming
+/// `into`, then `from`'s joins withdrawn. `removal_entries` writes it.
+///
+/// Refused with `unknown_participant` when either is not on the bill or they
+/// are the same, and `unauthorized_entry` when `from` states or is bound to a
+/// key. Only the creator's plan may be written.
+#[uniffi::export]
+pub fn plan_merge(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    from: String,
+    into: String,
+    me: String,
+) -> Result<ffi::RemovalPlan> {
+    let parsed = parse_entries(&entries)?;
+    let verified = Signer.prepare(parsed.iter(), &bill_id);
+    let verify = |entry: &Value, key: &str| verified.verify(entry, key);
+    let host = FactHost {
+        facts: &facts,
+        sign: None,
+        verify: Some(&verify),
+    };
+    let folded = BillLog::with_entries(&host, parsed.clone())
+        .for_bill(bill_id.clone())
+        .fold()?;
+    let plan = splitz_host::plan_merge(&folded, &folded.creator_id, &parsed, &from, &into, &me)?;
+    Ok(convert::removal_plan(&plan))
+}
+
 /// Whether `now` writes exactly what `confirmed` does and is held back by the
 /// same entries: what a person agreed to is still what would be written.
 /// A wallet plans again inside the turn that writes the restated expenses and
@@ -1716,6 +1863,15 @@ pub fn split_without(split_json: String, id: String) -> Result<Option<String>> {
     Ok(splitz_host::split_without(&split, &id).map(|s| s.to_string()))
 }
 
+/// `split` with `from`'s part moved to `into`, or none when that needs a
+/// person's choice: a list already naming both. Figures are added onto
+/// `into`'s; `amount_overflow` when the sum leaves §2.2's range.
+#[uniffi::export]
+pub fn split_merged(split_json: String, from: String, into: String) -> Result<Option<String>> {
+    let split = parse(&split_json, "a split")?;
+    Ok(splitz_host::split_merged(&split, &from, &into)?.map(|s| s.to_string()))
+}
+
 /// A plan the binding gave out, read back so the host compares it.
 fn host_removal_plan(plan: ffi::RemovalPlan) -> Result<splitz_host::RemovalPlan> {
     let mut edits = Vec::with_capacity(plan.edits.len());
@@ -1734,6 +1890,7 @@ fn host_removal_plan(plan: ffi::RemovalPlan) -> Result<splitz_host::RemovalPlan>
             author: e.author,
             split: parse(&e.split_json, "a split")?,
             basis: e.basis,
+            paid_by: e.paid_by,
         });
     }
     let blockers = plan
@@ -2169,6 +2326,51 @@ pub fn swap_deposit(
         &to,
         amount_minor_units,
         &rate,
+        &at,
+    )?;
+    Ok(SwapDepositPlan {
+        uri: deposit.uri,
+        note: deposit.note.to_json().to_string(),
+    })
+}
+
+/// One transaction paying the request `entries` fold to and the deposit for
+/// `quote`, settling `amount_minor_units` of the debt to `to` (§14.10): the
+/// request to hand the wallet and the note to store before calling it. The
+/// obligation is read again here from `entries`, so what is sent is what the
+/// bill says now. Refused when the request pays nobody in ZEC, when `to` is
+/// already in the request, and for whatever `swap_send_refusal` refuses the
+/// swap leg at `at`: an expired quote, a deposit needing a memo, a payout,
+/// address, asset, debt or rate that no longer matches the quote.
+#[uniffi::export]
+pub fn combined_send(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    quote: ffi::SwapQuote,
+    to: String,
+    amount_minor_units: i64,
+    at: String,
+) -> Result<SwapDepositPlan> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    let host = FactHost {
+        facts: &facts,
+        sign: None,
+        verify: None,
+    };
+    let Some(owed) = splitz_core::host::obligation_for(&host, &folded)? else {
+        return Err(SplitzError::Host {
+            detail: "this account owes nothing on the bill".to_owned(),
+            transient: false,
+        });
+    };
+    let deposit = splitz_host::combined_send(
+        &bill_id,
+        &folded.bill,
+        &owed,
+        &convert::quote_back(&quote),
+        &to,
+        amount_minor_units,
         &at,
     )?;
     Ok(SwapDepositPlan {

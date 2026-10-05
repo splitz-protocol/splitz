@@ -21,6 +21,7 @@ class RemovalEdit {
     required this.author,
     required this.split,
     this.basis,
+    this.paidBy,
   });
 
   /// The `addExpense` entry the restated expense replaces.
@@ -40,8 +41,13 @@ class RemovalEdit {
   /// (§10.4).
   final String? author;
 
-  /// [seen]'s split without the person, the others sharing what was theirs.
+  /// [seen]'s split without the person, the others sharing what was theirs;
+  /// for a merge, with the person's part moved to whom they are merged into.
   final Map<String, dynamic> split;
+
+  /// The payer written in place of [seen]'s, or null to keep it. Only a merge
+  /// changes the payer (see [planMerge]).
+  final String? paidBy;
 }
 
 /// Why an entry still names somebody once a plan's edits are written.
@@ -171,6 +177,7 @@ class RemovalPlan {
           e.seen.description,
           e.seen.split,
           e.split,
+          e.paidBy,
         ],
     ],
     'blockers': [
@@ -193,6 +200,91 @@ class RemovalPlan {
 Map<String, dynamic>? splitWithout(Map<String, dynamic> split, String id) {
   final typed = _typedWithout(split, id);
   return typed == null ? null : _withoutAnywhere(typed, id);
+}
+
+/// [split] with [from]'s part moved to [into], or null when that needs a
+/// choice only a person can make.
+///
+/// A list (`among`, an item's `sharedBy`) names [into] in [from]'s place; one
+/// already naming both is null, because one place for two names changes
+/// everybody else's share. A figure (`amounts`, `basisPoints`,
+/// `shareCounts`) is added to [into]'s, so every other figure, and the total,
+/// stay as they are. Throws `amount_overflow` when that sum leaves §2.2's
+/// range.
+Map<String, dynamic>? splitMerged(
+  Map<String, dynamic> split,
+  String from,
+  String into,
+) {
+  final out = {...split};
+  final among = out['among'];
+  if (among is List && among.contains(from)) {
+    if (among.contains(into)) return null;
+    out['among'] = [for (final x in among) x == from ? into : x];
+  }
+  for (final member in const ['amounts', 'basisPoints', 'shareCounts']) {
+    final figures = out[member];
+    if (figures is Map && figures.containsKey(from)) {
+      final moved = Map<String, dynamic>.from(figures);
+      final theirs = moved.remove(from);
+      final held = moved[into];
+      if (theirs is! int || (held != null && held is! int)) return null;
+      moved[into] = held == null
+          ? theirs
+          : protocol.checkedAdd(held as int, theirs);
+      out[member] = moved;
+    }
+  }
+  final items = out['items'];
+  if (items is List) {
+    final merged = <Object?>[];
+    for (final raw in items) {
+      final sharedBy = raw is Map ? raw['sharedBy'] : null;
+      if (sharedBy is List && sharedBy.contains(from)) {
+        if (sharedBy.contains(into)) return null;
+        merged.add({
+          ...Map<String, dynamic>.from(raw as Map),
+          'sharedBy': [for (final x in sharedBy) x == from ? into : x],
+        });
+      } else {
+        merged.add(raw);
+      }
+    }
+    out['items'] = merged;
+  }
+  return out;
+}
+
+/// Whether writing [merged] in place of [split] changes the share of anybody
+/// but [from] and [into], or leaves [into] other than the two shares summed.
+///
+/// §3 gives leftover units by id and by largest remainder, so a name or a
+/// figure moved from one person to another can carry a unit across a third.
+/// A merge says nobody else's share changes; one that would is for a person
+/// to write.
+bool _movesAnyoneElse(
+  int amount,
+  Map<String, dynamic> split,
+  Map<String, dynamic> merged,
+  String from,
+  String into,
+) {
+  final Map<String, int> before, after;
+  try {
+    before = protocol.splitExpense(amount, split);
+    after = protocol.splitExpense(amount, merged);
+  } on protocol.SplitError {
+    return true;
+  }
+  if (after.containsKey(from)) return true;
+  for (final who in {...before.keys, ...after.keys}) {
+    if (who == from) continue;
+    final want = who == into
+        ? (before[from] ?? 0) + (before[into] ?? 0)
+        : before[who] ?? 0;
+    if ((after[who] ?? 0) != want) return true;
+  }
+  return false;
 }
 
 /// [split] with [id] taken out of every member §10.8's check reads.
@@ -330,7 +422,54 @@ RemovalPlan planRemoval({
   required List<Map<String, dynamic>> log,
   required String id,
   required String me,
+}) => _plan(folded, creatorId, log, id, me, null);
+
+/// What merging [from] into [into] needs, as seen from [me]: the plan that
+/// takes [from] off the bill with every expense naming them written again
+/// naming [into] instead — as payer, and in the split by [splitMerged].
+///
+/// For somebody the creator added before the person joined under their own
+/// key: the two are one person, and the bill should say so. Only the creator
+/// may merge ([RemovalPlan.mayWithdrawJoins] is false for anybody else), and
+/// an expense [splitMerged] cannot rewrite, a payment, or a confirmation
+/// naming [from] is a [RemovalBlocker], as for a removal.
+///
+/// Refused with `unknown_participant` when either is not on the bill or they
+/// are the same, and with `unauthorized_entry` when [from] states a key or
+/// §10.7 binds one to them: a person who joined themselves is never folded
+/// into somebody else.
+RemovalPlan planMerge({
+  required splitz.FoldedBill folded,
+  required String creatorId,
+  required List<Map<String, dynamic>> log,
+  required String from,
+  required String into,
+  required String me,
 }) {
+  final stand = folded.bill.participant(from);
+  if (stand == null || folded.bill.participant(into) == null || from == into) {
+    throw const protocol.SplitError(
+      protocol.SplitCode.unknownParticipant,
+      'Both must be on the bill, and be two people',
+    );
+  }
+  if (stand.identityKey != null || folded.identities.bound.containsKey(from)) {
+    throw const protocol.SplitError(
+      protocol.SplitCode.unauthorizedEntry,
+      'They joined with a key of their own, so they are somebody',
+    );
+  }
+  return _plan(folded, creatorId, log, from, me, into);
+}
+
+RemovalPlan _plan(
+  splitz.FoldedBill folded,
+  String creatorId,
+  List<Map<String, dynamic>> log,
+  String id,
+  String me,
+  String? into,
+) {
   final bill = folded.bill;
   final inForce = folded.inForce.toSet();
   final byId = {for (final e in log) e['id']: e};
@@ -374,7 +513,7 @@ RemovalPlan planRemoval({
           );
           continue;
         }
-        if (e.paidBy == id) {
+        if (e.paidBy == id && into == null) {
           blockers.add(
             RemovalBlocker(
               RemovalBlock.paidFor,
@@ -399,10 +538,14 @@ RemovalPlan planRemoval({
         }
         // Named only by the entry it corrects, or by a member its type does
         // not read: written again as it reads now, without them.
-        final split = _names(e.split, id)
+        final split = into != null
+            ? splitMerged(e.split, id, into)
+            : _names(e.split, id)
             ? splitWithout(e.split, id)
             : _withoutAnywhere(e.split, id);
-        if (split == null) {
+        if (split == null ||
+            (into != null &&
+                _movesAnyoneElse(e.amount, e.split, split, id, into))) {
           blockers.add(
             RemovalBlocker(
               RemovalBlock.splitByHand,
@@ -419,6 +562,7 @@ RemovalPlan planRemoval({
             author: author,
             split: split,
             basis: folded.amendmentOf[entryId],
+            paidBy: into != null && e.paidBy == id ? into : null,
           ),
         );
       case 'recordPayment':
@@ -447,7 +591,7 @@ RemovalPlan planRemoval({
     edits: edits,
     blockers: blockers,
     joins: joins,
-    mayWithdrawJoins: me == creatorId || me == id,
+    mayWithdrawJoins: me == creatorId || (into == null && me == id),
   );
 }
 
@@ -484,7 +628,7 @@ List<Map<String, dynamic>> removalEntries({
         targetId: edit.entryId,
         basis: edit.basis,
         expenseId: 'r-${edit.entryId}',
-        paidBy: edit.seen.paidBy,
+        paidBy: edit.paidBy ?? edit.seen.paidBy,
         amount: edit.seen.amount,
         split: edit.split,
         description: edit.seen.description.isEmpty

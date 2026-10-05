@@ -276,6 +276,7 @@ void main(List<String> args) {
             author: unpaid.edits.single.author,
             splitJson: '{"type":"equal","among":[]}',
             basis: unpaid.edits.single.basis,
+            paidBy: unpaid.edits.single.paidBy,
           ),
         ],
         blockers: unpaid.blockers,
@@ -352,6 +353,46 @@ void main(List<String> args) {
     'text that is not a split is refused',
     notSplit != null,
     '${notSplit?.detail}',
+  );
+
+  print('the bill is paid only once ana, its creator, closes it (§14.9)');
+  final open = settleRefusalOf(ana.facts(), billId, ana.entries);
+  check(
+    'an open bill refuses every payment',
+    open == 'bill_not_closed',
+    '$open',
+  );
+  String? benCloses;
+  try {
+    closeEntryFor(ben.facts(), billId, ana.entries, ben.signingSeed());
+  } on SplitzErrorExceptionProtocol catch (e) {
+    benCloses = e.code;
+  }
+  check(
+    'only the creator closes it',
+    benCloses == 'unauthorized_entry',
+    '$benCloses',
+  );
+  check(
+    'and an open bill has nothing to reopen',
+    reopenEntryFor(ana.facts(), billId, ana.entries, ana.signingSeed()) == null,
+    'reopened',
+  );
+  ana.add(closeEntryFor(ana.facts(), billId, ana.entries, ana.signingSeed()));
+  final closedNow = settleRefusalOf(ana.facts(), billId, ana.entries);
+  check(
+    'closed, a payment may start',
+    closedNow == null &&
+        foldEntries(ana.facts(), billId, ana.entries).closeEntry != null,
+    '$closedNow',
+  );
+  final noExpense = expenseRefusalOf(ana.facts(), billId, ana.entries);
+  check(
+    'and no expense may be written until she reopens it',
+    noExpense == 'bill_closed' &&
+        reopenEntryFor(ana.facts(), billId, ana.entries, ana.signingSeed()) !=
+            null,
+    '$noExpense',
   );
 
   print('ben owes half of it');
@@ -778,6 +819,7 @@ void main(List<String> args) {
       BillEventKind.priced,
       BillEventKind.paymentRecorded,
       BillEventKind.paymentConfirmed,
+      BillEventKind.closedForSettling,
     ]),
     '$kinds',
   );
@@ -1002,6 +1044,101 @@ void main(List<String> args) {
             null,
     '${declaredPayoutIndex(const [onBase, onArb], onArb)}',
   );
+  print('a request and a swap in one transaction (§14.10)');
+  const at = '2026-10-29T22:00:00.000Z';
+  final noZec = refusedBy(
+    () => combinedSend(
+      ana.facts(),
+      taxiId,
+      taxi,
+      quote('0xbenbase', 'base'),
+      ben.me,
+      4000,
+      at,
+    ),
+  );
+  check(
+    'a bill paying nobody in ZEC has no request for a swap to join',
+    noZec != null,
+    '${noZec?.detail}',
+  );
+  final cat = Device(120);
+  const catZec =
+      'u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7';
+  final withCat = [
+    ...taxi,
+    joinBillEntry(
+      cat.facts(),
+      taxiId,
+      'Cat',
+      catZec,
+      cat.key,
+      const [],
+      cat.signingSeed(),
+    ),
+    addExpenseEntry(
+      cat.facts(),
+      taxiId,
+      't2',
+      cat.me,
+      2000,
+      jsonEncode({
+        'type': 'equal',
+        'among': [ana.me, cat.me],
+      }),
+      null,
+      cat.signingSeed(),
+    ),
+  ];
+  final both = combinedSend(
+    ana.facts(),
+    taxiId,
+    withCat,
+    quote('0xbenbase', 'base'),
+    ben.me,
+    4000,
+    at,
+  );
+  check(
+    "one request carries cat's ZEC and ben's deposit",
+    both.uri.contains('t1deposit') &&
+        both.uri.contains(catZec) &&
+        'address'.allMatches(both.uri).length == 2,
+    both.uri,
+  );
+  final toCatTwice = refusedBy(
+    () => combinedSend(
+      ana.facts(),
+      taxiId,
+      withCat,
+      quote('0xbenbase', 'base'),
+      cat.me,
+      1000,
+      at,
+    ),
+  );
+  check(
+    'and a swap to somebody the request already pays is refused',
+    toCatTwice != null,
+    '${toCatTwice?.detail}',
+  );
+  final late = refusedBy(
+    () => combinedSend(
+      ana.facts(),
+      taxiId,
+      withCat,
+      quote('0xbenbase', 'base'),
+      ben.me,
+      4000,
+      '2026-10-30T00:00:00.000Z',
+    ),
+  );
+  check(
+    'and a quote that expired before the send is refused, ZEC and all',
+    late != null && late.detail.contains('Expired'),
+    '${late?.detail}',
+  );
+
   final swapRecord = recordPaymentEntry(
     ana.facts(),
     taxiId,
@@ -1192,6 +1329,80 @@ void main(List<String> args) {
     'and ana withdrawing her own record is not',
     entryRefusal(ana.facts(), taxiId, taxi, own) == null,
     'none',
+  );
+
+  print('a name added by hand, merged into the person who joined (§14.11)');
+  final joe = Device(140);
+  var trip = [...taxi, addPersonEntry(ana.facts(), taxiId, taxi, 'jo', 'Jo')];
+  trip = [
+    ...trip,
+    addExpenseEntry(
+      ana.facts(),
+      taxiId,
+      'm1',
+      'jo',
+      1200,
+      jsonEncode({
+        'type': 'equal',
+        'among': [ana.me, 'jo'],
+      }),
+      'boat',
+      ana.signingSeed(),
+    ),
+    joinBillEntry(
+      joe.facts(),
+      taxiId,
+      'Joseph',
+      null,
+      joe.key,
+      const [],
+      joe.signingSeed(),
+    ),
+  ];
+  final merge = planMerge(ana.facts(), taxiId, trip, 'jo', joe.me, ana.me);
+  check(
+    'the hand-added name merges into joe whole, as payer too',
+    merge.complete && merge.edits.single.paidBy == joe.me,
+    '${merge.edits.map((e) => e.paidBy).toList()}',
+  );
+  final mergeWritten = removalEntries(
+    ana.facts(),
+    taxiId,
+    merge,
+    ana.signingSeed(),
+  );
+  final merged = foldEntries(ana.facts(), taxiId, [...trip, ...mergeWritten]);
+  final mergeIds = {
+    for (final e in mergeWritten) (jsonDecode(e) as Map)['id'] as String,
+  };
+  check(
+    'written, jo is off the bill and joe paid the boat',
+    merged.setAside.every((a) => !mergeIds.contains(a.id)) &&
+        merged.bill.participants.every((p) => p.id != 'jo') &&
+        merged.bill.expenses.any((e) => e.paidBy == joe.me && e.amount == 1200),
+    '${merged.setAside.map((a) => a.code).toList()}',
+  );
+  String? keyed;
+  try {
+    planMerge(ana.facts(), taxiId, trip, joe.me, 'jo', ana.me);
+  } on SplitzErrorExceptionProtocol catch (e) {
+    keyed = e.code;
+  }
+  check(
+    'somebody who joined with a key of their own is never merged',
+    keyed == 'unauthorized_entry',
+    '$keyed',
+  );
+  String? twice;
+  try {
+    addPersonEntry(ana.facts(), taxiId, trip, 'jo', 'Jo');
+  } on SplitzErrorExceptionProtocol catch (e) {
+    twice = e.code;
+  }
+  check(
+    'and a name already on the bill is not added twice',
+    twice == 'duplicate_participant',
+    '$twice',
   );
 
   print('and the rest of what every wallet needs from the protocol');

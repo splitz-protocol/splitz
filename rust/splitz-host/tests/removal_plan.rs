@@ -11,9 +11,10 @@ use splitz_core::host::{
     record_payment, void_entry, BillLog, FoldedBill, CREATOR_KEY_BYTES,
 };
 use splitz_core::Expense;
+use splitz_core::{net_balances, participant_id};
 use splitz_host::{
-    plan_removal, removal_entries, split_without, RemovalBlock, RemovalEdit, RemovalPlan,
-    WalletBillHost,
+    plan_merge, plan_removal, removal_entries, split_merged, split_without, RemovalBlock,
+    RemovalEdit, RemovalPlan, WalletBillHost,
 };
 use std::collections::{BTreeMap, HashMap};
 use support::FakeWallet;
@@ -735,6 +736,7 @@ fn a_running_total_past_the_bound_is_refused_not_wrapped() {
         author: Some("x".into()),
         split: equal(&["x"]),
         basis: None,
+        paid_by: None,
     };
     let of = |n: usize| RemovalPlan {
         edits: (0..n).map(edit).collect(),
@@ -875,4 +877,237 @@ fn entries_for_a_plan_that_is_not_complete_are_refused() {
     );
     // The person themselves may leave.
     assert!(b.plan("cai", "cai").may_withdraw_joins);
+}
+
+// --- merging somebody added before they joined ------------------------------
+
+/// Ana added "josh" herself; Jo joined from his own device. Josh paid a
+/// 30.00 dinner split by Ana, Josh and Cai, and shares a 20.00 taxi Ana paid
+/// with Ana.
+fn josh_and_jo() -> Bill {
+    let mut b = Bill::new();
+    b.join("cai");
+    b.join("jo");
+    b.write("josh", |h| {
+        join_bill(h, Some("Josh"), None, None, None).unwrap()
+    });
+    b.expense(
+        "ana",
+        "dinner",
+        "josh",
+        3000,
+        equal(&["ana", "cai", "josh"]),
+        None,
+    );
+    b.expense("ana", "taxi", "ana", 2000, equal(&["ana", "josh"]), None);
+    b
+}
+
+fn merge(b: &Bill, me: &str, from: &str) -> splitz_core::Result<RemovalPlan> {
+    let ordered = b.held(|log| log.entries());
+    plan_merge(&b.fold(), "ana", &ordered, from, "jo", me)
+}
+
+#[test]
+fn a_merge_names_jo_in_his_place_as_payer_too_and_the_fold_applies_it() {
+    let mut b = josh_and_jo();
+    let before = net_balances(&b.fold().bill).unwrap();
+    let plan = merge(&b, "ana", "josh").unwrap();
+    assert!(plan.complete());
+    let payers: Vec<_> = plan.edits.iter().map(|e| e.paid_by.clone()).collect();
+    assert_eq!(payers, vec![Some("jo".to_owned()), None]);
+    let written = {
+        let ana = &b.wallets["ana"];
+        removal_entries(&WalletBillHost::new(ana), &plan).unwrap()
+    };
+    for e in written {
+        b.write("ana", |_| e);
+    }
+    let folded = b.fold();
+    assert!(folded.set_aside.is_empty(), "{:?}", folded.set_aside);
+    assert!(folded.bill.participant("josh").is_none());
+    let after = net_balances(&folded.bill).unwrap();
+    assert_eq!(after["jo"], before["josh"] + before["jo"]);
+    assert_eq!(after["ana"], before["ana"]);
+    assert_eq!(after["cai"], before["cai"]);
+}
+
+#[test]
+fn merged_figures_add_onto_his_so_every_other_figure_stays() {
+    assert_eq!(
+        split_merged(
+            &json!({"type": "exact", "amounts": {"ana": 500, "josh": 300, "jo": 200}}),
+            "josh",
+            "jo"
+        )
+        .unwrap(),
+        Some(json!({"type": "exact", "amounts": {"ana": 500, "jo": 500}}))
+    );
+    assert_eq!(
+        split_merged(
+            &json!({"type": "shares", "shareCounts": {"ana": 1, "josh": 2}}),
+            "josh",
+            "jo"
+        )
+        .unwrap(),
+        Some(json!({"type": "shares", "shareCounts": {"ana": 1, "jo": 2}}))
+    );
+    let over = split_merged(
+        &json!({"type": "exact", "amounts": {"josh": i64::MAX, "jo": 1}}),
+        "josh",
+        "jo",
+    );
+    assert_eq!(over.unwrap_err().code, code::AMOUNT_OVERFLOW);
+}
+
+#[test]
+fn a_list_already_naming_both_is_by_hand() {
+    assert_eq!(
+        split_merged(&equal(&["jo", "josh"]), "josh", "jo").unwrap(),
+        None
+    );
+    let mut b = josh_and_jo();
+    b.expense(
+        "ana",
+        "boat",
+        "ana",
+        900,
+        equal(&["ana", "jo", "josh"]),
+        None,
+    );
+    let plan = merge(&b, "ana", "josh").unwrap();
+    assert!(!plan.complete());
+    assert_eq!(plan.blockers.len(), 1);
+    assert_eq!(plan.blockers[0].block, RemovalBlock::SplitByHand);
+}
+
+#[test]
+fn a_payment_to_him_holds_the_merge_back() {
+    let mut b = josh_and_jo();
+    b.write("cai", |h| {
+        record_payment(h, "p1", "josh", 1000, "cash", None, None, None, None).unwrap()
+    });
+    let plan = merge(&b, "ana", "josh").unwrap();
+    assert_eq!(plan.blockers.len(), 1);
+    assert_eq!(plan.blockers[0].block, RemovalBlock::Payment);
+}
+
+#[test]
+fn only_the_creator_merges() {
+    let b = josh_and_jo();
+    let plan = merge(&b, "cai", "josh").unwrap();
+    assert!(!plan.may_withdraw_joins);
+    assert!(!plan.complete());
+    let cai = &b.wallets["cai"];
+    assert_eq!(
+        removal_entries(&WalletBillHost::new(cai), &plan)
+            .unwrap_err()
+            .code,
+        code::UNAUTHORIZED_ENTRY
+    );
+}
+
+#[test]
+fn somebody_with_a_key_nobody_or_one_person_into_themselves_is_never_merged() {
+    let mut b = josh_and_jo();
+    let key = fake_key("kim");
+    let kim = participant_id(&key).unwrap();
+    b.write(&kim, |h| {
+        join_bill(h, Some("Kim"), None, Some(&key), None).unwrap()
+    });
+    assert_eq!(
+        b.fold()
+            .bill
+            .participant(&kim)
+            .unwrap()
+            .identity_key
+            .as_deref(),
+        Some(key.as_str())
+    );
+    assert_eq!(
+        merge(&b, "ana", &kim).unwrap_err().code,
+        code::UNAUTHORIZED_ENTRY
+    );
+    assert_eq!(
+        merge(&b, "ana", "nobody").unwrap_err().code,
+        code::UNKNOWN_PARTICIPANT
+    );
+    assert_eq!(
+        merge(&b, "ana", "jo").unwrap_err().code,
+        code::UNKNOWN_PARTICIPANT
+    );
+    assert!(merge(&b, "ana", "josh").unwrap().complete());
+}
+
+// --- a merge that moves a third person is by hand ---------------------------
+
+/// Josh, added by Ana, merged into Bo over one dinner split `split`. §3 gives
+/// leftover units by id and by largest remainder, so moving Josh's name or
+/// figure onto Bo can carry a unit across Cai or Ana: such a merge is
+/// blocked, and one that moves nobody writes Bo exactly Josh's and Bo's sum.
+fn merge_josh_into_bo(split: Value, amount: i64, whole: bool) {
+    let mut b = Bill::new();
+    b.join("bo");
+    b.join("cai");
+    b.write("josh", |h| {
+        join_bill(h, Some("Josh"), None, None, None).unwrap()
+    });
+    b.expense("ana", "dinner", "ana", amount, split, None);
+    let before = net_balances(&b.fold().bill).unwrap();
+    let ordered = b.held(|log| log.entries());
+    let plan = plan_merge(&b.fold(), "ana", &ordered, "josh", "bo", "ana").unwrap();
+    if !whole {
+        assert!(!plan.complete());
+        assert_eq!(plan.blockers.len(), 1);
+        assert_eq!(plan.blockers[0].block, RemovalBlock::SplitByHand);
+        return;
+    }
+    assert!(plan.complete());
+    let written = removal_entries(&WalletBillHost::new(&b.wallets["ana"]), &plan).unwrap();
+    for e in written {
+        b.write("ana", |_| e);
+    }
+    let folded = b.fold();
+    assert!(folded.set_aside.is_empty(), "{:?}", folded.set_aside);
+    let after = net_balances(&folded.bill).unwrap();
+    assert_eq!(after["bo"], before["josh"] + before["bo"]);
+    assert_eq!(after["ana"], before["ana"]);
+    assert_eq!(after.get("cai"), before.get("cai"));
+}
+
+#[test]
+fn a_merge_where_no_leftover_crosses_anybody_is_whole() {
+    merge_josh_into_bo(equal(&["ana", "cai", "josh"]), 100, true);
+}
+
+#[test]
+fn a_merge_carrying_a_leftover_unit_across_cai_is_by_hand() {
+    merge_josh_into_bo(equal(&["ana", "cai", "josh"]), 200, false);
+}
+
+#[test]
+fn a_merge_moving_the_largest_remainder_is_by_hand() {
+    merge_josh_into_bo(
+        json!({"type": "percentage", "basisPoints": {"ana": 3334, "bo": 3333, "josh": 3333}}),
+        100,
+        false,
+    );
+}
+
+#[test]
+fn a_merge_moving_a_leftover_share_is_by_hand() {
+    merge_josh_into_bo(
+        json!({"type": "shares", "shareCounts": {"ana": 1, "cai": 1, "josh": 1}}),
+        200,
+        false,
+    );
+}
+
+#[test]
+fn a_merge_of_exact_figures_moves_nobody_and_is_whole() {
+    merge_josh_into_bo(
+        json!({"type": "exact", "amounts": {"ana": 67, "cai": 67, "josh": 66}}),
+        200,
+        true,
+    );
 }

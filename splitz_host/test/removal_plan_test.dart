@@ -667,6 +667,239 @@ void main() {
     });
   });
 
+  group('merging somebody added before they joined', () {
+    /// Ana added 'josh' herself; Jo joined from his own device. Josh paid a
+    /// 30.00 dinner split by Ana, Josh and Cai, and shares a 20.00 taxi Ana
+    /// paid with Ana.
+    _Bill joshAndJo() {
+      final b = _Bill()
+        ..join('cai')
+        ..join('jo');
+      b.write('josh', (h) => entries.joinBill(host: h, name: 'Josh'));
+      b.expense('ana', 'dinner', 'josh', 3000, _equal(['ana', 'cai', 'josh']));
+      b.expense('ana', 'taxi', 'ana', 2000, _equal(['ana', 'josh']));
+      return b;
+    }
+
+    RemovalPlan merge(_Bill b, {String me = 'ana', String from = 'josh'}) =>
+        planMerge(
+          folded: b.fold(),
+          creatorId: 'ana',
+          log: b.log,
+          from: from,
+          into: 'jo',
+          me: me,
+        );
+
+    test('every expense names Jo in his place, as payer too, and he comes '
+        'off the bill in one write the fold applies', () {
+      final b = joshAndJo();
+      final before = protocol.netBalances(b.fold().bill);
+      final plan = merge(b);
+      expect(plan.complete, isTrue);
+      expect(plan.edits.map((e) => e.paidBy), ['jo', null]);
+      for (final e in removalEntries(host: b.host('ana'), plan: plan)) {
+        b.write('ana', (_) => e);
+      }
+      final folded = b.fold();
+      expect(folded.setAside, isEmpty);
+      expect(folded.bill.participant('josh'), isNull);
+      final after = protocol.netBalances(folded.bill);
+      // Jo holds what Josh held; nobody else moves.
+      expect(after['jo'], before['josh']! + before['jo']!);
+      expect(after['ana'], before['ana']);
+      expect(after['cai'], before['cai']);
+    });
+
+    test('figures add onto his, so every other figure stays', () {
+      expect(
+        splitMerged(
+          {
+            'type': 'exact',
+            'amounts': {'ana': 500, 'josh': 300, 'jo': 200},
+          },
+          'josh',
+          'jo',
+        ),
+        {
+          'type': 'exact',
+          'amounts': {'ana': 500, 'jo': 500},
+        },
+      );
+      expect(
+        splitMerged(
+          {
+            'type': 'shares',
+            'shareCounts': {'ana': 1, 'josh': 2},
+          },
+          'josh',
+          'jo',
+        ),
+        {
+          'type': 'shares',
+          'shareCounts': {'ana': 1, 'jo': 2},
+        },
+      );
+      expect(
+        () => splitMerged(
+          {
+            'type': 'exact',
+            'amounts': {'josh': 0x7fffffffffffffff, 'jo': 1},
+          },
+          'josh',
+          'jo',
+        ),
+        throwsA(
+          isA<protocol.SplitError>().having(
+            (e) => e.code,
+            'code',
+            protocol.SplitCode.amountOverflow,
+          ),
+        ),
+      );
+    });
+
+    test('a list already naming both is by hand: one place for two names '
+        'moves everybody else', () {
+      expect(splitMerged(_equal(['jo', 'josh']), 'josh', 'jo'), isNull);
+      final b = joshAndJo()
+        ..expense('ana', 'boat', 'ana', 900, _equal(['ana', 'jo', 'josh']));
+      final plan = merge(b);
+      expect(plan.complete, isFalse);
+      expect(plan.blockers.single.block, RemovalBlock.splitByHand);
+    });
+
+    test('a payment to him holds the merge back, as it holds a removal', () {
+      final b = joshAndJo();
+      b.write(
+        'cai',
+        (h) => entries.recordPayment(
+          host: h,
+          paymentId: 'p1',
+          to: 'josh',
+          amount: 1000,
+          method: 'cash',
+        ),
+      );
+      expect(merge(b).blockers.single.block, RemovalBlock.payment);
+    });
+
+    test('only the creator merges', () {
+      final plan = merge(joshAndJo(), me: 'cai');
+      expect(plan.mayWithdrawJoins, isFalse);
+      expect(plan.complete, isFalse);
+      expect(
+        () => removalEntries(host: joshAndJo().host('cai'), plan: plan),
+        throwsA(isA<protocol.SplitError>()),
+      );
+    });
+
+    test('somebody who joined with a key of their own is never merged, and '
+        'neither is nobody, or one person into themselves', () {
+      final b = joshAndJo();
+      final key = fakeKey('kim');
+      final kim = entries.participantId(key)!;
+      b.write(
+        kim,
+        (h) => entries.joinBill(host: h, name: 'Kim', identityKey: key),
+      );
+      expect(b.fold().bill.participant(kim)?.identityKey, key);
+      Matcher refused(String code) => throwsA(
+        isA<protocol.SplitError>().having((e) => e.code, 'code', code),
+      );
+      expect(
+        () => merge(b, from: kim),
+        refused(protocol.SplitCode.unauthorizedEntry),
+      );
+      expect(
+        () => merge(b, from: 'nobody'),
+        refused(protocol.SplitCode.unknownParticipant),
+      );
+      expect(
+        () => merge(b, from: 'jo'),
+        refused(protocol.SplitCode.unknownParticipant),
+      );
+      // The honest one still goes through beside them.
+      expect(merge(b).complete, isTrue);
+    });
+  });
+
+  group('a merge that moves a third person is by hand', () {
+    // Josh, added by Ana, merges into Bo. §3 gives leftover units by id and
+    // by largest remainder, so moving Josh's name or figure onto Bo can carry
+    // a unit across Cai or Ana.
+    final cases = <String, (Map<String, dynamic>, int, bool)>{
+      'equal, no leftover crosses anybody': (
+        _equal(['ana', 'cai', 'josh']),
+        100,
+        true,
+      ),
+      'equal, a leftover unit crosses cai': (
+        _equal(['ana', 'cai', 'josh']),
+        200,
+        false,
+      ),
+      'percentage, the largest remainder moves': (
+        {
+          'type': 'percentage',
+          'basisPoints': {'ana': 3334, 'bo': 3333, 'josh': 3333},
+        },
+        100,
+        false,
+      ),
+      'shares, a leftover unit moves': (
+        {
+          'type': 'shares',
+          'shareCounts': {'ana': 1, 'cai': 1, 'josh': 1},
+        },
+        200,
+        false,
+      ),
+      'exact figures add and move nobody': (
+        {
+          'type': 'exact',
+          'amounts': {'ana': 67, 'cai': 67, 'josh': 66},
+        },
+        200,
+        true,
+      ),
+    };
+    for (final MapEntry(key: name, value: (split, amount, whole))
+        in cases.entries) {
+      test(name, () {
+        final b = _Bill()
+          ..join('bo')
+          ..join('cai');
+        b.write('josh', (h) => entries.joinBill(host: h, name: 'Josh'));
+        b.expense('ana', 'dinner', 'ana', amount, split);
+        final before = protocol.netBalances(b.fold().bill);
+        final plan = planMerge(
+          folded: b.fold(),
+          creatorId: 'ana',
+          log: b.log,
+          from: 'josh',
+          into: 'bo',
+          me: 'ana',
+        );
+        if (!whole) {
+          expect(plan.complete, isFalse);
+          expect(plan.blockers.single.block, RemovalBlock.splitByHand);
+          return;
+        }
+        expect(plan.complete, isTrue);
+        for (final e in removalEntries(host: b.host('ana'), plan: plan)) {
+          b.write('ana', (_) => e);
+        }
+        final folded = b.fold();
+        expect(folded.setAside, isEmpty);
+        final after = protocol.netBalances(folded.bill);
+        expect(after['bo'], before['josh']! + before['bo']!);
+        expect(after['ana'], before['ana']);
+        expect(after['cai'] ?? 0, before['cai'] ?? 0);
+      });
+    }
+  });
+
   test('the protocol refuses the removal the plan says is held back', () {
     // The fold's own §10.8 check agrees with the plan: a removal planned as
     // blocked is set aside with participant_still_named.

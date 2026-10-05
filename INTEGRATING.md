@@ -1226,6 +1226,33 @@ name in brackets, so a Kotlin, Swift or JavaScript wallet gets the same answer
 a Dart one does. `package:splitz_host/dev.dart` holds development scaffolding
 only and is not part of what a wallet ships.
 
+**Settling waits for the creator's close** (§10.9, §14.9). Nobody pays until
+the creator has closed the bill: `FoldedBill.closed` says whether it is, and
+`settleRefusal` / `settle_refusal` answers `bill_not_closed` while it is not.
+Ask it before every way of paying — the request (the host's own `settle`
+refuses an open bill before calling the wallet), a swap deposit, and a cash
+record. While the bill is closed, `expenseRefusal` / `expense_refusal`
+answers `bill_closed`: write no expense, correction or withdrawal of one. The
+creator closes with `closeFor` / `close_for`, over the digest its own fold
+reports (`closedOver`), and reopens with `reopenFor` / `reopen_for`; both
+refuse anybody else with `unauthorized_entry`. An expense written anyway, by a
+device that had not seen the close, reopens the bill on every device: show who
+reopened it rather than a payment that suddenly cannot start.
+[`close_entry_for`, `reopen_entry_for`, `settle_refusal_of`,
+`expense_refusal_of`]
+
+**One transaction for ZEC and a swap** (§14.10). When the payer owes people
+in ZEC and one person in another asset, `combinedSend` / `combined_send`
+answers one request carrying every ZEC output and the swap's deposit, and the
+note to store before the wallet is called. Check the swap leg with
+`swapSendRefusal` first, show every output — the deposit with the asset, the
+chain and the least the payee is guaranteed — on one review, and send once.
+On success record the ZEC payees under the transaction's id and the swap
+under its reference; after a restart `PendingSends.recordsFor` records the
+ZEC half from the note. A quote that needs a memo, an expired one, or a second
+payee in another asset cannot join: send those one after another.
+[`combined_send`]
+
 **Taking somebody off a bill** (§10.8). `planRemoval` / `plan_removal`
 answers what still names them and which expenses this device can write again
 without them; `RemovalPlan.complete` holds only when nothing else names them
@@ -1240,6 +1267,19 @@ correction it never saw is set aside rather than applied. Removal does not
 change the bill's key: the person can still read the bill and could join
 again. [`plan_removal`, `removal_entries`, `same_removal_plan`,
 `removal_share_changes`, `split_without`]
+
+**Somebody added by hand who then joined** (§14.11). When the creator added
+a name before the person joined from their own phone — under a key, and
+perhaps another name — `planMerge` / `plan_merge` plans the two as one: every
+expense naming the added name written again naming the person, as payer and
+in the split (`splitMerged` / `split_merged`), then the added name's joins
+withdrawn. It is a removal plan, written the same way with
+`removalEntries` / `removal_entries` in one merge, and only the creator's is
+complete. Refused for a name that states or is bound to a key. A split
+listing both names is left to a person, since one place for two names moves
+everybody else's share. The added name itself is `add_person_entry`: a join
+written as them and unsigned, since this device holds no key of theirs.
+[`plan_merge`, `split_merged`, `add_person_entry`]
 
 **A send that has not answered** (§14.3). Write a `PendingSend` with
 `PendingSends.begin` before calling the wallet and `end` it whatever happens;

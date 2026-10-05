@@ -108,6 +108,8 @@ pub(crate) fn folded(f: &splitz_core::host::FoldedBill) -> ffi::FoldedBill {
         payment_entries: f.payment_entries.clone().into_iter().collect(),
         rate_entry: f.rate_entry.clone(),
         rate_author: f.rate_author.clone(),
+        close_entry: f.close_entry.clone(),
+        closed_over: f.closed_over.clone(),
     }
 }
 
@@ -184,6 +186,7 @@ pub(crate) fn event(e: &splitz_host::BillEvent) -> ffi::BillEvent {
             K::PaymentRecorded => ffi::BillEventKind::PaymentRecorded,
             K::PaymentConfirmed => ffi::BillEventKind::PaymentConfirmed,
             K::Priced => ffi::BillEventKind::Priced,
+            K::ClosedForSettling => ffi::BillEventKind::ClosedForSettling,
             K::Other => ffi::BillEventKind::Other,
         },
         author: e.author.clone(),
@@ -295,6 +298,7 @@ pub(crate) fn removal_plan(p: &splitz_host::RemovalPlan) -> ffi::RemovalPlan {
                 author: e.author.clone(),
                 split_json: e.split.to_string(),
                 basis: e.basis.clone(),
+                paid_by: e.paid_by.clone(),
             })
             .collect(),
         blockers: p

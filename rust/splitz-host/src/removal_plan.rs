@@ -25,12 +25,16 @@ pub struct RemovalEdit {
     /// place is the restating device's, and only its author may correct an
     /// expense (§10.4).
     pub author: Option<String>,
-    /// `seen`'s split without the person, the others sharing what was theirs.
+    /// `seen`'s split without the person, the others sharing what was theirs;
+    /// for a merge, with the person's part moved to whom they are merged into.
     pub split: Value,
     /// The amendment applied to `entry_id` when the plan read it, or `None`
     /// when none was. The restatement names it, and the fold sets the
     /// restatement aside when the expense has been corrected since (§10.8).
     pub basis: Option<String>,
+    /// The payer written in place of `seen`'s, or `None` to keep it. Only a
+    /// merge changes the payer (see [`plan_merge`]).
+    pub paid_by: Option<String>,
 }
 
 /// Why an entry still names somebody once a plan's edits are written.
@@ -159,6 +163,7 @@ impl RemovalPlan {
                 e.seen.description.clone(),
                 e.seen.split.clone(),
                 e.split.clone(),
+                e.paid_by.clone(),
             )
         };
         self.edits.len() == other.edits.len()
@@ -183,6 +188,68 @@ impl RemovalPlan {
 /// check, which reads every member whatever the type, so it loses them too.
 pub fn split_without(split: &Value, id: &str) -> Option<Value> {
     typed_without(split, id).map(|typed| without_anywhere(&typed, id))
+}
+
+/// `split` with `from`'s part moved to `into`, or `None` when that needs a
+/// choice only a person can make.
+///
+/// A list (`among`, an item's `sharedBy`) names `into` in `from`'s place; one
+/// already naming both is `None`, because one place for two names changes
+/// everybody else's share. A figure (`amounts`, `basisPoints`,
+/// `shareCounts`) is added to `into`'s, so every other figure, and the total,
+/// stay as they are. Refused with `amount_overflow` when that sum leaves
+/// §2.2's range.
+pub fn split_merged(split: &Value, from: &str, into: &str) -> Result<Option<Value>> {
+    let Some(mut out) = split.as_object().cloned() else {
+        return Ok(Some(split.clone()));
+    };
+    let renamed = |ids: &mut Vec<Value>| -> bool {
+        if !ids.iter().any(|x| x.as_str() == Some(from)) {
+            return true;
+        }
+        if ids.iter().any(|x| x.as_str() == Some(into)) {
+            return false;
+        }
+        for x in ids.iter_mut() {
+            if x.as_str() == Some(from) {
+                *x = Value::from(into);
+            }
+        }
+        true
+    };
+    if let Some(among) = out.get_mut("among").and_then(Value::as_array_mut) {
+        if !renamed(among) {
+            return Ok(None);
+        }
+    }
+    for name in ["amounts", "basisPoints", "shareCounts"] {
+        if let Some(figures) = out.get_mut(name).and_then(Value::as_object_mut) {
+            let Some(theirs) = figures.remove(from) else {
+                continue;
+            };
+            let Some(theirs) = theirs.as_i64() else {
+                return Ok(None);
+            };
+            let sum = match figures.get(into) {
+                None => theirs,
+                Some(held) => match held.as_i64() {
+                    Some(held) => checked_add(held, theirs, code::AMOUNT_OVERFLOW)?,
+                    None => return Ok(None),
+                },
+            };
+            figures.insert(into.to_owned(), Value::from(sum));
+        }
+    }
+    if let Some(items) = out.get_mut("items").and_then(Value::as_array_mut) {
+        for item in items.iter_mut() {
+            if let Some(shared) = item.get_mut("sharedBy").and_then(Value::as_array_mut) {
+                if !renamed(shared) {
+                    return Ok(None);
+                }
+            }
+        }
+    }
+    Ok(Some(Value::Object(out)))
 }
 
 /// `split` with `id` taken out of every member §10.8's check reads.
@@ -331,6 +398,42 @@ fn expense_names(expense: &Map<String, Value>, id: &str) -> bool {
             .any(|item| item.is_object() && contains(&list(item.get("sharedBy"))))
 }
 
+/// Whether writing `merged` in place of `split` changes the share of anybody
+/// but `from` and `into`, or leaves `into` other than the two shares summed.
+///
+/// §3 gives leftover units by id and by largest remainder, so a name or a
+/// figure moved from one person to another can carry a unit across a third.
+/// A merge says nobody else's share changes; one that would is for a person
+/// to write.
+fn moves_anyone_else(amount: i64, split: &Value, merged: &Value, from: &str, into: &str) -> bool {
+    let (Ok(before), Ok(after)) = (split_expense(amount, split), split_expense(amount, merged))
+    else {
+        return true;
+    };
+    if after.contains_key(from) {
+        return true;
+    }
+    let share = |m: &BTreeMap<String, i64>, who: &str| m.get(who).copied().unwrap_or(0);
+    before.keys().chain(after.keys()).any(|who| {
+        if who == from {
+            return false;
+        }
+        let want = if who == into {
+            match checked_add(
+                share(&before, from),
+                share(&before, into),
+                code::AMOUNT_OVERFLOW,
+            ) {
+                Ok(sum) => sum,
+                Err(_) => return true,
+            }
+        } else {
+            share(&before, who)
+        };
+        share(&after, who) != want
+    })
+}
+
 /// What taking `id` off a bill needs, as seen from `me` (§10.8).
 ///
 /// `folded` is `log` folded, and `creator_id` the author of the bill's
@@ -357,6 +460,62 @@ pub fn plan_removal(
     id: &str,
     me: &str,
 ) -> RemovalPlan {
+    plan(folded, creator_id, log, id, me, None).expect("a removal sums nothing")
+}
+
+/// What merging `from` into `into` needs, as seen from `me`: the plan that
+/// takes `from` off the bill with every expense naming them written again
+/// naming `into` instead — as payer, and in the split by [`split_merged`].
+///
+/// For somebody the creator added before the person joined under their own
+/// key: the two are one person, and the bill should say so. Only the creator
+/// may merge (`may_withdraw_joins` is false for anybody else), and an expense
+/// [`split_merged`] cannot rewrite, a payment, or a confirmation naming
+/// `from` is a [`RemovalBlocker`], as for a removal.
+///
+/// Refused with `unknown_participant` when either is not on the bill or they
+/// are the same, with `unauthorized_entry` when `from` states a key or §10.7
+/// binds one to them — a person who joined themselves is never folded into
+/// somebody else — and with `amount_overflow` when a merged figure leaves
+/// §2.2's range.
+pub fn plan_merge(
+    folded: &FoldedBill,
+    creator_id: &str,
+    log: &[Value],
+    from: &str,
+    into: &str,
+    me: &str,
+) -> Result<RemovalPlan> {
+    let Some(stand) = folded.bill.participant(from) else {
+        return Err(two_people());
+    };
+    if folded.bill.participant(into).is_none() || from == into {
+        return Err(two_people());
+    }
+    if stand.identity_key.is_some() || folded.identities.bound.contains_key(from) {
+        return Err(SplitError::new(
+            code::UNAUTHORIZED_ENTRY,
+            "They joined with a key of their own, so they are somebody",
+        ));
+    }
+    plan(folded, creator_id, log, from, me, Some(into))
+}
+
+fn two_people() -> SplitError {
+    SplitError::new(
+        code::UNKNOWN_PARTICIPANT,
+        "Both must be on the bill, and be two people",
+    )
+}
+
+fn plan(
+    folded: &FoldedBill,
+    creator_id: &str,
+    log: &[Value],
+    id: &str,
+    me: &str,
+    into: Option<&str>,
+) -> Result<RemovalPlan> {
     let in_force: BTreeSet<&str> = folded.in_force.iter().map(String::as_str).collect();
     let mut by_id: HashMap<&str, &Map<String, Value>> = HashMap::new();
     for e in log {
@@ -407,7 +566,7 @@ pub fn plan_removal(
                     });
                     continue;
                 };
-                if e.paid_by == id {
+                if e.paid_by == id && into.is_none() {
                     blockers.push(RemovalBlocker {
                         description: e.description.clone(),
                         ..RemovalBlocker::new(RemovalBlock::PaidFor, entry_id)
@@ -427,11 +586,17 @@ pub fn plan_removal(
                 }
                 // Named only by the entry it corrects, or by a member its type
                 // does not read: written again as it reads now, without them.
-                let split = if names(&e.split, id) {
+                let split = if let Some(into) = into {
+                    split_merged(&e.split, id, into)?
+                } else if names(&e.split, id) {
                     split_without(&e.split, id)
                 } else {
                     Some(without_anywhere(&e.split, id))
                 };
+                let split = split.filter(|merged| match into {
+                    Some(into) => !moves_anyone_else(e.amount, &e.split, merged, id, into),
+                    None => true,
+                });
                 let Some(split) = split else {
                     blockers.push(RemovalBlocker {
                         description: e.description.clone(),
@@ -445,6 +610,7 @@ pub fn plan_removal(
                     author,
                     split,
                     basis: folded.amendment_of.get(entry_id).cloned(),
+                    paid_by: into.filter(|_| e.paid_by == id).map(str::to_owned),
                 });
             }
             Some("recordPayment") => {
@@ -467,12 +633,12 @@ pub fn plan_removal(
             _ => {}
         }
     }
-    RemovalPlan {
+    Ok(RemovalPlan {
         edits,
         blockers,
         joins,
-        may_withdraw_joins: me == creator_id || me == id,
-    }
+        may_withdraw_joins: me == creator_id || (into.is_none() && me == id),
+    })
 }
 
 /// The entries that carry out a `plan` that is complete, as `host` writes
@@ -506,7 +672,7 @@ pub fn removal_entries(host: &dyn BillHost, plan: &RemovalPlan) -> Result<Vec<Va
             &edit.entry_id,
             edit.basis.as_deref(),
             &format!("r-{}", edit.entry_id),
-            &edit.seen.paid_by,
+            edit.paid_by.as_deref().unwrap_or(&edit.seen.paid_by),
             edit.seen.amount,
             edit.split.clone(),
             description,

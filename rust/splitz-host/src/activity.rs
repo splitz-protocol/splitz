@@ -26,6 +26,9 @@ pub enum BillEventKind {
     PaymentRecorded,
     PaymentConfirmed,
     Priced,
+    /// The creator closed the bill for settling (§10.9). A withdrawal of it,
+    /// which reopens the bill, is an `EntryWithdrawn` naming it.
+    ClosedForSettling,
     /// An entry kind this reader does not name. Shown rather than hidden: an
     /// entry that vanished silently is indistinguishable from one that was
     /// never sent.
@@ -238,6 +241,9 @@ fn event(
             built.kind = BillEventKind::Priced;
             built.amount_minor_units = number(entry, "rate", "minorUnitsPerZec");
             built.description = member(entry, "rate", "source");
+        }
+        Some("closeBill") => {
+            built.kind = BillEventKind::ClosedForSettling;
         }
         _ => {}
     }

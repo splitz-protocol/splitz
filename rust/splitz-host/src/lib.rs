@@ -70,8 +70,8 @@ pub use pricing::{
 pub use refunds::{refunds_behind, RefundsBehind};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use removal_plan::{
-    plan_removal, removal_entries, split_without, RemovalBlock, RemovalBlocker, RemovalEdit,
-    RemovalPlan,
+    plan_merge, plan_removal, removal_entries, split_merged, split_without, RemovalBlock,
+    RemovalBlocker, RemovalEdit, RemovalPlan,
 };
 pub use sealing::{Sealing, BLOB_VERSION};
 pub use seam_contracts::{
@@ -83,10 +83,11 @@ pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
 pub use swap_watch::{SwapWatch, SwapWatchList};
 pub use swaps::{
-    assets_from_tokens, declared_payout_index, failed_swap_withdrawals, format_base_units,
-    quote_from_response, quote_request_body, status_from_response, swap_answer, swap_deposit,
-    swap_record_note, swap_send_refusal, zec_asset_in, OneClickSwaps, SwapDeposit, SwapQuote,
-    SwapSendRefusal, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps, MAX_TOKEN_DECIMALS,
+    assets_from_tokens, combined_send, declared_payout_index, failed_swap_withdrawals,
+    format_base_units, quote_from_response, quote_request_body, status_from_response, swap_answer,
+    swap_deposit, swap_record_note, swap_send_refusal, zec_asset_in, OneClickSwaps, SwapDeposit,
+    SwapQuote, SwapSendRefusal, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
+    MAX_TOKEN_DECIMALS,
 };
 pub use sync::{SplitsSync, SyncResult};
 pub use transport::{component_encode, query_encode, HttpTransport};

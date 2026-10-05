@@ -884,6 +884,82 @@ pub fn swap_deposit(
     Ok(SwapDeposit { uri, note })
 }
 
+/// One transaction paying `obligation`'s request and the deposit for
+/// `quote` (§14.10): every ZEC payee the request carries, and the swap that
+/// settles `amount_minor_units` of the debt to `to`, from one review and one
+/// send.
+///
+/// The note carries all of it, so a restart records each half from the note
+/// alone (§14.3).
+///
+/// `bill` is the bill as the store holds it now, and `obligation` this
+/// payer's obligation read from it. Refuses a request that carries nobody in
+/// ZEC and a swap to a payee the request already pays, which would be paid
+/// twice; then, with [`HostError::SwapRefused`], whatever
+/// [`swap_send_refusal`] refuses the swap leg at `at`, as it would a deposit
+/// sent alone.
+pub fn combined_send(
+    bill_id: &str,
+    bill: &Bill,
+    obligation: &splitz_core::host::PayerObligation,
+    quote: &SwapQuote,
+    to: &str,
+    amount_minor_units: i64,
+    at: &str,
+) -> Result<SwapDeposit, HostError> {
+    let zec = obligation.carried_to();
+    if zec.is_empty() || obligation.request.payments.is_empty() {
+        return Err(HostError::Swap {
+            message: "the request carries nobody to pay in ZEC".to_owned(),
+            transient: false,
+        });
+    }
+    if zec.contains_key(to) {
+        return Err(HostError::Swap {
+            message: "the request already pays this payee".to_owned(),
+            transient: false,
+        });
+    }
+    if let Some(refusal) = swap_send_refusal(
+        quote,
+        at,
+        bill,
+        Some(obligation),
+        to,
+        amount_minor_units,
+        None,
+    )
+    .map_err(HostError::Protocol)?
+    {
+        return Err(HostError::SwapRefused(refusal));
+    }
+    let alone = swap_deposit(bill_id, quote, to, amount_minor_units, &obligation.rate, at)?;
+    let mut payments = obligation.request.payments.clone();
+    payments.push(splitz_core::Zip321Payment {
+        address: quote.deposit_address.clone(),
+        zatoshi: quote.amount_in_zatoshi,
+        fiat: None,
+        memo: None,
+        label: Some(format!("swap to {}", quote.asset.symbol)),
+        message: None,
+    });
+    let uri = splitz_core::render_uri(&payments, false).map_err(HostError::Protocol)?;
+    let mut carried = zec;
+    carried.insert(to.to_owned(), amount_minor_units);
+    let note = crate::pending_sends::PendingSend {
+        bill_id: bill_id.to_owned(),
+        uri: uri.clone(),
+        carried,
+        at: at.to_owned(),
+        sent: obligation.carried_zatoshi(),
+        rate: Some(obligation.rate.clone()),
+        swap: alone.note.swap,
+        zatoshi: Some(quote.amount_in_zatoshi),
+        txid: None,
+    };
+    Ok(SwapDeposit { uri, note })
+}
+
 /// The id `assets` — a provider's own token list — names native ZEC by, the
 /// one a Zcash wallet's deposit is: symbol `ZEC` on chain `zec`, both read
 /// ignoring case. `None` when the list carries none.

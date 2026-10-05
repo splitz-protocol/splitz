@@ -222,6 +222,11 @@ pub struct FoldedBill {
     pub rate_entry: Option<String>,
     /// Who wrote that `setRate`: the name §14.2 puts beside the rate.
     pub rate_author: Option<String>,
+    /// The creator's close the bill is closed by (§10.9), or none while open.
+    pub close_entry: Option<String>,
+    /// The digest of the expenses as they stand (§10.9): what a close written
+    /// now covers.
+    pub closed_over: String,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
@@ -506,6 +511,8 @@ pub enum BillEventKind {
     PaymentRecorded,
     PaymentConfirmed,
     Priced,
+    /// The creator closed the bill for settling (§10.9).
+    ClosedForSettling,
     /// An entry kind this reader does not name. Shown rather than hidden.
     Other,
 }
@@ -615,6 +622,9 @@ pub struct RemovalEdit {
     /// The restatement names it, and is set aside when the expense has been
     /// corrected since (§10.8).
     pub basis: Option<String>,
+    /// The payer written in place of `seen`'s, or none to keep it. Only a
+    /// merge changes the payer.
+    pub paid_by: Option<String>,
 }
 
 /// Why an entry still names somebody once a plan's edits are written.

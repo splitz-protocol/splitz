@@ -229,6 +229,26 @@ check("and one only a person can redivide is answered with none",
 const notSplit = await refusal(() => splitz.split_without("{", ben.me));
 check("text that is not a split is refused", notSplit !== undefined, `${notSplit?.detail}`);
 
+console.log("the bill is paid only once ana, its creator, closes it (§14.9)");
+check("an open bill refuses every payment",
+      splitz.settle_refusal_of(ana.facts(), billId, ana.entries) === "bill_not_closed",
+      `${splitz.settle_refusal_of(ana.facts(), billId, ana.entries)}`);
+let benCloses;
+try { splitz.close_entry_for(ben.facts(), billId, ana.entries, ben.seed); }
+catch (e) { benCloses = e.code; }
+check("only the creator closes it", benCloses === "unauthorized_entry", `${benCloses}`);
+check("and an open bill has nothing to reopen",
+      splitz.reopen_entry_for(ana.facts(), billId, ana.entries, ana.seed) == null, "reopened");
+ana.add(splitz.close_entry_for(ana.facts(), billId, ana.entries, ana.seed));
+check("closed, a payment may start",
+      splitz.settle_refusal_of(ana.facts(), billId, ana.entries) == null &&
+        splitz.fold_entries(ana.facts(), billId, ana.entries).close_entry != null,
+      `${splitz.settle_refusal_of(ana.facts(), billId, ana.entries)}`);
+check("and no expense may be written until she reopens it",
+      splitz.expense_refusal_of(ana.facts(), billId, ana.entries) === "bill_closed" &&
+        splitz.reopen_entry_for(ana.facts(), billId, ana.entries, ana.seed) != null,
+      `${splitz.expense_refusal_of(ana.facts(), billId, ana.entries)}`);
+
 console.log("ben owes half of it");
 ben.take(ana);
 const owed = splitz.obligation_of(ben.facts(), billId, ben.entries);
@@ -558,6 +578,34 @@ check("the payout chosen is found by type, address, asset and chain",
       splitz.declared_payout_index([onBase, onArb], onArb) === 1 &&
         splitz.declared_payout_index([onBase, onArb], { ...onArb, chain: undefined }) === undefined,
       `${splitz.declared_payout_index([onBase, onArb], onArb)}`);
+console.log("a request and a swap in one transaction (§14.10)");
+const combinedAt = "2026-10-29T22:00:00.000Z";
+const noZec = await refusal(() => splitz.combined_send(ana.facts(), taxiId, taxi,
+  quote("0xbenbase", "base"), ben.me, 4000, combinedAt));
+check("a bill paying nobody in ZEC has no request for a swap to join",
+      noZec !== undefined, `${noZec?.detail}`);
+const cat = new Device(120);
+const catZec = "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7";
+const withCat = [
+  ...taxi,
+  splitz.join_bill_entry(cat.facts(), taxiId, "Cat", catZec, cat.key, [], cat.seed),
+  splitz.add_expense_entry(cat.facts(), taxiId, "t2", cat.me, 2000,
+    JSON.stringify({ type: "equal", among: [ana.me, cat.me] }), null, cat.seed),
+];
+const both = splitz.combined_send(ana.facts(), taxiId, withCat,
+  quote("0xbenbase", "base"), ben.me, 4000, combinedAt);
+check("one request carries cat's ZEC and ben's deposit",
+      both.uri.includes("t1deposit") && both.uri.includes(catZec) &&
+        (both.uri.match(/address/g) ?? []).length === 2, both.uri);
+const toCatTwice = await refusal(() => splitz.combined_send(ana.facts(), taxiId, withCat,
+  quote("0xbenbase", "base"), cat.me, 1000, combinedAt));
+check("and a swap to somebody the request already pays is refused",
+      toCatTwice !== undefined, `${toCatTwice?.detail}`);
+const late = await refusal(() => splitz.combined_send(ana.facts(), taxiId, withCat,
+  quote("0xbenbase", "base"), ben.me, 4000, "2026-10-30T00:00:00.000Z"));
+check("and a quote that expired before the send is refused, ZEC and all",
+      late !== undefined && late.detail.includes("Expired"), `${late?.detail}`);
+
 const swapRecord = splitz.record_payment_entry(ana.facts(), taxiId, {
   payment_id: "intent-1", to: ben.me, amount: 4000, method: "swap", reference: "intent-1",
   zatoshi: 7807316, paid_at_rate: undefined, note: undefined,
@@ -644,6 +692,40 @@ check("which is refused before it is written while the bill names him",
 const own = splitz.void_entry_for(ana.facts(), taxiId, JSON.parse(swapRecord).id, ana.seed);
 check("and ana withdrawing her own record is not",
       splitz.entry_refusal(ana.facts(), taxiId, taxi, own) === undefined, "none");
+
+console.log("a name added by hand, merged into the person who joined (§14.11)");
+const joe = new Device(140);
+const trip = [
+  ...taxi,
+  splitz.add_person_entry(ana.facts(), taxiId, taxi, "jo", "Jo"),
+];
+trip.push(
+  splitz.add_expense_entry(ana.facts(), taxiId, "m1", "jo", 1200,
+    JSON.stringify({ type: "equal", among: [ana.me, "jo"] }), "boat", ana.seed),
+  splitz.join_bill_entry(joe.facts(), taxiId, "Joseph", null, joe.key, [], joe.seed),
+);
+const merge = splitz.plan_merge(ana.facts(), taxiId, trip, "jo", joe.me, ana.me);
+check("the hand-added name merges into joe whole, as payer too",
+      merge.complete && merge.edits.length === 1 && merge.edits[0].paid_by === joe.me,
+      JSON.stringify(merge.edits.map((e) => e.paid_by)));
+const mergeWritten = splitz.removal_entries(ana.facts(), taxiId, merge, ana.seed);
+const merged = splitz.fold_entries(ana.facts(), taxiId, [...trip, ...mergeWritten]);
+const mergeIds = new Set(mergeWritten.map((e) => JSON.parse(e).id));
+check("written, jo is off the bill and joe paid the boat",
+      merged.set_aside.every((a) => !mergeIds.has(a.id)) &&
+        merged.bill.participants.every((p) => p.id !== "jo") &&
+        merged.bill.expenses.some((e) => e.paid_by === joe.me && Number(e.amount) === 1200),
+      JSON.stringify(merged.set_aside));
+let keyed;
+try { splitz.plan_merge(ana.facts(), taxiId, trip, joe.me, "jo", ana.me); }
+catch (e) { keyed = e.code; }
+check("somebody who joined with a key of their own is never merged",
+      keyed === "unauthorized_entry", `${keyed}`);
+let twice;
+try { splitz.add_person_entry(ana.facts(), taxiId, trip, "jo", "Jo"); }
+catch (e) { twice = e.code; }
+check("and a name already on the bill is not added twice",
+      twice === "duplicate_participant", `${twice}`);
 
 console.log("and the rest of what every wallet needs from the protocol");
 const fallback = splitz.payout_fallback(["not on base", undefined]);

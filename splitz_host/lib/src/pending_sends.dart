@@ -377,13 +377,18 @@ class PendingSends {
     if (send.damaged || send.carried.isEmpty) {
       throw const Unrecordable(UnrecordableReason.detailsLost);
     }
-    if (send.swap != null) {
+    final swap = send.swap;
+    // A deposit sent alone is recorded by its provider's reference, not a
+    // transaction id. One sent beside a request (§14.10) leaves the request's
+    // half to record here, and the swap to its own record.
+    if (swap != null && send.sent.isEmpty) {
       throw const Unrecordable(UnrecordableReason.isASwap);
     }
     final recorded = {for (final p in log.fold().bill.payments) p.id};
     final carried = {
       for (final e in send.carried.entries)
-        if (!recorded.contains(paymentIdForSend(host.me, id, e.key)))
+        if (e.key != swap?.to &&
+            !recorded.contains(paymentIdForSend(host.me, id, e.key)))
           e.key: e.value,
     };
     return recordSend(
@@ -424,17 +429,15 @@ enum UnsentClaim {
 }
 
 /// What [send] sends out of the account in all, in zatoshi: its outputs'
-/// ZEC, or a swap deposit's. Null when the note does not say.
+/// ZEC, a swap deposit's, or both when one transaction carried a request and
+/// a deposit (§14.10). Null when the note does not say.
 int? _sendTotal(PendingSend send) {
-  if (send.sent.isNotEmpty) {
-    var total = 0;
-    for (final z in send.sent.values) {
-      if (z < 0 || total > splitz.maxAmount - z) return null;
-      total += z;
-    }
-    return total;
+  var total = 0;
+  for (final z in [...send.sent.values, ?send.zatoshi]) {
+    if (z < 0 || total > splitz.maxAmount - z) return null;
+    total += z;
   }
-  return send.zatoshi;
+  return send.sent.isEmpty && send.zatoshi == null ? null : total;
 }
 
 /// The refusal of a person's word that [send] left nothing in the wallet, or
