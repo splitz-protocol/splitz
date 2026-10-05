@@ -2961,6 +2961,12 @@ A host MUST NOT write an expense, a correction or a withdrawal of one on a
 closed bill, and refuses with `bill_closed` (`expenseRefusal` /
 `expense_refusal`). The fold would admit it and reopen the bill (§10.9); a
 host refuses so that what is owed changes only when the creator reopens it.
+Taking somebody off, or merging them (§14.11), restates expenses, so a plan
+for either is refused with `bill_closed` while the bill is closed whenever it
+would restate one and nothing else holds it back (`planRemoval` /
+`plan_removal`, `planMerge` / `plan_merge`). Somebody on no expense still
+comes off a closed bill; a plan a payment or another blocker holds back is
+returned with that blocker, and writes nothing.
 
 A host writes a close only for the bill's creator (`closeFor` / `close_for`),
 over the digest its own fold reports (`closedOver` / `closed_over`), and a
@@ -3023,8 +3029,8 @@ merge as §10.8's removal is.
   across somebody else; such an expense is left to a person to edit.
 - An expense the creator cannot restate, a payment to or from the added name,
   or a confirmation by them holds the merge back, as each holds back a
-  removal. A merge changes expenses, so §14.9 refuses it while the bill is
-  closed.
+  removal. A merge restates expenses, so §14.9 refuses it with `bill_closed`
+  while the bill is closed.
 
 ## 15. The wallet seam
 

@@ -1724,6 +1724,9 @@ pub fn pending_send_records(
 /// withdrawal is still written and synced. `entries` are folded with
 /// signatures checked, as `fold_entries` folds them; the bill's creator is
 /// the one the fold names.
+///
+/// Refused with `bill_closed` while the bill is closed for settling and the
+/// plan, held back by nothing else, would restate an expense (§14.9).
 #[uniffi::export]
 pub fn plan_removal(
     facts: HostFacts,
@@ -1743,7 +1746,7 @@ pub fn plan_removal(
     let folded = BillLog::with_entries(&host, parsed.clone())
         .for_bill(bill_id.clone())
         .fold()?;
-    let plan = splitz_host::plan_removal(&folded, &folded.creator_id, &parsed, &id, &me);
+    let plan = splitz_host::plan_removal(&folded, &folded.creator_id, &parsed, &id, &me)?;
     Ok(convert::removal_plan(&plan))
 }
 

@@ -487,13 +487,16 @@ fn removal_plan(op: &Value) -> Value {
         Ok(folded) => folded,
         Err(e) => return json!({ "built": true, "folded": false, "error": e.code }),
     };
-    let plan = plan_removal(
+    let plan = match plan_removal(
         &folded,
         &folded.creator_id,
         &log.entries(),
         op["target"].as_str().unwrap(),
         me,
-    );
+    ) {
+        Ok(plan) => plan,
+        Err(e) => return json!({ "built": true, "folded": true, "error": e.code }),
+    };
     let moved = match plan.share_changes() {
         Ok(moved) => json!(moved),
         Err(e) => json!({ "error": e.code }),

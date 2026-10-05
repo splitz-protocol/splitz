@@ -7,8 +7,8 @@ mod support;
 use serde_json::{json, Value};
 use splitz_core::code;
 use splitz_core::host::{
-    add_expense, amend_entry, base64url_no_pad, confirm_payment, create_bill, join_bill,
-    record_payment, void_entry, BillLog, FoldedBill, CREATOR_KEY_BYTES,
+    add_expense, amend_entry, base64url_no_pad, close_for, confirm_payment, create_bill, join_bill,
+    record_payment, reopen_for, void_entry, BillLog, FoldedBill, CREATOR_KEY_BYTES,
 };
 use splitz_core::Expense;
 use splitz_core::{net_balances, participant_id};
@@ -125,7 +125,7 @@ impl Bill {
     /// `id`'s removal as `me` plans it, over the log in §10.2's order.
     fn plan(&self, id: &str, me: &str) -> RemovalPlan {
         let ordered = self.held(|log| log.entries());
-        plan_removal(&self.fold(), "ana", &ordered, id, me)
+        plan_removal(&self.fold(), "ana", &ordered, id, me).expect("an open bill plans")
     }
 
     /// Writes `plan` as `me` would: each expense again under its new split,
@@ -1110,4 +1110,79 @@ fn a_merge_of_exact_figures_moves_nobody_and_is_whole() {
         200,
         true,
     );
+}
+
+// --- a closed bill ------------------------------------------------------------
+
+/// Ana's taxi, shared with Ben and Cai, closed for settling by Ana; Dee is on
+/// no expense.
+fn closed_taxi() -> Bill {
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cai");
+    b.join("dee");
+    b.expense(
+        "ana",
+        "taxi",
+        "ana",
+        3000,
+        equal(&["ana", "ben", "cai"]),
+        None,
+    );
+    let folded = b.fold();
+    b.write("ana", |h| close_for(h, &folded).unwrap());
+    assert!(b.fold().close_entry.is_some());
+    b
+}
+
+fn plan_on(b: &Bill, id: &str) -> Result<RemovalPlan, splitz_core::SplitError> {
+    let ordered = b.held(|log| log.entries());
+    plan_removal(&b.fold(), "ana", &ordered, id, "ana")
+}
+
+#[test]
+fn a_closed_bill_refuses_a_removal_that_restates_an_expense() {
+    let err = plan_on(&closed_taxi(), "ben").unwrap_err();
+    assert_eq!(err.code, code::BILL_CLOSED);
+}
+
+#[test]
+fn a_closed_bill_refuses_a_merge_that_restates_an_expense() {
+    let mut b = closed_taxi();
+    b.write("josh", |h| {
+        join_bill(h, Some("Josh"), None, None, None).unwrap()
+    });
+    b.expense("ana", "cab", "ana", 900, equal(&["ana", "josh"]), None);
+    let folded = b.fold();
+    b.write("ana", |h| close_for(h, &folded).unwrap());
+    let ordered = b.held(|log| log.entries());
+    let err = plan_merge(&b.fold(), "ana", &ordered, "josh", "cai", "ana").unwrap_err();
+    assert_eq!(err.code, code::BILL_CLOSED);
+}
+
+#[test]
+fn a_closed_bill_still_takes_off_somebody_on_no_expense() {
+    let plan = plan_on(&closed_taxi(), "dee").unwrap();
+    assert!(plan.edits.is_empty());
+    assert!(plan.complete());
+}
+
+#[test]
+fn a_reopened_bill_plans_the_removal_again() {
+    let mut b = closed_taxi();
+    let folded = b.fold();
+    b.write("ana", |h| reopen_for(h, &folded).unwrap().unwrap());
+    assert_eq!(plan_on(&b, "ben").unwrap().edits.len(), 1);
+}
+
+#[test]
+fn a_closed_bill_returns_a_plan_a_payment_holds_back() {
+    let mut b = closed_taxi();
+    b.write("ben", |h| {
+        record_payment(h, "p1", "ana", 1000, "cash", None, None, None, None).unwrap()
+    });
+    let plan = plan_on(&b, "ben").unwrap();
+    assert_eq!(plan.blockers.len(), 1);
+    assert_eq!(plan.blockers[0].block, RemovalBlock::Payment);
+    assert!(!plan.complete());
 }

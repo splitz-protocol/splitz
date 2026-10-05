@@ -397,13 +397,18 @@ Map<String, Object?> removalPlan(Map<String, dynamic> op) {
   } on protocol.SplitError catch (e) {
     return {'built': true, 'folded': false, 'error': e.code};
   }
-  final plan = planRemoval(
-    folded: folded,
-    creatorId: folded.creatorId,
-    log: log.entries,
-    id: op['target'] as String,
-    me: me,
-  );
+  final RemovalPlan plan;
+  try {
+    plan = planRemoval(
+      folded: folded,
+      creatorId: folded.creatorId,
+      log: log.entries,
+      id: op['target'] as String,
+      me: me,
+    );
+  } on protocol.SplitError catch (e) {
+    return {'built': true, 'folded': true, 'error': e.code};
+  }
   Object? moved;
   try {
     moved = plan.shareChanges;

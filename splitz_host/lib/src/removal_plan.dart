@@ -416,6 +416,9 @@ bool _expenseNames(Map<String, dynamic> expense, String id) {
 /// of it. Every other entry naming them is a [RemovalBlocker], in log order.
 /// One reading per entry id: §10.2's union keeps copies of an id under
 /// different signatures.
+///
+/// Refused with `bill_closed` while the bill is closed for settling and the
+/// plan, held back by nothing else, would restate an expense (§14.9).
 RemovalPlan planRemoval({
   required splitz.FoldedBill folded,
   required String creatorId,
@@ -438,6 +441,7 @@ RemovalPlan planRemoval({
 /// are the same, and with `unauthorized_entry` when [from] states a key or
 /// §10.7 binds one to them: a person who joined themselves is never folded
 /// into somebody else.
+/// Refused with `bill_closed`, as [planRemoval] is, while the bill is closed.
 RemovalPlan planMerge({
   required splitz.FoldedBill folded,
   required String creatorId,
@@ -586,6 +590,15 @@ RemovalPlan _plan(
       case 'joinBill':
         if (_map(entry['participant'])['id'] == id) joins.add(entryId);
     }
+  }
+  // §14.9: a closed bill's expenses change only once its creator reopens it.
+  // Somebody on no expense still comes off, and a plan something else holds
+  // back writes nothing, so it is returned with what holds it.
+  if (folded.closed && edits.isNotEmpty && blockers.isEmpty) {
+    throw const protocol.SplitError(
+      protocol.SplitCode.billClosed,
+      'The bill is closed for settling; reopen it to change its expenses',
+    );
   }
   return RemovalPlan(
     edits: edits,

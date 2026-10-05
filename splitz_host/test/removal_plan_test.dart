@@ -900,6 +900,79 @@ void main() {
     }
   });
 
+  group('a closed bill', () {
+    Matcher refusedClosed() => throwsA(
+      isA<protocol.SplitError>().having(
+        (e) => e.code,
+        'code',
+        protocol.SplitCode.billClosed,
+      ),
+    );
+
+    /// Ana's taxi, shared with Ben and Cai, closed for settling by Ana.
+    _Bill closedTaxi() {
+      final b = _Bill()
+        ..join('ben')
+        ..join('cai')
+        ..join('dee');
+      b.expense('ana', 'taxi', 'ana', 3000, _equal(['ana', 'ben', 'cai']));
+      b.write('ana', (h) => entries.closeFor(h, b.fold()));
+      expect(b.fold().closed, isTrue);
+      return b;
+    }
+
+    test('refuses a removal that restates an expense', () {
+      expect(() => closedTaxi().plan('ben'), refusedClosed());
+    });
+
+    test('refuses a merge that restates an expense', () {
+      final b = closedTaxi();
+      b.write('josh', (h) => entries.joinBill(host: h, name: 'Josh'));
+      b.expense('ana', 'cab', 'ana', 900, _equal(['ana', 'josh']));
+      b.write('ana', (h) => entries.closeFor(h, b.fold()));
+      expect(
+        () => planMerge(
+          folded: b.fold(),
+          creatorId: 'ana',
+          log: b.log,
+          from: 'josh',
+          into: 'cai',
+          me: 'ana',
+        ),
+        refusedClosed(),
+      );
+    });
+
+    test('still takes off somebody on no expense', () {
+      final plan = closedTaxi().plan('dee');
+      expect(plan.edits, isEmpty);
+      expect(plan.complete, isTrue);
+    });
+
+    test('returns a plan a payment holds back, with that blocker', () {
+      final b = closedTaxi();
+      b.write(
+        'ben',
+        (h) => entries.recordPayment(
+          host: h,
+          paymentId: 'p1',
+          to: 'ana',
+          amount: 1000,
+          method: 'cash',
+        ),
+      );
+      final plan = b.plan('ben');
+      expect(plan.blockers.map((x) => x.block), [RemovalBlock.payment]);
+      expect(plan.complete, isFalse);
+    });
+
+    test('plans the removal again once reopened', () {
+      final b = closedTaxi();
+      b.write('ana', (h) => entries.reopenFor(h, b.fold())!);
+      expect(b.plan('ben').edits, hasLength(1));
+    });
+  });
+
   test('the protocol refuses the removal the plan says is held back', () {
     // The fold's own §10.8 check agrees with the plan: a removal planned as
     // blocked is set aside with participant_still_named.

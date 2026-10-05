@@ -453,14 +453,17 @@ fn moves_anyone_else(amount: i64, split: &Value, merged: &Value, from: &str, int
 /// out of it. Every other entry naming them is a [`RemovalBlocker`], in log
 /// order. One reading per entry id: §10.2's union keeps copies of an id under
 /// different signatures.
+///
+/// Refused with `bill_closed` while the bill is closed for settling and the
+/// plan, held back by nothing else, would restate an expense (§14.9).
 pub fn plan_removal(
     folded: &FoldedBill,
     creator_id: &str,
     log: &[Value],
     id: &str,
     me: &str,
-) -> RemovalPlan {
-    plan(folded, creator_id, log, id, me, None).expect("a removal sums nothing")
+) -> Result<RemovalPlan> {
+    plan(folded, creator_id, log, id, me, None)
 }
 
 /// What merging `from` into `into` needs, as seen from `me`: the plan that
@@ -476,8 +479,9 @@ pub fn plan_removal(
 /// Refused with `unknown_participant` when either is not on the bill or they
 /// are the same, with `unauthorized_entry` when `from` states a key or §10.7
 /// binds one to them — a person who joined themselves is never folded into
-/// somebody else — and with `amount_overflow` when a merged figure leaves
-/// §2.2's range.
+/// somebody else — with `amount_overflow` when a merged figure leaves
+/// §2.2's range, and with `bill_closed`, as [`plan_removal`] is, while the
+/// bill is closed.
 pub fn plan_merge(
     folded: &FoldedBill,
     creator_id: &str,
@@ -632,6 +636,15 @@ fn plan(
             }
             _ => {}
         }
+    }
+    // §14.9: a closed bill's expenses change only once its creator reopens
+    // it. Somebody on no expense still comes off, and a plan something else
+    // holds back writes nothing, so it is returned with what holds it.
+    if folded.close_entry.is_some() && !edits.is_empty() && blockers.is_empty() {
+        return Err(SplitError::new(
+            code::BILL_CLOSED,
+            "The bill is closed for settling; reopen it to change its expenses",
+        ));
     }
     Ok(RemovalPlan {
         edits,
