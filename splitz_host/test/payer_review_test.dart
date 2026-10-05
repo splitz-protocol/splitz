@@ -100,7 +100,6 @@ const screen = [
   'Ben', // replaced address
   'Dan', // awaiting
   '512.34', // rate figure
-  'Eve', // rate author
   '0.07807316', // Ben's output
   'u1ben11111…', // Ben's address, the first 10 characters
   '0.01951829', // Eve's output
@@ -144,7 +143,6 @@ void main() {
       (ReviewRule.replacedAddress, 'Ben'),
       (ReviewRule.awaiting, 'Dan'),
       (ReviewRule.rate, '512.34'),
-      (ReviewRule.rate, 'Eve'),
       (ReviewRule.output, '0.07807316'),
       (ReviewRule.output, ben),
       (ReviewRule.output, '0.01951829'),
@@ -166,7 +164,7 @@ void main() {
 
   test('an amount inside a longer number is not shown', () {
     final b = bill();
-    final shown = [...screen]..[6] = '0.078073169';
+    final shown = [...screen]..[5] = '0.078073169';
     expect(
       checkPayerReview(
         obligation: b.obligation,
@@ -181,7 +179,7 @@ void main() {
   test('a different address sharing the first ten characters is not '
       'shown', () {
     final b = bill();
-    final shown = [...screen]..[7] = 'u1ben1111122222…';
+    final shown = [...screen]..[6] = 'u1ben1111122222…';
     expect(
       checkPayerReview(
         obligation: b.obligation,
@@ -224,7 +222,8 @@ void main() {
     const lower = 'by a later choice';
     const eveSecond = {'eve': 1};
     final lowerScreen = [...screen]
-      ..[9] = eveLater
+      ..[8] = eveLater
+      ..add('Eve')
       ..add(lower);
 
     List<(ReviewRule, String)> found(
@@ -260,12 +259,10 @@ void main() {
     });
 
     test('names the recipient', () {
-      // Eve's name is on the screen twice over — she set the rate — so the
-      // name is removed from both lines to see the rule ask for it.
+      // Her name is on the screen as the recipient paid by a lower choice.
       final shown = lowerScreen.where((l) => l != 'Eve').toList();
       expect(found(eveSecond, eveSecond, shown, lower), [
         (ReviewRule.lowerPreference, 'Eve'),
-        (ReviewRule.rate, 'Eve'),
       ]);
     });
 

@@ -128,7 +128,6 @@ fn screen() -> Vec<String> {
         "Ben",            // replaced address
         "Dan",            // awaiting
         "512.34",         // rate figure
-        "Eve",            // rate author
         "0.07807316",     // Ben's output
         "u1ben11111…",    // Ben's address, the first 10 characters
         "0.01951829",     // Eve's output
@@ -198,7 +197,6 @@ fn each_fact_taken_away_is_exactly_its_own_finding() {
         (ReviewRule::ReplacedAddress, "Ben"),
         (ReviewRule::Awaiting, "Dan"),
         (ReviewRule::Rate, "512.34"),
-        (ReviewRule::Rate, "Eve"),
         (ReviewRule::Output, "0.07807316"),
         (ReviewRule::Output, BEN),
         (ReviewRule::Output, "0.01951829"),
@@ -218,7 +216,7 @@ fn each_fact_taken_away_is_exactly_its_own_finding() {
 #[test]
 fn an_amount_inside_a_longer_number_is_not_shown() {
     let mut shown = screen();
-    shown[6] = "0.078073169".to_owned();
+    shown[5] = "0.078073169".to_owned();
     assert_eq!(
         found(&shown, &reasons()),
         [(ReviewRule::Output, "0.07807316".to_owned())]
@@ -228,7 +226,7 @@ fn an_amount_inside_a_longer_number_is_not_shown() {
 #[test]
 fn a_different_address_sharing_the_first_ten_characters_is_not_shown() {
     let mut shown = screen();
-    shown[7] = "u1ben1111122222…".to_owned();
+    shown[6] = "u1ben1111122222…".to_owned();
     assert_eq!(
         found(&shown, &reasons()),
         [(ReviewRule::Output, BEN.to_owned())]
@@ -278,7 +276,8 @@ fn lower_found(
 
 fn lower_screen() -> Vec<String> {
     let mut shown = screen();
-    shown[9] = EVE_LATER.to_owned();
+    shown[8] = EVE_LATER.to_owned();
+    shown.push("Eve".to_owned());
     shown.push(LOWER.to_owned());
     shown
 }
@@ -308,16 +307,12 @@ fn a_recipient_paid_by_a_lower_preference_is_shown_with_the_wallets_words() {
 
 #[test]
 fn a_lower_preference_names_the_recipient() {
-    // Eve's name is on the screen twice over — she set the rate — so the name
-    // is removed from both lines to see the rule ask for it.
+    // Her name is on the screen as the recipient paid by a lower choice.
     let via = eve_second();
     let shown: Vec<String> = lower_screen().into_iter().filter(|l| l != "Eve").collect();
     assert_eq!(
         lower_found(&via, &via, &shown, LOWER),
-        [
-            (ReviewRule::LowerPreference, "Eve".to_owned()),
-            (ReviewRule::Rate, "Eve".to_owned()),
-        ]
+        [(ReviewRule::LowerPreference, "Eve".to_owned())]
     );
 }
 

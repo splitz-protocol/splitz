@@ -61,7 +61,7 @@ enum ReviewRule {
   /// Every recipient paid more than the debts the bill records explain (§6).
   unexplained,
 
-  /// The rate the request was priced at, and who set it.
+  /// The rate the request was priced at.
   rate,
 
   /// The ZEC amount and address of every output.
@@ -219,11 +219,6 @@ List<ReviewFinding> checkPayerReview({
     figure,
     _showsNumber(text, figure),
   );
-  final author = folded.rateAuthor;
-  if (author != null) {
-    final who = name(author);
-    need(ReviewRule.rate, 'who set the rate', who, text.contains(who));
-  }
 
   final payments = obligation.request.payments;
   for (var i = 0; i < payments.length; i++) {

@@ -553,7 +553,8 @@ class FoldResult {
   /// The `setRate` entry whose rate the bill carries, or null with no rate.
   final String? rateEntry;
 
-  /// Who wrote that `setRate` (§14.2: a payer is shown who set the rate).
+  /// Who wrote that `setRate`: a payee is warned when it was the payer
+  /// (§14.2), and the creator's rate is kept over another's (§7).
   final String? rateAuthor;
 }
 

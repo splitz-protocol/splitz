@@ -60,7 +60,7 @@ pub enum ReviewRule {
     /// Every recipient paid more than the debts the bill records explain
     /// (§6).
     Unexplained,
-    /// The rate the request was priced at, and who set it.
+    /// The rate the request was priced at.
     Rate,
     /// The ZEC amount and address of every output.
     Output,
@@ -246,11 +246,6 @@ pub fn check_payer_review(
         figure,
         shown,
     );
-    if let Some(author) = &folded.rate_author {
-        let who = name(author);
-        let shown = text.contains(&who);
-        need(ReviewRule::Rate, "who set the rate".to_owned(), who, shown);
-    }
 
     let request = &obligation.request;
     for (payment, to) in request.payments.iter().zip(&request.recipients) {
