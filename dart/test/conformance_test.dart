@@ -9,7 +9,14 @@ import 'dart:io';
 
 import 'package:splitz_core/splitz_core.dart';
 import 'package:splitz_core/host.dart'
-    show ProposedOutput, ScanRefused, ScannedBill, checkProposal, readScan;
+    show
+        ProposedOutput,
+        ScanRefused,
+        ScannedBill,
+        checkProposal,
+        checkWrittenPayment,
+        checkWrittenPayout,
+        readScan;
 import 'package:test/test.dart';
 
 /// The corpus lives at the repository root, one level above this package, so a
@@ -551,6 +558,15 @@ void main() {
       'receivers': a.receivers,
       'canReceiveMemo': a.canReceiveMemo,
     });
+  });
+
+  runCases('writers.json', (c, produce) {
+    if (c.containsKey('payout')) {
+      checkWrittenPayout((c['payout'] as Map).cast<String, dynamic>());
+    } else {
+      checkWrittenPayment((c['payment'] as Map).cast<String, dynamic>());
+    }
+    produce({'accepted': true});
   });
 
   runCases('rate.json', (c, produce) {

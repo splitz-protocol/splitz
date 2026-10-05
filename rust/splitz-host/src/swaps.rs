@@ -860,10 +860,7 @@ pub fn swap_deposit(
         }],
         false,
     )
-    .map_err(|e| HostError::Swap {
-        message: e.message,
-        transient: false,
-    })?;
+    .map_err(HostError::Protocol)?;
     let watch = crate::swap_watch::SwapWatch {
         bill_id: bill_id.to_owned(),
         reference: quote.payment_reference().to_owned(),

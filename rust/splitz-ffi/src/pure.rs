@@ -679,25 +679,9 @@ pub fn arrivals_of(
     bills: Vec<ffi::HeldBill>,
     received: Vec<ffi::IncomingTransaction>,
 ) -> Result<ffi::Arrivals> {
-    let folded = fold_held(&facts, bills)?;
-    let received: Vec<splitz_core::host::IncomingTransaction> = received
-        .into_iter()
-        .map(|t| splitz_core::host::IncomingTransaction {
-            txid: t.txid,
-            zatoshi: t.zatoshi,
-            memos: t.memos,
-        })
-        .collect();
-    let found = splitz_core::host::arrivals_for(&folded, &facts.me, &received);
+    let found = arrivals_found(&facts, bills, received)?;
     let each = |list: Vec<splitz_core::host::Arrival>| -> Vec<ffi::Arrival> {
-        list.into_iter()
-            .map(|a| ffi::Arrival {
-                bill_id: a.bill_id,
-                payment: convert::payment(&a.payment),
-                record: a.record,
-                txid: a.txid,
-            })
-            .collect()
+        list.into_iter().map(arrival).collect()
     };
     Ok(ffi::Arrivals {
         arrived: each(found.arrived),
@@ -707,6 +691,95 @@ pub fn arrivals_of(
         underpriced: each(found.underpriced),
         unbound: each(found.unbound),
     })
+}
+
+/// Whether this device, the payee, may withdraw its record of the payment
+/// `payment_id` on `bill_id`: the proposal that holds it when its wallet
+/// received that payment's transaction carrying what the record states, as
+/// [`arrivals_of`] proposes it `arrived`, and `None` when it may (§14.7).
+/// A payee MUST NOT write a `voidEntry` of a record this answers for:
+/// withdrawing it asks the payer to pay a debt a second time. Read with the
+/// same bills and received transactions as [`arrivals_of`].
+#[uniffi::export]
+pub fn arrived_withdrawal_refusal(
+    facts: HostFacts,
+    bills: Vec<ffi::HeldBill>,
+    received: Vec<ffi::IncomingTransaction>,
+    bill_id: String,
+    payment_id: String,
+) -> Result<Option<ffi::Arrival>> {
+    let found = arrivals_found(&facts, bills, received)?;
+    Ok(found.covering(&bill_id, &payment_id).cloned().map(arrival))
+}
+
+fn arrivals_found(
+    facts: &HostFacts,
+    bills: Vec<ffi::HeldBill>,
+    received: Vec<ffi::IncomingTransaction>,
+) -> Result<splitz_core::host::Arrivals> {
+    let folded = fold_held(facts, bills)?;
+    let received: Vec<splitz_core::host::IncomingTransaction> = received
+        .into_iter()
+        .map(|t| splitz_core::host::IncomingTransaction {
+            txid: t.txid,
+            zatoshi: t.zatoshi,
+            memos: t.memos,
+        })
+        .collect();
+    Ok(splitz_core::host::arrivals_for(
+        &folded, &facts.me, &received,
+    ))
+}
+
+fn arrival(a: splitz_core::host::Arrival) -> ffi::Arrival {
+    ffi::Arrival {
+        bill_id: a.bill_id,
+        payment: convert::payment(&a.payment),
+        record: a.record,
+        txid: a.txid,
+    }
+}
+
+/// A settlement the binding gave out, read back.
+fn settlement_back(s: &ffi::Settlement) -> splitz_core::Settlement {
+    splitz_core::Settlement {
+        from: s.from.clone(),
+        to: s.to.clone(),
+        amount: s.amount,
+        covers: s
+            .covers
+            .iter()
+            .map(|d| splitz_core::DirectDebt {
+                from: d.from.clone(),
+                to: d.to.clone(),
+                amount: d.amount,
+            })
+            .collect(),
+    }
+}
+
+/// The refunds that account for `settlement`'s unexplained part on the bill
+/// `entries` hold — what the bill's negative expenses move onto its payer,
+/// and who wrote them — or `None` when none do, or it has none (§6.3). Only
+/// then may a screen call that part a refund; otherwise no debt the bill
+/// records explains it, and a confirmed payment above what was owed leaves
+/// the same figure. Folded as [`fold_entries`] folds a bill.
+#[uniffi::export]
+pub fn refunds_behind(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    settlement: ffi::Settlement,
+) -> Result<Option<ffi::RefundsBehind>> {
+    let folded = folded_bill(&facts, &bill_id, &entries)?;
+    Ok(
+        splitz_host::refunds_behind(&settlement_back(&settlement), &folded).map(|r| {
+            ffi::RefundsBehind {
+                refunded: r.refunded,
+                authors: r.authors,
+            }
+        }),
+    )
 }
 
 /// The CoinGecko `/simple/price` request for one ZEC in `currency`, under the
@@ -1418,8 +1491,10 @@ pub fn pending_send_after(
 /// A send killed after its broadcast and mined before the app came back is
 /// no longer waiting and its note may name no transaction; one the wallet
 /// built at or after the note was written may be it, and clearing the note
-/// would let the debt go out again. A note that does not read is held only
-/// by what is still sending.
+/// would let the debt go out again — unless it sent out something other than
+/// what the note's request sends in all, which makes it another payment. A
+/// transaction or a note that does not say what it sent may be any send. A
+/// note that does not read is held only by what is still sending.
 #[uniffi::export]
 pub fn pending_send_unsent_refusal(
     bill_id: String,
@@ -1433,6 +1508,7 @@ pub fn pending_send_unsent_refusal(
         .map(|t| splitz_host::OwnTransaction {
             txid: t.txid,
             created: t.created,
+            sent: t.sent,
         })
         .collect();
     splitz_host::unsent_claim_refusal(&held, still_sending, &own).map(|r| match r {
@@ -1594,6 +1670,43 @@ pub fn removal_share_changes(plan: ffi::RemovalPlan) -> Result<Vec<ffi::ShareCha
         .collect())
 }
 
+/// The entries that carry out `plan`, signed with `seed`, to push in one
+/// merge: each expense written again without the person, naming the entry it
+/// replaces and the correction it read, then a withdrawal of every join
+/// stating them (§10.8). Written apart, a sync between them leaves the
+/// expenses restated and the person on the bill.
+///
+/// Refused for a plan that is not complete: `unauthorized_entry` when this
+/// device may not withdraw their joins, `participant_still_named` when
+/// something else still names them. A restatement two devices write at once
+/// applies once, and one written over a correction it did not read is set
+/// aside with `restatement_stale`, keeping the correction.
+#[uniffi::export]
+pub fn removal_entries(
+    facts: HostFacts,
+    bill_id: String,
+    plan: ffi::RemovalPlan,
+    seed: String,
+) -> Result<Vec<String>> {
+    let plan = host_removal_plan(plan)?;
+    let key = seed_bytes(&seed)?;
+    let sign = |message: &[u8]| {
+        Signer
+            .sign(&key, message)
+            .expect("seed_bytes checked the length")
+    };
+    let host = FactHost {
+        facts: &facts,
+        sign: Some(&sign),
+        verify: None,
+    };
+    let entries = splitz_host::removal_entries(&host, &plan)?;
+    entries
+        .into_iter()
+        .map(|entry| signed(&facts, &key, entry, &bill_id))
+        .collect()
+}
+
 /// `split` without `id` in it, the others sharing what was theirs, as JSON;
 /// `None` when that leaves nobody or needs a choice only a person can make
 /// (§4.4).
@@ -1620,6 +1733,7 @@ fn host_removal_plan(plan: ffi::RemovalPlan) -> Result<splitz_host::RemovalPlan>
             },
             author: e.author,
             split: parse(&e.split_json, "a split")?,
+            basis: e.basis,
         });
     }
     let blockers = plan
@@ -1644,6 +1758,7 @@ fn host_removal_plan(plan: ffi::RemovalPlan) -> Result<splitz_host::RemovalPlan>
         edits,
         blockers,
         joins: plan.joins,
+        may_withdraw_joins: plan.may_withdraw_joins,
     })
 }
 
@@ -1836,24 +1951,7 @@ fn payer_obligation(o: &ffi::PayerObligation) -> Result<splitz_core::host::Payer
         });
     }
     Ok(splitz_core::host::PayerObligation {
-        settlements: o
-            .settlements
-            .iter()
-            .map(|s| splitz_core::Settlement {
-                from: s.from.clone(),
-                to: s.to.clone(),
-                amount: s.amount,
-                covers: s
-                    .covers
-                    .iter()
-                    .map(|d| splitz_core::DirectDebt {
-                        from: d.from.clone(),
-                        to: d.to.clone(),
-                        amount: d.amount,
-                    })
-                    .collect(),
-            })
-            .collect(),
+        settlements: o.settlements.iter().map(settlement_back).collect(),
         awaiting: o
             .awaiting
             .iter()
@@ -2138,6 +2236,15 @@ pub fn format_base_units(base_units: String, decimals: i32) -> Option<String> {
 #[uniffi::export]
 pub fn parse_amount_in(text: String, currency: String) -> Option<i64> {
     splitz_host::parse_amount_in(&text, &currency)
+}
+
+/// `text` read as an amount in `currency` that may be below zero — a refund's
+/// figure (§4) — by [`parse_amount_in`]'s rules after one leading `-`, or
+/// `None`. A form correcting a refund reads its figure with this, so its sign
+/// never flips because the field could not hold it.
+#[uniffi::export]
+pub fn parse_signed_amount_in(text: String, currency: String) -> Option<i64> {
+    splitz_host::parse_signed_amount_in(&text, &currency)
 }
 
 /// `text` read as minor units at `exponent` decimals — a percentage's basis

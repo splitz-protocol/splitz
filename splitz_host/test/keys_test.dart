@@ -211,6 +211,43 @@ void main() {
       );
     });
 
+    test('every spelling BIP39 reads as one wallet is one identity', () {
+      // "abandon abandon about", 0x00, "caf" + U+00E9: NFKC, single spaces.
+      const want = '6162616e646f6e206162616e646f6e2061626f757400636166c3a9';
+      String hex(List<int> b) =>
+          [for (final x in b) x.toRadixString(16).padLeft(2, '0')].join();
+      for (final (mnemonic, passphrase) in [
+        ('abandon abandon about', 'caf\u00e9'),
+        ('abandon abandon about', 'cafe\u0301'),
+        ('abandon  abandon\u3000about', 'caf\u00e9'),
+        (' abandon abandon about\n', 'cafe\u0301'),
+      ]) {
+        expect(
+          hex(
+            identitySecretFromMnemonic(
+              mnemonic: mnemonic,
+              passphrase: passphrase,
+            ),
+          ),
+          want,
+        );
+      }
+      // U+FEFF is not white space: it stays, and is another wallet.
+      expect(
+        hex(
+          identitySecretFromMnemonic(
+            mnemonic: 'abandon\ufeffabandon about',
+            passphrase: '',
+          ),
+        ),
+        isNot(startsWith('6162616e646f6e20')),
+      );
+      expect(
+        () => identitySecretFromMnemonic(mnemonic: ' \u3000 ', passphrase: 'p'),
+        throwsArgumentError,
+      );
+    });
+
     test('an empty mnemonic and an index past ZIP 32 are refused', () {
       expect(
         () => identitySecretFromMnemonic(mnemonic: '', passphrase: 'p'),

@@ -1052,8 +1052,9 @@ samples above hand-roll the loop only to show the parts. It takes one payer's
 settlements and the bill, plus the rate, and returns the URI together with the
 recipients it could not carry:
 `renderObligation(plan.settlements.where((s) => s.from == me).toList(), bill, rate: rate, skipUnpayable: true)`.
-**It does not filter by payer:** handed the whole plan, it renders every
-payer's debts into one request, and whoever sends it pays them all. With `skipUnpayable` it
+**It does not filter by payer, and refuses a list that is not one payer's**
+with `obligation_mixed_payers`: handed the whole plan, it would otherwise
+render every payer's debts into one request for whoever sends it to pay. With `skipUnpayable` it
 renders the payable outputs and reports the rest; without it a recipient it
 cannot carry refuses the whole request. Prefer it to writing the loop: this
 is the hazard the loop exists to get wrong.
@@ -1168,10 +1169,14 @@ offer the switch while a send is unresolved (§14.3).
 Who owes what does not move and no entry is written; every other device keeps
 the order the recipient declared. Pass the same `via` to `checkPayerReview`,
 with your words for "paid by a lower preference", and it asks that every such
-recipient be named with them.
+recipient be named with them. `unexplainedWords` are your words for a payment
+carrying more than the debts the bill records explain
+(`Settlement.unexplained`, §6.3): a review that leaves them out while a payee
+is paid an unexplained part is a finding.
 
 A wallet on the binding runs the same check with `checkPayerReview(facts,
-billId, entries, obligation, visibleText, reasonWords, via, lowerWords)`: the
+billId, entries, obligation, visibleText, reasonWords, via, lowerWords,
+unexplainedWords)`: the
 bill crosses as its entries, as it does for `obligationOf`, and `obligation` is
 the one `obligationOf` or `obligationVia` gave. `renderAmount` and
 `rateFigure` write the figures. An
@@ -1210,6 +1215,110 @@ expenses can exceed what §7.1 converts, or what one §8.1 output carries at a
 low rate. `renderObligation` with `skipUnpayable` reports that recipient as
 `unpriceable` and carries the rest; without it the whole request is refused.
 
+## What the host decides for every wallet
+
+Two packages sit above the protocol: `package:splitz_core/host.dart` (the
+`splitz_core::host` module) is the seam above, and `package:splitz_host/
+splitz_host.dart` (the `splitz-host` crate) is the plumbing a wallet needs
+around it — keys, sealing, the log store, sync, and the rules §14 addresses to
+a host. Each rule below is one function in both, and in the binding under the
+name in brackets, so a Kotlin, Swift or JavaScript wallet gets the same answer
+a Dart one does. `package:splitz_host/dev.dart` holds development scaffolding
+only and is not part of what a wallet ships.
+
+**Taking somebody off a bill** (§10.8). `planRemoval` / `plan_removal`
+answers what still names them and which expenses this device can write again
+without them; `RemovalPlan.complete` holds only when nothing else names them
+and this device may withdraw their joins (`mayWithdrawJoins`: the creator, or
+the person themselves). `shareChanges` is what writing it moves, for the
+confirmation screen. Plan again just before writing and write nothing unless
+`sameAs` the plan the person agreed to (`same_removal_plan`), then write
+`removalEntries` / `removal_entries` — every restated expense and every join
+withdrawal — **in one merge**. A restatement names the entry it replaces, so
+two devices doing this at once leave one expense, and one written over a
+correction it never saw is set aside rather than applied. Removal does not
+change the bill's key: the person can still read the bill and could join
+again. [`plan_removal`, `removal_entries`, `same_removal_plan`,
+`removal_share_changes`, `split_without`]
+
+**A send that has not answered** (§14.3). Write a `PendingSend` with
+`PendingSends.begin` before calling the wallet and `end` it whatever happens;
+while a note stands, nothing else is sent or recorded from that bill. A
+person's word that nothing went out is checked first:
+`unsentClaimRefusal` refuses while anything is still sending or while the
+wallet holds a transaction it built since the note that may be this send —
+pass each one's `sent`, what it sent out of the account less its fee, so a
+later payment of something else does not hold the note; `namedSendRefusal`
+decides a note that names its transaction. [`pending_send_blocks`,
+`pending_send_unsent_refusal`, `pending_send_named_refusal`,
+`pending_send_records`]
+
+**Withdrawing a payment record** (§14.4, §14.7). The payer may not withdraw
+its own shielded record while the wallet shows the transaction mined or still
+sending (`ownPaymentWithdrawalRefusal`), and the payee may not withdraw a
+record its wallet proposes as arrived (`Arrivals.covering`). Ask before
+writing the `voidEntry`. [`own_payment_withdrawal_refusal`,
+`arrived_withdrawal_refusal`]
+
+**Recording what was paid** (§9.2, §10.5). `recordSend` writes one record per
+recipient a send carried; `confirmPayment` is the payee's. A host never writes
+a payment of nothing (`payment_not_positive`), a swap with no reference
+(`swap_missing_reference`) or a payout with nowhere to pay
+(`payout_incomplete`), in an entry or an amendment of one.
+[`payment_entries_for_send`, `record_payment_entry`, `confirm_payment_entry`,
+`entry_refusal`]
+
+**Paying a lower preference** (§14.8). `payoutFallback` takes your reason for
+each declared payout you cannot pay and answers the next you can and why the
+first was passed over; `rankedPayouts` orders them. [`payout_fallback`,
+`ranked_payouts`, `obligation_via`]
+
+**Swaps** (§15.7). `swapSendRefusal` checks a quote against what it pays
+before anything is sent; `swapDeposit` builds the request and the note;
+`failedSwapWithdrawals` names the records of a swap that failed.
+[`swap_send_refusal`, `swap_deposit`, `swap_payment_entry`,
+`failed_swap_withdrawals`]
+
+**Names** (§9.1). Show people by `displayNameOf`, which qualifies a name
+another participant's `nameSkeleton` collides with; `shortForm` is how a
+narrow screen may cut an address and still count as showing it.
+[`display_names`, `name_skeleton`, `short_form`]
+
+**Identity** (§15.1). `identitySecretFromMnemonic` is the secret a BIP39
+account supplies: one participant whichever wallet the words are restored
+into. [`identity_seed_from_mnemonic`]
+
+**The rest of the binding:**
+
+- writing entries: `void_entry_for` withdraws one (§10.8, ask
+  `entry_refusal` first); `amend_entry_for` replaces one this device wrote,
+  wholesale, its payload of the target's own kind (§10.4);
+- sharing a bill: `invite_for_bill` is its invite URI (§11.1),
+  `shareable_bill_payload` the whole bill as one scanned code or `None` when it
+  will not fit (§11.2), `bill_key_problem` why a key is not one the cipher can
+  use, and `copy_key` how a peer names one copy of an entry it holds (§14.5);
+- reading a bill: `history_of` is the log as a history, newest first, and
+  `totals_of` where this device stands with each person across every bill it
+  holds;
+- arrivals (§14.7): `arrivals_of` proposes the payments to this device whose
+  transaction its wallet received, and `memo_txids` names the transactions
+  whose memos it reads to tie each to its bill;
+- payouts: `declared_payout_index` is where a picked payout sits among the
+  declared ones, which is what `obligation_via` takes (§14.8);
+- swaps (§15.7): `swap_quote_request` is the body to post for a quote,
+  `swap_quote_from_response` the quote an answer states once it answers that
+  request, `swap_assets_from_tokens` what a provider will deliver, and
+  `swap_status_from_response` what a status answer means — never a
+  confirmation.
+
+**Figures a person types or reads** (§2.1). `parseAmountIn` and
+`parseMinorUnits` read what was typed into minor units, and
+`parseSignedAmountIn` a refund's figure, so a form correcting one keeps its
+sign; `formatBaseUnits`
+writes a token amount. `concernsBeforeConfirming` is what the payee is told
+before confirming a payment. [`parse_amount_in`, `parse_minor_units`,
+`parse_signed_amount_in`, `format_base_units`, `concerns_before_confirming`]
+
 ## What a payer sees
 
 Netting reroutes payments, so a payer is often asked to pay someone they never
@@ -1229,7 +1338,10 @@ person who never lent them money.
 direct debt of the payer's accounts for. §4 admits a negative expense, so a
 peer can write a "refund" that makes somebody owe them money they never
 borrowed; that excess is exactly this figure, and a screen that shows only the
-total asks the payer to send it.
+total asks the payer to send it. Call it a refund only when `refundsBehind` /
+`refunds_behind` (the binding's `refunds_behind`) answers one, naming who
+wrote it: a confirmed payment above what was owed leaves the same figure on a
+bill with no refund at all.
 
 ## Conformance
 

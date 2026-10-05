@@ -294,6 +294,7 @@ pub(crate) fn removal_plan(p: &splitz_host::RemovalPlan) -> ffi::RemovalPlan {
                 seen: expense(&e.seen),
                 author: e.author.clone(),
                 split_json: e.split.to_string(),
+                basis: e.basis.clone(),
             })
             .collect(),
         blockers: p
@@ -315,6 +316,7 @@ pub(crate) fn removal_plan(p: &splitz_host::RemovalPlan) -> ffi::RemovalPlan {
             })
             .collect(),
         joins: p.joins.clone(),
+        may_withdraw_joins: p.may_withdraw_joins,
         complete: p.complete(),
     }
 }

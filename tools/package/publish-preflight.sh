@@ -143,6 +143,13 @@ for pkg in ios android npm; do
   else
     bad "" "dist/$pkg has changed since it was built — rerun tools/package/$pkg.sh"
   fi
+  # The digest leaves out build/, where Gradle and npm write their own
+  # outputs. A prebuilt artefact there — the AAR above all — is what a
+  # consumer would install, and nothing above says what it was built from.
+  stray="$(cd "dist/$pkg" && find . -path '*/build/outputs/*' -type f \( -name '*.aar' -o -name '*.jar' \) -print -quit)"
+  if [ -n "$stray" ]; then
+    bad "" "dist/$pkg holds a build output no stamp covers (${stray#./}) — delete dist/$pkg/*/build and ship the module"
+  fi
 done
 [ -d dist/ios/SplitzFFI/splitz_ffiFFI.xcframework ] &&
   ok "" "dist/ios/SplitzFFI built, with its xcframework" ||

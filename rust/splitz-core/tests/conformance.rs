@@ -660,6 +660,17 @@ fn zip321() {
 }
 
 #[test]
+fn writers() {
+    run_cases("writers.json", |c| {
+        match c.get("payout") {
+            Some(payout) => splitz_core::host::check_written_payout(payout)?,
+            None => splitz_core::host::check_written_payment(&c["payment"])?,
+        }
+        Ok(json!({"accepted": true}))
+    });
+}
+
+#[test]
 fn rate() {
     run_cases("rate.json", |c| {
         let rate = rate_of(&c["rate"]);

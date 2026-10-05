@@ -75,6 +75,11 @@ pub mod code {
     pub const UNKNOWN_PAYMENT: &str = "unknown_payment";
     pub const AMEND_KIND_MISMATCH: &str = "amend_kind_mismatch";
     pub const PARTICIPANT_STILL_NAMED: &str = "participant_still_named";
+    pub const PAYMENT_NOT_POSITIVE: &str = "payment_not_positive";
+    pub const PAYOUT_INCOMPLETE: &str = "payout_incomplete";
+    pub const SWAP_MISSING_REFERENCE: &str = "swap_missing_reference";
+    pub const RESTATEMENT_STALE: &str = "restatement_stale";
+    pub const RESTATEMENT_SUPERSEDED: &str = "restatement_superseded";
     pub const PARTICIPANT_ID_NOT_DERIVED: &str = "participant_id_not_derived";
 
     // §11 invites, payloads and sealing
@@ -311,6 +316,8 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
         "payload_too_large",
         "This bill is too big for one code. Share an invite.",
     ),
+    ("payment_not_positive", "A payment must be more than zero."),
+    ("payout_incomplete", "Say where this payout is paid."),
     (
         "payout_not_declared",
         "They haven't added that way to be paid.",
@@ -329,11 +336,23 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
     ),
     ("rate_not_positive", "A price must be more than zero."),
     (
+        "restatement_stale",
+        "Someone changed this expense before it was written again.",
+    ),
+    (
+        "restatement_superseded",
+        "Someone already wrote this expense again.",
+    ),
+    (
         "sealed_future_version",
         "An update to this bill needs a newer app.",
     ),
     ("sealed_malformed", "An update to this bill is damaged."),
     ("self_payment", "You can't pay yourself."),
+    (
+        "swap_missing_reference",
+        "Add the swap's reference to record it.",
+    ),
     (
         "unauthorized_confirmation",
         "Only the person paid can confirm this.",

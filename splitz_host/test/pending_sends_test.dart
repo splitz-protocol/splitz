@@ -346,6 +346,99 @@ void main() {
       );
     });
 
+    test('a later payment of something else does not hold it', () {
+      // The note's request sends 10000000 zatoshi; the shop took 2500000.
+      const shop = OwnTransaction(
+        txid: 'ab',
+        created: '2026-10-28T20:30:00.000Z',
+        sent: 2500000,
+      );
+      expect(
+        unsentClaimRefusal(note, stillSending: false, own: const [shop]),
+        isNull,
+      );
+    });
+
+    test('a later transaction that sent what the note sends holds it', () {
+      const maybe = OwnTransaction(
+        txid: 'cc',
+        created: '2026-10-28T19:31:12.000Z',
+        sent: 10000000,
+      );
+      final r = unsentClaimRefusal(
+        note,
+        stillSending: false,
+        own: const [maybe],
+      );
+      expect(r?.claim, UnsentClaim.builtSince);
+      expect(r?.txid, 'cc');
+      // One zatoshi either way is another payment.
+      for (final other in [9999999, 10000001]) {
+        expect(
+          unsentClaimRefusal(
+            note,
+            stillSending: false,
+            own: [
+              OwnTransaction(
+                txid: 'dd',
+                created: '2026-10-28T19:31:12.000Z',
+                sent: other,
+              ),
+            ],
+          ),
+          isNull,
+        );
+      }
+    });
+
+    test('a note that does not say what it sends is held by any later one', () {
+      final silent = PendingSend(
+        billId: 'b1',
+        uri: note.uri,
+        carried: note.carried,
+        at: note.at,
+      );
+      const shop = OwnTransaction(
+        txid: 'ab',
+        created: '2026-10-28T20:30:00.000Z',
+        sent: 2500000,
+      );
+      expect(
+        unsentClaimRefusal(
+          silent,
+          stillSending: false,
+          own: const [shop],
+        )?.claim,
+        UnsentClaim.builtSince,
+      );
+      // A swap deposit's note says it in `zatoshi`.
+      final deposit = PendingSend(
+        billId: 'b1',
+        uri: note.uri,
+        carried: note.carried,
+        at: note.at,
+        zatoshi: 2500000,
+      );
+      expect(
+        unsentClaimRefusal(deposit, stillSending: false, own: const [shop]),
+        isNotNull,
+      );
+      expect(
+        unsentClaimRefusal(
+          deposit,
+          stillSending: false,
+          own: const [
+            OwnTransaction(
+              txid: 'ab',
+              created: '2026-10-28T20:30:00.000Z',
+              sent: 7,
+            ),
+          ],
+        ),
+        isNull,
+      );
+    });
+
     test('anything still sending holds it, whatever it is', () {
       expect(
         unsentClaimRefusal(note, stillSending: true, own: const [])?.claim,

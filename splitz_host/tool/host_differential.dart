@@ -410,13 +410,36 @@ Map<String, Object?> removalPlan(Map<String, dynamic> op) {
   } on protocol.SplitError catch (e) {
     moved = {'error': e.code};
   }
+  // What writing a complete plan leaves: the entries removalEntries builds,
+  // folded with the log, read back as who is on the bill and what it holds.
+  Object? written;
+  if (plan.complete) {
+    final after = seam.BillLog(DiffHost(me: me, at: instants.last, txid: ''))
+      ..add(log.entries)
+      ..add(
+        removalEntries(
+          host: DiffHost(me: me, at: instants.last, txid: ''),
+          plan: plan,
+        ),
+      );
+    final f = after.fold();
+    written = {
+      'participants': [for (final p in f.bill.participants) p.id],
+      'expenses': [
+        for (final e in f.bill.expenses) [e.id, e.amount, e.split],
+      ],
+      'setAside': [for (final s in f.setAside) s.code]..sort(),
+    };
+  }
   return {
     'built': true,
     'folded': true,
     'namesThem': plan.namesThem,
     'complete': plan.complete,
+    'mayWithdrawJoins': plan.mayWithdrawJoins,
+    'written': written,
     'edits': [
-      for (final e in plan.edits) [e.entryId, e.author, e.split],
+      for (final e in plan.edits) [e.entryId, e.author, e.split, e.basis],
     ],
     'blockers': [
       for (final b in plan.blockers)

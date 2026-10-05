@@ -86,3 +86,30 @@ fn an_amount_is_read_at_its_currencys_exponent_and_not_in_one_with_none() {
     assert_eq!(splitz_host::parse_amount_in("12", "XAU"), None);
     assert_eq!(splitz_host::parse_amount_in("12", "eur"), None);
 }
+
+#[test]
+fn a_refund_reads_with_its_sign_and_only_one_sign() {
+    use splitz_host::parse_signed_amount_in as signed;
+    assert_eq!(signed("-30.00", "EUR"), Some(-3000));
+    assert_eq!(signed("  -30.00", "EUR"), Some(-3000));
+    assert_eq!(signed("30.00", "EUR"), Some(3000));
+    assert_eq!(signed("-0", "EUR"), Some(0));
+    for bad in [
+        "--3",
+        "- 3",
+        "-",
+        "+3",
+        "3-",
+        "-1,000",
+        "-9223372036854775808",
+    ] {
+        assert_eq!(signed(bad, "EUR"), None, "{bad}");
+    }
+    // At the bound and one past it, in minor units.
+    assert_eq!(
+        signed("-92233720368547758.07", "EUR"),
+        Some(-9_223_372_036_854_775_807)
+    );
+    assert_eq!(signed("-92233720368547758.08", "EUR"), None);
+    assert_eq!(signed("-1", "XAU"), None);
+}

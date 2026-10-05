@@ -284,6 +284,28 @@ pub struct OwnTransaction {
     /// When the wallet created it: a §9.3 instant. Fixed width, so it orders
     /// against a note's `at` by its text.
     pub created: String,
+    /// What it sent out of the account, in zatoshi: the balance it took less
+    /// its fee. `None` when the wallet cannot say, which makes it one that
+    /// may be any send.
+    pub sent: Option<i64>,
+}
+
+/// What `send` sends out of the account in all, in zatoshi: its outputs'
+/// ZEC, or a swap deposit's. `None` when the note does not say.
+fn send_total(send: &PendingSend) -> Option<i64> {
+    if send.sent.is_empty() {
+        return send.zatoshi;
+    }
+    send.sent.values().try_fold(
+        0i64,
+        |total, &z| {
+            if z < 0 {
+                None
+            } else {
+                total.checked_add(z)
+            }
+        },
+    )
 }
 
 /// Why a person may not say a send left nothing in the wallet (§14.3).
@@ -306,6 +328,13 @@ pub enum UnsentClaimRefusal {
 /// second: a wallet stamps its transactions in whole seconds, and the note is
 /// written before the wallet is called. A note that will not read names no
 /// instant, so only `still_sending` holds it.
+///
+/// Only a transaction that may be this send holds it: one that sent out what
+/// the note's request sends in all. A later payment of something else from
+/// the same wallet is not this send, and holding the note on it would leave
+/// the bill unpayable for good, with recording that transaction as this
+/// payment the only way out. A transaction or a note that does not say what
+/// it sent may be any send, and holds it.
 pub fn unsent_claim_refusal(
     send: &PendingSend,
     still_sending: bool,
@@ -318,8 +347,12 @@ pub fn unsent_claim_refusal(
         return None;
     }
     let began = send.at.get(..19)?;
+    let total = send_total(send);
     own.iter()
-        .find(|t| t.created.get(..19).is_some_and(|c| c >= began))
+        .find(|t| {
+            t.created.get(..19).is_some_and(|c| c >= began)
+                && (t.sent.is_none() || total.is_none() || t.sent == total)
+        })
         .map(|t| UnsentClaimRefusal::BuiltSince {
             txid: t.txid.clone(),
         })

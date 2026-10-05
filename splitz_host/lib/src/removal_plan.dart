@@ -20,10 +20,16 @@ class RemovalEdit {
     required this.seen,
     required this.author,
     required this.split,
+    this.basis,
   });
 
   /// The `addExpense` entry the restated expense replaces.
   final String entryId;
+
+  /// The amendment applied to [entryId] when the plan read it, or null when
+  /// none was. The restatement names it, and the fold sets the restatement
+  /// aside when the expense has been corrected since (§10.8).
+  final String? basis;
 
   /// The expense as the plan read it. What is written again is this, under
   /// [split]: payer, amount and description come from the same reading.
@@ -95,6 +101,7 @@ class RemovalPlan {
     required this.edits,
     required this.blockers,
     this.joins = const [],
+    this.mayWithdrawJoins = true,
   });
 
   /// Expenses this device can take them out of.
@@ -109,14 +116,20 @@ class RemovalPlan {
   /// standing keeps them on the bill.
   final List<String> joins;
 
+  /// Whether the device planning may withdraw [joins]: only the bill's
+  /// creator or the person themselves may (§10.8), and a withdrawal by anybody
+  /// else is set aside with `unauthorized_entry`.
+  final bool mayWithdrawJoins;
+
   /// Whether any entry still in force names them.
   bool get namesThem => edits.isNotEmpty || blockers.isNotEmpty;
 
   /// Whether writing [edits] and withdrawing [joins] takes them off the bill:
-  /// nothing else names them. A host offers the [edits] only when this holds
-  /// (§10.8): written alone they leave the person on the bill, owed what they
-  /// paid and sharing in nothing else.
-  bool get complete => blockers.isEmpty;
+  /// nothing else names them, and this device may withdraw their joins. A
+  /// host offers the [edits] only when this holds (§10.8): written alone they
+  /// leave the person on the bill, owed what they paid and sharing in nothing
+  /// else.
+  bool get complete => blockers.isEmpty && mayWithdrawJoins;
 
   /// How much more each participant owes once [edits] are written, in the
   /// bill's minor units: positive for the others taking on a share, and
@@ -151,6 +164,7 @@ class RemovalPlan {
       for (final e in plan.edits)
         [
           e.entryId,
+          e.basis,
           e.seen.id,
           e.seen.paidBy,
           e.seen.amount,
@@ -164,6 +178,7 @@ class RemovalPlan {
         [b.block.name, b.entryId, b.description, b.author, b.fromThem],
     ],
     'joins': plan.joins,
+    'mayWithdrawJoins': plan.mayWithdrawJoins,
   });
 }
 
@@ -172,7 +187,50 @@ class RemovalPlan {
 /// amounts and percentages must still add up, an item they alone had
 /// belongs to nobody else, and shares that leave nobody a share divide
 /// nothing (§4.4).
+///
+/// A member the split's `type` does not read still names them under §10.8's
+/// check, which reads every member whatever the type, so it loses them too.
 Map<String, dynamic>? splitWithout(Map<String, dynamic> split, String id) {
+  final typed = _typedWithout(split, id);
+  return typed == null ? null : _withoutAnywhere(typed, id);
+}
+
+/// [split] with [id] taken out of every member §10.8's check reads.
+Map<String, dynamic> _withoutAnywhere(Map<String, dynamic> split, String id) {
+  final out = {...split};
+  final among = out['among'];
+  if (among is List && among.contains(id)) {
+    out['among'] = [
+      for (final x in among)
+        if (x != id) x,
+    ];
+  }
+  for (final member in const ['amounts', 'basisPoints', 'shareCounts']) {
+    final figures = out[member];
+    if (figures is Map && figures.containsKey(id)) {
+      out[member] = Map<String, dynamic>.from(figures)..remove(id);
+    }
+  }
+  final items = out['items'];
+  if (items is List) {
+    out['items'] = [
+      for (final raw in items)
+        if (raw is Map && raw['sharedBy'] is List)
+          {
+            ...Map<String, dynamic>.from(raw),
+            'sharedBy': [
+              for (final x in raw['sharedBy'] as List)
+                if (x != id) x,
+            ],
+          }
+        else
+          raw,
+    ];
+  }
+  return out;
+}
+
+Map<String, dynamic>? _typedWithout(Map<String, dynamic> split, String id) {
   List<Object?> drop(Object? ids) => [
     for (final x in ids is List ? ids : const [])
       if (x != id) x,
@@ -250,8 +308,10 @@ bool _expenseNames(Map<String, dynamic> expense, String id) {
 /// What taking [id] off a bill needs, as seen from [me] (§10.8).
 ///
 /// [folded] is [log] folded, and [creatorId] the author of the bill's
-/// create. [log] is read in the order given. An entry named by
-/// [splitz.FoldedBill.withdrawn] names nobody.
+/// create. Only the entries [splitz.FoldedBill.inForce] names are read — the
+/// set §10.8's check reads, so an entry refused at ingress, withdrawn,
+/// replaced or a restatement that does not apply names nobody — in the order
+/// [log] gives them.
 ///
 /// §10.8 counts somebody as named by every entry still in force — an
 /// expense or payment the fold set aside included — and by an amended entry
@@ -263,8 +323,7 @@ bool _expenseNames(Map<String, dynamic> expense, String id) {
 /// it, [me] wrote it or opened the bill, and [splitWithout] can take them out
 /// of it. Every other entry naming them is a [RemovalBlocker], in log order.
 /// One reading per entry id: §10.2's union keeps copies of an id under
-/// different signatures, and an expense restated once per copy would be on
-/// the bill twice.
+/// different signatures.
 RemovalPlan planRemoval({
   required splitz.FoldedBill folded,
   required String creatorId,
@@ -273,28 +332,17 @@ RemovalPlan planRemoval({
   required String me,
 }) {
   final bill = folded.bill;
-  final gone = folded.withdrawn.toSet();
+  final inForce = folded.inForce.toSet();
   final byId = {for (final e in log) e['id']: e};
 
-  // The amendment §10.4 applies to each entry: the last in log order whose
-  // author wrote its target, carrying the target's kind and subject — and
-  // none when that one is withdrawn, since an earlier one does not stand in
-  // for it (§10.8).
-  final amended = <String, Map<String, dynamic>>{};
-  for (final e in log) {
-    if (e['kind'] != 'amendEntry') continue;
-    final targetId = e['targetId'];
-    if (targetId is! String) continue;
-    final target = byId[targetId];
-    if (target == null || e['author'] != target['author']) continue;
-    final member = protocol.payloadForKind[target['kind']];
-    if (member == null || e[member] is! Map) continue;
-    if (_map(e[member])['id'] != _map(target[member])['id']) continue;
-    amended[targetId] = e;
+  // The amendment §10.4 applies to each entry, as the fold chose it.
+  Map<String, dynamic>? amendmentOf(Object? entryId) {
+    final amendmentId = folded.amendmentOf[entryId];
+    return amendmentId == null ? null : byId[amendmentId];
   }
-  amended.removeWhere((_, e) => gone.contains(e['id']));
+
   List<Map<String, dynamic>> readings(Map<String, dynamic> e, String member) =>
-      [_map(e[member]), _map(amended[e['id']]?[member])];
+      [_map(e[member]), _map(amendmentOf(e['id'])?[member])];
 
   final edits = <RemovalEdit>[];
   final blockers = <RemovalBlocker>[];
@@ -302,7 +350,9 @@ RemovalPlan planRemoval({
   final read = <Object?>{};
   for (final entry in log) {
     final entryId = entry['id'];
-    if (entryId is! String || gone.contains(entryId) || !read.add(entryId)) {
+    if (entryId is! String ||
+        !inForce.contains(entryId) ||
+        !read.add(entryId)) {
       continue;
     }
     switch (entry['kind']) {
@@ -347,8 +397,11 @@ RemovalPlan planRemoval({
           );
           continue;
         }
-        // Named only by the entry it corrects: written again as it reads now.
-        final split = _names(e.split, id) ? splitWithout(e.split, id) : e.split;
+        // Named only by the entry it corrects, or by a member its type does
+        // not read: written again as it reads now, without them.
+        final split = _names(e.split, id)
+            ? splitWithout(e.split, id)
+            : _withoutAnywhere(e.split, id);
         if (split == null) {
           blockers.add(
             RemovalBlocker(
@@ -360,7 +413,13 @@ RemovalPlan planRemoval({
           continue;
         }
         edits.add(
-          RemovalEdit(entryId: entryId, seen: e, author: author, split: split),
+          RemovalEdit(
+            entryId: entryId,
+            seen: e,
+            author: author,
+            split: split,
+            basis: folded.amendmentOf[entryId],
+          ),
         );
       case 'recordPayment':
         final payer = readings(entry, 'payment').any((x) => x['from'] == id);
@@ -384,5 +443,54 @@ RemovalPlan planRemoval({
         if (_map(entry['participant'])['id'] == id) joins.add(entryId);
     }
   }
-  return RemovalPlan(edits: edits, blockers: blockers, joins: joins);
+  return RemovalPlan(
+    edits: edits,
+    blockers: blockers,
+    joins: joins,
+    mayWithdrawJoins: me == creatorId || me == id,
+  );
+}
+
+/// The entries that carry out a [plan] that is [RemovalPlan.complete], as
+/// [host] writes them and before they are signed: each expense written again
+/// without the person, naming the entry it replaces and the correction it read
+/// (§10.8), then a withdrawal of every join stating them.
+///
+/// Written together, in one merge: written apart, a sync between them leaves
+/// the expenses restated and the person on the bill. Refused for a plan that
+/// is not complete, which this would leave half done: with
+/// `unauthorized_entry` when this device may not withdraw their joins, and
+/// `participant_still_named` when something else still names them.
+List<Map<String, dynamic>> removalEntries({
+  required splitz.BillHost host,
+  required RemovalPlan plan,
+}) {
+  if (!plan.mayWithdrawJoins) {
+    throw const protocol.SplitError(
+      protocol.SplitCode.unauthorizedEntry,
+      "Only the bill's creator or the person may take them off",
+    );
+  }
+  if (plan.blockers.isNotEmpty) {
+    throw const protocol.SplitError(
+      protocol.SplitCode.participantStillNamed,
+      'Something else on the bill still names them',
+    );
+  }
+  return [
+    for (final edit in plan.edits)
+      splitz.restateExpense(
+        host: host,
+        targetId: edit.entryId,
+        basis: edit.basis,
+        expenseId: 'r-${edit.entryId}',
+        paidBy: edit.seen.paidBy,
+        amount: edit.seen.amount,
+        split: edit.split,
+        description: edit.seen.description.isEmpty
+            ? null
+            : edit.seen.description,
+      ),
+    for (final join in plan.joins) splitz.voidEntry(host: host, targetId: join),
+  ];
 }

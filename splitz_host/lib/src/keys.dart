@@ -1,10 +1,12 @@
 /// Where a bill's key and this account's signing identity live.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart' as hashing;
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 import 'signing.dart';
 import 'wallet.dart';
@@ -81,13 +83,51 @@ class SplitsKeys {
         'a bill key is $keyLengthBytes bytes of base64url',
       );
     }
-    final held = await readBillKey(billId);
-    if (held != null && held.isNotEmpty) {
-      if (held == key) return;
-      throw BillKeyConflict(billId);
-    }
-    await _store.write(_billKeyName(billId), key);
+    await _inTurn(billId, () async {
+      final held = await readBillKey(billId);
+      if (held != null && held.isNotEmpty) {
+        if (held == key) return;
+        throw BillKeyConflict(billId);
+      }
+      await _store.write(_billKeyName(billId), key);
+    });
   }
+
+  /// The turn each bill's key is changed in, per store and for the whole
+  /// process: a read of the key and the write or delete that depends on it
+  /// are one step, so a key replaced between them is never overwritten or
+  /// deleted by a decision made about the one before it.
+  static final Expando<Map<String, Future<void>>> _turnsOf = Expando();
+
+  Future<T> _inTurn<T>(String billId, Future<T> Function() step) async {
+    final turns = _turnsOf[_store] ??= {};
+    final before = turns[billId];
+    final done = Completer<void>();
+    turns[billId] = done.future;
+    try {
+      if (before != null) await before;
+      return await step();
+    } finally {
+      done.complete();
+      if (identical(turns[billId], done.future)) turns.remove(billId);
+    }
+  }
+
+  /// Forgets [billId]'s key only while it is still [key], and says whether it
+  /// did. The read and the delete are one turn: a key replaced since [key]
+  /// was read stays.
+  Future<bool> forgetBillIfStill(String billId, String key) =>
+      _inTurn(billId, () async {
+        String? held;
+        try {
+          held = await readBillKey(billId);
+        } on StateError {
+          return false;
+        }
+        if (held != key) return false;
+        await _store.delete(_billKeyName(billId));
+        return true;
+      });
 
   /// Replaces the key held for [billId] with [key], whatever was held.
   ///
@@ -102,12 +142,13 @@ class SplitsKeys {
         'a bill key is $keyLengthBytes bytes of base64url',
       );
     }
-    await _store.write(_billKeyName(billId), key);
+    await _inTurn(billId, () => _store.write(_billKeyName(billId), key));
   }
 
   /// Forgets a bill's key, so the keychain does not accumulate secrets for
   /// bills that no longer exist.
-  Future<void> forgetBill(String billId) => _store.delete(_billKeyName(billId));
+  Future<void> forgetBill(String billId) =>
+      _inTurn(billId, () => _store.delete(_billKeyName(billId)));
 
   /// Whether [key] is one the cipher can actually use: base64url, padded or
   /// not, decoding to exactly [keyLengthBytes] bytes.
@@ -174,9 +215,24 @@ List<int> identitySeedFrom(List<int> secret) => hashing.sha256.convert([
 /// The highest ZIP 32 account index: account indices are below 2^31.
 const maxAccountIndex = 0x7fffffff;
 
+/// Unicode's White_Space property, the set Rust's `split_whitespace` splits
+/// on. Dart's `\s` also matches U+FEFF, which is not white space, and two
+/// sets would derive two identities from one mnemonic.
+final _whiteSpace = RegExp(
+  '[\t\n\v\f\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F'
+  '\u205F\u3000]+',
+);
+
 /// The identity secret of a BIP39 wallet account (§15.1): [mnemonic] and
 /// [passphrase], UTF-8, joined by a zero byte, and for any ZIP 32 account but
 /// account 0, a zero byte and [accountIndex] as four big-endian bytes.
+///
+/// Both texts are read in Unicode NFKC, and the mnemonic's words are joined
+/// by one space whatever separated them. BIP39 hashes NFKD, and two texts
+/// share an NFKC form exactly when they share an NFKD one, so every spelling
+/// of one wallet's words and passphrase — and so one wallet's funds — is one
+/// participant. NFKC rather than NFKD leaves text as a keyboard types it
+/// unchanged: plain ASCII, and composed letters such as "ä".
 ///
 /// The passphrase is part of it because it selects another wallet from one
 /// mnemonic; the account index because two accounts of one mnemonic are two
@@ -212,10 +268,22 @@ List<int> identitySecretFromMnemonic({
     maxAccountIndex,
     'accountIndex',
   );
+  final words = unorm
+      .nfkc(mnemonic)
+      .split(_whiteSpace)
+      .where((w) => w.isNotEmpty)
+      .join(' ');
+  if (words.isEmpty) {
+    throw ArgumentError.value(
+      mnemonic,
+      'mnemonic',
+      'a mnemonic of white space derives an identity anyone can compute',
+    );
+  }
   return [
-    ...utf8.encode(mnemonic),
+    ...utf8.encode(words),
     0,
-    ...utf8.encode(passphrase),
+    ...utf8.encode(unorm.nfkc(passphrase)),
     if (accountIndex != 0) ...[
       0,
       (accountIndex >> 24) & 0xff,

@@ -34,7 +34,9 @@ import uniffi.splitz_ffi.SwapSendRefusal
 import uniffi.splitz_ffi.TradableAsset
 import uniffi.splitz_ffi.TransactionState
 import uniffi.splitz_ffi.UnsentClaimRefusal
+import uniffi.splitz_ffi.Settlement
 import uniffi.splitz_ffi.addExpenseEntry
+import uniffi.splitz_ffi.refundsBehind
 import uniffi.splitz_ffi.agreedPrice
 import uniffi.splitz_ffi.amendExpenseEntry
 import uniffi.splitz_ffi.billKeyProblem
@@ -60,9 +62,12 @@ import uniffi.splitz_ffi.mergeEntries
 import uniffi.splitz_ffi.nameSkeleton
 import uniffi.splitz_ffi.newBillKey
 import uniffi.splitz_ffi.obligationOf
+import uniffi.splitz_ffi.obligationVia
+import uniffi.splitz_ffi.shortForm
 import uniffi.splitz_ffi.openBlobs
 import uniffi.splitz_ffi.ownPaymentWithdrawalRefusal
 import uniffi.splitz_ffi.parseAmountIn
+import uniffi.splitz_ffi.parseSignedAmountIn
 import uniffi.splitz_ffi.parseMinorUnits
 import uniffi.splitz_ffi.participantIdForKey
 import uniffi.splitz_ffi.paymentEntriesForSend
@@ -72,6 +77,7 @@ import uniffi.splitz_ffi.pendingSendNamedRefusal
 import uniffi.splitz_ffi.pendingSendNote
 import uniffi.splitz_ffi.pendingSendUnsentRefusal
 import uniffi.splitz_ffi.planRemoval
+import uniffi.splitz_ffi.removalEntries
 import uniffi.splitz_ffi.rankedPayouts
 import uniffi.splitz_ffi.rateFigure
 import uniffi.splitz_ffi.ratePercentOff
@@ -243,6 +249,12 @@ class BillTest {
               sameRemovalPlan(unpaid, planRemoval(ana.facts(), billId, ana.entries, ben.me, ana.me)) ==
                   RemovalPlanStanding.STANDS,
               "same")
+        val offWhole = removalEntries(ana.facts(), billId, unpaid, ana.seed)
+        val offFolded = foldEntries(ana.facts(), billId, ana.entries + offWhole)
+        check("written whole, the removal takes him off and leaves one dinner",
+              offWhole.size == 2 && offFolded.bill.participants.none { it.id == ben.me } &&
+                  offFolded.bill.expenses.size == 1,
+              "${offWhole.size}")
         check("a split without him crosses as JSON",
               splitWithout("""{"type":"equal","among":["${ana.me}","${ben.me}"]}""", ben.me) ==
                   """{"type":"equal","among":["${ana.me}"]}""",
@@ -256,7 +268,27 @@ class BillTest {
         println("ben owes half of it")
         ben.take(ana)
         val owed = obligationOf(ben.facts(), billId, ben.entries)
+        val viaNobody = obligationVia(ben.facts(), billId, ben.entries, mapOf())
+        check("choosing no payout is the plain obligation",
+          viaNobody?.request?.uri != null && viaNobody.request.uri == owed?.request?.uri, "${viaNobody?.request?.uri}")
+        val strangerVia = try {
+            obligationVia(ben.facts(), billId, ben.entries, mapOf("nobody" to 0L))
+            null
+        } catch (e: SplitzException.Protocol) { e.code }
+        check("choosing a payout for somebody not on the bill is refused",
+              strangerVia == "unknown_participant", "$strangerVia")
+        check("a long value is shown by its first ten characters, a short one whole",
+              shortForm("u1abcdefghijklmnopqrstuvwxyz") == "u1abcdefgh…" && shortForm("u1ab") == "u1ab",
+              shortForm("u1abcdefghijklmnopqrstuvwxyz"))
         check("ben has an obligation", owed != null, owed?.request?.uri ?: "none")
+        val refund = addExpenseEntry(ana.facts(), billId, "r9", ben.me, -1000L,
+            """{"type":"equal","among":["${ana.me}","${ben.me}"]}""", "refund", ana.seed)
+        val unexplained = Settlement(ben.me, ana.me, 500L, listOf())
+        check("an unexplained part a refund accounts for names who wrote it (§6.3)",
+              refundsBehind(ben.facts(), billId, ben.entries + refund, unexplained)?.authors == listOf(ana.me),
+              "${refundsBehind(ben.facts(), billId, ben.entries + refund, unexplained)}")
+        check("and one no refund accounts for is not called one",
+              refundsBehind(ben.facts(), billId, ben.entries, unexplained) == null, "none")
         val settlement = owed!!.settlements.single()
         check("it is four and a half thousand to ana",
               settlement.to == ana.me && settlement.amount == 4500L,
@@ -272,12 +304,16 @@ class BillTest {
         check("nobody may say it never left while the wallet is still sending",
               pendingSendUnsentRefusal(billId, note, true, listOf()) == UnsentClaimRefusal.StillSending,
               "${pendingSendUnsentRefusal(billId, note, true, listOf())}")
-        val builtSince = pendingSendUnsentRefusal(billId, note, false, listOf(OwnTransaction(txid, ben.now())))
+        val builtSince = pendingSendUnsentRefusal(billId, note, false, listOf(OwnTransaction(txid, ben.now(), null)))
         check("nor once the wallet built a transaction after the note was written",
               builtSince == UnsentClaimRefusal.BuiltSince(txid), "$builtSince")
+        check("nor does a later payment that sent something else",
+              pendingSendUnsentRefusal(billId, note, false,
+                  listOf(OwnTransaction("ab".repeat(32), ben.now(), 1L))) == null,
+              "none")
         check("one built before it does not hold the note",
               pendingSendUnsentRefusal(billId, note, false,
-                  listOf(OwnTransaction("cd".repeat(32), "2026-10-28T19:30:00.000Z"))) == null,
+                  listOf(OwnTransaction("cd".repeat(32), "2026-10-28T19:30:00.000Z", null))) == null,
               "none")
         val named = pendingSendAfter(billId, note, SendEnded.UNRESOLVED, txid, false)!!
         check("a note naming its transaction is not cleared while the wallet may still send it",
@@ -321,6 +357,12 @@ class BillTest {
         check("and is no longer whole: he cannot come off", !paidPlan.complete, "${paidPlan.complete}")
         check("so the plan ana saw before no longer stands",
               sameRemovalPlan(unpaid, paidPlan) == RemovalPlanStanding.CHANGED, "changed")
+        val notWhole = try {
+            removalEntries(ana.facts(), billId, paidPlan, ana.seed)
+            null
+        } catch (e: SplitzException.Protocol) { e.code }
+        check("and its entries are refused while the payment names him",
+              notWhole == "participant_still_named", "$notWhole")
         val confirmScreen = listOf("Ben says he paid you",
                                    "${renderAmount(paid.zatoshi!!)} ZEC",
                                    "priced at ${rateFigure(paid.paidAtRate!!)} EUR a ZEC",
@@ -452,7 +494,8 @@ class BillTest {
               "${txidInSendOrder("00".repeat(31) + "ab")}")
         check("a typed figure is read in integers (§2.1)",
               parseAmountIn("12.34", "EUR") == 1234L && parseAmountIn("1,000", "KWD") == null &&
-                  parseMinorUnits("12.5", 2u) == 1250L,
+                  parseMinorUnits("12.5", 2u) == 1250L &&
+              parseSignedAmountIn("-30.00", "EUR") == -3000L && parseSignedAmountIn("--3", "EUR") == null,
               "${parseAmountIn("12.34", "EUR")}")
         val gold = try {
             createBillEntry(ana.facts(), "Gold", "XAU", "equal", anaKey, null, ana.seed); null

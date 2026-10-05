@@ -63,4 +63,29 @@ void main() {
       expect(parseAmountIn('12', 'eur'), isNull);
     },
   );
+
+  test('a refund reads with its sign, and only one sign', () {
+    expect(parseSignedAmountIn('-30.00', 'EUR'), -3000);
+    expect(parseSignedAmountIn('  -30.00', 'EUR'), -3000);
+    expect(parseSignedAmountIn('30.00', 'EUR'), 3000);
+    expect(parseSignedAmountIn('-0', 'EUR'), 0);
+    for (final bad in [
+      '--3',
+      '- 3',
+      '-',
+      '+3',
+      '3-',
+      '-1,000',
+      '-9223372036854775808',
+    ]) {
+      expect(parseSignedAmountIn(bad, 'EUR'), isNull, reason: bad);
+    }
+    // At the bound and one past it, in minor units.
+    expect(
+      parseSignedAmountIn('-92233720368547758.07', 'EUR'),
+      -9223372036854775807,
+    );
+    expect(parseSignedAmountIn('-92233720368547758.08', 'EUR'), isNull);
+    expect(parseSignedAmountIn('-1', 'XAU'), isNull);
+  });
 }

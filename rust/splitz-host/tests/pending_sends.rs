@@ -357,7 +357,61 @@ fn own(txid: &str, created: &str) -> splitz_host::OwnTransaction {
     splitz_host::OwnTransaction {
         txid: txid.to_owned(),
         created: created.to_owned(),
+        sent: None,
     }
+}
+
+fn sending(txid: &str, created: &str, sent: i64) -> splitz_host::OwnTransaction {
+    splitz_host::OwnTransaction {
+        sent: Some(sent),
+        ..own(txid, created)
+    }
+}
+
+#[test]
+fn a_later_payment_of_something_else_does_not_hold_it() {
+    // The note's request sends 10_000_000 zatoshi; the shop took 2_500_000.
+    let shop = sending("ab", "2026-10-28T20:30:00.000Z", 2_500_000);
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&send("b1"), false, &[shop]),
+        None
+    );
+}
+
+#[test]
+fn a_later_transaction_that_sent_what_the_note_sends_holds_it() {
+    let maybe = sending("cc", "2026-10-28T19:31:12.000Z", 10_000_000);
+    assert_eq!(
+        splitz_host::unsent_claim_refusal(&send("b1"), false, &[maybe]),
+        Some(splitz_host::UnsentClaimRefusal::BuiltSince {
+            txid: "cc".to_owned()
+        })
+    );
+    // One zatoshi either way is another payment.
+    for other in [9_999_999, 10_000_001] {
+        let near = sending("dd", "2026-10-28T19:31:12.000Z", other);
+        assert_eq!(
+            splitz_host::unsent_claim_refusal(&send("b1"), false, &[near]),
+            None
+        );
+    }
+}
+
+#[test]
+fn a_note_that_does_not_say_what_it_sends_is_held_by_any_later_transaction() {
+    let mut silent = send("b1");
+    silent.sent.clear();
+    let shop = sending("ab", "2026-10-28T20:30:00.000Z", 2_500_000);
+    assert!(matches!(
+        splitz_host::unsent_claim_refusal(&silent, false, &[shop]),
+        Some(splitz_host::UnsentClaimRefusal::BuiltSince { .. })
+    ));
+    // A swap deposit's note says it in `zatoshi`.
+    silent.zatoshi = Some(2_500_000);
+    let deposit = sending("ab", "2026-10-28T20:30:00.000Z", 2_500_000);
+    assert!(splitz_host::unsent_claim_refusal(&silent, false, &[deposit]).is_some());
+    let other = sending("ab", "2026-10-28T20:30:00.000Z", 7);
+    assert!(splitz_host::unsent_claim_refusal(&silent, false, &[other]).is_none());
 }
 
 #[test]

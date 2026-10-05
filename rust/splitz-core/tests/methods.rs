@@ -10,7 +10,7 @@ use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use splitz_core::host::{
-    add_expense, base64url_no_pad, create_bill, join_bill, lane_for, obligation_for,
+    add_expense, amend_entry, base64url_no_pad, create_bill, join_bill, lane_for, obligation_for,
     obligation_via, payment_id_for_send, record_payment, set_rate, settle, BillHost, BillLog,
     SendResult, Sent, SettleLane, SignEntry, VerifyEntry,
 };
@@ -524,7 +524,7 @@ fn a_payout_nobody_could_be_paid_by_is_not_written() {
         json!({"type": "swap", "asset": "USDC", "chain": "base", "address": 7}),
     ] {
         let refused = join(vec![json!({"type": "cash"}), bad.clone()]).unwrap_err();
-        assert_eq!(refused.code, "bill_type_error", "{bad}");
+        assert_eq!(refused.code, "payout_incomplete", "{bad}");
     }
     let honest = vec![
         json!({"type": "zec", "address": "u1ana"}),
@@ -550,13 +550,13 @@ fn a_payment_of_nothing_or_a_swap_naming_none_is_not_written() {
     for amount in [0, -1] {
         assert_eq!(
             write(amount, "cash", None).unwrap_err().code,
-            "negative_amount"
+            "payment_not_positive"
         );
     }
     for reference in [None, Some(""), Some("  ")] {
         assert_eq!(
             write(100, "swap", reference).unwrap_err().code,
-            "bill_type_error",
+            "swap_missing_reference",
             "{reference:?}"
         );
     }
@@ -655,4 +655,55 @@ fn a_request_that_can_carry_nothing_sends_nothing() {
     assert_eq!(settled.result, SendResult::Failed);
     assert!(settled.records.is_empty());
     assert!(log.fold().unwrap().bill.payments.is_empty());
+}
+
+#[test]
+fn an_amendment_may_not_write_what_the_record_may_not() {
+    let ana = FakeHost::new("ana");
+    let amend = |member: &str, payload: Value| amend_entry(&ana, "t", member, payload);
+    assert_eq!(
+        amend(
+            "payment",
+            json!({"id": "ana:p1", "amount": 0, "method": "cash"})
+        )
+        .unwrap_err()
+        .code,
+        "payment_not_positive"
+    );
+    assert_eq!(
+        amend(
+            "payment",
+            json!({"id": "ana:p1", "amount": 5, "method": "swap"})
+        )
+        .unwrap_err()
+        .code,
+        "swap_missing_reference"
+    );
+    assert_eq!(
+        amend(
+            "participant",
+            json!({"id": "ana", "payouts": [{"type": "zec", "address": ""}]})
+        )
+        .unwrap_err()
+        .code,
+        "payout_incomplete"
+    );
+    assert!(amend(
+        "payment",
+        json!({"id": "ana:p1", "amount": 5, "method": "cash"})
+    )
+    .is_ok());
+    // A byte order mark is not white space, in any implementation.
+    assert!(record_payment(
+        &ana,
+        "b",
+        "ben",
+        100,
+        "swap",
+        Some("\u{feff}"),
+        None,
+        None,
+        None
+    )
+    .is_ok());
 }

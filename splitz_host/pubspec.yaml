@@ -22,6 +22,7 @@ dependencies:
   # curve operation to the host (§13); this package is the host.
   cryptography: ^2.7.0
   crypto: ^3.0.0
+  unorm_dart: ^0.3.3
 
 dev_dependencies:
   test: ^1.25.0

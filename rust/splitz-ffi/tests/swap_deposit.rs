@@ -119,3 +119,24 @@ fn base_units_read_as_whole_tokens() {
     assert_eq!(format_base_units("x".to_owned(), 6), None);
     assert_eq!(format_base_units("1".to_owned(), 256), None);
 }
+
+#[test]
+fn a_deposit_address_the_request_cannot_carry_crosses_with_its_code() {
+    let bad = SwapQuote {
+        deposit_address: "t1 deposit".to_owned(),
+        ..quote(None, None)
+    };
+    match swap_deposit(
+        "bill-1".to_owned(),
+        bad,
+        "ben".to_owned(),
+        4000,
+        eur(),
+        "2026-10-28T19:31:00.000Z".to_owned(),
+    ) {
+        Err(splitz_ffi::SplitzError::Protocol { code, .. }) => {
+            assert_eq!(code, "zip321_bad_address")
+        }
+        other => panic!("{other:?}"),
+    }
+}

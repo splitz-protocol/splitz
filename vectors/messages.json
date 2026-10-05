@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
-  "count": 89,
+  "count": 94,
   "cases": [
     {
       "name": "address_invalid",
@@ -308,6 +308,16 @@
       "expect": "This bill is too big for one code. Share an invite."
     },
     {
+      "name": "payment_not_positive",
+      "code": "payment_not_positive",
+      "expect": "A payment must be more than zero."
+    },
+    {
+      "name": "payout_incomplete",
+      "code": "payout_incomplete",
+      "expect": "Say where this payout is paid."
+    },
+    {
       "name": "payout_not_declared",
       "code": "payout_not_declared",
       "expect": "They haven't added that way to be paid."
@@ -333,6 +343,16 @@
       "expect": "A price must be more than zero."
     },
     {
+      "name": "restatement_stale",
+      "code": "restatement_stale",
+      "expect": "Someone changed this expense before it was written again."
+    },
+    {
+      "name": "restatement_superseded",
+      "code": "restatement_superseded",
+      "expect": "Someone already wrote this expense again."
+    },
+    {
       "name": "sealed_future_version",
       "code": "sealed_future_version",
       "expect": "An update to this bill needs a newer app."
@@ -346,6 +366,11 @@
       "name": "self_payment",
       "code": "self_payment",
       "expect": "You can't pay yourself."
+    },
+    {
+      "name": "swap_missing_reference",
+      "code": "swap_missing_reference",
+      "expect": "Add the swap's reference to record it."
     },
     {
       "name": "unauthorized_confirmation",

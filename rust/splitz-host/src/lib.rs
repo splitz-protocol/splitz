@@ -22,6 +22,7 @@ pub mod payer_review;
 pub mod payouts;
 pub mod pending_sends;
 pub mod pricing;
+pub mod refunds;
 pub mod relay;
 pub mod removal_plan;
 pub mod sealing;
@@ -40,7 +41,8 @@ pub mod wallet_bill_host;
 pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKind};
 pub use confirm_review::{concerns_before_confirming, PaymentConcern};
 pub use currencies::{
-    currency_exponent, parse_amount_in, parse_minor_units, ISO_4217_EXPONENTS, MAX_PARSE_EXPONENT,
+    currency_exponent, parse_amount_in, parse_minor_units, parse_signed_amount_in,
+    ISO_4217_EXPONENTS, MAX_PARSE_EXPONENT,
 };
 pub use error::{HostError, Result, SyncFailure};
 pub use fold::{fold_unverified, fold_verified, FoldFailure};
@@ -65,9 +67,11 @@ pub use pricing::{
     FirstZecPrices, FixedZecPrices, NoZecPrices, BINANCE_ZEC_SYMBOL, MAX_MINOR_UNITS_PER_ZEC,
     RATE_WARNING_PERCENT,
 };
+pub use refunds::{refunds_behind, RefundsBehind};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use removal_plan::{
-    plan_removal, split_without, RemovalBlock, RemovalBlocker, RemovalEdit, RemovalPlan,
+    plan_removal, removal_entries, split_without, RemovalBlock, RemovalBlocker, RemovalEdit,
+    RemovalPlan,
 };
 pub use sealing::{Sealing, BLOB_VERSION};
 pub use seam_contracts::{

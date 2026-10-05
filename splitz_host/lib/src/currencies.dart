@@ -235,3 +235,19 @@ int? parseAmountIn(String text, String currency) {
   final exponent = currencyExponent(currency);
   return exponent == null ? null : parseMinorUnits(text, exponent: exponent);
 }
+
+/// [text] read as an amount in [currency] that may be below zero: a refund's
+/// figure (§4), which [parseAmountIn] refuses. One ASCII `-` directly before
+/// the figure makes it negative, after any leading space; otherwise
+/// [parseAmountIn]'s rules, and null where they refuse. A form correcting a
+/// refund reads its figure with this, so the figure round-trips and its sign
+/// never flips because the field could not hold it.
+int? parseSignedAmountIn(String text, String currency) {
+  final typed = text.replaceFirst(RegExp(r'^[ \t\r\n]+'), '');
+  if (!typed.startsWith('-')) return parseAmountIn(typed, currency);
+  final rest = typed.substring(1);
+  // The figure follows its sign directly: "- 3" is not a figure.
+  if (rest.isEmpty || ' \t\r\n'.contains(rest[0])) return null;
+  final magnitude = parseAmountIn(rest, currency);
+  return magnitude == null ? null : -magnitude;
+}

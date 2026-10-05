@@ -90,14 +90,16 @@ String nameSkeleton(String name) {
   var space = false;
   final folded = [
     for (final r in name.runes)
-      if (_caseFolded.any((range) => r >= range.$1 && r <= range.$2))
+      if (_capitalLookAlike[r] case final latin?)
+        latin
+      else if (_caseFolded.any((range) => r >= range.$1 && r <= range.$2))
         ...String.fromCharCode(r).toLowerCase().runes
       else
         r,
   ];
   for (final rune in folded) {
     if (_invisible(rune) || _combining(rune)) continue;
-    if (rune == 0x20 || rune == 0x09 || rune == 0xA0 || rune == 0x3000) {
+    if (_whiteSpace(rune)) {
       space = out.isNotEmpty;
       continue;
     }
@@ -142,6 +144,55 @@ bool _combining(int r) =>
     (r >= 0x20D0 && r <= 0x20FF) ||
     (r >= 0xFE20 && r <= 0xFE2F);
 
+/// Unicode's White_Space property: every one is a gap between words.
+bool _whiteSpace(int r) =>
+    (r >= 0x09 && r <= 0x0D) ||
+    r == 0x20 ||
+    r == 0x85 ||
+    r == 0xA0 ||
+    r == 0x1680 ||
+    (r >= 0x2000 && r <= 0x200A) ||
+    r == 0x2028 ||
+    r == 0x2029 ||
+    r == 0x202F ||
+    r == 0x205F ||
+    r == 0x3000;
+
+/// Greek and Cyrillic capitals that render as a Latin capital, mapped before
+/// case folding: folded first, Ν and Υ become ν and υ, which render as v and
+/// u, and the capital that reads as N or Y would escape the comparison.
+const Map<int, int> _capitalLookAlike = {
+  0x391: 0x61, // Α
+  0x392: 0x62, // Β
+  0x395: 0x65, // Ε
+  0x396: 0x7A, // Ζ
+  0x397: 0x68, // Η
+  0x399: 0x69, // Ι
+  0x39A: 0x6B, // Κ
+  0x39C: 0x6D, // Μ
+  0x39D: 0x6E, // Ν
+  0x39F: 0x6F, // Ο
+  0x3A1: 0x70, // Ρ
+  0x3A4: 0x74, // Τ
+  0x3A5: 0x79, // Υ
+  0x3A7: 0x78, // Χ
+  0x405: 0x73, // Ѕ
+  0x406: 0x69, // І
+  0x408: 0x6A, // Ј
+  0x410: 0x61, // А
+  0x412: 0x62, // В
+  0x415: 0x65, // Е
+  0x41A: 0x6B, // К
+  0x41C: 0x6D, // М
+  0x41D: 0x68, // Н
+  0x41E: 0x6F, // О
+  0x420: 0x70, // Р
+  0x421: 0x63, // С
+  0x422: 0x74, // Т
+  0x423: 0x79, // У
+  0x425: 0x78, // Х
+};
+
 /// Lower-case Cyrillic and Greek letters that render as a Latin one.
 const Map<int, int> _latinLookAlike = {
   0x430: 0x61, // а
@@ -159,7 +210,7 @@ const Map<int, int> _latinLookAlike = {
   0x443: 0x79, // у
   0x445: 0x78, // х
   0x455: 0x73, // ѕ
-  0x4CF: 0x6C, // ӏ
+  0x4CF: 0x69, // ӏ
   0x3B1: 0x61, // α
   0x3B5: 0x65, // ε
   0x3B9: 0x69, // ι
@@ -171,7 +222,9 @@ const Map<int, int> _latinLookAlike = {
   0x3C5: 0x75, // υ
   0x3C7: 0x78, // χ
   0x131: 0x69, // ı
-  0x1C0: 0x6C, // ǀ
+  0x1C0: 0x69, // ǀ
+  0x6C: 0x69, // l, which a sans-serif capital I renders as
+  0x31: 0x69, // 1, likewise
   0x251: 0x61, // ɑ
   0x261: 0x67, // ɡ
   0x269: 0x69, // ɩ

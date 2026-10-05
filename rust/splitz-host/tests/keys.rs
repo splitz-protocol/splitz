@@ -287,6 +287,27 @@ fn account_zero_carries_no_index_and_account_one_does() {
 }
 
 #[test]
+fn every_spelling_bip39_reads_as_one_wallet_is_one_identity() {
+    // "abandon abandon about", 0x00, "caf" + U+00E9: NFKC, single spaces.
+    let want = "6162616e646f6e206162616e646f6e2061626f757400636166c3a9";
+    let hex = |b: Vec<u8>| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    for (mnemonic, passphrase) in [
+        ("abandon abandon about", "caf\u{e9}"),
+        ("abandon abandon about", "cafe\u{301}"),
+        ("abandon  abandon\u{3000}about", "caf\u{e9}"),
+        (" abandon abandon about\n", "cafe\u{301}"),
+    ] {
+        let secret = splitz_host::identity_secret_from_mnemonic(mnemonic, passphrase, 0).unwrap();
+        assert_eq!(hex(secret), want, "{mnemonic:?} {passphrase:?}");
+    }
+    // U+FEFF is not white space: it stays, and is another wallet.
+    let bom =
+        splitz_host::identity_secret_from_mnemonic("abandon\u{feff}abandon about", "", 0).unwrap();
+    assert!(!hex(bom).starts_with("6162616e646f6e20"));
+    assert!(splitz_host::identity_secret_from_mnemonic(" \u{3000} ", "p", 0).is_err());
+}
+
+#[test]
 fn an_empty_mnemonic_and_an_index_past_zip32_are_refused() {
     assert!(splitz_host::identity_secret_from_mnemonic("", "p", 0).is_err());
     assert!(splitz_host::identity_secret_from_mnemonic("m", "p", 0x8000_0000).is_err());
@@ -333,4 +354,27 @@ fn two_accounts_on_one_store_keep_their_own_bill_keys_only_when_scoped() {
     assert_eq!(a.read_bill_key("bill").unwrap(), None);
     assert_eq!(b.read_bill_key("bill").unwrap().as_deref(), Some(key));
     assert!(AccountSecretStore::new(&shared, "").is_err());
+}
+
+#[test]
+fn a_key_is_forgotten_only_while_it_is_still_the_one_held() {
+    let store = InMemorySecretStore::default();
+    let random = Counter::from(0);
+    let keys = SplitsKeys::new(&store, &random);
+    let foreign = keys.generate_key();
+    let real = keys.generate_key();
+    keys.store_bill_key("b1", &foreign).unwrap();
+    // The person took the real invite since the foreign key was read.
+    keys.forget_bill("b1").unwrap();
+    keys.store_bill_key("b1", &real).unwrap();
+    assert!(!keys.forget_bill_if_still("b1", &foreign).unwrap());
+    assert_eq!(
+        keys.read_bill_key("b1").unwrap().as_deref(),
+        Some(real.as_str())
+    );
+    // Still the one held: forgotten.
+    assert!(keys.forget_bill_if_still("b1", &real).unwrap());
+    assert_eq!(keys.read_bill_key("b1").unwrap(), None);
+    // Nothing held: nothing to forget.
+    assert!(!keys.forget_bill_if_still("b1", &real).unwrap());
 }

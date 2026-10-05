@@ -162,7 +162,29 @@ check("text that is not a split is refused", notSplit instanceof splitz.SplitzEr
 console.log("ben owes half of it");
 ben.take(ana);
 const owed = splitz.obligation_of(ben.facts(), billId, ben.entries);
+const viaNobody = splitz.obligation_via(ben.facts(), billId, ben.entries, new Map());
+check("choosing no payout is the plain obligation",
+      viaNobody?.request?.uri != null && viaNobody.request.uri === owed?.request?.uri, `${viaNobody?.request?.uri}`);
+let strangerVia;
+try {
+  splitz.obligation_via(ben.facts(), billId, ben.entries, new Map([["nobody", 0n]]));
+} catch (e) { strangerVia = e.code; }
+check("choosing a payout for somebody not on the bill is refused",
+      strangerVia === "unknown_participant", `${strangerVia}`);
+check("a long value is shown by its first ten characters, a short one whole",
+      splitz.short_form("u1abcdefghijklmnopqrstuvwxyz") === "u1abcdefgh…" &&
+        splitz.short_form("u1ab") === "u1ab",
+      splitz.short_form("u1abcdefghijklmnopqrstuvwxyz"));
 check("ben has an obligation", owed !== undefined, owed?.request?.uri ?? "none");
+const refund = splitz.add_expense_entry(ana.facts(), billId, "r9", ben.me, -1000,
+    JSON.stringify({ type: "equal", among: [ana.me, ben.me] }), "refund", ana.seed);
+const unexplained = { from: ben.me, to: ana.me, amount: 500n, covers: [] };
+const refunded = splitz.refunds_behind(ben.facts(), billId, [...ben.entries, refund], unexplained);
+check("an unexplained part a refund accounts for names who wrote it (§6.3)",
+      refunded !== undefined && refunded.authors.length === 1 && refunded.authors[0] === ana.me,
+      JSON.stringify(refunded?.authors));
+check("and one no refund accounts for is not called one",
+      splitz.refunds_behind(ben.facts(), billId, ben.entries, unexplained) === undefined, "none");
 check("it is four and a half thousand to ana",
       owed.settlements[0].to === ana.me && Number(owed.settlements[0].amount) === 4500,
       `${owed.settlements[0].to} ${owed.settlements[0].amount}`);
@@ -179,12 +201,16 @@ check("nobody may say it never left while the wallet is still sending",
       splitz.pending_send_unsent_refusal(billId, note, true, [])?.tag === "StillSending",
       JSON.stringify(splitz.pending_send_unsent_refusal(billId, note, true, [])));
 const builtSince = splitz.pending_send_unsent_refusal(billId, note, false,
-    [{ txid, created: ben.now() }]);
+    [{ txid, created: ben.now(), sent: undefined }]);
 check("nor once the wallet built a transaction after the note was written",
       builtSince?.tag === "BuiltSince" && builtSince.txid === txid, JSON.stringify(builtSince));
 check("one built before it does not hold the note",
       splitz.pending_send_unsent_refusal(billId, note, false,
-        [{ txid: "cd".repeat(32), created: "2026-10-28T19:30:00.000Z" }]) === undefined,
+        [{ txid: "cd".repeat(32), created: "2026-10-28T19:30:00.000Z", sent: undefined }]) === undefined,
+      "none");
+check("nor does a later payment that sent something else",
+      splitz.pending_send_unsent_refusal(billId, note, false,
+        [{ txid: "ab".repeat(32), created: ben.now(), sent: 1n }]) === undefined,
       "none");
 
 console.log("the wallet sends, then records what §14.3 allows");
@@ -352,7 +378,9 @@ check("a txid in digest order is reversed (§14.7)",
 check("a typed figure is read in integers (§2.1)",
       Number(splitz.parse_amount_in("12.34", "EUR")) === 1234 &&
         splitz.parse_amount_in("1,000", "KWD") === undefined &&
-        Number(splitz.parse_minor_units("12.5", 2)) === 1250,
+        Number(splitz.parse_minor_units("12.5", 2)) === 1250 &&
+        Number(splitz.parse_signed_amount_in("-30.00", "EUR")) === -3000 &&
+        splitz.parse_signed_amount_in("--3", "EUR") === undefined,
       `${splitz.parse_amount_in("12.34", "EUR")}`);
 const gold = refusedHost(() =>
   splitz.create_bill_entry(ana.facts(), "Gold", "XAU", "equal", anaKey, undefined, ana.seed));

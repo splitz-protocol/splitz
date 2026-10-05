@@ -41,6 +41,8 @@ class FoldedBill {
     this.paymentEntries = const {},
     this.rateEntry,
     this.rateAuthor,
+    this.inForce = const [],
+    this.amendmentOf = const {},
   });
 
   final splitz.Bill bill;
@@ -87,6 +89,14 @@ class FoldedBill {
 
   /// Who wrote that `setRate`: the name §14.2 puts beside the rate.
   final String? rateAuthor;
+
+  /// The entries in force, in §10.2's order: what §10.8's still-named check
+  /// reads. An entry refused at ingress, withdrawn, replaced by a restatement
+  /// or a restatement that does not apply is not among them.
+  final List<String> inForce;
+
+  /// The amendment §10.4 would apply to each entry, by the entry's id.
+  final Map<String, String> amendmentOf;
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -176,6 +186,8 @@ class BillLog {
       paymentEntries: result.paymentEntries,
       rateEntry: result.rateEntry,
       rateAuthor: result.rateAuthor,
+      inForce: result.inForce,
+      amendmentOf: result.amendmentOf,
     );
   }
 

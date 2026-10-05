@@ -460,6 +460,14 @@ records for them, and coverage — the one line a payer has to answer "why do I
 owe this" — goes quiet precisely when it is needed. A settlement whose covered
 amounts sum below its own amount states the difference as `unexplained`.
 
+**`unexplained` is not evidence of a refund.** Coverage reads only direct
+debts, so a confirmed payment that ended up larger than what was owed — an
+expense corrected downward after it was paid — leaves the reverse settlement
+unexplained on a bill that holds no refund at all. A host names a refund as
+the cause only when negative expenses on the bill account for the
+unexplained part (`refundsBehind` / `refunds_behind`); otherwise it says
+only that no debt the bill records explains it.
+
 For a plan computed from balances, where §6.3 requires coverage to be empty,
 every settlement is wholly unexplained. That is the true answer and not a
 defect: no debts were supplied, so nothing about the plan can be explained to
@@ -854,11 +862,25 @@ one a reader cannot tell apart, by accident or to pass as somebody already on
 the bill. A host SHOULD show such a name qualified: the bill's creator as the
 organiser, anybody else with the last eight characters of their id, or the
 whole id when another's last eight match. Two names collide when their
-skeletons match — case folded, invisible format characters and combining marks
-removed, white space collapsed, and fullwidth, mathematical, Cyrillic and Greek
-letters that render as Latin ones mapped to them (`nameSkeleton` /
-`name_skeleton`, `displayNameOf` / `display_name_of`, `display_names` in the
-binding).
+skeletons match (`nameSkeleton` / `name_skeleton`, `displayNameOf` /
+`display_name_of`, `display_names` in the binding). A skeleton is the name
+with, in this order:
+
+1. Greek and Cyrillic capitals that render as a Latin capital mapped to that
+   Latin letter in lower case — Α Β Ε Ζ Η Ι Κ Μ Ν Ο Ρ Τ Υ Χ and Ѕ І Ј А В Е К
+   М Н О Р С Т У Х — before anything is case folded, since folding first turns
+   Ν and Υ into ν and υ, which render as v and u;
+2. every other letter in U+0000–U+024F, U+0370–U+037E, U+0380–U+0523,
+   U+0531–U+0556 and U+1E00–U+1FFF lower-cased, and none elsewhere, so every
+   implementation folds alike whatever Unicode version its library carries;
+3. invisible format characters and combining marks removed, and every run of
+   Unicode White_Space collapsed to one space, none leading;
+4. fullwidth and mathematical alphanumerics mapped to the ASCII letter or
+   digit they draw, precomposed Latin letters to their base letter, lower-case
+   Cyrillic and Greek letters that render as Latin ones to it, and `l`, `1`,
+   `ı`, `ǀ` and `ӏ` to `i`, which a sans-serif capital I is drawn as.
+
+The vectors in both host packages' naming tests pin the table.
 
 **Participant ids** MUST be unique within a document (`duplicate_participant`).
 
@@ -1332,7 +1354,8 @@ its `sig`, when present, is a string; its `v`, when present, is in range;
 every string is Unicode scalar values (§2.3); every number is an integer a
 signed 64-bit value holds (§9.3); it carries at most one of `rate`, `expense`,
 `payment` and `confirmation`; every payload member it carries is an object;
-`targetId`, when present, is a string; the payload its kind uses is present;
+`targetId`, when present, is a string; `basis`, when present, is a string;
+the payload its kind uses is present;
 every id inside that payload is a string; a `voidEntry` or `amendEntry` names
 a non-empty target; `at`, `id` and `author` are well formed; and last, the
 `createBill` members and the id's derivation (§9.4, §9.5) — a create's `name`
@@ -1341,8 +1364,13 @@ is a string, its `currency` is one (§2.1), its `splitMode` is a string and one
 stated `keyDigest` is 32 bytes as unpadded base64url (`bill_type_error`), then
 its id derives.
 
+**An `addExpense` may carry `targetId` and `basis`**, and is then a
+restatement of the expense at `targetId` (§10.8). Any other kind carrying
+`basis` ignores it.
+
 **An entry naming a target the log does not hold is set aside with
-`unknown_entry`.** This applies to `amendEntry` and `voidEntry` alike: a
+`unknown_entry`.** This applies to `amendEntry`, `voidEntry` and a
+restatement alike: a
 correction or a withdrawal pointing at nothing corrects and withdraws nothing,
 and a reader that ignores it silently differs from one that reports it.
 
@@ -2026,18 +2054,22 @@ change first. An implementation SHOULD answer it before writing that
 withdrawal. `planRemoval` / `plan_removal` in both host packages, and
 `plan_removal` in the binding, answer it from the log, the bill it folds to,
 the creator, the author and the participant. They read the log as the rule
-above reads it: every entry not withdrawn, whether the fold applied it or set
-it aside; an amended entry through both the entry and the amendment §10.4
-would apply to it, a withdrawn amendment not at all, and an earlier one never
-in its place; and one reading per entry id, since §10.2's union keeps copies
-of one id under different signatures and an expense restated once per copy is
-on the bill twice. They return, in log order:
+above reads it, and from the fold's own answer to it: the entries the fold
+holds in force (`FoldedBill.inForce` / `in_force`) — admitted at ingress, not
+withdrawn, not replaced and not a restatement that does not apply, whether
+the fold went on to apply each one or set it aside — so an entry a verifying
+reader refused, such as one signed by a key other than its author's, names
+nobody; an amended entry through both the entry and the amendment the fold
+chose for it (`amendmentOf` / `amendment_of`); and one reading per entry
+id, since §10.2's union keeps copies of one id under different signatures. They return, in log order:
 
 - **the expenses the author can write again without them** — applied by the
   fold, not paid for by them, written by the author or on a bill the author
   created, and whose split still divides the amount once they are taken out
   (`splitWithout` / `split_without`): an `equal` or `shares` split shared
-  among the rest, an `itemized` split with them taken off each item. An
+  among the rest, an `itemized` split with them taken off each item, and
+  every member the split's `type` does not read losing them too, since the
+  rule above reads every member whatever the type. An
   expense named only by the entry an amendment corrects is written again as
   it reads now;
 - **every other entry that names them**, and why: an expense the fold does
@@ -2051,17 +2083,24 @@ on the bill twice. They return, in log order:
   stay on the bill while any one of them stands, so taking them off withdraws
   every one.
 
-Each expense is written again as a new `addExpense` with the entry it replaces
-withdrawn, never as an amendment: the rule above counts an amended entry as
-naming them while the entry it corrects does. The answer goes stale as soon
-as another entry arrives, so a host SHOULD plan again immediately before
-writing and write nothing when the plan differs from the one the person
-agreed to (`RemovalPlan.sameAs` / `same_as`, `same_removal_plan` in the
-binding).
+Each expense is written again as a restatement (below), never as an
+amendment: the rule above counts an amended entry as naming them while the
+entry it corrects does. The answer goes stale as soon as another entry
+arrives, so a host SHOULD plan again immediately before writing and write
+nothing when the plan differs from the one the person agreed to
+(`RemovalPlan.sameAs` / `same_as`, `same_removal_plan` in the binding).
 
 **Whole or not at all.** A host SHOULD write the restated expenses only when
-nothing else names the participant — `RemovalPlan.complete` / `complete()`,
-and `complete` on the binding's plan — and then withdraw every join with
+nothing else names the participant and it may withdraw their joins — the
+bill's creator or the participant themselves (`mayWithdrawJoins` /
+`may_withdraw_joins`); `RemovalPlan.complete` / `complete()`, and
+`complete` on the binding's plan, hold both — and then withdraw every join
+with them, **in one write**: written apart, a sync between them leaves the
+expenses restated and the participant on the bill.
+`removalEntries` / `removal_entries` in both host packages, and
+`removal_entries` in the binding, build exactly those entries for a complete
+plan and refuse any other — `unauthorized_entry` when this device may not
+withdraw the joins, `participant_still_named` when something else names
 them. Written alone they leave the participant on the bill, still owed what
 they paid and sharing in nothing else; taking somebody out of one expense is
 an edit of that expense. What writing them moves is
@@ -2071,6 +2110,49 @@ units, every restated expense split by §4 before and after. The participant
 taken out has minus their share, the figures sum to zero, an unchanged
 participant is left out, and a running total past §2.2's bounds is refused
 with `amount_overflow`.
+
+**Restating an expense.** An `addExpense` carrying `targetId` restates the
+expense that entry added: it replaces it, so the target is not applied, and
+the restatement applies in its place. `basis` names the `amendEntry` the
+fold applied to the target when the restatement was written, and is absent
+when none was. A restatement applies only when, after every withdrawal is
+resolved:
+
+- its target is an `addExpense` (`amend_kind_mismatch` otherwise) the log
+  holds (`unknown_entry`);
+- its author may withdraw the target by the table above — the target's
+  author or the bill's creator (`unauthorized_entry`);
+- the target is on the bill — not withdrawn, and, when the target is itself a
+  restatement, the one that applies to its own target — and the amendment the
+  fold applies to the target is the one `basis` names, or none when `basis`
+  is absent (`restatement_stale`);
+- and no earlier restatement of the same target, by §10.2's order, also
+  passes these checks (`restatement_superseded`).
+
+A restatement that does not apply is set aside with its code, leaves its
+target as it stood, and names nobody for the still-named check. A withdrawn
+restatement does not apply, so withdrawing one puts its target back, or lets
+the next restatement of it apply. A restatement's target can be a
+restatement; ids are digests of their entries, so the chain ends.
+
+**Why one, and why `basis`.** A restatement written as a new `addExpense`
+beside a withdrawal of the old one is two entries a second device can write
+again: the creator on a phone and a tablet, or the creator and the expense's
+author, each taking one person off at once, leave two expenses where there was
+one — every one of them is applied, and every remaining participant owes the
+expense twice. Naming the target lets the fold apply one. A restatement also
+copies what its writer read, so one written while the author corrected the
+expense would put the uncorrected figure back and discard the correction with
+nothing set aside to show for it; `basis` makes that restatement stale
+instead, the correction stands, and the participant stays on the bill until
+the removal is planned again from the corrected figure.
+
+**What removal does not do.** Taking somebody off the bill withdraws their
+joins; it does not change the bill's key (§11.1). They still hold the key, so
+they can read every entry written afterwards, and they can write a new
+`joinBill` that puts them back. A wallet that offers removal SHOULD say both,
+and SHOULD show everybody on the bill a join from somebody whose earlier join
+was withdrawn.
 
 **What all of this rests on.** These rules name participant **ids**, and an id
 is unauthenticated until §10.7 binds a key to it. For a participant who has
@@ -2390,7 +2472,8 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `self_payment`, `bill_bad_participant_id`,
 `unknown_payment`, `unauthorized_confirmation`,
 `confirmation_missing_reference`, `unauthorized_payment`, `id_not_minted`,
-`participant_still_named`, `ambiguous_create`,
+`participant_still_named`, `restatement_stale`, `restatement_superseded`,
+`ambiguous_create`,
 `bill_unknown_confirmation_method`, `canonical_json_float`,
 `rate_currency_mismatch`, `rate_not_positive`, `negative_amount`,
 `rate_amount_too_large`, `balances_nonzero_residual`, `log_empty`,
@@ -2412,7 +2495,8 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `zip321_bad_currency_code`, `zip321_fiat_not_positive`,
 `zip321_fiat_too_many_digits`, `zip321_no_address`,
 `zip321_not_canonical`, `zip321_memo_undeliverable`, `address_invalid`,
-`payout_not_declared`, `obligation_mixed_payers`.
+`payout_not_declared`, `obligation_mixed_payers`, `payment_not_positive`,
+`payout_incomplete`, `swap_missing_reference`.
 
 **The code is part of the protocol; the message that accompanies it is prose
 and is not.** A user-facing string MUST be derived from the code.
@@ -2525,7 +2609,10 @@ nothing to omit.
   ZEC it asks for.
 
 A host SHOULD also compare the rate with a live price where it can read one,
-and warn when they are 5% or more apart (`ratePercentOff` / `rate_percent_off`,
+and warn when they are 5% or more apart: the difference as a percentage of
+the live price, truncated toward zero, 5 or more either way — so a rate of
+1050 against a live 1000 warns (5) and 1000 against a live 1050 does not (−4)
+(`ratePercentOff` / `rate_percent_off`,
 `rateFarFromLive` / `rate_far_from_live`), saying so when it has no live price
 to compare; and SHOULD warn a payer when whoever set the rate is somebody the
 request pays. Both are figures a person with a stake in them chose.
@@ -2595,9 +2682,14 @@ this in both host packages.
 **A person's word that nothing left the wallet is checked before the note
 goes.** A host MUST NOT remove a note on that word while the wallet is still
 sending any transaction, or while it holds a transaction it built itself at or
-after the note's `at`, compared to the second. A send killed after its
-broadcast and mined before the app came back is no longer waiting, and its
-note may name no transaction: clearing it pays the debt twice. A note that
+after the note's `at`, compared to the second, that may be this send: one
+that sent out of the account — the balance it took less its fee — what the
+note's request sends in all, or one, or a note, that does not say. A send
+killed after its broadcast and mined before the app came back is no longer
+waiting, and its note may name no transaction: clearing it pays the debt
+twice. A transaction that sent out something else is another payment, and
+holding the note on it leaves the bill unpayable for good, with recording
+that transaction as this payment the only way out. A note that
 will not read names no instant and is held only by what is still sending.
 `unsentClaimRefusal` implements the check in both host packages. A note that
 names its transaction is decided by where the wallet's history shows that
@@ -2753,7 +2845,8 @@ or more from a live price (`concernsBeforeConfirming` /
 
 **The payee does not withdraw what arrived.** A payee's host MUST NOT write a
 `voidEntry` (§10.8) of a record its wallet proposes as `arrived`
-(`Arrivals.covering` / `covering`): the transaction reached the payee carrying
+(`Arrivals.covering` / `covering` in both host packages,
+`arrived_withdrawal_refusal` in the binding): the transaction reached the payee carrying
 what the record states, and withdrawing it asks the payer to pay the debt a
 second time. A `short`, `unstated`, `disputed`, `underpriced` or `unbound`
 record is not evidence, and stays the payee's to withdraw.
@@ -2841,7 +2934,12 @@ The device itself: who it speaks as, what it can spend, where its secrets go.
   hardware account keeps none on the phone — means the identity is random and
   unrecoverable; it still signs correctly.
 - A wallet whose account comes from a BIP39 mnemonic MUST supply as its
-  identity secret the mnemonic and the BIP39 passphrase, each UTF-8 encoded,
+  identity secret the mnemonic and the BIP39 passphrase, each in Unicode NFKC
+  — two texts share an NFKC form exactly when they share the NFKD form BIP39
+  hashes, so every spelling of one wallet's words is one participant, and
+  text as a keyboard types it is unchanged — the mnemonic's words joined by
+  one ASCII space whatever Unicode White_Space separated them, each UTF-8
+  encoded,
   joined by one zero byte, and for any ZIP 32 account index other than 0, one
   further zero byte and the index as four big-endian bytes
   (`identitySecretFromMnemonic` / `identity_secret_from_mnemonic`; the binding
@@ -2981,7 +3079,9 @@ left before dessert and cannot be handed a code across the table.
   low * tolerance`. A market that fails or cannot price the currency defers to
   the other; with neither answering the currency is unpriced. Two markets that
   disagree are not a price, and an implementation MUST NOT pick one of them.
-  `AgreeingZecPrices` and `agreedPrice` / `agreed_price` are this rule.
+  When they agree the figure used is the second market's, so every
+  implementation asked the same two markets in the same order fixes the same
+  rate. `AgreeingZecPrices` and `agreedPrice` / `agreed_price` are this rule.
 
 ### 15.7 `SwapProvider`
 

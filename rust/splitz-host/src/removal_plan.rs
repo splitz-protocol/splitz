@@ -10,8 +10,8 @@
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use splitz_core::host::FoldedBill;
-use splitz_core::{checked_add, checked_sub, code, payload_for, split_expense, Expense, Result};
+use splitz_core::host::{restate_expense, void_entry, BillHost, FoldedBill};
+use splitz_core::{checked_add, checked_sub, code, split_expense, Expense, Result, SplitError};
 
 /// One expense to write again without the person, withdrawing `entry_id`.
 #[derive(Debug, Clone, PartialEq)]
@@ -27,6 +27,10 @@ pub struct RemovalEdit {
     pub author: Option<String>,
     /// `seen`'s split without the person, the others sharing what was theirs.
     pub split: Value,
+    /// The amendment applied to `entry_id` when the plan read it, or `None`
+    /// when none was. The restatement names it, and the fold sets the
+    /// restatement aside when the expense has been corrected since (§10.8).
+    pub basis: Option<String>,
 }
 
 /// Why an entry still names somebody once a plan's edits are written.
@@ -89,6 +93,10 @@ pub struct RemovalPlan {
     /// to how somebody is paid restates their record in another join, and one
     /// left standing keeps them on the bill.
     pub joins: Vec<String>,
+    /// Whether the device planning may withdraw `joins`: only the bill's
+    /// creator or the person themselves may (§10.8), and a withdrawal by
+    /// anybody else is set aside with `unauthorized_entry`.
+    pub may_withdraw_joins: bool,
 }
 
 impl RemovalPlan {
@@ -98,11 +106,12 @@ impl RemovalPlan {
     }
 
     /// Whether writing `edits` and withdrawing `joins` takes them off the
-    /// bill: nothing else names them. A host offers the `edits` only when
-    /// this holds (§10.8): written alone they leave the person on the bill,
-    /// owed what they paid and sharing in nothing else.
+    /// bill: nothing else names them, and this device may withdraw their
+    /// joins. A host offers the `edits` only when this holds (§10.8): written
+    /// alone they leave the person on the bill, owed what they paid and
+    /// sharing in nothing else.
     pub fn complete(&self) -> bool {
-        self.blockers.is_empty()
+        self.blockers.is_empty() && self.may_withdraw_joins
     }
 
     /// How much more each participant owes once `edits` are written, in the
@@ -143,6 +152,7 @@ impl RemovalPlan {
         let edit = |e: &RemovalEdit| {
             (
                 e.entry_id.clone(),
+                e.basis.clone(),
                 e.seen.id.clone(),
                 e.seen.paid_by.clone(),
                 e.seen.amount,
@@ -159,6 +169,7 @@ impl RemovalPlan {
                 .all(|(a, b)| edit(a) == edit(b))
             && self.blockers == other.blockers
             && self.joins == other.joins
+            && self.may_withdraw_joins == other.may_withdraw_joins
     }
 }
 
@@ -167,7 +178,37 @@ impl RemovalPlan {
 /// amounts and percentages must still add up, an item they alone had
 /// belongs to nobody else, and shares that leave nobody a share divide
 /// nothing (§4.4).
+///
+/// A member the split's `type` does not read still names them under §10.8's
+/// check, which reads every member whatever the type, so it loses them too.
 pub fn split_without(split: &Value, id: &str) -> Option<Value> {
+    typed_without(split, id).map(|typed| without_anywhere(&typed, id))
+}
+
+/// `split` with `id` taken out of every member §10.8's check reads.
+fn without_anywhere(split: &Value, id: &str) -> Value {
+    let Some(mut out) = split.as_object().cloned() else {
+        return split.clone();
+    };
+    if let Some(among) = out.get_mut("among").and_then(Value::as_array_mut) {
+        among.retain(|x| x.as_str() != Some(id));
+    }
+    for name in ["amounts", "basisPoints", "shareCounts"] {
+        if let Some(figures) = out.get_mut(name).and_then(Value::as_object_mut) {
+            figures.remove(id);
+        }
+    }
+    if let Some(items) = out.get_mut("items").and_then(Value::as_array_mut) {
+        for item in items {
+            if let Some(shared) = item.get_mut("sharedBy").and_then(Value::as_array_mut) {
+                shared.retain(|x| x.as_str() != Some(id));
+            }
+        }
+    }
+    Value::Object(out)
+}
+
+fn typed_without(split: &Value, id: &str) -> Option<Value> {
     let drop = |ids: Option<&Value>| -> Vec<Value> {
         ids.and_then(Value::as_array)
             .map(|ids| {
@@ -260,11 +301,6 @@ fn object(value: Option<&Value>) -> &Map<String, Value> {
     value.and_then(Value::as_object).unwrap_or(&EMPTY)
 }
 
-/// `member` of `value`, with a JSON `null` read as absent.
-fn member<'a>(value: &'a Map<String, Value>, name: &str) -> Option<&'a Value> {
-    value.get(name).filter(|v| !v.is_null())
-}
-
 /// Whether `value`'s `name` is the string `id`.
 fn is(value: &Map<String, Value>, name: &str, id: &str) -> bool {
     value.get(name).and_then(Value::as_str) == Some(id)
@@ -298,8 +334,10 @@ fn expense_names(expense: &Map<String, Value>, id: &str) -> bool {
 /// What taking `id` off a bill needs, as seen from `me` (§10.8).
 ///
 /// `folded` is `log` folded, and `creator_id` the author of the bill's
-/// create. `log` is read in the order given. An entry named by
-/// `folded.withdrawn` names nobody.
+/// create. Only the entries `folded.in_force` names are read — the set
+/// §10.8's check reads, so an entry refused at ingress, withdrawn, replaced
+/// or a restatement that does not apply names nobody — in the order `log`
+/// gives them.
 ///
 /// §10.8 counts somebody as named by every entry still in force — an expense
 /// or payment the fold set aside included — and by an amended entry when
@@ -311,8 +349,7 @@ fn expense_names(expense: &Map<String, Value>, id: &str) -> bool {
 /// it, `me` wrote it or opened the bill, and [`split_without`] can take them
 /// out of it. Every other entry naming them is a [`RemovalBlocker`], in log
 /// order. One reading per entry id: §10.2's union keeps copies of an id under
-/// different signatures, and an expense restated once per copy would be on
-/// the bill twice.
+/// different signatures.
 pub fn plan_removal(
     folded: &FoldedBill,
     creator_id: &str,
@@ -320,7 +357,7 @@ pub fn plan_removal(
     id: &str,
     me: &str,
 ) -> RemovalPlan {
-    let gone: BTreeSet<&str> = folded.withdrawn.iter().map(String::as_str).collect();
+    let in_force: BTreeSet<&str> = folded.in_force.iter().map(String::as_str).collect();
     let mut by_id: HashMap<&str, &Map<String, Value>> = HashMap::new();
     for e in log {
         if let Some(entry_id) = e.get("id").and_then(Value::as_str) {
@@ -328,46 +365,13 @@ pub fn plan_removal(
         }
     }
 
-    // The amendment §10.4 applies to each entry: the last in log order whose
-    // author wrote its target, carrying the target's kind and subject — and
-    // none when that one is withdrawn, since an earlier one does not stand in
-    // for it (§10.8).
-    let mut amended: BTreeMap<&str, &Map<String, Value>> = BTreeMap::new();
-    for e in log.iter().map(|e| object(Some(e))) {
-        if !is(e, "kind", "amendEntry") {
-            continue;
-        }
-        let Some(target_id) = e.get("targetId").and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(target) = by_id.get(target_id) else {
-            continue;
-        };
-        if member(e, "author") != member(target, "author") {
-            continue;
-        }
-        let Some(name) = target
-            .get("kind")
-            .and_then(Value::as_str)
-            .and_then(payload_for)
-        else {
-            continue;
-        };
-        if !e.get(name).is_some_and(Value::is_object) {
-            continue;
-        }
-        if member(object(e.get(name)), "id") != member(object(target.get(name)), "id") {
-            continue;
-        }
-        amended.insert(target_id, e);
-    }
-    amended.retain(|_, e| {
-        !e.get("id")
-            .and_then(Value::as_str)
-            .is_some_and(|a| gone.contains(a))
-    });
+    // The amendment §10.4 applies to each entry, as the fold chose it.
     let readings = |e: &Map<String, Value>, name: &str, entry_id: &str| {
-        let corrected = amended.get(entry_id).and_then(|a| a.get(name));
+        let corrected = folded
+            .amendment_of
+            .get(entry_id)
+            .and_then(|a| by_id.get(a.as_str()))
+            .and_then(|a| a.get(name));
         [object(e.get(name)).clone(), object(corrected).clone()]
     };
 
@@ -379,7 +383,7 @@ pub fn plan_removal(
         let Some(entry_id) = entry.get("id").and_then(Value::as_str) else {
             continue;
         };
-        if gone.contains(entry_id) || !read.insert(entry_id) {
+        if !in_force.contains(entry_id) || !read.insert(entry_id) {
             continue;
         }
         match entry.get("kind").and_then(Value::as_str) {
@@ -421,12 +425,12 @@ pub fn plan_removal(
                     });
                     continue;
                 }
-                // Named only by the entry it corrects: written again as it
-                // reads now.
+                // Named only by the entry it corrects, or by a member its type
+                // does not read: written again as it reads now, without them.
                 let split = if names(&e.split, id) {
                     split_without(&e.split, id)
                 } else {
-                    Some(e.split.clone())
+                    Some(without_anywhere(&e.split, id))
                 };
                 let Some(split) = split else {
                     blockers.push(RemovalBlocker {
@@ -440,6 +444,7 @@ pub fn plan_removal(
                     seen: e.clone(),
                     author,
                     split,
+                    basis: folded.amendment_of.get(entry_id).cloned(),
                 });
             }
             Some("recordPayment") => {
@@ -466,5 +471,49 @@ pub fn plan_removal(
         edits,
         blockers,
         joins,
+        may_withdraw_joins: me == creator_id || me == id,
     }
+}
+
+/// The entries that carry out a `plan` that is complete, as `host` writes
+/// them and before they are signed: each expense written again without the
+/// person, naming the entry it replaces and the correction it read (§10.8),
+/// then a withdrawal of every join stating them.
+///
+/// Written together, in one merge: written apart, a sync between them leaves
+/// the expenses restated and the person on the bill. Refused for a plan that
+/// is not complete, which this would leave half done: with
+/// `unauthorized_entry` when this device may not withdraw their joins, and
+/// `participant_still_named` when something else still names them.
+pub fn removal_entries(host: &dyn BillHost, plan: &RemovalPlan) -> Result<Vec<Value>> {
+    if !plan.may_withdraw_joins {
+        return Err(SplitError::new(
+            code::UNAUTHORIZED_ENTRY,
+            "Only the bill's creator or the person may take them off",
+        ));
+    }
+    if !plan.blockers.is_empty() {
+        return Err(SplitError::new(
+            code::PARTICIPANT_STILL_NAMED,
+            "Something else on the bill still names them",
+        ));
+    }
+    let mut out = Vec::with_capacity(plan.edits.len() + plan.joins.len());
+    for edit in &plan.edits {
+        let description = Some(edit.seen.description.as_str()).filter(|d| !d.is_empty());
+        out.push(restate_expense(
+            host,
+            &edit.entry_id,
+            edit.basis.as_deref(),
+            &format!("r-{}", edit.entry_id),
+            &edit.seen.paid_by,
+            edit.seen.amount,
+            edit.split.clone(),
+            description,
+        )?);
+    }
+    for join in &plan.joins {
+        out.push(void_entry(host, join)?);
+    }
+    Ok(out)
 }

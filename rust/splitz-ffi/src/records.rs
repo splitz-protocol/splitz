@@ -48,6 +48,10 @@ pub struct OwnTransaction {
     pub txid: String,
     /// When the wallet created it, a §9.3 instant.
     pub created: String,
+    /// What it sent out of the account, in zatoshi: the balance it took less
+    /// its fee. `None` when the wallet cannot say, which makes it one that
+    /// may be any send.
+    pub sent: Option<i64>,
 }
 
 /// Why a person may not say a send left nothing in the wallet (§14.3).
@@ -234,6 +238,15 @@ pub struct Settlement {
     pub amount: i64,
     /// The original debts this payment discharges (§6.3).
     pub covers: Vec<DirectDebt>,
+}
+
+/// The refunds behind a settlement's unexplained part (`refunds_behind`).
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct RefundsBehind {
+    /// What the refunds move onto the payer, in the bill's minor units.
+    pub refunded: i64,
+    /// Who wrote them, sorted; empty for an expense with no known author.
+    pub authors: Vec<String>,
 }
 
 /// A recipient a payment request could not carry (§8.4).
@@ -598,6 +611,10 @@ pub struct RemovalEdit {
     pub author: Option<String>,
     /// `seen`'s split without the person, as JSON.
     pub split_json: String,
+    /// The amendment applied to `entry_id` when the plan read it, or none.
+    /// The restatement names it, and is set aside when the expense has been
+    /// corrected since (§10.8).
+    pub basis: Option<String>,
 }
 
 /// Why an entry still names somebody once a plan's edits are written.
@@ -654,9 +671,13 @@ pub struct RemovalPlan {
     /// Every `joinBill` still stating them, in log order: write a `voidEntry`
     /// for each. One left standing keeps them on the bill.
     pub joins: Vec<String>,
+    /// Whether the device planning may withdraw `joins`: only the bill's
+    /// creator or the person themselves may (§10.8).
+    pub may_withdraw_joins: bool,
     /// Whether writing `edits` and withdrawing `joins` takes them off the
-    /// bill: `blockers` is empty. Offer the `edits` only when this holds
-    /// (§10.8). Not read back by `same_removal_plan`.
+    /// bill: `blockers` is empty and `may_withdraw_joins` holds. Offer the
+    /// `edits` only when this holds (§10.8). Not read back by
+    /// `same_removal_plan`.
     pub complete: bool,
 }
 

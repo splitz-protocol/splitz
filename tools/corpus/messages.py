@@ -73,6 +73,11 @@ MESSAGES = {
     "unknown_payment": "That payment isn't on this bill.",
     "amend_kind_mismatch": "A change must be the same kind as what it changes.",
     "participant_still_named": "This person still has costs or payments on the bill.",
+    "payment_not_positive": "A payment must be more than zero.",
+    "payout_incomplete": "Say where this payout is paid.",
+    "swap_missing_reference": "Add the swap's reference to record it.",
+    "restatement_stale": "Someone changed this expense before it was written again.",
+    "restatement_superseded": "Someone already wrote this expense again.",
     "participant_id_not_derived": "This person's id doesn't match their key.",
     # §11 invites, payloads and sealing
     "invite_not_an_invite": "This isn't a bill invite.",

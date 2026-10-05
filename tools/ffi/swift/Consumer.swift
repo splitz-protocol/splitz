@@ -229,6 +229,12 @@ func run(origin: String, downOrigin: String) async throws {
                                     id: ben.me, me: ana.me)
     check("and the plan still stands while the bill has not moved",
           try sameRemovalPlan(confirmed: unpaid, now: replanned) == .stands, "stands")
+    let offWhole = try removalEntries(facts: ana.facts(), billId: billId, plan: unpaid, seed: ana.seed)
+    let offFolded = try foldEntries(facts: ana.facts(), billId: billId, entries: ana.entries + offWhole)
+    check("written whole, the removal takes him off and leaves one dinner",
+          offWhole.count == 2 && !offFolded.bill.participants.contains { $0.id == ben.me } &&
+              offFolded.bill.expenses.count == 1,
+          "\(offWhole.count)")
     let without = try splitWithout(splitJson: bothOfThem, id: ben.me)
     check("a split without him crosses as JSON", without == onlyAna, without ?? "nil")
     let byHand = #"{"type":"exact","amounts":{""# + ana.me + #"":1,""# + ben.me + #"":1}}"#
@@ -240,7 +246,32 @@ func run(origin: String, downOrigin: String) async throws {
     print("ben owes half of it")
     try ben.take(ana)
     let owed = try obligationOf(facts: ben.facts(), billId: billId, entries: ben.entries)
+    let viaNobody = try obligationVia(facts: ben.facts(), billId: billId, entries: ben.entries, via: [:])
+    check("choosing no payout is the plain obligation",
+          viaNobody?.request.uri != nil && viaNobody?.request.uri == owed?.request.uri, viaNobody?.request.uri ?? "nil")
+    var strangerVia: String? = nil
+    do {
+        _ = try obligationVia(facts: ben.facts(), billId: billId, entries: ben.entries,
+                              via: ["nobody": 0])
+    } catch SplitzError.Protocol(let code, _) { strangerVia = code }
+    check("choosing a payout for somebody not on the bill is refused",
+          strangerVia == "unknown_participant", strangerVia ?? "nil")
+    check("a long value is shown by its first ten characters, a short one whole",
+          shortForm(value: "u1abcdefghijklmnopqrstuvwxyz") == "u1abcdefgh…"
+            && shortForm(value: "u1ab") == "u1ab",
+          shortForm(value: "u1abcdefghijklmnopqrstuvwxyz"))
     check("ben has an obligation", owed != nil, owed?.request.uri ?? "none")
+    let refund = try addExpenseEntry(
+        facts: ana.facts(), billId: billId, expenseId: "r9", paidBy: ben.me, amount: -1000,
+        splitJson: #"{"type":"equal","among":[""# + ana.me + #"",""# + ben.me + #""]}"#,
+        description: "refund", seed: ana.seed)
+    let unexplained = Settlement(from: ben.me, to: ana.me, amount: 500, covers: [])
+    check("an unexplained part a refund accounts for names who wrote it (§6.3)",
+          try refundsBehind(facts: ben.facts(), billId: billId, entries: ben.entries + [refund],
+                            settlement: unexplained)?.authors == [ana.me], "authors")
+    check("and one no refund accounts for is not called one",
+          try refundsBehind(facts: ben.facts(), billId: billId, entries: ben.entries,
+                            settlement: unexplained) == nil, "none")
     let settlement = owed!.settlements[0]
     check("it is four and a half thousand to ana",
           settlement.to == ana.me && settlement.amount == 4500,
@@ -303,11 +334,16 @@ func run(origin: String, downOrigin: String) async throws {
           "\(String(describing: pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: true, own: [])))")
     let builtSince = pendingSendUnsentRefusal(
         billId: billId, note: note!, stillSending: false,
-        own: [OwnTransaction(txid: txid, created: ben.now())])
+        own: [OwnTransaction(txid: txid, created: ben.now(), sent: nil)])
     check("nor once the wallet built a transaction after the note was written",
           builtSince == .builtSince(txid: txid), "\(String(describing: builtSince))")
     let builtBefore = OwnTransaction(txid: String(repeating: "cd", count: 32),
-                                     created: "2026-10-28T19:30:00.000Z")
+                                     created: "2026-10-28T19:30:00.000Z", sent: nil)
+    let somethingElse = OwnTransaction(txid: String(repeating: "ab", count: 32),
+                                       created: ben.now(), sent: 1)
+    check("nor does a later payment that sent something else",
+          pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: false,
+                                   own: [somethingElse]) == nil, "none")
     check("one built before it does not hold the note",
           pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: false,
                                    own: [builtBefore]) == nil, "none")
@@ -372,6 +408,12 @@ func run(origin: String, downOrigin: String) async throws {
     check("and is no longer whole: he cannot come off", !paidPlan.complete, "\(paidPlan.complete)")
     check("so the plan ana saw before no longer stands",
           try sameRemovalPlan(confirmed: unpaid, now: paidPlan) == .changed, "changed")
+    var notWhole: String? = nil
+    do {
+        _ = try removalEntries(facts: ana.facts(), billId: billId, plan: paidPlan, seed: ana.seed)
+    } catch SplitzError.Protocol(let code, _) { notWhole = code }
+    check("and its entries are refused while the payment names him",
+          notWhole == "participant_still_named", notWhole ?? "nil")
     let confirmScreen = ["Ben says he paid you",
                          "\(try renderAmount(zatoshi: paid.zatoshi!)) ZEC",
                          "priced at \(rateFigure(rate: paid.paidAtRate!)) EUR a ZEC",
@@ -432,6 +474,16 @@ func run(origin: String, downOrigin: String) async throws {
           arrivals.disputed.isEmpty && arrivals.underpriced.isEmpty && arrivals.unbound.isEmpty,
           "disputed=\(arrivals.disputed.count) underpriced=\(arrivals.underpriced.count)")
     let arrival = arrivals.arrived[0]
+    let holds = try arrivedWithdrawalRefusal(
+        facts: ana.facts(), bills: [HeldBill(billId: billId, entries: ana.entries)],
+        received: [IncomingTransaction(txid: txid, zatoshi: sent)],
+        billId: billId, paymentId: arrival.payment.id)
+    check("ana may not withdraw the record of a payment that arrived (§14.7)",
+          holds?.txid == txid, holds?.txid ?? "nil")
+    check("but may withdraw one whose transaction her wallet never received",
+          try arrivedWithdrawalRefusal(
+              facts: ana.facts(), bills: [HeldBill(billId: billId, entries: ana.entries)],
+              received: [], billId: billId, paymentId: arrival.payment.id) == nil, "none")
     try ana.add(try confirmPaymentEntry(facts: ana.facts(), billId: billId,
                                         paymentId: arrival.payment.id,
                                         method: "walletReceived",
@@ -619,7 +671,9 @@ func run(origin: String, downOrigin: String) async throws {
     check("a typed figure is read in integers (§2.1)",
           parseAmountIn(text: "12.34", currency: "EUR") == 1234
             && parseAmountIn(text: "1,000", currency: "KWD") == nil
-            && parseMinorUnits(text: "12.5", exponent: 2) == 1250,
+            && parseMinorUnits(text: "12.5", exponent: 2) == 1250
+            && parseSignedAmountIn(text: "-30.00", currency: "EUR") == -3000
+            && parseSignedAmountIn(text: "--3", currency: "EUR") == nil,
           "\(String(describing: parseAmountIn(text: "12.34", currency: "EUR")))")
     let gold = await refusal {
         _ = try createBillEntry(facts: ana.facts(), name: "Gold", currency: "XAU",

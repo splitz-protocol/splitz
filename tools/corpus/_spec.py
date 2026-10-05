@@ -1955,9 +1955,10 @@ def seal_log(entries):
         for e in out:
             # An entry that carries no id maps under None, which is not a
             # target any withdrawal names.
-            if "targetId" in e and e["targetId"] in remap:
-                e["targetId"] = remap[e["targetId"]]
-                moved = True
+            for member in ("targetId", "basis"):
+                if member in e and e[member] in remap:
+                    e[member] = remap[e[member]]
+                    moved = True
         if not moved:
             return out
     return None  # never settles: a reference cycle
@@ -2014,6 +2015,8 @@ def check_entry(entry):
             raise Refused("bill_type_error")
 
     if "targetId" in entry and not isinstance(entry["targetId"], str):
+        raise Refused("bill_type_error")
+    if "basis" in entry and not isinstance(entry["basis"], str):
         raise Refused("bill_type_error")
 
     want = PAYLOAD_FOR.get(kind)
@@ -2350,6 +2353,63 @@ def fold(entries, bill_id=None, verify=None):
         target: e for target, e in amendments.items() if e["id"] not in voided
     }
 
+    # Restating an expense, section 10.8. An `addExpense` carrying `targetId`
+    # replaces that expense: one restatement of a target applies, the first by
+    # section 10.2's order among those allowed, and only while the target is
+    # on the bill as the restatement read it -- the amendment it names as
+    # `basis` is still the one applied to the target. A restatement that does
+    # not apply is set aside and its target stays.
+    restating = {}
+    for e in entries:
+        if e["kind"] == "addExpense" and "targetId" in e:
+            restating.setdefault(e["targetId"], []).append(e)
+    restatement_ids = {e["id"] for group in restating.values() for e in group}
+    winner = {}
+
+    def decide(target_id):
+        target = by_id.get(target_id)
+        on_bill = (target is not None and target_id not in voided
+                   and (target_id not in restatement_ids
+                        or winner.get(target["targetId"]) is target))
+        current = amendments.get(target_id)
+        basis = current["id"] if current is not None else None
+        chosen = None
+        for r in restating.get(target_id, []):
+            if r["id"] in voided:
+                continue
+            if target is None:
+                aside(r, "unknown_entry", "restates an entry the log lacks")
+            elif target["kind"] != "addExpense":
+                aside(r, "amend_kind_mismatch", "restates what is no expense")
+            elif r["author"] not in (target["author"], creator):
+                aside(r, "unauthorized_entry", "may not withdraw its target")
+            elif not on_bill or r.get("basis") != basis:
+                aside(r, "restatement_stale", "its target changed under it")
+            elif chosen is not None:
+                aside(r, "restatement_superseded", "another restated it first")
+            else:
+                chosen = r
+        winner[target_id] = chosen
+
+    for start in restating:
+        # A restatement's target may be a restatement itself, decided first.
+        # Ids are digests of their entries, so the chain ends.
+        chain = [start]
+        while True:
+            t = by_id.get(chain[-1])
+            if (t is None or chain[-1] not in restatement_ids
+                    or t["targetId"] in winner or t["targetId"] in chain):
+                break
+            chain.append(t["targetId"])
+        for target_id in reversed(chain):
+            if target_id not in winner:
+                decide(target_id)
+    unapplied = restatement_ids - {
+        r["id"] for r in winner.values() if r is not None}
+    for target_id, r in winner.items():
+        if r is not None:
+            voided.add(target_id)
+
     # Taking somebody off the bill, section 10.8. This runs after every other
     # withdrawal is resolved and before the joins are applied: a check made
     # once the person is gone is a check made too late.
@@ -2360,7 +2420,8 @@ def fold(entries, bill_id=None, verify=None):
         target = by_id[e["targetId"]]
         gone = target.get("participant", {}).get("id")
         surviving = [o for o in entries
-                     if o["id"] not in voided and o["kind"] != "voidEntry"]
+                     if o["id"] not in voided and o["kind"] != "voidEntry"
+                     and o["id"] not in unapplied]
         named = False
         for other in surviving:
             # The amendment and the entry it corrects are both read: the
@@ -2394,7 +2455,8 @@ def fold(entries, bill_id=None, verify=None):
             aside(e, "participant_still_named",
                   "a surviving entry still names that participant")
 
-    live = [e for e in entries if e["id"] not in voided and e["kind"] != "voidEntry"]
+    live = [e for e in entries if e["id"] not in voided
+            and e["kind"] != "voidEntry" and e["id"] not in unapplied]
 
     def applied(e, attempt):
         """Section 10.4. `attempt` applied to the entry as amended, then as
@@ -3026,3 +3088,34 @@ def non_canonical(text):
     last = alphabet.index(text[-1])
     assert last & 1 == 0, "already non-canonical"
     return text[:-1] + alphabet[last | 1]
+
+
+# --- Section 9.1 and 9.2: what a host never writes ---------------------------
+
+# Unicode's White_Space property: the one set every implementation reads as
+# blank. Python's str.isspace also counts U+001C..U+001F, and Dart's trim
+# U+FEFF, so neither is used.
+_WHITE_SPACE = frozenset(
+    [*range(0x09, 0x0E), 0x20, 0x85, 0xA0, 0x1680, *range(0x2000, 0x200B),
+     0x2028, 0x2029, 0x202F, 0x205F, 0x3000])
+
+
+def _blank(text):
+    return not isinstance(text, str) or all(ord(c) in _WHITE_SPACE for c in text)
+
+
+def check_written_payout(payout):
+    """Section 9.1. A payout nobody could be paid by is never written."""
+    kind = payout.get("type")
+    fields = {"zec": ("address",), "swap": ("asset", "chain", "address")}
+    if any(_blank(payout.get(f)) for f in fields.get(kind, ())):
+        raise Refused("payout_incomplete")
+
+
+def check_written_payment(payment):
+    """Section 9.2. A payment of nothing, or a swap with no reference."""
+    amount = payment.get("amount")
+    if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
+        raise Refused("payment_not_positive")
+    if payment.get("method") == "swap" and _blank(payment.get("reference")):
+        raise Refused("swap_missing_reference")

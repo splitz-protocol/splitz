@@ -76,6 +76,11 @@ abstract final class SplitCode {
   static const unknownPayment = 'unknown_payment';
   static const amendKindMismatch = 'amend_kind_mismatch';
   static const participantStillNamed = 'participant_still_named';
+  static const paymentNotPositive = 'payment_not_positive';
+  static const payoutIncomplete = 'payout_incomplete';
+  static const swapMissingReference = 'swap_missing_reference';
+  static const restatementStale = 'restatement_stale';
+  static const restatementSuperseded = 'restatement_superseded';
   static const participantIdNotDerived = 'participant_id_not_derived';
 
   // §11 invites, payloads and sealing
@@ -210,15 +215,21 @@ const Map<String, String> _plainMessages = {
   'payload_missing_body': 'This code is incomplete. Scan it again.',
   'payload_not_a_payload': 'This isn\'t a bill code.',
   'payload_too_large': 'This bill is too big for one code. Share an invite.',
+  'payment_not_positive': 'A payment must be more than zero.',
+  'payout_incomplete': 'Say where this payout is paid.',
   'payout_not_declared': 'They haven\'t added that way to be paid.',
   'percentage_not_full_scale': 'The percentages don\'t add up to 100.',
   'rate_amount_too_large': 'This amount is too large to price.',
   'rate_currency_mismatch':
       'This price is in a different currency from the bill.',
   'rate_not_positive': 'A price must be more than zero.',
+  'restatement_stale':
+      'Someone changed this expense before it was written again.',
+  'restatement_superseded': 'Someone already wrote this expense again.',
   'sealed_future_version': 'An update to this bill needs a newer app.',
   'sealed_malformed': 'An update to this bill is damaged.',
   'self_payment': 'You can\'t pay yourself.',
+  'swap_missing_reference': 'Add the swap\'s reference to record it.',
   'unauthorized_confirmation': 'Only the person paid can confirm this.',
   'unauthorized_entry': 'Only the person who wrote this can change it.',
   'unauthorized_payment': 'Only the payer can record this payment.',

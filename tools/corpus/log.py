@@ -639,7 +639,96 @@ FOLD_CASES = [
      [C, create(name="Other"), J_ANA], None),
 ]
 
+# --- §10.8: restating an expense ---------------------------------------------
+#
+# Ben's dinner is shared by ana, ben and cai. Taking cai off writes it again
+# without him, naming the entry it replaces; two devices doing that at once,
+# or one doing it while ben corrects the dinner, must not leave two dinners or
+# drop the correction.
+J_CAI = {"v": 1, "id": "j4", "author": "cai", "kind": "joinBill", "at": AT(2),
+         "participant": {"id": "cai", "name": "Cai", "payTo": ADDRESSES[2]}}
+E_DIN = {"v": 1, "id": "ed", "author": "ben", "kind": "addExpense", "at": AT(3),
+         "expense": {"id": "ben:din", "description": "dinner", "paidBy": "ben",
+                     "amount": 9000, "at": AT(3),
+                     "split": {"type": "equal", "among": ["ana", "ben", "cai"]}}}
+TRIO = [C, J_ANA, J_BEN, J_CAI, E_DIN]
+
+
+def restate(eid, author, target, xid, minute, among=("ana", "ben"),
+            amount=9000, basis=None):
+    e = {"v": 1, "id": eid, "author": author, "kind": "addExpense",
+         "at": AT(minute), "targetId": target,
+         "expense": {"id": xid, "description": "dinner", "paidBy": "ben",
+                     "amount": amount, "at": AT(3),
+                     "split": {"type": "equal", "among": list(among)}}}
+    if basis is not None:
+        e["basis"] = basis
+    return e
+
+
+CORRECTED = {"v": 1, "id": "ad", "author": "ben", "kind": "amendEntry",
+             "at": AT(6), "targetId": "ed",
+             "expense": {"id": "ben:din", "description": "dinner",
+                         "paidBy": "ben", "amount": 12000, "at": AT(3),
+                         "split": {"type": "equal",
+                                   "among": ["ana", "ben", "cai"]}}}
+
+RESTATEMENT_CASES = [
+    ("a_restatement_replaces_its_target",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6)], C["id"]),
+    ("two_restatements_of_one_expense_leave_one",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ben", "ed", "ben:din2", 7)], C["id"]),
+    ("two_restatements_by_one_author_leave_one",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ana", "ed", "ana:din2", 6)], C["id"]),
+    ("a_restatement_by_somebody_who_may_not_withdraw_its_target",
+     TRIO + [restate("r1", "cai", "ed", "cai:din", 6)], C["id"]),
+    ("a_restatement_that_missed_a_correction_is_stale",
+     TRIO + [CORRECTED, restate("r1", "ana", "ed", "ana:din", 7)], C["id"]),
+    ("a_restatement_naming_the_correction_applies",
+     TRIO + [CORRECTED, restate("r1", "ana", "ed", "ana:din", 7,
+                                amount=12000, basis="ad")], C["id"]),
+    ("a_restatement_naming_a_correction_that_is_not_applied_is_stale",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 7, basis="ad")], C["id"]),
+    ("a_restatement_of_a_withdrawn_expense_is_stale",
+     TRIO + [void("v1", "ben", "ed", 6),
+             restate("r1", "ana", "ed", "ana:din", 7)], C["id"]),
+    ("withdrawing_a_restatement_puts_its_target_back",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             void("v1", "ana", "r1", 7)], C["id"]),
+    ("withdrawing_the_first_restatement_lets_the_next_apply",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ben", "ed", "ben:din2", 7),
+             void("v1", "ana", "r1", 8)], C["id"]),
+    ("a_restatement_of_a_restatement",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ana", "r1", "ana:din2", 7, among=("ana",))],
+     C["id"]),
+    ("a_restatement_of_a_restatement_that_lost",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ben", "ed", "ben:din2", 7),
+             restate("r3", "ben", "r2", "ben:din3", 8, among=("ben",))],
+     C["id"]),
+    ("a_restatement_of_a_payment",
+     BASE + [restate("r1", "ana", "p1", "ana:din", 6)], C["id"]),
+    ("a_restatement_of_an_entry_the_log_lacks",
+     TRIO + [restate("r1", "ana", "nothing", "ana:din", 6)], C["id"]),
+    ("restating_and_removing_in_one_step",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             void("v1", "ana", "j4", 6)], C["id"]),
+    ("a_stale_restatement_keeps_the_person_on_the_bill",
+     TRIO + [CORRECTED, restate("r1", "ana", "ed", "ana:din", 7),
+             void("v1", "ana", "j4", 7)], C["id"]),
+    ("a_superseded_restatement_does_not_name_anybody",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ben", "ed", "ben:din2", 7,
+                     among=("ana", "ben", "cai")),
+             void("v1", "ana", "j4", 6)], C["id"]),
+]
+
 FOLD_CASES += LANE_CASES
+FOLD_CASES += RESTATEMENT_CASES
 
 def at_depth(total):
     """An entry whose deepest value sits at level `total` (§10.1).
@@ -676,6 +765,9 @@ ENTRY_CASES = [
     ("an_entry_whose_version_is_a_fraction", dict(J_ANA, v=1.5)),
     ("an_entry_whose_version_is_a_string", dict(J_ANA, v="1")),
     ("an_entry_whose_version_is_zero", dict(J_ANA, v=0)),
+    # §10.8. A restatement names the correction it read by id.
+    ("a_basis_that_is_not_a_string_is_refused", dict(E1, targetId="e0", basis=7)),
+    ("a_basis_that_is_a_string_is_admitted", dict(E1, targetId="e0", basis="a0")),
     # §10.1's depth bound, at the boundary and one past it. A case nested far
     # past a JSON reader's own recursion limit cannot live here: the file
     # would fail to parse and take the whole corpus down rather than test one

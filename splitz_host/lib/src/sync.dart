@@ -49,14 +49,8 @@ class SplitsSync {
         // §9.4: discarded too, while it is still the key held. It opens only
         // what its maker sealed for this device, and kept it would refuse
         // the bill's real invite as a conflict. A key chosen since the sync
-        // began stays.
-        String? held;
-        try {
-          held = await _keys.readBillKey(billId);
-        } on StateError {
-          held = null;
-        }
-        if (held == key) await _keys.forgetBill(billId);
+        // began stays: the check and the delete are one turn.
+        await _keys.forgetBillIfStill(billId, key);
         throw SplitsSyncException(
           protocol.describeCode(protocol.SplitCode.inviteKeyMismatch)!,
           code: protocol.SplitCode.inviteKeyMismatch,

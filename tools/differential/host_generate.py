@@ -343,7 +343,12 @@ def a_removal_case(rng: random.Random) -> dict:
         among = sorted(rng.sample(who, rng.randrange(1, n + 1)))
         kind = rng.choice(["equal", "equal", "shares", "exact", "percentage"])
         if kind == "equal":
-            return {"type": "equal", "among": among}
+            split = {"type": "equal", "among": among}
+            if rng.random() < 0.2:
+                # A member an equal split does not read still names whoever
+                # it keys (section 10.8), and a removal takes them out of it.
+                split["amounts"] = {rng.choice(who): 1}
+            return split
         if kind == "shares":
             return {"type": "shares",
                     "shareCounts": {p: rng.randrange(0, 4) for p in among}}

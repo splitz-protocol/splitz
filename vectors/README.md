@@ -1,6 +1,6 @@
 # Conformance vectors
 
-915 cases across 22 files. An implementation is conformant when it reproduces
+956 cases across 23 files. An implementation is conformant when it reproduces
 all of them.
 
 ## Shape
@@ -23,8 +23,8 @@ rather than refusing the whole log (§10.3), so the codes appear inside
 bill is from a newer version" and "this bill is damaged" is the difference
 between telling a user to update and telling them to give up.
 
-`withholdings.json` is the only file whose subject is the wallet rather than
-the wire. SPEC.md §14 is addressed to a host, so an implementation can keep
+`withholdings.json` and `writers.json` are the files whose subject is the
+wallet rather than the wire. SPEC.md §14 is addressed to a host, so an implementation can keep
 every rule in §1–§12 and still ask somebody to pay a debt they have already
 paid, or send the balance of a bill to whoever minted the second claim on an
 id. A wallet is not conformant without it.
@@ -52,6 +52,7 @@ Objects keyed by participant id are compared by content, not by key order.
 | `sealed.json` | `frame` | the version, nonce and body length |
 | `seal.json` | `entry`, or `billId` | the plaintext and nonce it seals under, or the channel |
 | `withholdings.json` | `plan`, `bill`, `payer`, `contested`, `payAnyway` | what a request carries, and what is held back |
+| `writers.json` | `payout` or `payment` | accepted, or the code a host refuses to write it with |
 | `delta.json` | `log`, `theyHave` | nothing missing, one square, or past the cap |
 | `scan.json` | `text` | a bill code read, or refused when its key is not the bill's (§9.4) |
 | `messages.json` | `code` | the sentence a host may show for it |

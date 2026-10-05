@@ -68,6 +68,12 @@ pub struct FoldedBill {
     pub rate_entry: Option<String>,
     /// Who wrote that `setRate`: the name §14.2 puts beside the rate.
     pub rate_author: Option<String>,
+    /// The entries in force, in §10.2's order: what §10.8's still-named check
+    /// reads. An entry refused at ingress, withdrawn, replaced by a
+    /// restatement or a restatement that does not apply is not among them.
+    pub in_force: Vec<String>,
+    /// The amendment §10.4 would apply to each entry, by the entry's id.
+    pub amendment_of: BTreeMap<String, String>,
 }
 
 /// One bill's entries, and the answers derived from them.
@@ -192,6 +198,8 @@ impl<'h> BillLog<'h> {
             payment_entries: result.payment_entries,
             rate_entry: result.rate_entry,
             rate_author: result.rate_author,
+            in_force: result.in_force,
+            amendment_of: result.amendment_of,
         })
     }
 

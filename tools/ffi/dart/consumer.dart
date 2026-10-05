@@ -275,10 +275,12 @@ void main(List<String> args) {
             seen: unpaid.edits.single.seen,
             author: unpaid.edits.single.author,
             splitJson: '{"type":"equal","among":[]}',
+            basis: unpaid.edits.single.basis,
           ),
         ],
         blockers: unpaid.blockers,
         joins: unpaid.joins,
+        mayWithdrawJoins: unpaid.mayWithdrawJoins,
         complete: unpaid.complete,
       ),
     );
@@ -298,6 +300,23 @@ void main(List<String> args) {
         ) ==
         RemovalPlanStanding.stands,
     'stands',
+  );
+  final offWhole = removalEntries(
+    ana.facts(),
+    billId,
+    unpaid,
+    ana.signingSeed(),
+  );
+  final offFolded = foldEntries(ana.facts(), billId, [
+    ...ana.entries,
+    ...offWhole,
+  ]);
+  check(
+    'written whole, the removal takes him off and leaves one dinner',
+    offWhole.length == 2 &&
+        offFolded.bill.participants.every((p) => p.id != ben.me) &&
+        offFolded.bill.expenses.length == 1,
+    '${offWhole.length}',
   );
   final without = splitWithout(
     jsonEncode({
@@ -340,7 +359,66 @@ void main(List<String> args) {
     ..clear()
     ..addAll(mergeEntries(ben.entries, ana.entries).entries);
   final owed = obligationOf(ben.facts(), billId, ben.entries);
+  final viaNobody = obligationVia(ben.facts(), billId, ben.entries, {});
+  check(
+    'choosing no payout is the plain obligation',
+    viaNobody?.request.uri != null &&
+        viaNobody?.request.uri == owed?.request.uri,
+    '${viaNobody?.request.uri}',
+  );
+  String? strangerVia;
+  try {
+    obligationVia(ben.facts(), billId, ben.entries, {'nobody': 0});
+  } on SplitzErrorExceptionProtocol catch (e) {
+    strangerVia = e.code;
+  }
+  check(
+    'choosing a payout for somebody not on the bill is refused',
+    strangerVia == 'unknown_participant',
+    '$strangerVia',
+  );
+  check(
+    'a long value is shown by its first ten characters, a short one whole',
+    shortForm('u1abcdefghijklmnopqrstuvwxyz') == 'u1abcdefgh…' &&
+        shortForm('u1ab') == 'u1ab',
+    shortForm('u1abcdefghijklmnopqrstuvwxyz'),
+  );
   check('ben has an obligation', owed != null, owed?.request.uri ?? 'none');
+  final refund = addExpenseEntry(
+    ana.facts(),
+    billId,
+    'r9',
+    ben.me,
+    -1000,
+    jsonEncode({
+      'type': 'equal',
+      'among': [ana.me, ben.me],
+    }),
+    'refund',
+    ana.signingSeed(),
+  );
+  final unexplained = Settlement(
+    from: ben.me,
+    to: ana.me,
+    amount: 500,
+    covers: const [],
+  );
+  final refunded = refundsBehind(ben.facts(), billId, [
+    ...ben.entries,
+    refund,
+  ], unexplained);
+  check(
+    'an unexplained part a refund accounts for names who wrote it (§6.3)',
+    refunded != null &&
+        refunded.authors.length == 1 &&
+        refunded.authors.single == ana.me,
+    '${refunded?.authors}',
+  );
+  check(
+    'and one no refund accounts for is not called one',
+    refundsBehind(ben.facts(), billId, ben.entries, unexplained) == null,
+    'none',
+  );
   final settlement = owed!.settlements.single;
   check(
     'it is four and a half thousand to ana',
@@ -391,7 +469,7 @@ void main(List<String> args) {
     '${pendingSendUnsentRefusal(billId, note, true, const [])}',
   );
   final builtSince = pendingSendUnsentRefusal(billId, note, false, [
-    OwnTransaction(txid: txid, created: ben.now()),
+    OwnTransaction(txid: txid, created: ben.now(), sent: null),
   ]);
   check(
     'nor once the wallet built a transaction after the note was written',
@@ -401,7 +479,20 @@ void main(List<String> args) {
   check(
     'one built before it does not hold the note',
     pendingSendUnsentRefusal(billId, note, false, [
-          OwnTransaction(txid: 'cd' * 32, created: '2026-10-28T19:30:00.000Z'),
+          OwnTransaction(
+            txid: 'cd' * 32,
+            created: '2026-10-28T19:30:00.000Z',
+            sent: null,
+          ),
+        ]) ==
+        null,
+    'none',
+  );
+
+  check(
+    'nor does a later payment that sent something else',
+    pendingSendUnsentRefusal(billId, note, false, [
+          OwnTransaction(txid: 'ab' * 32, created: ben.now(), sent: 1),
         ]) ==
         null,
     'none',
@@ -552,6 +643,17 @@ void main(List<String> args) {
     'so the plan ana saw before no longer stands',
     sameRemovalPlan(unpaid, paidPlan) == RemovalPlanStanding.changed,
     'changed',
+  );
+  String? notWhole;
+  try {
+    removalEntries(ana.facts(), billId, paidPlan, ana.signingSeed());
+  } on SplitzErrorExceptionProtocol catch (e) {
+    notWhole = e.code;
+  }
+  check(
+    'and its entries are refused while the payment names him',
+    notWhole == 'participant_still_named',
+    '$notWhole',
   );
   // This record was written by hand, with no ZEC figure, rate or reference:
   // the screen says so in the wallet's own words.
@@ -1036,7 +1138,9 @@ void main(List<String> args) {
     'a typed figure is read in integers (§2.1)',
     parseAmountIn('12.34', 'EUR') == 1234 &&
         parseAmountIn('1,000', 'KWD') == null &&
-        parseMinorUnits('12.5', 2) == 1250,
+        parseMinorUnits('12.5', 2) == 1250 &&
+        parseSignedAmountIn('-30.00', 'EUR') == -3000 &&
+        parseSignedAmountIn('--3', 'EUR') == null,
     '${parseAmountIn('12.34', 'EUR')}',
   );
   final gold = refusedBy(

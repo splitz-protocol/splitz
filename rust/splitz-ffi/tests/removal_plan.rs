@@ -4,8 +4,8 @@
 use serde_json::{json, Value};
 use splitz_ffi::{
     add_expense_entry, create_bill_entry, fold_entries, identity_key_from_seed, join_bill_entry,
-    plan_removal, removal_share_changes, same_removal_plan, split_without, void_entry_for,
-    HostFacts, RemovalBlock, RemovalPlanStanding, ShareChange, SplitzError,
+    plan_removal, removal_entries, removal_share_changes, same_removal_plan, split_without,
+    void_entry_for, HostFacts, RemovalBlock, RemovalPlanStanding, ShareChange, SplitzError,
 };
 
 struct Device {
@@ -262,4 +262,75 @@ fn share_changes_refuse_a_plan_that_does_not_split() {
         Err(SplitzError::Protocol { code, .. }) if code == "empty_split"
     ));
     assert!(matches!(with("{"), Err(SplitzError::Host { .. })));
+}
+
+#[test]
+fn removal_entries_write_it_whole_and_two_devices_leave_one_expense() {
+    let (ana, ben, bill_id, mut entries) = bill();
+    let cai = Device::new(150);
+    entries.push(cai.join(4, &bill_id));
+    entries.push(ana.expense(5, &bill_id, "taxi", &[&ana.me, &ben.me, &cai.me]));
+    let plan = plan_removal(
+        ana.facts(9),
+        bill_id.clone(),
+        entries.clone(),
+        cai.me.clone(),
+        ana.me.clone(),
+    )
+    .unwrap();
+    assert!(plan.complete && plan.may_withdraw_joins);
+    // One creator, two devices, two instants, one log read by both.
+    let phone = removal_entries(
+        ana.facts(10),
+        bill_id.clone(),
+        plan.clone(),
+        ana.seed.clone(),
+    )
+    .unwrap();
+    let tablet = removal_entries(ana.facts(11), bill_id.clone(), plan, ana.seed.clone()).unwrap();
+    assert_eq!(phone.len(), 2);
+    entries.extend(phone);
+    entries.extend(tablet);
+    let folded = fold_entries(ana.facts(12), bill_id, entries).unwrap();
+    assert_eq!(folded.bill.expenses.len(), 1);
+    assert_eq!(folded.bill.expenses[0].amount, 3000);
+    assert!(folded.bill.participants.iter().all(|p| p.id != cai.me));
+    let codes: Vec<&str> = folded.set_aside.iter().map(|s| s.code.as_str()).collect();
+    assert!(codes.contains(&"restatement_superseded"), "{codes:?}");
+}
+
+#[test]
+fn removal_entries_refuse_a_plan_that_is_not_complete() {
+    let (ana, ben, bill_id, mut entries) = bill();
+    let cai = Device::new(150);
+    entries.push(cai.join(4, &bill_id));
+    entries.push(ana.expense(5, &bill_id, "taxi", &[&ana.me, &ben.me, &cai.me]));
+    // Ben neither opened the bill nor is Cai.
+    let by_ben = plan_removal(
+        ben.facts(9),
+        bill_id.clone(),
+        entries.clone(),
+        cai.me.clone(),
+        ben.me.clone(),
+    )
+    .unwrap();
+    assert!(!by_ben.may_withdraw_joins && !by_ben.complete);
+    match removal_entries(ben.facts(10), bill_id.clone(), by_ben, ben.seed.clone()) {
+        Err(SplitzError::Protocol { code, .. }) => assert_eq!(code, "unauthorized_entry"),
+        other => panic!("{other:?}"),
+    }
+    // Ana paid for the taxi: nobody takes Ana off while it stands.
+    let ana_off = plan_removal(
+        ben.facts(9),
+        bill_id.clone(),
+        entries,
+        ana.me.clone(),
+        ana.me.clone(),
+    )
+    .unwrap();
+    assert!(!ana_off.blockers.is_empty());
+    match removal_entries(ana.facts(10), bill_id, ana_off, ana.seed.clone()) {
+        Err(SplitzError::Protocol { code, .. }) => assert_eq!(code, "participant_still_named"),
+        other => panic!("{other:?}"),
+    }
 }

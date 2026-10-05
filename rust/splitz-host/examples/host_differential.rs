@@ -14,10 +14,10 @@ use splitz_core::host::{
 use splitz_core::{decode_bill, signing_message, SetAside};
 use splitz_host::{
     activity_of, awaiting_confirmation_by, base64url_decode, base64url_encode, component_encode,
-    is_well_formed_key, plan_removal, query_encode, BillEvent, BillStorage, BillStore, DraftItem,
-    HostError, HttpTransport, InMemoryBillStorage, InMemorySecretStore, OneClickSwaps,
-    RemovalBlock, Sealing, Signer, SplitDraft, SplitKind, SplitsKeys, SwapProvider, SwapQuote,
-    SwapWatch, SystemRandomness, TradableAsset, WalletAccount,
+    is_well_formed_key, plan_removal, query_encode, removal_entries, BillEvent, BillStorage,
+    BillStore, DraftItem, HostError, HttpTransport, InMemoryBillStorage, InMemorySecretStore,
+    OneClickSwaps, RemovalBlock, Sealing, Signer, SplitDraft, SplitKind, SplitsKeys, SwapProvider,
+    SwapQuote, SwapWatch, SystemRandomness, TradableAsset, WalletAccount,
 };
 
 /// A provider that answers with one scripted body and records its URLs.
@@ -506,13 +506,37 @@ fn removal_plan(op: &Value) -> Value {
         RemovalBlock::Payment => "payment",
         RemovalBlock::Confirmation => "confirmation",
     };
+    // What writing a complete plan leaves: the entries removal_entries
+    // builds, folded with the log, read back as who is on the bill and what it
+    // holds.
+    let written = if plan.complete() {
+        let mut after = BillLog::new(&host);
+        after.add(log.entries()).expect("the log merges again");
+        after
+            .add(removal_entries(&host, &plan).expect("a complete plan"))
+            .expect("the removal merges");
+        let f = after.fold().expect("the log still folds");
+        let mut codes: Vec<&str> = f.set_aside.iter().map(|s| s.code).collect();
+        codes.sort_unstable();
+        json!({
+            "participants": f.bill.participants.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+            "expenses": f.bill.expenses.iter()
+                .map(|e| json!([e.id, e.amount, e.split]))
+                .collect::<Vec<_>>(),
+            "setAside": codes,
+        })
+    } else {
+        Value::Null
+    };
     json!({
         "built": true,
         "folded": true,
         "namesThem": plan.names_them(),
         "complete": plan.complete(),
+        "mayWithdrawJoins": plan.may_withdraw_joins,
+        "written": written,
         "edits": plan.edits.iter()
-            .map(|e| json!([e.entry_id, e.author, e.split]))
+            .map(|e| json!([e.entry_id, e.author, e.split, e.basis]))
             .collect::<Vec<_>>(),
         "blockers": plan.blockers.iter()
             .map(|b| json!([block(b.block), b.entry_id, b.description, b.author, b.from_them]))

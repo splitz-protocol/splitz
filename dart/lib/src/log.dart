@@ -280,6 +280,9 @@ Map<String, dynamic> checkEntry(Object? raw) {
   if (entry.containsKey('targetId') && entry['targetId'] is! String) {
     raise(SplitCode.billTypeError, 'A targetId is a string');
   }
+  if (entry.containsKey('basis') && entry['basis'] is! String) {
+    raise(SplitCode.billTypeError, 'A basis is a string');
+  }
 
   final wanted = payloadForKind[kind];
   if (wanted != null && !entry.containsKey(wanted)) {
@@ -504,6 +507,8 @@ class FoldResult {
     required this.paymentEntries,
     required this.rateEntry,
     required this.rateAuthor,
+    this.inForce = const [],
+    this.amendmentOf = const {},
   });
 
   /// The materialised bill, as a wire-form map.
@@ -556,6 +561,16 @@ class FoldResult {
   /// Who wrote that `setRate`: a payee is warned when it was the payer
   /// (§14.2), and the creator's rate is kept over another's (§7).
   final String? rateAuthor;
+
+  /// The entries in force, in §10.2's order: admitted at ingress, not
+  /// withdrawn or replaced, not a withdrawal, and not a restatement that does
+  /// not apply. What §10.8's still-named check reads, whether or not the fold
+  /// went on to apply each one.
+  final List<String> inForce;
+
+  /// The amendment §10.4 would apply to each entry, by the entry's id: the
+  /// `basis` a restatement of that entry names (§10.8).
+  final Map<String, String> amendmentOf;
 }
 
 /// Where a participant is paid (§10.3 step 4): the address of their first
@@ -834,6 +849,80 @@ FoldResult foldLog(List<Object?> rawEntries,
   // figure the bill shows.
   amendments.removeWhere((_, e) => voided.contains(e['id']));
 
+  // Restating an expense (§10.8). An `addExpense` carrying `targetId`
+  // replaces that expense: one restatement of a target applies, the first by
+  // §10.2's order among those allowed, and only while the target is on the
+  // bill as the restatement read it — the amendment it names as `basis` is
+  // still the one applied to the target. A restatement that does not apply is
+  // set aside and its target stays. Two devices taking one person off an
+  // expense at once therefore leave one expense, and a correction written
+  // meanwhile is kept rather than replaced by a copy that never saw it.
+  final restating = <String, List<Map<String, dynamic>>>{};
+  for (final e in entries) {
+    if (e['kind'] == 'addExpense' && e.containsKey('targetId')) {
+      restating.putIfAbsent(e['targetId'] as String, () => []).add(e);
+    }
+  }
+  final restatementIds = {
+    for (final group in restating.values)
+      for (final e in group) e['id'] as String
+  };
+  final winner = <String, Map<String, dynamic>?>{};
+  void decide(String targetId) {
+    final target = byId[targetId];
+    final onBill = target != null &&
+        !voided.contains(targetId) &&
+        (!restatementIds.contains(targetId) ||
+            identical(winner[target['targetId']], target));
+    final basis = amendments[targetId]?['id'];
+    Map<String, dynamic>? chosen;
+    for (final r in restating[targetId] ?? const <Map<String, dynamic>>[]) {
+      if (voided.contains(r['id'])) continue;
+      if (target == null) {
+        aside(r, SplitCode.unknownEntry);
+      } else if (target['kind'] != 'addExpense') {
+        aside(r, SplitCode.amendKindMismatch);
+      } else if (r['author'] != target['author'] && r['author'] != creator) {
+        aside(r, SplitCode.unauthorizedEntry);
+      } else if (!onBill || r['basis'] != basis) {
+        aside(r, SplitCode.restatementStale);
+      } else if (chosen != null) {
+        aside(r, SplitCode.restatementSuperseded);
+      } else {
+        chosen = r;
+      }
+    }
+    winner[targetId] = chosen;
+  }
+
+  for (final start in restating.keys) {
+    // A restatement's target may be a restatement itself, decided first. Ids
+    // are digests of their entries, so the chain ends.
+    final chain = [start];
+    while (true) {
+      final t = byId[chain.last];
+      if (t == null ||
+          !restatementIds.contains(chain.last) ||
+          winner.containsKey(t['targetId']) ||
+          chain.contains(t['targetId'])) {
+        break;
+      }
+      chain.add(t['targetId'] as String);
+    }
+    for (final targetId in chain.reversed) {
+      if (!winner.containsKey(targetId)) decide(targetId);
+    }
+  }
+  final unapplied = {
+    ...restatementIds.difference({
+      for (final r in winner.values)
+        if (r != null) r['id'] as String
+    })
+  };
+  for (final MapEntry(key: targetId, value: r) in winner.entries) {
+    if (r != null) voided.add(targetId);
+  }
+
   // Taking somebody off the bill. This runs after every other withdrawal is
   // resolved and before the joins are applied: a check made once the person is
   // gone is a check made too late.
@@ -852,7 +941,9 @@ FoldResult foldLog(List<Object?> rawEntries,
     final gone = _mapOf(target['participant'])['id'];
     var named = false;
     for (final other in entries) {
-      if (voided.contains(other['id']) || other['kind'] == 'voidEntry') {
+      if (voided.contains(other['id']) ||
+          other['kind'] == 'voidEntry' ||
+          unapplied.contains(other['id'])) {
         continue;
       }
       // The amendment and the entry it corrects are both read: the amendment
@@ -895,7 +986,10 @@ FoldResult foldLog(List<Object?> rawEntries,
 
   final live = [
     for (final e in entries)
-      if (!voided.contains(e['id']) && e['kind'] != 'voidEntry') e,
+      if (!voided.contains(e['id']) &&
+          e['kind'] != 'voidEntry' &&
+          !unapplied.contains(e['id']))
+        e,
   ];
 
   /// §10.4. [attempt] applied to [e] as amended, then as written. An
@@ -1249,6 +1343,11 @@ FoldResult foldLog(List<Object?> rawEntries,
     expenseAuthors: sorted(expenseAuthors),
     paymentEntries: sorted(paymentEntries),
     rateEntry: rateEntry,
+    inForce: [for (final e in live) e['id'] as String],
+    amendmentOf: {
+      for (final MapEntry(key: target, value: e) in amendments.entries)
+        target: e['id'] as String,
+    },
     rateAuthor: rateAuthor,
   );
 }

@@ -8,6 +8,10 @@ exported by `rust/splitz-ffi/src/pure.rs` under the same name or listed in
 `allow-binding.txt`, with the export that carries it or the reason a binding
 wallet has no use for it. Exit 1 names each one that is neither, and each
 listed export that does not exist.
+
+Every export is also named in INTEGRATING.md or SPEC.md, by its own name or
+the camelCase name the Kotlin, Swift and Dart bindings give it: an export a
+wallet cannot learn of from the documents is one it will not call.
 """
 
 from __future__ import annotations
@@ -72,6 +76,13 @@ def main() -> int:
             problems.append(f"STALE host::{name} -> {allow[name]}: no such export")
     for name in sorted(set(allow) - host):
         problems.append(f"STALE allow-binding.txt names host::{name}, which the crate does not export")
+    docs = "\n".join(
+        (ROOT / doc).read_text(encoding="utf-8") for doc in ("INTEGRATING.md", "SPEC.md")
+    )
+    for name in sorted(exports):
+        camel = re.sub(r"_([a-z0-9])", lambda m: m.group(1).upper(), name)
+        if not re.search(rf"\b({re.escape(name)}|{re.escape(camel)})\b", docs):
+            problems.append(f"UNDOCUMENTED export {name}: named in neither INTEGRATING.md nor SPEC.md")
     carried = sum(1 for n in host if n in exports or allow.get(n))
     print(
         f"binding: {len(host)} host functions, {len(exports)} exports, "

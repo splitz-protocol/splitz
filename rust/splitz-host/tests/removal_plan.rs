@@ -12,7 +12,8 @@ use splitz_core::host::{
 };
 use splitz_core::Expense;
 use splitz_host::{
-    plan_removal, split_without, RemovalBlock, RemovalEdit, RemovalPlan, WalletBillHost,
+    plan_removal, removal_entries, split_without, RemovalBlock, RemovalEdit, RemovalPlan,
+    WalletBillHost,
 };
 use std::collections::{BTreeMap, HashMap};
 use support::FakeWallet;
@@ -733,11 +734,13 @@ fn a_running_total_past_the_bound_is_refused_not_wrapped() {
         },
         author: Some("x".into()),
         split: equal(&["x"]),
+        basis: None,
     };
     let of = |n: usize| RemovalPlan {
         edits: (0..n).map(edit).collect(),
         blockers: vec![],
         joins: vec![],
+        may_withdraw_joins: true,
     };
     assert_eq!(
         of(2).share_changes().unwrap(),
@@ -750,4 +753,126 @@ fn a_running_total_past_the_bound_is_refused_not_wrapped() {
         of(3).share_changes().unwrap_err().code,
         code::AMOUNT_OVERFLOW
     );
+}
+
+// --- restating in one write (§10.8) -----------------------------------------
+
+impl Bill {
+    /// What `me` writes to take `id` off, computed from the log as it stands
+    /// and not yet added to it: the entries one device would push.
+    fn removal(&mut self, id: &str, me: &str) -> Vec<Value> {
+        let plan = self.plan(id, me);
+        let wallet = &self.wallets[me];
+        for _ in 0..60 {
+            wallet.tick();
+        }
+        removal_entries(&WalletBillHost::new(wallet), &plan).expect("a complete plan")
+    }
+}
+
+fn total(f: &FoldedBill) -> i64 {
+    f.bill.expenses.iter().map(|e| e.amount).sum()
+}
+
+#[test]
+fn an_honest_removal_takes_them_off_in_one_write() {
+    let (mut b, _) = taxi();
+    let written = b.removal("cai", "ana");
+    b.log.extend(written);
+    let f = b.fold();
+    assert!(f.bill.participants.iter().all(|p| p.id != "cai"));
+    assert!(f.set_aside.is_empty());
+    assert_eq!(total(&f), 3000);
+}
+
+#[test]
+fn a_member_the_split_type_does_not_read_is_taken_out_too() {
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cai");
+    b.expense(
+        "ana",
+        "snacks",
+        "ana",
+        400,
+        json!({"type": "equal", "among": ["ana", "ben"], "amounts": {"cai": 1}}),
+        None,
+    );
+    let plan = b.plan("cai", "ana");
+    assert!(plan.complete());
+    assert_eq!(plan.edits[0].split["amounts"], json!({}));
+    let written = b.removal("cai", "ana");
+    b.log.extend(written);
+    let f = b.fold();
+    assert!(f.bill.participants.iter().all(|p| p.id != "cai"));
+    assert!(f.set_aside.is_empty());
+}
+
+#[test]
+fn one_creator_on_two_devices_restating_at_once_leaves_one_expense() {
+    let (mut b, _) = taxi();
+    let phone = b.removal("cai", "ana");
+    let tablet = b.removal("cai", "ana");
+    assert_ne!(phone, tablet);
+    b.log.extend(phone);
+    b.log.extend(tablet);
+    let f = b.fold();
+    assert_eq!(f.bill.expenses.len(), 1);
+    assert_eq!(total(&f), 3000);
+    assert!(f.bill.participants.iter().all(|p| p.id != "cai"));
+    let codes: Vec<&str> = f.set_aside.iter().map(|s| s.code).collect();
+    assert!(codes.contains(&code::RESTATEMENT_SUPERSEDED));
+}
+
+#[test]
+fn a_correction_written_meanwhile_is_kept_and_they_stay_until_planned_again() {
+    let (mut b, boat) = boat();
+    let removal = b.removal("ben", "ana");
+    let mut corrected = boat["expense"].clone();
+    corrected["amount"] = json!(5000);
+    let target = id_of(&boat);
+    b.write("cai", |h| {
+        amend_entry(h, &target, "expense", corrected).unwrap()
+    });
+    b.log.extend(removal);
+    let f = b.fold();
+    assert_eq!(total(&f), 5000);
+    assert!(f.bill.participants.iter().any(|p| p.id == "ben"));
+    let codes: Vec<&str> = f.set_aside.iter().map(|s| s.code).collect();
+    assert!(codes.contains(&code::RESTATEMENT_STALE));
+    assert!(codes.contains(&code::PARTICIPANT_STILL_NAMED));
+    let again = b.removal("ben", "ana");
+    b.log.extend(again);
+    let done = b.fold();
+    assert_eq!(total(&done), 5000);
+    assert!(done.bill.participants.iter().all(|p| p.id != "ben"));
+}
+
+#[test]
+fn entries_for_a_plan_that_is_not_complete_are_refused() {
+    let (b, _) = boat();
+    // Cai paid for the boat: nobody can take Cai off while it stands.
+    let plan = b.plan("cai", "ana");
+    assert!(!plan.complete());
+    let ana = &b.wallets["ana"];
+    assert_eq!(
+        removal_entries(&WalletBillHost::new(ana), &plan)
+            .unwrap_err()
+            .code,
+        code::PARTICIPANT_STILL_NAMED
+    );
+    // Ben may not withdraw Cai's join, whatever names them.
+    let (b, _) = taxi();
+    let plan = b.plan("cai", "ben");
+    assert!(plan.blockers.is_empty() || !plan.complete());
+    assert!(!plan.may_withdraw_joins);
+    let ben = &b.wallets["ben"];
+    assert_eq!(
+        removal_entries(&WalletBillHost::new(ben), &plan)
+            .unwrap_err()
+            .code,
+        code::UNAUTHORIZED_ENTRY
+    );
+    // The person themselves may leave.
+    assert!(b.plan("cai", "cai").may_withdraw_joins);
 }

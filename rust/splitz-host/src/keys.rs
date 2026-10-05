@@ -1,6 +1,7 @@
 //! Where a bill's key and this account's signing identity live.
 
 use splitz_core::sha256;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::error::{HostError, Result};
 use crate::signing::{base64url_decode, base64url_encode};
@@ -55,6 +56,18 @@ impl Randomness for SystemRandomness {
 /// derived from anything an invite hands out: a bill key derived from the bill
 /// id would be reproducible by everyone who ever saw a scanned code, which is
 /// the one thing an invite gives away freely.
+/// The turn a bill's key is changed in, for the whole process: a read of the
+/// key and the write or delete that depends on it are one step, so a key
+/// replaced between them is never overwritten or deleted by a decision made
+/// about the one before it.
+static KEY_TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn key_turn() -> std::sync::MutexGuard<'static, ()> {
+    KEY_TURN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 pub struct SplitsKeys<'a> {
     store: &'a dyn SecretStore,
     random: &'a dyn Randomness,
@@ -109,6 +122,7 @@ impl<'a> SplitsKeys<'a> {
                 "a bill key is {KEY_LENGTH_BYTES} bytes of base64url"
             )));
         }
+        let _turn = key_turn();
         match self.read_bill_key(bill_id)? {
             Some(held) if !held.is_empty() && held == key => Ok(()),
             Some(held) if !held.is_empty() => Err(HostError::KeyConflict(bill_id.to_owned())),
@@ -119,7 +133,20 @@ impl<'a> SplitsKeys<'a> {
     /// Forgets a bill's key, so the keychain does not accumulate secrets for
     /// bills that no longer exist.
     pub fn forget_bill(&self, bill_id: &str) -> Result<()> {
+        let _turn = key_turn();
         self.store.delete(&Self::bill_key_name(bill_id))
+    }
+
+    /// Forgets `bill_id`'s key only while it is still `key`, and says whether
+    /// it did. The read and the delete are one turn: a key replaced since
+    /// `key` was read stays.
+    pub fn forget_bill_if_still(&self, bill_id: &str, key: &str) -> Result<bool> {
+        let _turn = key_turn();
+        if self.read_bill_key(bill_id).ok().flatten().as_deref() != Some(key) {
+            return Ok(false);
+        }
+        self.store.delete(&Self::bill_key_name(bill_id))?;
+        Ok(true)
     }
 
     /// A fresh key, base64url without padding, as an invite carries one.
@@ -173,6 +200,13 @@ pub const MAX_ACCOUNT_INDEX: u32 = 0x7fff_ffff;
 /// the passphrase, UTF-8, joined by a zero byte, and for any ZIP 32 account
 /// but account 0, a zero byte and `account_index` as four big-endian bytes.
 ///
+/// Both texts are read in Unicode NFKC, and the mnemonic's words are joined
+/// by one space whatever separated them. BIP39 hashes NFKD, and two texts
+/// share an NFKC form exactly when they share an NFKD one, so every spelling
+/// of one wallet's words and passphrase — and so one wallet's funds — is one
+/// participant. NFKC rather than NFKD leaves text as a keyboard types it
+/// unchanged: plain ASCII, and composed letters such as "ä".
+///
 /// The passphrase is part of it because it selects another wallet from one
 /// mnemonic; the account index because two accounts of one mnemonic are two
 /// people to a bill. Neither text may hold a zero byte, so no two inputs join
@@ -203,9 +237,20 @@ pub fn identity_secret_from_mnemonic(
             "account index {account_index} is above the ZIP 32 maximum {MAX_ACCOUNT_INDEX}"
         )));
     }
-    let mut secret = mnemonic.as_bytes().to_vec();
+    let words = mnemonic
+        .nfkc()
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if words.is_empty() {
+        return Err(HostError::Malformed(
+            "a mnemonic of white space derives an identity anyone can compute".to_owned(),
+        ));
+    }
+    let mut secret = words.into_bytes();
     secret.push(0);
-    secret.extend_from_slice(passphrase.as_bytes());
+    secret.extend(passphrase.nfkc().collect::<String>().into_bytes());
     if account_index != 0 {
         secret.push(0);
         secret.extend_from_slice(&account_index.to_be_bytes());

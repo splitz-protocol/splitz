@@ -9,7 +9,7 @@ new implementation; where the two disagree, `SPEC.md` is right.
 
 Three things, and the third is the one most implementations miss.
 
-**1. Reproduce the corpus.** `vectors/` holds 915 cases across 22 files.
+**1. Reproduce the corpus.** `vectors/` holds 956 cases across 23 files.
 Every case carries a `name`, its inputs, and either `expect` (the value the
 implementation must produce) or `error` (the §12 code it must refuse with).
 `vectors/README.md` describes each file's shape.
@@ -28,7 +28,8 @@ and are worth checking anywhere:
 - §9.3's instants against a reader nobody involved wrote (`tools/oracle/`).
 
 **3. Keep §14, which is addressed to the wallet.** `vectors/withholdings.json`
-is the only corpus file whose subject is the host rather than the wire. An
+and `vectors/writers.json` are the corpus files whose subject is the host
+rather than the wire. An
 implementation can reproduce §1–§12 exactly and still ask somebody to pay a
 debt they already paid, or send the balance of a bill to whoever minted the
 second claim on an id. A wallet is not conformant without it.

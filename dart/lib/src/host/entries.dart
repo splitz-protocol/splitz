@@ -79,7 +79,7 @@ Map<String, dynamic> joinBill({
   // order is the preference order, and a reader that reorders it settles to
   // a different address than the one asked for.
   if (payouts != null) {
-    payouts.forEach(_checkPayout);
+    payouts.forEach(checkWrittenPayout);
     participant['payouts'] = payouts;
   }
   return _sealed(host, <String, dynamic>{
@@ -88,16 +88,35 @@ Map<String, dynamic> joinBill({
   });
 }
 
-/// Refuses a payout nobody could be paid by (§9.1): a `zec` payout with no
-/// address, or a `swap` missing its asset, chain or address. A reader takes
-/// such a payout as unpayable and sends the payer to the next preference
-/// without asking, so it is never written. A type §9.1 does not define is
-/// left to every reader, which refuses it (`bill_unknown_payout_method`).
-void _checkPayout(Map<String, dynamic> payout) {
-  bool blank(String field) {
-    final v = payout[field];
-    return v is! String || v.trim().isEmpty;
-  }
+/// Whether [text] holds nothing but Unicode White_Space: the one set every
+/// implementation reads as blank. Dart's `trim` also drops U+FEFF and Rust's
+/// does not, so two readers of one rule would disagree about one input.
+bool _blank(Object? text) =>
+    text is! String ||
+    text.runes.every(
+      (r) =>
+          (r >= 0x09 && r <= 0x0D) ||
+          r == 0x20 ||
+          r == 0x85 ||
+          r == 0xA0 ||
+          r == 0x1680 ||
+          (r >= 0x2000 && r <= 0x200A) ||
+          r == 0x2028 ||
+          r == 0x2029 ||
+          r == 0x202F ||
+          r == 0x205F ||
+          r == 0x3000,
+    );
+
+/// Refuses a payout nobody could be paid by (§9.1), with
+/// `payout_incomplete`: a `zec` payout with no address, or a `swap` missing
+/// its asset, chain or address. A reader takes such a payout as unpayable
+/// and sends the payer to the next preference without asking, so it is never
+/// written — by a join or by an amendment of one. A type §9.1 does not
+/// define is left to every reader, which refuses it
+/// (`bill_unknown_payout_method`).
+void checkWrittenPayout(Map<String, dynamic> payout) {
+  bool blank(String field) => _blank(payout[field]);
 
   final missing = switch (payout['type']) {
     'zec' => [if (blank('address')) 'address'],
@@ -110,8 +129,30 @@ void _checkPayout(Map<String, dynamic> payout) {
   };
   if (missing.isNotEmpty) {
     throw splitz.SplitError(
-      splitz.SplitCode.billTypeError,
+      splitz.SplitCode.payoutIncomplete,
       'A ${payout['type']} payout names its ${missing.join(', ')}',
+    );
+  }
+}
+
+/// Refuses a payment record nobody should write (§9.2), by a record or by an
+/// amendment of one: an amount that is not more than nothing
+/// (`payment_not_positive`) — while unconfirmed it still withholds the whole
+/// debt it names — and a `swap` with no `reference`
+/// (`swap_missing_reference`), by which alone either side finds the swap
+/// again.
+void checkWrittenPayment(Map<String, dynamic> payment) {
+  final amount = payment['amount'];
+  if (amount is! int || amount <= 0) {
+    throw splitz.SplitError(
+      splitz.SplitCode.paymentNotPositive,
+      'A payment is more than nothing, got $amount',
+    );
+  }
+  if (payment['method'] == 'swap' && _blank(payment['reference'])) {
+    throw const splitz.SplitError(
+      splitz.SplitCode.swapMissingReference,
+      'A swap payment names its swap in reference',
     );
   }
 }
@@ -152,6 +193,38 @@ Map<String, dynamic> addExpense({
   });
 }
 
+/// Writes the `addExpense` at [targetId] again as this expense, replacing it
+/// (§10.8). [basis] is the id of the amendment applied to the target when it
+/// was read, or null when none was: the restatement is set aside with
+/// `restatement_stale` when the target has changed since, so a correction
+/// written meanwhile is kept rather than replaced by a copy that never saw
+/// it. Only the target's author or the bill's creator may restate it.
+Map<String, dynamic> restateExpense({
+  required BillHost host,
+  required String targetId,
+  required String? basis,
+  required String expenseId,
+  required String paidBy,
+  required int amount,
+  required Map<String, dynamic> split,
+  String? description,
+}) {
+  final expense = <String, dynamic>{
+    'id': authoredId(host.me, expenseId),
+    'paidBy': paidBy,
+    'amount': amount,
+    'at': _at(host),
+    'split': split,
+  };
+  if (description != null) expense['description'] = description;
+  return _sealed(host, <String, dynamic>{
+    'kind': 'addExpense',
+    'targetId': targetId,
+    if (basis != null) 'basis': basis,
+    'expense': expense,
+  });
+}
+
 /// Records a payment that was made. It moves no balance until a confirmation
 /// settles it (§10.5) — a record is a claim, not a settlement.
 ///
@@ -178,22 +251,11 @@ Map<String, dynamic> recordPayment({
   Map<String, dynamic>? paidAtRate,
   String? note,
 }) {
-  // §9.2: a payment of nothing records nothing, and while unconfirmed it
-  // still withholds the whole debt it names from this payer's request.
-  if (amount <= 0) {
-    throw splitz.SplitError(
-      splitz.SplitCode.negativeAmount,
-      'A payment is more than nothing, got $amount',
-    );
-  }
-  // §9.2: a swap is known only by its reference; without one neither side
-  // can find it again.
-  if (method == 'swap' && (reference == null || reference.trim().isEmpty)) {
-    throw const splitz.SplitError(
-      splitz.SplitCode.billTypeError,
-      'A swap payment names its swap in reference',
-    );
-  }
+  checkWrittenPayment({
+    'amount': amount,
+    'method': method,
+    if (reference != null) 'reference': reference,
+  });
   final payment = <String, dynamic>{
     'id': authoredId(host.me, paymentId),
     'from': host.me,
@@ -272,6 +334,16 @@ Map<String, dynamic> amendEntry({
   required String member,
   required Map<String, dynamic> payload,
 }) {
+  // What a join or a record may not write, an amendment of one may not
+  // either: it replaces the entry wholesale.
+  if (member == 'participant' && payload['payouts'] is List) {
+    for (final payout in payload['payouts'] as List) {
+      checkWrittenPayout(
+        payout is Map ? payout.cast<String, dynamic>() : const {},
+      );
+    }
+  }
+  if (member == 'payment') checkWrittenPayment(payload);
   return _sealed(host, <String, dynamic>{
     'kind': 'amendEntry',
     'targetId': targetId,

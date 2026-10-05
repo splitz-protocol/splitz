@@ -277,6 +277,14 @@ pub fn check_entry(entry: &Value) -> Result<()> {
             ));
         }
     }
+    if let Some(basis) = entry.get("basis") {
+        if !basis.is_string() {
+            return Err(SplitError::new(
+                code::BILL_TYPE_ERROR,
+                "A basis is a string",
+            ));
+        }
+    }
 
     if let Some(wanted) = payload_for(kind) {
         let Some(payload) = entry.get(wanted) else {
@@ -623,6 +631,14 @@ pub struct FoldResult {
     pub rate_entry: Option<String>,
     /// Who wrote that `setRate` (§14.2: a payer is shown who set the rate).
     pub rate_author: Option<String>,
+    /// The entries in force, in §10.2's order: admitted at ingress, not
+    /// withdrawn or replaced, not a withdrawal, and not a restatement that
+    /// does not apply. What §10.8's still-named check reads, whether or not
+    /// the fold went on to apply each one.
+    pub in_force: Vec<String>,
+    /// The amendment §10.4 would apply to each entry, by the entry's id: the
+    /// `basis` a restatement of that entry names (§10.8).
+    pub amendment_of: BTreeMap<String, String>,
 }
 
 fn split_pool(split: &Value) -> BTreeSet<String> {
@@ -958,6 +974,109 @@ pub fn fold_log_verified(
     // the figure the bill shows.
     amendments.retain(|_, e| !voided.contains(field(e, "id")));
 
+    // Restating an expense (§10.8). An `addExpense` carrying `targetId`
+    // replaces that expense: one restatement of a target applies, the first by
+    // §10.2's order among those allowed, and only while the target is on the
+    // bill as the restatement read it — the amendment it names as `basis` is
+    // still the one applied to the target. A restatement that does not apply
+    // is set aside and its target stays. Two devices taking one person off an
+    // expense at once therefore leave one expense, and a correction written
+    // meanwhile is kept rather than replaced by a copy that never saw it.
+    let mut restating: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    let mut restating_order: Vec<String> = Vec::new();
+    for entry in &entries {
+        if field(entry, "kind") == "addExpense" && entry.get("targetId").is_some() {
+            let target = field(entry, "targetId").to_owned();
+            if !restating.contains_key(&target) {
+                restating_order.push(target.clone());
+            }
+            restating.entry(target).or_default().push(entry);
+        }
+    }
+    let restatement_ids: BTreeSet<String> = restating
+        .values()
+        .flatten()
+        .map(|e| field(e, "id").to_owned())
+        .collect();
+    // The id of the restatement that applies to each target decided so far,
+    // or none.
+    let mut winner: BTreeMap<String, Option<String>> = BTreeMap::new();
+    for start in &restating_order {
+        // A restatement's target may be a restatement itself, decided first.
+        // Ids are digests of their entries, so the chain ends.
+        let mut chain = vec![start.clone()];
+        loop {
+            let last = chain.last().expect("a chain is never empty");
+            let Some(t) = by_id.get(last) else { break };
+            let up = field(t, "targetId").to_owned();
+            if !restatement_ids.contains(last) || winner.contains_key(&up) || chain.contains(&up) {
+                break;
+            }
+            chain.push(up);
+        }
+        for target_id in chain.iter().rev() {
+            if winner.contains_key(target_id) {
+                continue;
+            }
+            let target = by_id.get(target_id);
+            let on_bill = target.is_some_and(|t| {
+                !voided.contains(target_id)
+                    && (!restatement_ids.contains(target_id)
+                        || winner
+                            .get(field(t, "targetId"))
+                            .cloned()
+                            .flatten()
+                            .as_deref()
+                            == Some(target_id.as_str()))
+            });
+            let basis = amendments.get(target_id).map(|a| field(a, "id").to_owned());
+            let mut chosen: Option<String> = None;
+            for r in restating.get(target_id).into_iter().flatten() {
+                let id = field(r, "id");
+                if voided.contains(id) {
+                    continue;
+                }
+                let refusal = match target {
+                    None => Some(code::UNKNOWN_ENTRY),
+                    Some(t) if field(t, "kind") != "addExpense" => Some(code::AMEND_KIND_MISMATCH),
+                    Some(t)
+                        if field(r, "author") != field(t, "author")
+                            && field(r, "author") != creator =>
+                    {
+                        Some(code::UNAUTHORIZED_ENTRY)
+                    }
+                    Some(_)
+                        if !on_bill
+                            || r.get("basis").and_then(Value::as_str).map(str::to_owned)
+                                != basis =>
+                    {
+                        Some(code::RESTATEMENT_STALE)
+                    }
+                    Some(_) if chosen.is_some() => Some(code::RESTATEMENT_SUPERSEDED),
+                    Some(_) => None,
+                };
+                match refusal {
+                    Some(code) => set_aside.push(SetAside {
+                        id: id.to_owned(),
+                        code,
+                    }),
+                    None => chosen = Some(id.to_owned()),
+                }
+            }
+            winner.insert(target_id.clone(), chosen);
+        }
+    }
+    let applied_restatements: BTreeSet<String> = winner.values().flatten().cloned().collect();
+    let unapplied: BTreeSet<String> = restatement_ids
+        .difference(&applied_restatements)
+        .cloned()
+        .collect();
+    for (target_id, chosen) in &winner {
+        if chosen.is_some() {
+            voided.insert(target_id.clone());
+        }
+    }
+
     let effective = |entry: &Value| -> Value {
         amendments
             .get(field(entry, "id"))
@@ -986,7 +1105,10 @@ pub fn fold_log_verified(
     for (void_id, gone) in removals {
         let mut named = false;
         for other in &entries {
-            if voided.contains(field(other, "id")) || field(other, "kind") == "voidEntry" {
+            if voided.contains(field(other, "id"))
+                || field(other, "kind") == "voidEntry"
+                || unapplied.contains(field(other, "id"))
+            {
                 continue;
             }
             // The amendment and the entry it corrects are both read: the
@@ -1033,8 +1155,17 @@ pub fn fold_log_verified(
 
     let live: Vec<Value> = entries
         .iter()
-        .filter(|e| !voided.contains(field(e, "id")) && field(e, "kind") != "voidEntry")
+        .filter(|e| {
+            !voided.contains(field(e, "id"))
+                && field(e, "kind") != "voidEntry"
+                && !unapplied.contains(field(e, "id"))
+        })
         .cloned()
+        .collect();
+    let entries_in_force: Vec<String> = live.iter().map(|e| field(e, "id").to_owned()).collect();
+    let amendment_of: BTreeMap<String, String> = amendments
+        .iter()
+        .map(|(target, e)| (target.clone(), field(e, "id").to_owned()))
         .collect();
 
     // §10.4. Each entry is applied as amended, then as written. An amendment
@@ -1554,6 +1685,8 @@ pub fn fold_log_verified(
         payment_entries,
         rate_entry,
         rate_author,
+        in_force: entries_in_force,
+        amendment_of,
     })
 }
 

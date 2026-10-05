@@ -258,3 +258,19 @@ pub fn parse_minor_units(text: &str, exponent: u32) -> Option<i64> {
 pub fn parse_amount_in(text: &str, currency: &str) -> Option<i64> {
     parse_minor_units(text, currency_exponent(currency)?)
 }
+
+/// `text` read as an amount in `currency` that may be below zero: a refund's
+/// figure (§4), which [`parse_amount_in`] refuses. One ASCII `-` directly
+/// before the figure makes it negative, after any leading space; otherwise
+/// [`parse_amount_in`]'s rules, and `None` where they refuse. A form
+/// correcting a refund reads its figure with this, so the figure round-trips
+/// and its sign never flips because the field could not hold it.
+pub fn parse_signed_amount_in(text: &str, currency: &str) -> Option<i64> {
+    let typed = text.trim_start_matches([' ', '\t', '\r', '\n']);
+    match typed.strip_prefix('-') {
+        // The figure follows its sign directly: "- 3" is not a figure.
+        Some(rest) if rest.starts_with([' ', '\t', '\r', '\n']) => None,
+        Some(rest) => parse_amount_in(rest, currency).map(|m| -m),
+        None => parse_amount_in(typed, currency),
+    }
+}

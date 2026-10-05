@@ -1,9 +1,9 @@
 //! What this layer refuses, and why.
 //!
 //! Separate from `splitz_core::SplitError`: a §12 code names a protocol
-//! refusal that every implementation must reproduce, and nothing here is one.
-//! A host failure is local — a malformed key, a store that would not write —
-//! and carries a sentence rather than a code.
+//! refusal that every implementation must reproduce. A host failure is local —
+//! a malformed key, a store that would not write — and carries a sentence
+//! rather than a code; a protocol refusal passing through keeps its code.
 
 use std::fmt;
 
@@ -54,6 +54,9 @@ pub enum HostError {
     /// (§9.4, `invite_key_mismatch`): what opened under the held key is a
     /// version of the bill somebody else made.
     ForeignKey(String),
+    /// A protocol refusal met on the way through this layer, with its §12
+    /// code: a caller branches on the code whichever function raised it.
+    Protocol(splitz_core::SplitError),
 }
 
 /// Why a bill could not be synced. A key that is not the bill's own is
@@ -89,6 +92,7 @@ impl fmt::Display for HostError {
                 f,
                 "invite_key_mismatch: the key held for {bill} is not the one it was made with"
             ),
+            HostError::Protocol(e) => write!(f, "{}: {}", e.code, e.message),
         }
     }
 }

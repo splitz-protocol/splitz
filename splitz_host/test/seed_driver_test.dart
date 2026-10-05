@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:splitz_host/splitz_host.dart';
+import 'package:splitz_host/dev.dart';
 import 'support/process_port.dart';
 
 /// Runs `tool/seed-driver.py` against a throwaway seed file.

@@ -399,7 +399,7 @@ class PendingSends {
 
 /// A transaction the wallet built itself, as [unsentClaimRefusal] reads it.
 class OwnTransaction {
-  const OwnTransaction({required this.txid, required this.created});
+  const OwnTransaction({required this.txid, required this.created, this.sent});
 
   /// The transaction's id, as the wallet reports it.
   final String txid;
@@ -407,6 +407,11 @@ class OwnTransaction {
   /// When the wallet created it: a §9.3 instant. Fixed width, so it orders
   /// against a note's [PendingSend.at] by its text.
   final String created;
+
+  /// What it sent out of the account, in zatoshi: the balance it took less
+  /// its fee. Null when the wallet cannot say, which makes it one that may be
+  /// any send.
+  final int? sent;
 }
 
 /// Why a person may not say a send left nothing in the wallet (§14.3).
@@ -416,6 +421,20 @@ enum UnsentClaim {
 
   /// The wallet built a transaction at or after the note was written.
   builtSince,
+}
+
+/// What [send] sends out of the account in all, in zatoshi: its outputs'
+/// ZEC, or a swap deposit's. Null when the note does not say.
+int? _sendTotal(PendingSend send) {
+  if (send.sent.isNotEmpty) {
+    var total = 0;
+    for (final z in send.sent.values) {
+      if (z < 0 || total > splitz.maxAmount - z) return null;
+      total += z;
+    }
+    return total;
+  }
+  return send.zatoshi;
 }
 
 /// The refusal of a person's word that [send] left nothing in the wallet, or
@@ -440,6 +459,13 @@ class UnsentClaimRefusal {
 /// second: a wallet stamps its transactions in whole seconds, and the note is
 /// written before the wallet is called. A note that will not read names no
 /// instant, so only [stillSending] holds it.
+///
+/// Only a transaction that may be this send holds it: one that sent out what
+/// the note's request sends in all. A later payment of something else from
+/// the same wallet is not this send, and holding the note on it would leave
+/// the bill unpayable for good, with recording that transaction as this
+/// payment the only way out. A transaction or a note that does not say what
+/// it sent may be any send, and holds it.
 UnsentClaimRefusal? unsentClaimRefusal(
   PendingSend send, {
   required bool stillSending,
@@ -448,9 +474,11 @@ UnsentClaimRefusal? unsentClaimRefusal(
   if (stillSending) return const UnsentClaimRefusal(UnsentClaim.stillSending);
   if (send.damaged || send.at.length < 19) return null;
   final began = send.at.substring(0, 19);
+  final total = _sendTotal(send);
   for (final t in own) {
     if (t.created.length >= 19 &&
-        t.created.substring(0, 19).compareTo(began) >= 0) {
+        t.created.substring(0, 19).compareTo(began) >= 0 &&
+        (t.sent == null || total == null || t.sent == total)) {
       return UnsentClaimRefusal(UnsentClaim.builtSince, txid: t.txid);
     }
   }

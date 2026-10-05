@@ -197,9 +197,7 @@ fn refuse_foreign_key(
         .iter()
         .any(|e| splitz_core::create_refuses_key(e, bill_id, key));
     if foreign {
-        if keys.read_bill_key(bill_id).ok().flatten().as_deref() == Some(key) {
-            keys.forget_bill(bill_id)?;
-        }
+        keys.forget_bill_if_still(bill_id, key)?;
         return Err(HostError::ForeignKey(bill_id.to_owned()));
     }
     Ok(())

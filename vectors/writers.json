@@ -1,0 +1,162 @@
+{
+  "description": "What a host refuses to write. SPEC.md sections 9.1 and 9.2.",
+  "count": 17,
+  "cases": [
+    {
+      "name": "a_zec_payout_with_an_address",
+      "payout": {
+        "type": "zec",
+        "address": "u1writer"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "a_zec_payout_with_no_address",
+      "payout": {
+        "type": "zec"
+      },
+      "error": "payout_incomplete"
+    },
+    {
+      "name": "a_zec_payout_with_an_empty_address",
+      "payout": {
+        "type": "zec",
+        "address": ""
+      },
+      "error": "payout_incomplete"
+    },
+    {
+      "name": "a_zec_payout_of_white_space",
+      "payout": {
+        "type": "zec",
+        "address": " \u3000\t"
+      },
+      "error": "payout_incomplete"
+    },
+    {
+      "name": "a_byte_order_mark_is_not_white_space",
+      "payout": {
+        "type": "zec",
+        "address": "\ufeff"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "an_information_separator_is_not_white_space",
+      "payout": {
+        "type": "zec",
+        "address": "\u001c"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "a_swap_payout_whole",
+      "payout": {
+        "type": "swap",
+        "asset": "usdc",
+        "chain": "base",
+        "address": "0xabc"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "a_swap_payout_with_no_chain",
+      "payout": {
+        "type": "swap",
+        "asset": "usdc",
+        "address": "0xabc"
+      },
+      "error": "payout_incomplete"
+    },
+    {
+      "name": "a_cash_payout_needs_nothing",
+      "payout": {
+        "type": "cash"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "an_unknown_payout_is_left_to_the_reader",
+      "payout": {
+        "type": "gold"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "a_payment_of_one",
+      "payment": {
+        "amount": 1,
+        "method": "cash"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "a_payment_of_nothing",
+      "payment": {
+        "amount": 0,
+        "method": "cash"
+      },
+      "error": "payment_not_positive"
+    },
+    {
+      "name": "a_negative_payment",
+      "payment": {
+        "amount": -5,
+        "method": "cash"
+      },
+      "error": "payment_not_positive"
+    },
+    {
+      "name": "a_swap_with_its_reference",
+      "payment": {
+        "amount": 100,
+        "method": "swap",
+        "reference": "intent-1"
+      },
+      "expect": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "a_swap_with_no_reference",
+      "payment": {
+        "amount": 100,
+        "method": "swap"
+      },
+      "error": "swap_missing_reference"
+    },
+    {
+      "name": "a_swap_whose_reference_is_white_space",
+      "payment": {
+        "amount": 100,
+        "method": "swap",
+        "reference": "\u2002"
+      },
+      "error": "swap_missing_reference"
+    },
+    {
+      "name": "a_shielded_payment_needs_no_reference",
+      "payment": {
+        "amount": 100,
+        "method": "shieldedZec"
+      },
+      "expect": {
+        "accepted": true
+      }
+    }
+  ]
+}

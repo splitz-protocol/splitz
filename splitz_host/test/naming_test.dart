@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 
 /// One table, pinned in both host packages.
 const _skeletons =
-    r'''[["Ana", "ana"], ["ANA", "ana"], ["\u0410na", "ana"], ["\u0430n\u0430", "ana"], ["Ana\u200b", "ana"], ["A\u0301na", "ana"], ["  Ana   Ben ", "ana ben"], ["\uff22en", "ben"], ["\ud835\udc01en", "ben"], ["\ud835\udfcf\ud835\udfd0", "12"], ["\u0392\u03b5\u03bd", "\u03b2ev"], ["\u03a3\u0399\u03a3\u03a5\u03a6\u039f\u03a3", "\u03c3i\u03c3u\u03c6o\u03c3"], ["\u0130stanbul", "istanbul"], ["\u01c0ucy", "lucy"], ["\u0391\u039d\u0391", "ava"], ["\u041e\u043b\u0435\u0433", "o\u043be\u0433"], ["stra\u00dfe", "stra\u00dfe"], ["\u01c5", "\u01c6"], ["Ana\u3000Ben", "ana ben"], ["\ufeffAna", "ana"], ["Ana\udb40\udc41", "ana"]]''';
+    r'''[["Ana", "ana"], ["ANA", "ana"], ["\u0410na", "ana"], ["\u0430n\u0430", "ana"], ["Ana\u200b", "ana"], ["A\u0301na", "ana"], ["  Ana   Ben ", "ana ben"], ["\uff22en", "ben"], ["\ud835\udc01en", "ben"], ["\ud835\udfcf\ud835\udfd0", "i2"], ["\u0392\u03b5\u03bd", "bev"], ["\u03a3\u0399\u03a3\u03a5\u03a6\u039f\u03a3", "\u03c3i\u03c3y\u03c6o\u03c3"], ["\u0130stanbul", "istanbui"], ["\u01c0ucy", "iucy"], ["\u0391\u039d\u0391", "ana"], ["\u041e\u043b\u0435\u0433", "o\u043be\u0433"], ["stra\u00dfe", "stra\u00dfe"], ["\u01c5", "\u01c6"], ["Ana\u3000Ben", "ana ben"], ["\ufeffAna", "ana"], ["Ana\udb40\udc41", "ana"], ["\u0397ANS", "hans"], ["HANS", "hans"], ["AIex", "aiex"], ["Alex", "aiex"], ["Ana\u2002Lee", "ana iee"], ["\u039d\u03a5", "ny"]]''';
 
 splitz.Bill _bill(List<(String, String)> people) => splitz.Bill(
   id: 'b',

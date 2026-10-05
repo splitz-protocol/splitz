@@ -40,6 +40,8 @@ fn bill(rate_by: &str) -> FoldedBill {
         payment_entries: BTreeMap::new(),
         rate_entry: None,
         rate_author: Some(rate_by.into()),
+        in_force: vec![],
+        amendment_of: BTreeMap::new(),
     }
 }
 

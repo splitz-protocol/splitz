@@ -103,16 +103,21 @@ pub fn name_skeleton(name: &str) -> String {
     let mut out = String::new();
     let mut space = false;
     for c in name.chars().flat_map(|c| {
-        let folded = case_folded(c as u32);
+        let capital = CAPITAL_LOOK_ALIKE
+            .iter()
+            .find(|(from, _)| *from == c as u32)
+            .and_then(|(_, to)| char::from_u32(*to));
+        let folded = capital.is_none() && case_folded(c as u32);
         c.to_lowercase()
             .filter(move |_| folded)
-            .chain((!folded).then_some(c))
+            .chain(capital)
+            .chain((capital.is_none() && !folded).then_some(c))
     }) {
         let r = c as u32;
         if invisible(r) || combining(r) {
             continue;
         }
-        if matches!(r, 0x20 | 0x09 | 0xA0 | 0x3000) {
+        if white_space(r) {
             space = !out.is_empty();
             continue;
         }
@@ -151,7 +156,49 @@ fn combining(r: u32) -> bool {
 }
 
 /// Lower-case Cyrillic and Greek letters that render as a Latin one.
-const LATIN_LOOK_ALIKE: [(u32, u32); 31] = [
+/// Unicode's White_Space property: every one is a gap between words.
+fn white_space(r: u32) -> bool {
+    matches!(r,
+        0x09..=0x0D | 0x20 | 0x85 | 0xA0 | 0x1680 | 0x2000..=0x200A | 0x2028 | 0x2029
+        | 0x202F | 0x205F | 0x3000)
+}
+
+/// Greek and Cyrillic capitals that render as a Latin capital, mapped before
+/// case folding: folded first, Ν and Υ become ν and υ, which render as v and
+/// u, and the capital that reads as N or Y would escape the comparison.
+const CAPITAL_LOOK_ALIKE: [(u32, u32); 29] = [
+    (0x391, 0x61), // Α
+    (0x392, 0x62), // Β
+    (0x395, 0x65), // Ε
+    (0x396, 0x7A), // Ζ
+    (0x397, 0x68), // Η
+    (0x399, 0x69), // Ι
+    (0x39A, 0x6B), // Κ
+    (0x39C, 0x6D), // Μ
+    (0x39D, 0x6E), // Ν
+    (0x39F, 0x6F), // Ο
+    (0x3A1, 0x70), // Ρ
+    (0x3A4, 0x74), // Τ
+    (0x3A5, 0x79), // Υ
+    (0x3A7, 0x78), // Χ
+    (0x405, 0x73), // Ѕ
+    (0x406, 0x69), // І
+    (0x408, 0x6A), // Ј
+    (0x410, 0x61), // А
+    (0x412, 0x62), // В
+    (0x415, 0x65), // Е
+    (0x41A, 0x6B), // К
+    (0x41C, 0x6D), // М
+    (0x41D, 0x68), // Н
+    (0x41E, 0x6F), // О
+    (0x420, 0x70), // Р
+    (0x421, 0x63), // С
+    (0x422, 0x74), // Т
+    (0x423, 0x79), // У
+    (0x425, 0x78), // Х
+];
+
+const LATIN_LOOK_ALIKE: [(u32, u32); 33] = [
     (0x430, 0x61),
     (0x432, 0x62),
     (0x435, 0x65),
@@ -167,7 +214,7 @@ const LATIN_LOOK_ALIKE: [(u32, u32); 31] = [
     (0x443, 0x79),
     (0x445, 0x78),
     (0x455, 0x73),
-    (0x4CF, 0x6C),
+    (0x4CF, 0x69),
     (0x3B1, 0x61),
     (0x3B5, 0x65),
     (0x3B9, 0x69),
@@ -179,7 +226,10 @@ const LATIN_LOOK_ALIKE: [(u32, u32); 31] = [
     (0x3C5, 0x75),
     (0x3C7, 0x78),
     (0x131, 0x69),
-    (0x1C0, 0x6C),
+    (0x1C0, 0x69),
+    // l, which a sans-serif capital I renders as, and 1 likewise.
+    (0x6C, 0x69),
+    (0x31, 0x69),
     (0x251, 0x61),
     (0x261, 0x67),
     (0x269, 0x69),

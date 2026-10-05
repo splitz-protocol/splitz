@@ -435,7 +435,7 @@ void main() {
             isA<splitz.SplitError>().having(
               (e) => e.code,
               'code',
-              splitz.SplitCode.billTypeError,
+              splitz.SplitCode.payoutIncomplete,
             ),
           ),
           reason: '$bad',
@@ -471,7 +471,7 @@ void main() {
             amount: amount,
             method: 'cash',
           ),
-          refusedWith(splitz.SplitCode.negativeAmount),
+          refusedWith(splitz.SplitCode.paymentNotPositive),
           reason: '$amount',
         );
       }
@@ -485,10 +485,65 @@ void main() {
             method: 'swap',
             reference: reference,
           ),
-          refusedWith(splitz.SplitCode.billTypeError),
+          refusedWith(splitz.SplitCode.swapMissingReference),
           reason: '$reference',
         );
       }
+      // A byte order mark is not white space, in any implementation.
+      expect(
+        recordPayment(
+          host: bill.ana,
+          paymentId: 'bom',
+          to: 'ben',
+          amount: 100,
+          method: 'swap',
+          reference: '\ufeff',
+        )['payment']['reference'],
+        '\ufeff',
+      );
+      // An amendment replaces its target wholesale, so it may not write what
+      // the record itself may not.
+      expect(
+        () => amendEntry(
+          host: bill.ana,
+          targetId: 'p1',
+          member: 'payment',
+          payload: {'id': 'ana:p1', 'amount': 0, 'method': 'cash'},
+        ),
+        refusedWith(splitz.SplitCode.paymentNotPositive),
+      );
+      expect(
+        () => amendEntry(
+          host: bill.ana,
+          targetId: 'p1',
+          member: 'payment',
+          payload: {'id': 'ana:p1', 'amount': 5, 'method': 'swap'},
+        ),
+        refusedWith(splitz.SplitCode.swapMissingReference),
+      );
+      expect(
+        () => amendEntry(
+          host: bill.ana,
+          targetId: 'j1',
+          member: 'participant',
+          payload: {
+            'id': 'ana',
+            'payouts': [
+              {'type': 'zec', 'address': ''},
+            ],
+          },
+        ),
+        refusedWith(splitz.SplitCode.payoutIncomplete),
+      );
+      expect(
+        amendEntry(
+          host: bill.ana,
+          targetId: 'p1',
+          member: 'payment',
+          payload: {'id': 'ana:p1', 'amount': 5, 'method': 'cash'},
+        )['payment']['amount'],
+        5,
+      );
       // One unit, a swap that names its intent, and cash naming nothing are
       // all honest records.
       expect(

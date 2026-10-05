@@ -82,18 +82,23 @@ pub fn create_bill(
     Ok(with_id(value, id))
 }
 
-/// Refuses a payout nobody could be paid by (§9.1): a `zec` payout with no
-/// address, or a `swap` missing its asset, chain or address. A reader takes
-/// such a payout as unpayable and sends the payer to the next preference
-/// without asking, so it is never written. A type §9.1 does not define is
-/// left to every reader, which refuses it (`bill_unknown_payout_method`).
-fn check_payout(payout: &Value) -> Result<()> {
-    let blank = |field: &str| {
-        payout
-            .get(field)
-            .and_then(Value::as_str)
-            .is_none_or(|v| v.trim().is_empty())
-    };
+/// Whether `text` holds nothing but Unicode White_Space: the one set every
+/// implementation reads as blank. Dart's `trim` also drops U+FEFF and Rust's
+/// does not, so two readers of one rule would disagree about one input.
+fn blank(text: Option<&Value>) -> bool {
+    text.and_then(Value::as_str)
+        .is_none_or(|v| v.chars().all(char::is_whitespace))
+}
+
+/// Refuses a payout nobody could be paid by (§9.1), with
+/// `payout_incomplete`: a `zec` payout with no address, or a `swap` missing
+/// its asset, chain or address. A reader takes such a payout as unpayable
+/// and sends the payer to the next preference without asking, so it is never
+/// written — by a join or by an amendment of one. A type §9.1 does not
+/// define is left to every reader, which refuses it
+/// (`bill_unknown_payout_method`).
+pub fn check_written_payout(payout: &Value) -> Result<()> {
+    let blank = |field: &str| blank(payout.get(field));
     let kind = payout.get("type").and_then(Value::as_str).unwrap_or("");
     let fields: &[&str] = match kind {
         "zec" => &["address"],
@@ -107,10 +112,38 @@ fn check_payout(payout: &Value) -> Result<()> {
         Ok(())
     } else {
         Err(crate::error::SplitError::new(
-            crate::error::code::BILL_TYPE_ERROR,
+            crate::error::code::PAYOUT_INCOMPLETE,
             format!("A {kind} payout names its {}", missing.join(", ")),
         ))
     }
+}
+
+/// Refuses a payment record nobody should write (§9.2), by a record or by an
+/// amendment of one: an amount that is not more than nothing
+/// (`payment_not_positive`) — while unconfirmed it still withholds the whole
+/// debt it names — and a `swap` with no `reference`
+/// (`swap_missing_reference`), by which alone either side finds the swap
+/// again.
+pub fn check_written_payment(payment: &Value) -> Result<()> {
+    let amount = payment.get("amount").and_then(Value::as_i64);
+    if amount.is_none_or(|a| a <= 0) {
+        return Err(crate::error::SplitError::new(
+            crate::error::code::PAYMENT_NOT_POSITIVE,
+            format!(
+                "A payment is more than nothing, got {}",
+                payment.get("amount").unwrap_or(&Value::Null)
+            ),
+        ));
+    }
+    if payment.get("method").and_then(Value::as_str) == Some("swap")
+        && blank(payment.get("reference"))
+    {
+        return Err(crate::error::SplitError::new(
+            crate::error::code::SWAP_MISSING_REFERENCE,
+            "A swap payment names its swap in reference",
+        ));
+    }
+    Ok(())
 }
 
 /// Joins a bill, or restates this device's own participant record.
@@ -141,7 +174,7 @@ pub fn join_bill(
     // a different address than the one asked for.
     if let Some(payouts) = payouts {
         for payout in &payouts {
-            check_payout(payout)?;
+            check_written_payout(payout)?;
         }
         participant.insert("payouts".to_owned(), Value::Array(payouts));
     }
@@ -199,6 +232,45 @@ pub fn add_expense(
     sealed(host, body)
 }
 
+/// Writes the `addExpense` at `target_id` again as this expense, replacing it
+/// (§10.8). `basis` is the id of the amendment applied to the target when it
+/// was read, or `None` when none was: the restatement is set aside with
+/// `restatement_stale` when the target has changed since, so a correction
+/// written meanwhile is kept rather than replaced by a copy that never saw
+/// it. Only the target's author or the bill's creator may restate it.
+#[allow(clippy::too_many_arguments)]
+pub fn restate_expense(
+    host: &dyn BillHost,
+    target_id: &str,
+    basis: Option<&str>,
+    expense_id: &str,
+    paid_by: &str,
+    amount: i64,
+    split: Value,
+    description: Option<&str>,
+) -> Result<Value> {
+    let mut expense = Map::new();
+    expense.insert(
+        "id".to_owned(),
+        Value::from(authored_id(host.me(), expense_id)),
+    );
+    expense.insert("paidBy".to_owned(), Value::from(paid_by));
+    expense.insert("amount".to_owned(), Value::from(amount));
+    expense.insert("at".to_owned(), Value::from(at(host)?));
+    expense.insert("split".to_owned(), split);
+    if let Some(description) = description {
+        expense.insert("description".to_owned(), Value::from(description));
+    }
+    let mut body = Map::new();
+    body.insert("kind".to_owned(), Value::from("addExpense"));
+    body.insert("targetId".to_owned(), Value::from(target_id));
+    if let Some(basis) = basis {
+        body.insert("basis".to_owned(), Value::from(basis));
+    }
+    body.insert("expense".to_owned(), Value::Object(expense));
+    sealed(host, body)
+}
+
 /// Records a payment that was made. It moves no balance until a confirmation
 /// settles it (§10.5) — a record is a claim, not a settlement.
 ///
@@ -226,22 +298,13 @@ pub fn record_payment(
     paid_at_rate: Option<Value>,
     note: Option<&str>,
 ) -> Result<Value> {
-    // §9.2: a payment of nothing records nothing, and while unconfirmed it
-    // still withholds the whole debt it names from this payer's request.
-    if amount <= 0 {
-        return Err(crate::error::SplitError::new(
-            crate::error::code::NEGATIVE_AMOUNT,
-            format!("A payment is more than nothing, got {amount}"),
-        ));
+    let mut asked = Map::new();
+    asked.insert("amount".to_owned(), Value::from(amount));
+    asked.insert("method".to_owned(), Value::from(method));
+    if let Some(reference) = reference {
+        asked.insert("reference".to_owned(), Value::from(reference));
     }
-    // §9.2: a swap is known only by its reference; without one neither side
-    // can find it again.
-    if method == "swap" && reference.is_none_or(|r| r.trim().is_empty()) {
-        return Err(crate::error::SplitError::new(
-            crate::error::code::BILL_TYPE_ERROR,
-            "A swap payment names its swap in reference",
-        ));
-    }
+    check_written_payment(&Value::Object(asked))?;
     let mut payment = Map::new();
     payment.insert(
         "id".to_owned(),
@@ -334,6 +397,21 @@ pub fn amend_entry(
     member: &str,
     payload: Value,
 ) -> Result<Value> {
+    // What a join or a record may not write, an amendment of one may not
+    // either: it replaces the entry wholesale.
+    if member == "participant" {
+        for payout in payload
+            .get("payouts")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            check_written_payout(payout)?;
+        }
+    }
+    if member == "payment" {
+        check_written_payment(&payload)?;
+    }
     let mut body = Map::new();
     body.insert("kind".to_owned(), Value::from("amendEntry"));
     body.insert("targetId".to_owned(), Value::from(target_id));
