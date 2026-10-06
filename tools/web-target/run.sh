@@ -13,10 +13,11 @@
 # stops happening.
 #
 # What refuses is dart2js itself, on the integer literals it cannot represent:
-# 9223372036854775807, i64::MAX, which bounds every amount (§2.2). Nothing else
-# in the package keeps the refusal, so the lane requires dart2js to refuse it
-# at `maxAmount`'s own declaration: the same digits elsewhere would keep the
-# lane green after the bound was rewritten as arithmetic.
+# 9223372036854775807, i64::MAX, which bounds every amount (§2.2). Other
+# literals refuse too — BLAKE2b's initialisation vectors in address.dart — so
+# the lane requires dart2js to refuse at `maxAmount`'s own declaration: a
+# refusal elsewhere would keep the lane green after the bound was rewritten as
+# arithmetic.
 #
 # Exit status is 1 when the package compiles, or when it fails anywhere but
 # that declaration.

@@ -141,6 +141,7 @@ pub(crate) fn obligation(o: &splitz_core::host::PayerObligation) -> ffi::PayerOb
                 owed: a.owed,
                 paid: a.paid,
                 paid_to: a.paid_to.clone(),
+                others_paid: a.others_paid,
             })
             .collect(),
         rate: rate(&o.rate),
@@ -200,6 +201,8 @@ pub(crate) fn event(e: &splitz_host::BillEvent) -> ffi::BillEvent {
         refused_code: e.refused_code.clone(),
         confirmed: e.confirmed,
         applied: e.applied(),
+        taken_off: e.taken_off.clone(),
+        moved_to: e.moved_to.clone(),
     }
 }
 

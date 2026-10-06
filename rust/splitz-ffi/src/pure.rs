@@ -211,19 +211,76 @@ pub fn add_person_entry(
     name: String,
 ) -> Result<String> {
     let folded = folded_for(&facts, &bill_id, &entries)?;
-    if id == facts.me || folded.bill.participant(&id).is_some() {
-        return Err(SplitzError::Protocol {
-            code: splitz_core::code::DUPLICATE_PARTICIPANT.to_owned(),
-            detail: "somebody on this bill already goes by that".to_owned(),
-        });
-    }
-    let as_them = HostFacts { me: id, ..facts };
     let host = FactHost {
-        facts: &as_them,
+        facts: &facts,
         sign: None,
         verify: None,
     };
-    Ok(join_bill(&host, Some(&name), None, None, None)?.to_string())
+    Ok(splitz_host::add_person_entry(&host, &folded, &id, &name)?.to_string())
+}
+
+/// The entry this account withdraws to take the expense `expense_id` off the
+/// bill `entries` fold to (§10.8): the entry that put it there, or this
+/// account's own first expense when that entry is a restatement a removal
+/// wrote (`expense_withdrawal_target`). `None` when the bill holds no such
+/// expense.
+#[uniffi::export]
+pub fn expense_withdrawal_target(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    expense_id: String,
+) -> Result<Option<String>> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    let parsed = parse_entries(&entries)?;
+    Ok(splitz_host::expense_withdrawal_target(
+        &folded,
+        &parsed,
+        &expense_id,
+        &facts.me,
+    ))
+}
+
+/// Who may correct the expense `expense_id` on the bill `entries` fold to
+/// (§10.4, §10.8): the author of the entry that puts it there, and — when that
+/// is a restatement a removal wrote — the author of the expense it restates
+/// (`expense_correctors`). Empty when the bill holds no such expense.
+#[uniffi::export]
+pub fn expense_correctors(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    expense_id: String,
+) -> Result<Vec<String>> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    let parsed = parse_entries(&entries)?;
+    Ok(splitz_host::expense_correctors(
+        &folded,
+        &parsed,
+        &expense_id,
+    ))
+}
+
+/// Why this account must still write its own signed join on the bill
+/// `entries` fold to (§10.7), or none when it is on it as itself
+/// (`joined_as_me`): `not_joined` when no record stands under `facts.me`, and
+/// `not_bound` when one does that the fold binds to no key — one somebody else
+/// may have planted, with their own payout. Its own join binds its key and
+/// takes the record back.
+#[uniffi::export]
+pub fn join_needed(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+) -> Result<Option<String>> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    Ok(if splitz_host::joined_as_me(&folded, &facts.me) {
+        None
+    } else if folded.bill.participant(&facts.me).is_none() {
+        Some("not_joined".to_owned())
+    } else {
+        Some("not_bound".to_owned())
+    })
 }
 
 /// `first`, then every payout `who` declares that it does not take the place
@@ -381,6 +438,57 @@ pub fn confirm_payment_entry(
     })
 }
 
+/// A confirmation of the payment `payment_id` on the bill `entries` fold to,
+/// written as `confirmer_for` names (§10.5, §14.11): signed as this account
+/// when it is the payee, or unsigned as the payee when this account is the
+/// creator and the payee somebody it added by hand, who holds no key.
+/// Refused with `unauthorized_confirmation` when this account may do neither,
+/// and `unknown_payment` when the bill holds no such payment.
+#[uniffi::export]
+#[allow(clippy::too_many_arguments)]
+pub fn confirm_payment_for_entry(
+    facts: HostFacts,
+    bill_id: String,
+    entries: Vec<String>,
+    payment_id: String,
+    method: String,
+    reference: Option<String>,
+    record: String,
+    seed: String,
+) -> Result<String> {
+    let folded = folded_for(&facts, &bill_id, &entries)?;
+    let payment = folded
+        .bill
+        .payments
+        .iter()
+        .find(|p| p.id == payment_id)
+        .ok_or_else(|| SplitzError::Protocol {
+            code: splitz_core::code::UNKNOWN_PAYMENT.to_owned(),
+            detail: "the bill holds no such payment".to_owned(),
+        })?;
+    let Some(confirmer) = splitz_host::confirmer_for(&folded, payment, &facts.me) else {
+        return Err(SplitzError::Protocol {
+            code: splitz_core::code::UNAUTHORIZED_CONFIRMATION.to_owned(),
+            detail: "only the payee, or the creator for somebody it added, confirms".to_owned(),
+        });
+    };
+    if confirmer == facts.me {
+        return build(&facts, &seed, Some(&bill_id), |host| {
+            confirm_payment(host, &payment_id, &method, reference.as_deref(), &record)
+        });
+    }
+    let as_them = HostFacts {
+        me: confirmer,
+        ..facts
+    };
+    let host = FactHost {
+        facts: &as_them,
+        sign: None,
+        verify: None,
+    };
+    Ok(confirm_payment(&host, &payment_id, &method, reference.as_deref(), &record)?.to_string())
+}
+
 /// Snapshots a rate onto the bill (§7), so every device prices from one figure
 /// rather than from whatever its own feed said.
 #[uniffi::export]
@@ -399,6 +507,19 @@ pub fn set_rate_entry(
 
 /// The bill as the creator's device folds `entries`, verified, for the
 /// entries §10.9 and §14.9 write and refuse.
+/// §14.9: no payment starts on a bill its creator has not closed, a swap's
+/// deposit included. `settle_refusal` is the host's rule; this carries it to
+/// every swap export that reads the bill.
+fn refuse_unless_closed(folded: &splitz_core::host::FoldedBill) -> Result<()> {
+    match splitz_core::host::settle_refusal(folded) {
+        Some(code) => Err(SplitzError::Protocol {
+            code: code.to_owned(),
+            detail: "the bill is not closed for settling".to_owned(),
+        }),
+        None => Ok(()),
+    }
+}
+
 fn folded_for(
     facts: &HostFacts,
     bill_id: &str,
@@ -487,7 +608,7 @@ pub fn void_entry_for(
     seed: String,
 ) -> Result<String> {
     build(&facts, &seed, Some(&bill_id), |host| {
-        void_entry(host, &target_id)
+        void_entry(host, &target_id, None)
     })
 }
 
@@ -888,7 +1009,7 @@ pub fn refunds_behind(
 ) -> Result<Option<ffi::RefundsBehind>> {
     let folded = folded_bill(&facts, &bill_id, &entries)?;
     Ok(
-        splitz_host::refunds_behind(&settlement_back(&settlement), &folded).map(|r| {
+        splitz_host::refunds_behind(&settlement_back(&settlement), &folded)?.map(|r| {
             ffi::RefundsBehind {
                 refunded: r.refunded,
                 authors: r.authors,
@@ -1667,10 +1788,12 @@ pub fn own_payment_withdrawal_refusal(
         ffi::TransactionState::Mined => splitz_host::TransactionState::Mined,
         ffi::TransactionState::Waiting => splitz_host::TransactionState::Waiting,
         ffi::TransactionState::Expired => splitz_host::TransactionState::Expired,
+        ffi::TransactionState::Unread => splitz_host::TransactionState::Unread,
     });
     splitz_host::own_payment_withdrawal_refusal(&payment, &me, state).map(|r| match r {
         splitz_host::OwnPaymentWithdrawal::Mined => ffi::OwnPaymentWithdrawal::Mined,
         splitz_host::OwnPaymentWithdrawal::Waiting => ffi::OwnPaymentWithdrawal::Waiting,
+        splitz_host::OwnPaymentWithdrawal::Unread => ffi::OwnPaymentWithdrawal::Unread,
     })
 }
 
@@ -2028,9 +2151,10 @@ pub fn check_payee_review(
     Ok(found.into_iter().map(review_finding).collect())
 }
 
-/// The payments this device may confirm, newest first (§10.5): those naming
-/// `facts.me` as payee and not yet confirmed. Only the payee confirms; each is
-/// shown with what [`check_payee_review`] holds a confirm screen to.
+/// The payments this device may confirm, newest first (§10.5): those not yet
+/// confirmed that `confirmer_for` lets `facts.me` confirm — its own, and, for
+/// the creator, those paid to somebody it added by hand. Each is shown with
+/// what [`check_payee_review`] holds a confirm screen to.
 ///
 /// `bill_id` names the bill the entries belong to, as for [`fold_entries`].
 #[uniffi::export]
@@ -2040,12 +2164,10 @@ pub fn awaiting_my_confirmation(
     entries: Vec<String>,
 ) -> Result<Vec<ffi::PaymentRecord>> {
     let folded = folded_bill(&facts, &bill_id, &entries)?;
-    Ok(
-        splitz_host::awaiting_confirmation_by(&folded.bill, &facts.me)
-            .iter()
-            .map(convert::payment)
-            .collect(),
-    )
+    Ok(splitz_host::awaiting_confirmation_for(&folded, &facts.me)
+        .iter()
+        .map(convert::payment)
+        .collect())
 }
 
 fn review_finding(f: splitz_host::ReviewFinding) -> ffi::ReviewFinding {
@@ -2120,6 +2242,7 @@ fn payer_obligation(o: &ffi::PayerObligation) -> Result<splitz_core::host::Payer
                 owed: a.owed,
                 paid: a.paid,
                 paid_to: a.paid_to.clone(),
+                others_paid: a.others_paid,
             })
             .collect(),
         request: splitz_core::Obligation {
@@ -2242,6 +2365,7 @@ pub fn swap_send_refusal(
     let folded = BillLog::with_entries(&host, parsed)
         .for_bill(bill_id)
         .fold()?;
+    refuse_unless_closed(&folded)?;
     let chosen = chosen.as_ref().map(convert::payout_back);
     let mut via = BTreeMap::new();
     if let Some(chosen) = &chosen {
@@ -2356,6 +2480,7 @@ pub fn combined_send(
     at: String,
 ) -> Result<SwapDepositPlan> {
     let folded = folded_for(&facts, &bill_id, &entries)?;
+    refuse_unless_closed(&folded)?;
     let host = FactHost {
         facts: &facts,
         sign: None,
@@ -2475,10 +2600,12 @@ pub fn pending_send_named_refusal(
         ffi::TransactionState::Mined => splitz_host::TransactionState::Mined,
         ffi::TransactionState::Waiting => splitz_host::TransactionState::Waiting,
         ffi::TransactionState::Expired => splitz_host::TransactionState::Expired,
+        ffi::TransactionState::Unread => splitz_host::TransactionState::Unread,
     });
     splitz_host::named_send_refusal(&held, state).map(|r| match r {
         splitz_host::NamedSendRefusal::Waiting => ffi::NamedSendRefusal::Waiting,
         splitz_host::NamedSendRefusal::Mined => ffi::NamedSendRefusal::Mined,
+        splitz_host::NamedSendRefusal::Unread => ffi::NamedSendRefusal::Unread,
     })
 }
 

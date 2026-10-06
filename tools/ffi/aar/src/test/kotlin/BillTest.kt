@@ -91,6 +91,7 @@ import uniffi.splitz_ffi.shareableBillPayload
 import uniffi.splitz_ffi.splitWithout
 import uniffi.splitz_ffi.swapDeposit
 import uniffi.splitz_ffi.swapPaymentEntry
+import uniffi.splitz_ffi.closeEntryFor
 import uniffi.splitz_ffi.swapSendRefusal
 import uniffi.splitz_ffi.txidInSendOrder
 import uniffi.splitz_ffi.voidEntryFor
@@ -432,6 +433,8 @@ class BillTest {
         taxi = taxi + addExpenseEntry(ben.facts(), taxiId, "t1", ben.me, 8000,
             """{"type":"equal","among":["${ana.me}","${ben.me}"]}""", null, ben.seed)
         taxi = taxi + setRateEntry(ana.facts(), taxiId, "EUR", 51234, null, ana.seed)
+        // §14.9: a deposit goes out only on a bill its creator has closed.
+        taxi = taxi + closeEntryFor(ana.facts(), taxiId, taxi, ana.seed)
         fun quote(recipient: String, chain: String) = SwapQuote("t1deposit", recipient, null, 7_807_316L,
             "39990000", null, TradableAsset("nep141:$chain-usdc", "USDC", chain, 6),
             "2026-10-29T23:00:00.000Z", "intent-1")

@@ -12,6 +12,12 @@ listed export that does not exist.
 Every export is also named in INTEGRATING.md or SPEC.md, by its own name or
 the camelCase name the Kotlin, Swift and Dart bindings give it: an export a
 wallet cannot learn of from the documents is one it will not call.
+
+And the other direction: every refusal the binding writes itself — a
+`SplitzError::Protocol` built in `pure.rs` rather than carried up from a host
+function — is listed in `allow-binding-refusals.txt` with the export, the code
+and the host rule it stands for. A rule that lives only in the binding is one
+a Dart or Rust wallet never gets.
 """
 
 from __future__ import annotations
@@ -24,6 +30,39 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 HOST = ROOT / "rust/splitz-host/src/lib.rs"
 BINDING = ROOT / "rust/splitz-ffi/src/pure.rs"
 ALLOW = pathlib.Path(__file__).resolve().parent / "allow-binding.txt"
+REFUSALS = pathlib.Path(__file__).resolve().parent / "allow-binding-refusals.txt"
+
+
+def binding_refusals() -> set[tuple[str, str]]:
+    """Each (export, code) the binding builds a refusal for itself."""
+    found: set[tuple[str, str]] = set()
+    current, building = None, 0
+    for line in BINDING.read_text().splitlines():
+        m = re.match(r"(?:pub )?fn ([a-z0-9_]+)", line)
+        if m:
+            current = m.group(1)
+        if "SplitzError::Protocol {" in line:
+            # The code is the struct's first member, on this line or the next.
+            building = 2
+        elif building:
+            building -= 1
+        m = re.search(r"code::([A-Z_]+)", line)
+        if building and m and current:
+            found.add((current, m.group(1).lower()))
+            building = 0
+    return found
+
+
+def listed_refusals() -> set[tuple[str, str]]:
+    out: set[tuple[str, str]] = set()
+    for line in REFUSALS.read_text().splitlines():
+        if not line.strip() or line.startswith("#"):
+            continue
+        m = re.fullmatch(r"([a-z0-9_]+)\s+([a-z_]+)\s+#\s*\S.*", line.strip())
+        if not m:
+            raise SystemExit(f"allow-binding-refusals.txt: cannot read {line!r}")
+        out.add((m.group(1), m.group(2)))
+    return out
 
 
 def host_functions() -> set[str]:
@@ -83,6 +122,13 @@ def main() -> int:
         camel = re.sub(r"_([a-z0-9])", lambda m: m.group(1).upper(), name)
         if not re.search(rf"\b({re.escape(name)}|{re.escape(camel)})\b", docs):
             problems.append(f"UNDOCUMENTED export {name}: named in neither INTEGRATING.md nor SPEC.md")
+    built, listed = binding_refusals(), listed_refusals()
+    for export, code in sorted(built - listed):
+        problems.append(
+            f"BINDING-ONLY refusal {code} in {export}: not in allow-binding-refusals.txt"
+        )
+    for export, code in sorted(listed - built):
+        problems.append(f"STALE allow-binding-refusals.txt names {code} in {export}")
     carried = sum(1 for n in host if n in exports or allow.get(n))
     print(
         f"binding: {len(host)} host functions, {len(exports)} exports, "

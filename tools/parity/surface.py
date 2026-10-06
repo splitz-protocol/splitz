@@ -95,6 +95,7 @@ RENAMES = {
     "paymentDigestDomain": "PAYMENT_DIGEST_DOMAIN",
     "paymentDigest": "payment_digest",
     "closeDigestDomain": "CLOSE_DIGEST_DOMAIN",
+    "replacedAddressWords": "REPLACED_ADDRESS_WORDS",
     "closeDigest": "close_digest",
     "closeBill": "close_bill",
     "closeFor": "close_for",

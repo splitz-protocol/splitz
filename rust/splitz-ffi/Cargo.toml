@@ -8,6 +8,9 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/KamaIOps/Splitz-Protocol"
 # Held back from crates.io for the same reason the other two are.
 publish = false
+# The crate is its sources; the tests are lanes of the repository, as for
+# splitz-host.
+include = ["src/**"]
 
 [lib]
 crate-type = ["cdylib", "staticlib", "lib"]

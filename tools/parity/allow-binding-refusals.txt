@@ -1,0 +1,8 @@
+# Every refusal rust/splitz-ffi/src/pure.rs builds itself rather than carrying
+# up from a host function: the export, the §12 code, and the host rule it
+# stands for. tools/parity/binding.py fails on one listed nowhere, and on an
+# entry naming a refusal the binding no longer builds.
+
+confirm_payment_for_entry unknown_payment            # a payment id the folded bill does not hold; the host rule is confirmer_for, which takes the payment itself
+confirm_payment_for_entry unauthorized_confirmation  # confirmer_for answering none, turned into the refusal fold §10.5 would give
+concerns_before_confirming unknown_payment           # a payment id the folded bill does not hold; the host rule is concerns_before_confirming, which takes the payment itself

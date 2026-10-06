@@ -72,6 +72,8 @@ pub enum TransactionState {
     Waiting,
     /// Expired unmined: it can no longer go through.
     Expired,
+    /// The history could not be read: it may be in any state above.
+    Unread,
 }
 
 /// Why a person may not clear a pending-send note that names its transaction
@@ -82,6 +84,9 @@ pub enum NamedSendRefusal {
     Waiting,
     /// The wallet shows it went through: record it rather than clear it.
     Mined,
+    /// The wallet's history could not be read, so nothing says the
+    /// transaction can no longer land.
+    Unread,
 }
 
 /// Why this device may not withdraw its own record of a shielded payment
@@ -92,6 +97,9 @@ pub enum OwnPaymentWithdrawal {
     Mined,
     /// The wallet still holds that transaction and may send it.
     Waiting,
+    /// The wallet's history could not be read, so nothing says the
+    /// transaction can no longer reach the payee.
+    Unread,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
@@ -278,6 +286,9 @@ pub struct Awaiting {
     /// Who that unconfirmed money went to. Not `to` when netting rerouted the
     /// debt (§6.3): the payment to confirm, or to take back, is theirs.
     pub paid_to: Vec<String>,
+    /// What other payers have sent `to` and is waiting to be confirmed, when
+    /// that is why the debt is held (§14.4). Zero otherwise.
+    pub others_paid: i64,
 }
 
 /// One output of a payment request: who it pays and what it sends.
@@ -533,6 +544,11 @@ pub struct BillEvent {
     pub refused_code: Option<String>,
     pub confirmed: bool,
     pub applied: bool,
+    /// For a restatement (§10.8), the participant it takes off.
+    pub taken_off: Option<String>,
+    /// For a restatement, the one participant who takes over `taken_off`'s
+    /// part, when exactly one does: a merge (§14.11).
+    pub moved_to: Option<String>,
 }
 
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]

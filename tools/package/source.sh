@@ -6,6 +6,14 @@
 # compiles and the lock file — with "+dirty" when rust/ carries uncommitted
 # changes, since those are compiled but named by no hash.
 
+# A binary carries the paths of the sources it was compiled from, and those
+# name the machine and the account that built it. Each is rewritten to one
+# that names neither: the home directory, this repository, then the cargo
+# home. rustc applies the last prefix that matches, so the most specific comes
+# last. Exported here so every package script builds with it and
+# build_env_stamp records it.
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$HOME=/home --remap-path-prefix=$root=/splitz --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo"
+
 # The directory cargo builds rust/ into, as cargo itself resolves it —
 # CARGO_TARGET_DIR, build.target-dir in a config file, or rust/target. A
 # package copied from any other directory ships whatever an earlier build left
@@ -32,14 +40,20 @@ rust_source_stamp() {
 # decides what lands in the package — slices, ABIs, the manifest, the sources
 # copied in — so a change to one leaves a package stale though rust/ is not.
 script_source_stamp() {
-  local root="$1" pkg="$2" a b c
+  local root="$1" pkg="$2" a b c extra=() pinned=""
   a="$(git -C "$root" rev-parse "HEAD:tools/package/$pkg.sh")"
   b="$(git -C "$root" rev-parse HEAD:tools/package/source.sh)"
   c="$(git -C "$root" rev-parse HEAD:tools/package/relay)"
-  if [ -n "$(git -C "$root" status --porcelain -- "tools/package/$pkg.sh" tools/package/source.sh tools/package/relay)" ]; then
-    echo "$a+$b+$c+dirty"
+  # The npm package installs the runtime its generated code loads at the
+  # version pinned here: another pin is another package from one script.
+  if [ "$pkg" = npm ]; then
+    extra=(tools/ffi/node/koffi.version)
+    pinned="+$(git -C "$root" rev-parse HEAD:tools/ffi/node/koffi.version)"
+  fi
+  if [ -n "$(git -C "$root" status --porcelain -- "tools/package/$pkg.sh" tools/package/source.sh tools/package/relay ${extra[@]+"${extra[@]}"})" ]; then
+    echo "$a+$b+$c$pinned+dirty"
   else
-    echo "$a+$b+$c"
+    echo "$a+$b+$c$pinned"
   fi
 }
 

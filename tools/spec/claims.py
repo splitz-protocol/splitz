@@ -278,6 +278,20 @@ def main() -> int:
           [f"§12 exempts `{c}`, which is not a code it lists"
            for c in sorted(exempt - listed)])
 
+    # §9's writer rules name the code a host refuses with, and
+    # vectors/writers.json is where those refusals are pinned: a sentence
+    # naming another code says one thing while every implementation raises
+    # another.
+    section_9 = text.split("\n## 9.", 1)[1].split("\n## 10.", 1)[0]
+    writer_codes = {
+        c.get("error")
+        for c in json.loads((ROOT / "vectors" / "writers.json").read_text())["cases"]
+    } - {None}
+    stated = re.findall(r"A host MUST NOT write[^§]*?\(`([a-z_]+)`\)", section_9, re.S)
+    check("writer-codes", len(stated),
+          [f"§9 says a host refuses with `{c}`, which no writer vector raises"
+           for c in stated if c not in writer_codes])
+
     # Every vector file and every case SPEC.md names by name exists.
     named_files = set(re.findall(r"`vectors/([a-z0-9-]+\.json)`", text))
     check("vectors-named", len(named_files),

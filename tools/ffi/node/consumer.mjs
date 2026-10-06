@@ -565,6 +565,12 @@ const quote = (recipient, chain) => ({
   asset: { asset_id: `nep141:${chain}-usdc`, symbol: "USDC", chain, decimals: 6 },
   deadline: "2026-10-29T23:00:00.000Z", reference: "intent-1",
 });
+let stillOpen;
+try { splitz.swap_send_refusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000, undefined); }
+catch (e) { stillOpen = e.code; }
+check("no deposit goes out on a bill its creator has not closed (§14.9)",
+      stillOpen === "bill_not_closed", `${stillOpen}`);
+taxi.push(splitz.close_entry_for(ana.facts(), taxiId, taxi, ana.seed));
 const swapRefusal = (q, chosen) =>
   splitz.swap_send_refusal(ana.facts(), taxiId, taxi, q, ben.me, 4000, chosen);
 check("a deposit to ben's first payout, for what ana owes, may go",
@@ -580,18 +586,25 @@ check("the payout chosen is found by type, address, asset and chain",
       `${splitz.declared_payout_index([onBase, onArb], onArb)}`);
 console.log("a request and a swap in one transaction (§14.10)");
 const combinedAt = "2026-10-29T22:00:00.000Z";
-const noZec = await refusal(() => splitz.combined_send(ana.facts(), taxiId, taxi,
-  quote("0xbenbase", "base"), ben.me, 4000, combinedAt));
+let noZec;
+try { splitz.combined_send(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000, combinedAt); }
+catch (e) { noZec = e.code; }
 check("a bill paying nobody in ZEC has no request for a swap to join",
-      noZec !== undefined, `${noZec?.detail}`);
+      noZec === "zip321_no_payments", `${noZec}`);
 const cat = new Device(120);
 const catZec = "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl";
-const withCat = [
+const catJoined = [
   ...taxi,
   splitz.join_bill_entry(cat.facts(), taxiId, "Cat", catZec, cat.key, [], cat.seed),
   splitz.add_expense_entry(cat.facts(), taxiId, "t2", cat.me, 2000,
     JSON.stringify({ type: "equal", among: [ana.me, cat.me] }), null, cat.seed),
 ];
+let reopened;
+try { splitz.combined_send(ana.facts(), taxiId, catJoined, quote("0xbenbase", "base"), ben.me, 4000, combinedAt); }
+catch (e) { reopened = e.code; }
+check("cat's expense reopened the bill, so one transaction waits for the close too",
+      reopened === "bill_not_closed", `${reopened}`);
+const withCat = [...catJoined, splitz.close_entry_for(ana.facts(), taxiId, catJoined, ana.seed)];
 const both = splitz.combined_send(ana.facts(), taxiId, withCat,
   quote("0xbenbase", "base"), ben.me, 4000, combinedAt);
 check("one request carries cat's ZEC and ben's deposit",
@@ -681,6 +694,10 @@ check("nor once it went through, and may be once it expired",
           splitz.NamedSendRefusal.Mined &&
         splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Expired) === undefined,
       `${splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Expired)}`);
+check("and not on a history that could not be read (§14.3)",
+      splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Unread) ===
+          splitz.NamedSendRefusal.Unread,
+      `${splitz.pending_send_named_refusal(billId, named, splitz.TransactionState.Unread)}`);
 const taxiFolded = splitz.fold_entries(ana.facts(), taxiId, taxi);
 check("the creator is the one the fold names", taxiFolded.creator_id === ana.me, taxiFolded.creator_id);
 const benOff = splitz.plan_removal(ana.facts(), taxiId, taxi, ben.me, ana.me);
@@ -726,6 +743,35 @@ try { splitz.add_person_entry(ana.facts(), taxiId, trip, "jo", "Jo"); }
 catch (e) { twice = e.code; }
 check("and a name already on the bill is not added twice",
       twice === "duplicate_participant", `${twice}`);
+const toJo = splitz.record_payment_entry(ben.facts(), taxiId, {
+  payment_id: "p-jo", to: "jo", amount: 600, method: "cash", reference: undefined,
+  zatoshi: undefined, paid_at_rate: undefined, note: undefined,
+}, ben.seed);
+const owedJo = splitz.fold_entries(ana.facts(), taxiId, [...trip, toJo]);
+const joPaid = owedJo.bill.payments.find((p) => p.to === "jo");
+const forJo = splitz.confirm_payment_for_entry(ana.facts(), taxiId, [...trip, toJo], joPaid.id,
+  "recipientConfirmed", undefined, owedJo.payment_digests.get(joPaid.id), ana.seed);
+const joConfirmed = splitz.fold_entries(ana.facts(), taxiId, [...trip, toJo, forJo]);
+check("the creator confirms a payment to the name it added, as them (§14.11)",
+      joConfirmed.bill.confirmed_payments.includes(joPaid.id) && joConfirmed.set_aside.length === 0,
+      JSON.stringify(joConfirmed.set_aside));
+let notBens;
+try {
+  splitz.confirm_payment_for_entry(ben.facts(), taxiId, [...trip, toJo], joPaid.id,
+    "recipientConfirmed", undefined, owedJo.payment_digests.get(joPaid.id), ben.seed);
+} catch (e) { notBens = e.code; }
+check("and nobody else may", notBens === "unauthorized_confirmation", `${notBens}`);
+const outsider = new Device(160);
+const outsiderNeeds = splitz.join_needed(outsider.facts(), taxiId, taxi);
+check("ana, joined and signed, is on the bill as herself; a device that never joined is not (§10.7)",
+      splitz.join_needed(ana.facts(), taxiId, taxi) === undefined && outsiderNeeds === "not_joined",
+      `${outsiderNeeds}`);
+const taxiFold = splitz.fold_entries(ben.facts(), taxiId, taxi);
+const benTarget = splitz.expense_withdrawal_target(ben.facts(), taxiId, taxi, `${ben.me}:t1`);
+check("ben withdraws his own expense by the entry that put it there (§10.8)",
+      benTarget === taxiFold.expense_entries.get(`${ben.me}:t1`) &&
+        splitz.expense_withdrawal_target(ben.facts(), taxiId, taxi, "nobody:x") === undefined,
+      `${benTarget}`);
 
 console.log("and the rest of what every wallet needs from the protocol");
 const fallback = splitz.payout_fallback(["not on base", undefined]);

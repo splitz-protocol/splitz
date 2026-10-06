@@ -308,6 +308,12 @@ const quote = (recipient, chain) => ({
   asset: { asset_id: `nep141:${chain}-usdc`, symbol: "USDC", chain, decimals: 6 },
   deadline: "2026-10-29T23:00:00.000Z", reference: "intent-1",
 });
+let stillOpen;
+try { splitz.swap_send_refusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000, undefined); }
+catch (e) { stillOpen = e.code; }
+check("no deposit goes out on a bill its creator has not closed (§14.9)",
+      stillOpen === "bill_not_closed", `${stillOpen}`);
+taxi.push(splitz.close_entry_for(ana.facts(), taxiId, taxi, ana.seed));
 const swapRefusal = (q, chosen) =>
   splitz.swap_send_refusal(ana.facts(), taxiId, taxi, q, ben.me, 4000, chosen);
 check("a deposit to ben's first payout, for what ana owes, may go",

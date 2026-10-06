@@ -305,6 +305,9 @@ fun main(args: Array<String>) {
           pendingSendNamedRefusal(billId, note, TransactionState.MINED) == NamedSendRefusal.MINED &&
               pendingSendNamedRefusal(billId, note, TransactionState.EXPIRED) == null,
           "${pendingSendNamedRefusal(billId, note, TransactionState.EXPIRED)}")
+    check("and not on a history that could not be read (§14.3)",
+          pendingSendNamedRefusal(billId, note, TransactionState.UNREAD) == NamedSendRefusal.UNREAD,
+          "${pendingSendNamedRefusal(billId, note, TransactionState.UNREAD)}")
     check("nobody may say it never left while the wallet is still sending",
           pendingSendUnsentRefusal(billId, note!!, true, listOf()) == UnsentClaimRefusal.StillSending,
           "${pendingSendUnsentRefusal(billId, note, true, listOf())}")
@@ -550,6 +553,12 @@ fun main(args: Array<String>) {
     fun quote(recipient: String, chain: String) = SwapQuote("t1deposit", recipient, null, 7_807_316L,
         "39990000", null, TradableAsset("nep141:$chain-usdc", "USDC", chain, 6),
         "2026-10-29T23:00:00.000Z", "intent-1")
+    val stillOpen = try {
+        swapSendRefusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000L, null); null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("no deposit goes out on a bill its creator has not closed (§14.9)",
+          stillOpen == "bill_not_closed", "$stillOpen")
+    taxi = taxi + closeEntryFor(ana.facts(), taxiId, taxi, ana.seed)
     check("a deposit to ben's first payout, for what ana owes, may go",
           swapSendRefusal(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000L, null) == null,
           "none")
@@ -565,18 +574,25 @@ fun main(args: Array<String>) {
               declaredPayoutIndex(listOf(onBase, onArb), onArb.copy(chain = null)) == null,
           "${declaredPayoutIndex(listOf(onBase, onArb), onArb)}")
     println("a request and a swap in one transaction (§14.10)")
-    val noZec = refusal {
+    val noZec = try {
         combinedSend(ana.facts(), taxiId, taxi, quote("0xbenbase", "base"), ben.me, 4000L,
-            "2026-10-29T22:00:00.000Z")
-    }
+            "2026-10-29T22:00:00.000Z"); null
+    } catch (e: SplitzException.Protocol) { e.code }
     check("a bill paying nobody in ZEC has no request for a swap to join",
-          noZec != null, "${noZec?.detail}")
+          noZec == "zip321_no_payments", "$noZec")
     val cat = Device(120)
     val catZec = "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
-    val withCat = taxi +
+    val catJoined = taxi +
         joinBillEntry(cat.facts(), taxiId, "Cat", catZec, cat.key, listOf(), cat.seed) +
         addExpenseEntry(cat.facts(), taxiId, "t2", cat.me, 2000,
             """{"type":"equal","among":["${ana.me}","${cat.me}"]}""", null, cat.seed)
+    val reopened = try {
+        combinedSend(ana.facts(), taxiId, catJoined, quote("0xbenbase", "base"), ben.me, 4000L,
+            "2026-10-29T22:00:00.000Z"); null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("cat's expense reopened the bill, so one transaction waits for the close too",
+          reopened == "bill_not_closed", "$reopened")
+    val withCat = catJoined + closeEntryFor(ana.facts(), taxiId, catJoined, ana.seed)
     val both = combinedSend(ana.facts(), taxiId, withCat, quote("0xbenbase", "base"), ben.me, 4000L,
         "2026-10-29T22:00:00.000Z")
     check("one request carries cat's ZEC and ben's deposit",
@@ -684,6 +700,33 @@ fun main(args: Array<String>) {
     } catch (e: SplitzException.Protocol) { e.code }
     check("and a name already on the bill is not added twice",
           twice == "duplicate_participant", "$twice")
+    val toJo = recordPaymentEntry(ben.facts(), taxiId,
+        PaymentDraft("p-jo", "jo", 600L, "cash", null, null, null, null), ben.seed)
+    val owedJo = foldEntries(ana.facts(), taxiId, trip + toJo)
+    val joPaid = owedJo.bill.payments.single { it.to == "jo" }
+    val forJo = confirmPaymentForEntry(ana.facts(), taxiId, trip + toJo, joPaid.id,
+        "recipientConfirmed", null, owedJo.paymentDigests[joPaid.id]!!, ana.seed)
+    val joConfirmed = foldEntries(ana.facts(), taxiId, trip + toJo + forJo)
+    check("the creator confirms a payment to the name it added, as them (§14.11)",
+          joConfirmed.bill.confirmedPayments.contains(joPaid.id) &&
+              joConfirmed.setAside.none { it.id == entryId(forJo) },
+          "${joConfirmed.setAside}")
+    val notBens = try {
+        confirmPaymentForEntry(ben.facts(), taxiId, trip + toJo, joPaid.id,
+            "recipientConfirmed", null, owedJo.paymentDigests[joPaid.id]!!, ben.seed); null
+    } catch (e: SplitzException.Protocol) { e.code }
+    check("and nobody else may", notBens == "unauthorized_confirmation", "$notBens")
+    val outsider = Device(160)
+    check("ana, joined and signed, is on the bill as herself; a device that never joined is not (§10.7)",
+          joinNeeded(ana.facts(), taxiId, taxi) == null &&
+              joinNeeded(outsider.facts(), taxiId, taxi) == "not_joined",
+          "${joinNeeded(outsider.facts(), taxiId, taxi)}")
+    val taxiFold = foldEntries(ben.facts(), taxiId, taxi)
+    check("ben withdraws his own expense by the entry that put it there (§10.8)",
+          expenseWithdrawalTarget(ben.facts(), taxiId, taxi, "${ben.me}:t1") ==
+              taxiFold.expenseEntries["${ben.me}:t1"] &&
+              expenseWithdrawalTarget(ben.facts(), taxiId, taxi, "nobody:x") == null,
+          "${expenseWithdrawalTarget(ben.facts(), taxiId, taxi, "${ben.me}:t1")}")
 
     println("and the rest of what every wallet needs from the protocol")
     check("a first payout this wallet cannot pay is passed over for the next it can (§14.8)",

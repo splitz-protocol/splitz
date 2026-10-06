@@ -504,6 +504,12 @@ void main(List<String> args) {
     '${pendingSendNamedRefusal(billId, named, TransactionState.expired)}',
   );
   check(
+    'and not on a history that could not be read (§14.3)',
+    pendingSendNamedRefusal(billId, named, TransactionState.unread) ==
+        NamedSendRefusal.unread,
+    '${pendingSendNamedRefusal(billId, named, TransactionState.unread)}',
+  );
+  check(
     'nobody may say it never left while the wallet is still sending',
     pendingSendUnsentRefusal(billId, note, true, const []) ==
         const UnsentClaimRefusalStillSending(),
@@ -987,6 +993,26 @@ void main(List<String> args) {
     deadline: '2026-10-29T23:00:00.000Z',
     reference: 'intent-1',
   );
+  String? stillOpen;
+  try {
+    swapSendRefusal(
+      ana.facts(),
+      taxiId,
+      taxi,
+      quote('0xbenbase', 'base'),
+      ben.me,
+      4000,
+      null,
+    );
+  } on SplitzErrorExceptionProtocol catch (e) {
+    stillOpen = e.code;
+  }
+  check(
+    'no deposit goes out on a bill its creator has not closed (§14.9)',
+    stillOpen == 'bill_not_closed',
+    '$stillOpen',
+  );
+  taxi.add(closeEntryFor(ana.facts(), taxiId, taxi, ana.signingSeed()));
   check(
     'a deposit to ben\'s first payout, for what ana owes, may go',
     swapSendRefusal(
@@ -1046,8 +1072,9 @@ void main(List<String> args) {
   );
   print('a request and a swap in one transaction (§14.10)');
   const at = '2026-10-29T22:00:00.000Z';
-  final noZec = refusedBy(
-    () => combinedSend(
+  String? noZec;
+  try {
+    combinedSend(
       ana.facts(),
       taxiId,
       taxi,
@@ -1055,17 +1082,19 @@ void main(List<String> args) {
       ben.me,
       4000,
       at,
-    ),
-  );
+    );
+  } on SplitzErrorExceptionProtocol catch (e) {
+    noZec = e.code;
+  }
   check(
     'a bill paying nobody in ZEC has no request for a swap to join',
-    noZec != null,
-    '${noZec?.detail}',
+    noZec == 'zip321_no_payments',
+    '$noZec',
   );
   final cat = Device(120);
   const catZec =
       'u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl';
-  final withCat = [
+  final catJoined = [
     ...taxi,
     joinBillEntry(
       cat.facts(),
@@ -1089,6 +1118,29 @@ void main(List<String> args) {
       null,
       cat.signingSeed(),
     ),
+  ];
+  String? reopened;
+  try {
+    combinedSend(
+      ana.facts(),
+      taxiId,
+      catJoined,
+      quote('0xbenbase', 'base'),
+      ben.me,
+      4000,
+      '2026-10-29T22:00:00.000Z',
+    );
+  } on SplitzErrorExceptionProtocol catch (e) {
+    reopened = e.code;
+  }
+  check(
+    'cat\'s expense reopened the bill, so one transaction waits for the close too',
+    reopened == 'bill_not_closed',
+    '$reopened',
+  );
+  final withCat = [
+    ...catJoined,
+    closeEntryFor(ana.facts(), taxiId, catJoined, ana.signingSeed()),
   ];
   final both = combinedSend(
     ana.facts(),
@@ -1403,6 +1455,82 @@ void main(List<String> args) {
     'and a name already on the bill is not added twice',
     twice == 'duplicate_participant',
     '$twice',
+  );
+  final toJo = recordPaymentEntry(
+    ben.facts(),
+    taxiId,
+    PaymentDraft(
+      paymentId: 'p-jo',
+      to: 'jo',
+      amount: 600,
+      method: 'cash',
+      reference: null,
+      zatoshi: null,
+      paidAtRate: null,
+      note: null,
+    ),
+    ben.signingSeed(),
+  );
+  final owedJo = foldEntries(ana.facts(), taxiId, [...trip, toJo]);
+  final joPaid = owedJo.bill.payments.singleWhere((p) => p.to == 'jo');
+  final forJo = confirmPaymentForEntry(
+    ana.facts(),
+    taxiId,
+    [...trip, toJo],
+    joPaid.id,
+    'recipientConfirmed',
+    null,
+    owedJo.paymentDigests[joPaid.id]!,
+    ana.signingSeed(),
+  );
+  final joConfirmed = foldEntries(ana.facts(), taxiId, [...trip, toJo, forJo]);
+  check(
+    'the creator confirms a payment to the name it added, as them (§14.11)',
+    joConfirmed.bill.confirmedPayments.contains(joPaid.id) &&
+        joConfirmed.setAside.isEmpty,
+    '${joConfirmed.setAside}',
+  );
+  String? notBens;
+  try {
+    confirmPaymentForEntry(
+      ben.facts(),
+      taxiId,
+      [...trip, toJo],
+      joPaid.id,
+      'recipientConfirmed',
+      null,
+      owedJo.paymentDigests[joPaid.id]!,
+      ben.signingSeed(),
+    );
+  } on SplitzErrorExceptionProtocol catch (e) {
+    notBens = e.code;
+  }
+  check(
+    'and nobody else may',
+    notBens == 'unauthorized_confirmation',
+    '$notBens',
+  );
+  final outsider = Device(160);
+  final outsiderNeeds = joinNeeded(outsider.facts(), taxiId, taxi);
+  check(
+    'ana, joined and signed, is on the bill as herself; '
+        'a device that never joined is not (§10.7)',
+    joinNeeded(ana.facts(), taxiId, taxi) == null &&
+        outsiderNeeds == 'not_joined',
+    '$outsiderNeeds',
+  );
+  final taxiFold = foldEntries(ben.facts(), taxiId, taxi);
+  final benTarget = expenseWithdrawalTarget(
+    ben.facts(),
+    taxiId,
+    taxi,
+    '${ben.me}:t1',
+  );
+  check(
+    'ben withdraws his own expense by the entry that put it there (§10.8)',
+    benTarget == taxiFold.expenseEntries['${ben.me}:t1'] &&
+        expenseWithdrawalTarget(ben.facts(), taxiId, taxi, 'nobody:x') == null,
+    '$benTarget',
   );
 
   print('and the rest of what every wallet needs from the protocol');

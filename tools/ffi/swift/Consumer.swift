@@ -348,6 +348,9 @@ func run(origin: String, downOrigin: String) async throws {
           pendingSendNamedRefusal(billId: billId, note: note!, state: .mined) == .mined
             && pendingSendNamedRefusal(billId: billId, note: note!, state: .expired) == nil,
           "\(String(describing: pendingSendNamedRefusal(billId: billId, note: note!, state: .expired)))")
+    check("and not on a history that could not be read (§14.3)",
+          pendingSendNamedRefusal(billId: billId, note: note!, state: .unread) == .unread,
+          "\(String(describing: pendingSendNamedRefusal(billId: billId, note: note!, state: .unread)))")
     check("nobody may say it never left while the wallet is still sending",
           pendingSendUnsentRefusal(billId: billId, note: note!, stillSending: true, own: [])
             == .stillSending,
@@ -609,6 +612,15 @@ func run(origin: String, downOrigin: String) async throws {
                                        chain: chain, decimals: 6),
                   deadline: "2026-10-29T23:00:00.000Z", reference: "intent-1")
     }
+    var stillOpen: String?
+    do {
+        _ = try swapSendRefusal(facts: ana.facts(), billId: taxiId, entries: taxi,
+                                quote: quote("0xbenbase", "base"), to: ben.me,
+                                amountMinorUnits: 4000, chosen: nil)
+    } catch SplitzError.Protocol(let code, _) { stillOpen = code }
+    check("no deposit goes out on a bill its creator has not closed (§14.9)",
+          stillOpen == "bill_not_closed", stillOpen ?? "nil")
+    taxi.append(try closeEntryFor(facts: ana.facts(), billId: taxiId, entries: taxi, seed: ana.seed))
     func swapRefusal(_ q: SwapQuote, _ chosen: Payout?) throws -> SwapSendRefusal? {
         try swapSendRefusal(facts: ana.facts(), billId: taxiId, entries: taxi, quote: q,
                             to: ben.me, amountMinorUnits: 4000, chosen: chosen)
@@ -628,16 +640,17 @@ func run(origin: String, downOrigin: String) async throws {
           "\(String(describing: declaredPayoutIndex(payouts: [onBase, onArb], payout: onArb)))")
     print("a request and a swap in one transaction (§14.10)")
     let combinedAt = "2026-10-29T22:00:00.000Z"
-    let noZec = await refusal {
+    var noZec: String?
+    do {
         _ = try combinedSend(facts: ana.facts(), billId: taxiId, entries: taxi,
                              quote: quote("0xbenbase", "base"), to: ben.me,
                              amountMinorUnits: 4000, at: combinedAt)
-    }
+    } catch SplitzError.Protocol(let code, _) { noZec = code }
     check("a bill paying nobody in ZEC has no request for a swap to join",
-          noZec != nil && !(noZec!.detail.hasPrefix("threw")), noZec?.detail ?? "nil")
+          noZec == "zip321_no_payments", noZec ?? "nil")
     let cat = try Device(120)
     let catZec = "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
-    let withCat = taxi + [
+    let catJoined = taxi + [
         try joinBillEntry(facts: cat.facts(), billId: taxiId, name: "Cat", payTo: catZec,
                           identityKey: cat.key, payouts: [], seed: cat.seed),
         try addExpenseEntry(facts: cat.facts(), billId: taxiId, expenseId: "t2", paidBy: cat.me,
@@ -645,6 +658,16 @@ func run(origin: String, downOrigin: String) async throws {
                             splitJson: #"{"type":"equal","among":[""# + ana.me + #"",""# + cat.me + #""]}"#,
                             description: nil, seed: cat.seed),
     ]
+    var reopened: String?
+    do {
+        _ = try combinedSend(facts: ana.facts(), billId: taxiId, entries: catJoined,
+                             quote: quote("0xbenbase", "base"), to: ben.me,
+                             amountMinorUnits: 4000, at: combinedAt)
+    } catch SplitzError.Protocol(let code, _) { reopened = code }
+    check("cat's expense reopened the bill, so one transaction waits for the close too",
+          reopened == "bill_not_closed", reopened ?? "nil")
+    let withCat = catJoined + [try closeEntryFor(facts: ana.facts(), billId: taxiId,
+                                                 entries: catJoined, seed: ana.seed)]
     let both = try combinedSend(facts: ana.facts(), billId: taxiId, entries: withCat,
                                 quote: quote("0xbenbase", "base"), to: ben.me,
                                 amountMinorUnits: 4000, at: combinedAt)
@@ -798,6 +821,43 @@ func run(origin: String, downOrigin: String) async throws {
     } catch SplitzError.Protocol(let code, _) { twice = code }
     check("and a name already on the bill is not added twice",
           twice == "duplicate_participant", twice ?? "nil")
+    let toJo = try recordPaymentEntry(
+        facts: ben.facts(), billId: taxiId,
+        payment: PaymentDraft(paymentId: "p-jo", to: "jo", amount: 600, method: "cash",
+                              reference: nil, zatoshi: nil, paidAtRate: nil, note: nil),
+        seed: ben.seed)
+    let owedJo = try foldEntries(facts: ana.facts(), billId: taxiId, entries: trip + [toJo])
+    let joPaid = owedJo.bill.payments.first { $0.to == "jo" }!
+    let forJo = try confirmPaymentForEntry(
+        facts: ana.facts(), billId: taxiId, entries: trip + [toJo], paymentId: joPaid.id,
+        method: "recipientConfirmed", reference: nil, record: owedJo.paymentDigests[joPaid.id]!,
+        seed: ana.seed)
+    let joConfirmed = try foldEntries(facts: ana.facts(), billId: taxiId, entries: trip + [toJo, forJo])
+    check("the creator confirms a payment to the name it added, as them (§14.11)",
+          joConfirmed.bill.confirmedPayments.contains(joPaid.id) && joConfirmed.setAside.isEmpty,
+          "\(joConfirmed.setAside)")
+    var notBens: String?
+    do {
+        _ = try confirmPaymentForEntry(
+            facts: ben.facts(), billId: taxiId, entries: trip + [toJo], paymentId: joPaid.id,
+            method: "recipientConfirmed", reference: nil, record: owedJo.paymentDigests[joPaid.id]!,
+            seed: ben.seed)
+    } catch SplitzError.Protocol(let code, _) { notBens = code }
+    check("and nobody else may", notBens == "unauthorized_confirmation", notBens ?? "nil")
+    let outsider = try Device(160)
+    let outsiderNeeds = try joinNeeded(facts: outsider.facts(), billId: taxiId, entries: taxi)
+    check("ana, joined and signed, is on the bill as herself; a device that never joined is not (§10.7)",
+          try joinNeeded(facts: ana.facts(), billId: taxiId, entries: taxi) == nil
+              && outsiderNeeds == "not_joined",
+          outsiderNeeds ?? "nil")
+    let taxiFold = try foldEntries(facts: ben.facts(), billId: taxiId, entries: taxi)
+    let benTarget = try expenseWithdrawalTarget(facts: ben.facts(), billId: taxiId, entries: taxi,
+                                                expenseId: "\(ben.me):t1")
+    let nobodysTarget = try expenseWithdrawalTarget(facts: ben.facts(), billId: taxiId,
+                                                    entries: taxi, expenseId: "nobody:x")
+    check("ben withdraws his own expense by the entry that put it there (§10.8)",
+          benTarget == taxiFold.expenseEntries["\(ben.me):t1"] && nobodysTarget == nil,
+          benTarget ?? "nil")
 
     print("and the rest of what every wallet needs from the protocol")
     let fallback = payoutFallback(cannotPay: ["not on base", nil])

@@ -7,7 +7,10 @@
 
 activity_of               -> history_of
 assets_from_tokens        -> swap_assets_from_tokens
-awaiting_confirmation_by  -> awaiting_my_confirmation
+awaiting_confirmation_for -> awaiting_my_confirmation
+confirmer_for             -> confirm_payment_for_entry
+joined_as_me              -> join_needed
+awaiting_confirmation_by  # the payee's own list; awaiting_my_confirmation carries awaiting_confirmation_for, which adds what the creator confirms for somebody it added
 binance_price_url         -> binance_price_request
 coinbase_price_url        -> coinbase_price_request
 coingecko_price_url       -> zec_price_request
@@ -40,3 +43,4 @@ component_encode          # URL encoding for the relay client; relay_channel_url
 query_encode              # the same, for query strings the binding's request builders write whole
 send_payment_request      # takes the wallet's read, propose and broadcast as closures, and the binding has no callbacks; a binding wallet calls proposal_problem before building
 currency_exponent         # read inside every price and amount the binding writes; rate_figure and render_amount carry it
+sent_of                   # maps a SplitsWallet's send outcome for WalletBillHost; the binding never broadcasts (host_facts.rs), a binding wallet sends itself and records with payment_entries_for_send

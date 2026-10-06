@@ -1,0 +1,4 @@
+# What a published splitz_host ships is its library, README, CHANGELOG and
+# licences. Tests and the development tools stay in the repository.
+test/
+tool/

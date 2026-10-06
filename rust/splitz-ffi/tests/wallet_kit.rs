@@ -406,6 +406,25 @@ fn swap_bill() -> (Device, Device, String, Vec<String>) {
         )
         .unwrap(),
     );
+    // §14.9: a deposit goes out only on a bill its creator has closed.
+    let open = entries.clone();
+    let refused = splitz_ffi::swap_send_refusal(
+        ana.facts(7),
+        bill_id.clone(),
+        open.clone(),
+        swap_quote("0xbenbase", "base"),
+        ben.me.clone(),
+        4000,
+        None,
+    )
+    .unwrap_err();
+    assert!(
+        matches!(&refused, splitz_ffi::SplitzError::Protocol { code, .. } if code == "bill_not_closed"),
+        "{refused:?}"
+    );
+    entries.push(
+        splitz_ffi::close_entry_for(ana.facts(7), bill_id.clone(), open, ana.seed.clone()).unwrap(),
+    );
     (ana, ben, bill_id, entries)
 }
 
