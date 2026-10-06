@@ -699,14 +699,14 @@ pub fn removal_entries(host: &dyn BillHost, plan: &RemovalPlan) -> Result<Vec<Va
 
 /// The entry `me` withdraws to take the expense `expense_id` off `folded`
 /// (§10.8), read from `log`: the entry that put it on the bill, or — when
-/// that is a restatement a removal wrote and `me` is neither its author nor
-/// the creator — the first expense it restates, when `me` wrote that.
+/// that is a restatement a removal wrote — the first expense it restates, when
+/// `me` wrote that or is the creator.
 ///
-/// A restatement is the creator's, so its author may withdraw it; the person
-/// whose expense it restated may not, and withdrawing it would put their
-/// expense back as it named whoever was taken off. Withdrawing their own
-/// first entry instead takes the expense off and leaves the removal standing.
-/// `None` when `folded` holds no such expense.
+/// Withdrawing a restatement puts back the expense it replaced, which still
+/// names whoever was taken off, so the removal no longer stands. Withdrawing
+/// the first entry instead takes the expense off and leaves the removal
+/// standing; its author and the creator may (§10.8's table). Anybody else gets
+/// the entry in force. `None` when `folded` holds no such expense.
 pub fn expense_withdrawal_target(
     folded: &FoldedBill,
     log: &[Value],
@@ -722,9 +722,6 @@ pub fn expense_withdrawal_target(
     let Some(entry) = by_id.get(&entry_id).copied() else {
         return Some(entry_id);
     };
-    if field(entry, "author").as_deref() == Some(me) || me == folded.creator_id {
-        return Some(entry_id);
-    }
     let mut at = entry;
     let mut seen = std::collections::HashSet::new();
     while field(at, "kind").as_deref() == Some("addExpense") {
@@ -741,7 +738,9 @@ pub fn expense_withdrawal_target(
             _ => return Some(entry_id),
         }
     }
-    if !std::ptr::eq(at, entry) && field(at, "author").as_deref() == Some(me) {
+    if !std::ptr::eq(at, entry)
+        && (field(at, "author").as_deref() == Some(me) || me == folded.creator_id)
+    {
         field(at, "id")
     } else {
         Some(entry_id)

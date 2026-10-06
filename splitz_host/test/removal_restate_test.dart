@@ -519,6 +519,89 @@ void main() {
       },
     );
 
+    test(
+      'the creator takes a restated expense off, and cal stays off',
+      () async {
+        final (t, e2, restatement, log) = await restated();
+        final folded = await t.fold(log);
+        final target = expenseWithdrawalTarget(
+          folded: folded,
+          log: log,
+          expenseId: folded.bill.expenses.single.id,
+          me: 'ana',
+        )!;
+        t.anaWallet.tick(const Duration(hours: 2));
+        final off = await splitz.signEntry(
+          host: t.ana,
+          entry: splitz.voidEntry(host: t.ana, targetId: target),
+          billId: t.bill,
+        );
+        final after = await t.fold([...log, off]);
+        expect(after.bill.expenses, isEmpty);
+        expect(after.bill.participant('cal'), isNull);
+        // Control: withdrawing the restatement instead puts cal back.
+        t.anaWallet.tick(const Duration(hours: 2));
+        final back = await splitz.signEntry(
+          host: t.ana,
+          entry: splitz.voidEntry(host: t.ana, targetId: restatement),
+          billId: t.bill,
+        );
+        final undone = await t.fold([...log, back]);
+        expect(undone.bill.participant('cal'), isNotNull);
+        expect(undone.bill.expenses.single.amount, 900);
+      },
+    );
+
+    test("the creator's own restated expense comes off the same way", () async {
+      final t = await Table.open();
+      final e1 = await t.expense(t.ana, 'e1', 600, {
+        'type': 'equal',
+        'among': ['ana', 'cal'],
+      }, paidBy: 'ana');
+      final log = [...t.log, e1];
+      final (plan, written) = await t.remove(log, t.ana, 'ana');
+      expect(plan.complete, isTrue);
+      final all = [...log, ...written];
+      final folded = await t.fold(all);
+      final target = expenseWithdrawalTarget(
+        folded: folded,
+        log: all,
+        expenseId: folded.bill.expenses.single.id,
+        me: 'ana',
+      );
+      expect(target, e1['id']);
+      t.anaWallet.tick(const Duration(hours: 2));
+      final off = await splitz.signEntry(
+        host: t.ana,
+        entry: splitz.voidEntry(host: t.ana, targetId: target!),
+        billId: t.bill,
+      );
+      final after = await t.fold([...all, off]);
+      expect(after.bill.expenses, isEmpty);
+      expect(after.bill.participant('cal'), isNull);
+    });
+
+    test('an expense nobody restated is withdrawn by its own entry', () async {
+      final t = await Table.open();
+      final e1 = await t.expense(t.ben, 'e1', 300, {
+        'type': 'equal',
+        'among': ['ana', t.benId],
+      }, paidBy: t.benId);
+      final log = [...t.log, e1];
+      final folded = await t.fold(log);
+      for (final me in ['ana', t.benId]) {
+        expect(
+          expenseWithdrawalTarget(
+            folded: folded,
+            log: log,
+            expenseId: folded.bill.expenses.single.id,
+            me: me,
+          ),
+          e1['id'],
+        );
+      }
+    });
+
     test('its author withdraws it by their own first entry', () async {
       final (t, e2, restatement, log) = await restated();
       final folded = await t.fold(log);
@@ -532,13 +615,24 @@ void main() {
         ),
         e2['id'],
       );
-      // The creator, who wrote the restatement, withdraws that.
+      // The creator, who may withdraw any expense, withdraws the first entry
+      // too: withdrawing the restatement would put cal back.
       expect(
         expenseWithdrawalTarget(
           folded: folded,
           log: log,
           expenseId: restatedId,
           me: 'ana',
+        ),
+        e2['id'],
+      );
+      // Somebody who may withdraw neither is given the entry in force.
+      expect(
+        expenseWithdrawalTarget(
+          folded: folded,
+          log: log,
+          expenseId: restatedId,
+          me: 'cal',
         ),
         restatement,
       );

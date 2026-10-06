@@ -220,10 +220,10 @@ pub fn add_person_entry(
 }
 
 /// The entry this account withdraws to take the expense `expense_id` off the
-/// bill `entries` fold to (§10.8): the entry that put it there, or this
-/// account's own first expense when that entry is a restatement a removal
-/// wrote (`expense_withdrawal_target`). `None` when the bill holds no such
-/// expense.
+/// bill `entries` fold to (§10.8): the entry that put it there, or — when that
+/// entry is a restatement a removal wrote — the first expense it restates,
+/// when this account wrote that or created the bill
+/// (`expense_withdrawal_target`). `None` when the bill holds no such expense.
 #[uniffi::export]
 pub fn expense_withdrawal_target(
     facts: HostFacts,

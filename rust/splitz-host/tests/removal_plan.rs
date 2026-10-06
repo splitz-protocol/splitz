@@ -1462,8 +1462,15 @@ fn the_author_of_a_restated_expense_withdraws_their_first_entry() {
         expense_withdrawal_target(&folded, &b.log, &expense, "ben"),
         Some(id_of(&original))
     );
+    // The creator, who may withdraw any expense, withdraws the first entry
+    // too: withdrawing the restatement would put cal back.
     assert_eq!(
         expense_withdrawal_target(&folded, &b.log, &expense, "ana"),
+        Some(id_of(&original))
+    );
+    // Somebody who may withdraw neither is given the entry in force.
+    assert_eq!(
+        expense_withdrawal_target(&folded, &b.log, &expense, "cal"),
         Some(restatement)
     );
     let original_id = id_of(&original);
@@ -1471,6 +1478,59 @@ fn the_author_of_a_restated_expense_withdraws_their_first_entry() {
     let after = b.fold();
     assert!(after.bill.expenses.is_empty());
     assert!(after.bill.participant("cal").is_none());
+}
+
+#[test]
+fn the_creator_takes_a_restated_expense_off_and_the_removal_stands() {
+    for creators_own in [false, true] {
+        let mut b = Bill::new();
+        b.join("ben");
+        b.join("cal");
+        let original = if creators_own {
+            b.expense("ana", "x1", "ana", 600, equal(&["ana", "cal"]), None)
+        } else {
+            b.expense("ben", "x2", "ben", 900, equal(&["ana", "ben", "cal"]), None)
+        };
+        let plan = b.plan("cal", "ana");
+        let written: Vec<Value> = {
+            let ana = &b.wallets["ana"];
+            removal_entries(&WalletBillHost::new(ana), &plan).unwrap()
+        };
+        let restatement = id_of(written.iter().find(|e| e["kind"] == "addExpense").unwrap());
+        for e in written {
+            b.write("ana", |_| e);
+        }
+        let folded = b.fold();
+        let expense = folded.bill.expenses[0].id.clone();
+        let target = expense_withdrawal_target(&folded, &b.log, &expense, "ana").unwrap();
+        assert_eq!(target, id_of(&original));
+        b.write("ana", |h| void_entry(h, &target, None).unwrap());
+        let after = b.fold();
+        assert!(
+            after.bill.expenses.is_empty(),
+            "creators_own={creators_own}"
+        );
+        assert!(after.bill.participant("cal").is_none());
+        // Control: withdrawing the restatement instead puts cal back.
+        b.log.pop();
+        b.write("ana", |h| void_entry(h, &restatement, None).unwrap());
+        assert!(b.fold().bill.participant("cal").is_some());
+    }
+}
+
+#[test]
+fn an_expense_nobody_restated_is_withdrawn_by_its_own_entry() {
+    let mut b = Bill::new();
+    b.join("ben");
+    let original = b.expense("ben", "x3", "ben", 300, equal(&["ana", "ben"]), None);
+    let folded = b.fold();
+    let expense = folded.bill.expenses[0].id.clone();
+    for me in ["ana", "ben"] {
+        assert_eq!(
+            expense_withdrawal_target(&folded, &b.log, &expense, me),
+            Some(id_of(&original))
+        );
+    }
 }
 
 /// The bill's history, as `activity_of` reads it.

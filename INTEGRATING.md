@@ -1309,10 +1309,10 @@ a payment of nothing (`payment_not_positive`), a swap with no reference
 [`payment_entries_for_send`, `record_payment_entry`, `confirm_payment_entry`,
 `entry_refusal`]
 
-**Withdrawing a restated expense** (§10.8). After a removal restates your
-expense, `expenseWithdrawalTarget` names the entry you withdraw to take it
-off — your own first one, not the creator's restatement, which would put
-back the person removed. `expenseCorrectors` names who may correct an
+**Withdrawing a restated expense** (§10.8). After a removal restates an
+expense, `expenseWithdrawalTarget` names the entry its author or the creator
+withdraws to take it off — the first one, not the restatement, which would
+put back the person removed. `expenseCorrectors` names who may correct an
 expense — its entry's author, and after a restatement the person who first
 wrote it too — so offer Edit and Withdraw to each of them.
 [`expense_withdrawal_target`, `expense_correctors`]

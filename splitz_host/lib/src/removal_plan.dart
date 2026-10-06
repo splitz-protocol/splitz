@@ -654,14 +654,14 @@ List<Map<String, dynamic>> removalEntries({
 
 /// The entry [me] withdraws to take the expense [expenseId] off [folded]
 /// (§10.8), read from [log]: the entry that put it on the bill, or — when that
-/// is a restatement a removal wrote and [me] is neither its author nor the
-/// creator — the first expense it restates, when [me] wrote that.
+/// is a restatement a removal wrote — the first expense it restates, when [me]
+/// wrote that or is the creator.
 ///
-/// A restatement is the creator's, so its author may withdraw it; the person
-/// whose expense it restated may not, and withdrawing it would put their
-/// expense back as it named whoever was taken off. Withdrawing their own
-/// first entry instead takes the expense off and leaves the removal standing.
-/// Null when [folded] holds no such expense.
+/// Withdrawing a restatement puts back the expense it replaced, which still
+/// names whoever was taken off, so the removal no longer stands. Withdrawing
+/// the first entry instead takes the expense off and leaves the removal
+/// standing; its author and the creator may (§10.8's table). Anybody else gets
+/// the entry in force. Null when [folded] holds no such expense.
 String? expenseWithdrawalTarget({
   required splitz.FoldedBill folded,
   required List<Map<String, dynamic>> log,
@@ -672,9 +672,7 @@ String? expenseWithdrawalTarget({
   if (entryId == null) return null;
   final byId = {for (final e in log) e['id']: e};
   final entry = byId[entryId];
-  if (entry == null || entry['author'] == me || me == folded.creatorId) {
-    return entryId;
-  }
+  if (entry == null) return entryId;
   var at = entry;
   final seen = <Object?>{};
   while (at['kind'] == 'addExpense' &&
@@ -684,7 +682,7 @@ String? expenseWithdrawalTarget({
     if (earlier == null || earlier['kind'] != 'addExpense') return entryId;
     at = earlier;
   }
-  return !identical(at, entry) && at['author'] == me
+  return !identical(at, entry) && (at['author'] == me || me == folded.creatorId)
       ? at['id'] as String
       : entryId;
 }

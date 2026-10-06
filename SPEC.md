@@ -2063,11 +2063,11 @@ written by the creator, or by the expense's author, taking somebody off; an
 restates — following a chain of restatements to the first — and §10.4
 otherwise holds. Withdrawing the restatement stays its author's and the
 creator's alone: withdrawn, it puts back the expense it replaced, which still
-names whoever was taken off. The expense's author withdraws the expense by
-withdrawing their own first entry, which leaves the restatement stale and the
-removal standing (`expenseWithdrawalTarget` / `expense_withdrawal_target` name
-the entry to withdraw, and `expenseCorrectors` / `expense_correctors` who may
-correct it). A host MUST NOT write an `amendEntry` of an entry the
+names whoever was taken off. The expense's author takes the expense off by
+withdrawing its first entry, which leaves the restatement stale and the
+removal standing, and so does the creator, who may withdraw any expense
+(`expenseWithdrawalTarget` / `expense_withdrawal_target` name the entry to
+withdraw, and `expenseCorrectors` / `expense_correctors` who may correct it). A host MUST NOT write an `amendEntry` of an entry the
 log holds but does not have in force — a withdrawn entry, or one a
 restatement replaced — and refuses with `unauthorized_entry`: the fold admits
 it, the restatement goes stale, and the person taken off is back (`refusalOf`
