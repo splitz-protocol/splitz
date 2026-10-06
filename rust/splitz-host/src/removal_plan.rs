@@ -692,7 +692,105 @@ pub fn removal_entries(host: &dyn BillHost, plan: &RemovalPlan) -> Result<Vec<Va
         )?);
     }
     for join in &plan.joins {
-        out.push(void_entry(host, join)?);
+        out.push(void_entry(host, join, None)?);
     }
     Ok(out)
+}
+
+/// The entry `me` withdraws to take the expense `expense_id` off `folded`
+/// (§10.8), read from `log`: the entry that put it on the bill, or — when
+/// that is a restatement a removal wrote and `me` is neither its author nor
+/// the creator — the first expense it restates, when `me` wrote that.
+///
+/// A restatement is the creator's, so its author may withdraw it; the person
+/// whose expense it restated may not, and withdrawing it would put their
+/// expense back as it named whoever was taken off. Withdrawing their own
+/// first entry instead takes the expense off and leaves the removal standing.
+/// `None` when `folded` holds no such expense.
+pub fn expense_withdrawal_target(
+    folded: &FoldedBill,
+    log: &[Value],
+    expense_id: &str,
+    me: &str,
+) -> Option<String> {
+    let entry_id = folded.expense_entries.get(expense_id)?.clone();
+    let field = |e: &Value, member: &str| e.get(member).and_then(Value::as_str).map(str::to_owned);
+    let by_id: std::collections::HashMap<String, &Value> = log
+        .iter()
+        .filter_map(|e| field(e, "id").map(|id| (id, e)))
+        .collect();
+    let Some(entry) = by_id.get(&entry_id).copied() else {
+        return Some(entry_id);
+    };
+    if field(entry, "author").as_deref() == Some(me) || me == folded.creator_id {
+        return Some(entry_id);
+    }
+    let mut at = entry;
+    let mut seen = std::collections::HashSet::new();
+    while field(at, "kind").as_deref() == Some("addExpense") {
+        let Some(target) = field(at, "targetId") else {
+            break;
+        };
+        if !seen.insert(field(at, "id")) {
+            break;
+        }
+        match by_id.get(&target) {
+            Some(earlier) if field(earlier, "kind").as_deref() == Some("addExpense") => {
+                at = earlier;
+            }
+            _ => return Some(entry_id),
+        }
+    }
+    if !std::ptr::eq(at, entry) && field(at, "author").as_deref() == Some(me) {
+        field(at, "id")
+    } else {
+        Some(entry_id)
+    }
+}
+
+/// Who may correct the expense `expense_id` on `folded` (§10.4, §10.8), read
+/// from `log`: the author of the entry that puts it on the bill, and — when
+/// that is a restatement a removal wrote — the author of the first expense it
+/// restates, whose expense it stays. Empty when `folded` holds no such
+/// expense.
+///
+/// The two the fold admits an amendment of that entry from, and nobody else.
+pub fn expense_correctors(folded: &FoldedBill, log: &[Value], expense_id: &str) -> Vec<String> {
+    let (Some(entry_id), Some(author)) = (
+        folded.expense_entries.get(expense_id),
+        folded.expense_authors.get(expense_id),
+    ) else {
+        return Vec::new();
+    };
+    let field = |e: &Value, member: &str| e.get(member).and_then(Value::as_str).map(str::to_owned);
+    let by_id: std::collections::HashMap<String, &Value> = log
+        .iter()
+        .filter_map(|e| field(e, "id").map(|id| (id, e)))
+        .collect();
+    let Some(entry) = by_id.get(entry_id).copied() else {
+        return vec![author.clone()];
+    };
+    let mut at = entry;
+    let mut seen = std::collections::HashSet::new();
+    while field(at, "kind").as_deref() == Some("addExpense") {
+        let Some(target) = field(at, "targetId") else {
+            break;
+        };
+        if !seen.insert(field(at, "id")) {
+            break;
+        }
+        match by_id.get(&target) {
+            Some(earlier) if field(earlier, "kind").as_deref() == Some("addExpense") => {
+                at = earlier;
+            }
+            _ => return vec![author.clone()],
+        }
+    }
+    let mut out = vec![author.clone()];
+    if !std::ptr::eq(at, entry) {
+        if let Some(first) = field(at, "author").filter(|f| f != author) {
+            out.push(first);
+        }
+    }
+    out
 }

@@ -12,6 +12,7 @@
 //! on two things at once.
 
 pub mod activity;
+pub mod added_people;
 pub mod confirm_review;
 pub mod currencies;
 pub mod error;
@@ -38,7 +39,11 @@ pub mod transport;
 pub mod wallet;
 pub mod wallet_bill_host;
 
-pub use activity::{activity_of, awaiting_confirmation_by, BillEvent, BillEventKind};
+pub use activity::{
+    activity_of, awaiting_confirmation_by, awaiting_confirmation_for, confirmer_for, BillEvent,
+    BillEventKind,
+};
+pub use added_people::{add_person_entry, joined_as_me, HostAs};
 pub use confirm_review::{concerns_before_confirming, PaymentConcern};
 pub use currencies::{
     currency_exponent, parse_amount_in, parse_minor_units, parse_signed_amount_in,
@@ -53,6 +58,7 @@ pub use keys::{
 pub use naming::{display_name_of, name_skeleton, shared_names, short_id};
 pub use payer_review::{
     check_payee_review, check_payer_review, rate_figure, short_form, ReviewFinding, ReviewRule,
+    REPLACED_ADDRESS_WORDS,
 };
 pub use payouts::{payout_fallback, ranked_payouts, PayoutFallback};
 pub use pending_sends::{
@@ -70,8 +76,8 @@ pub use pricing::{
 pub use refunds::{refunds_behind, RefundsBehind};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use removal_plan::{
-    plan_merge, plan_removal, removal_entries, split_merged, split_without, RemovalBlock,
-    RemovalBlocker, RemovalEdit, RemovalPlan,
+    expense_correctors, expense_withdrawal_target, plan_merge, plan_removal, removal_entries,
+    split_merged, split_without, RemovalBlock, RemovalBlocker, RemovalEdit, RemovalPlan,
 };
 pub use sealing::{Sealing, BLOB_VERSION};
 pub use seam_contracts::{
@@ -96,4 +102,4 @@ pub use wallet::{
     SplitsRelay, SplitsWallet, SwapProvider, WalletAccount, WalletSendOutcome, WalletSendPhase,
     WalletSender, ZecPrices,
 };
-pub use wallet_bill_host::WalletBillHost;
+pub use wallet_bill_host::{sent_of, WalletBillHost};

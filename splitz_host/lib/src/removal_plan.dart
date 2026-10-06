@@ -651,3 +651,71 @@ List<Map<String, dynamic>> removalEntries({
     for (final join in plan.joins) splitz.voidEntry(host: host, targetId: join),
   ];
 }
+
+/// The entry [me] withdraws to take the expense [expenseId] off [folded]
+/// (§10.8), read from [log]: the entry that put it on the bill, or — when that
+/// is a restatement a removal wrote and [me] is neither its author nor the
+/// creator — the first expense it restates, when [me] wrote that.
+///
+/// A restatement is the creator's, so its author may withdraw it; the person
+/// whose expense it restated may not, and withdrawing it would put their
+/// expense back as it named whoever was taken off. Withdrawing their own
+/// first entry instead takes the expense off and leaves the removal standing.
+/// Null when [folded] holds no such expense.
+String? expenseWithdrawalTarget({
+  required splitz.FoldedBill folded,
+  required List<Map<String, dynamic>> log,
+  required String expenseId,
+  required String me,
+}) {
+  final entryId = folded.expenseEntries[expenseId];
+  if (entryId == null) return null;
+  final byId = {for (final e in log) e['id']: e};
+  final entry = byId[entryId];
+  if (entry == null || entry['author'] == me || me == folded.creatorId) {
+    return entryId;
+  }
+  var at = entry;
+  final seen = <Object?>{};
+  while (at['kind'] == 'addExpense' &&
+      at['targetId'] is String &&
+      seen.add(at['id'])) {
+    final earlier = byId[at['targetId']];
+    if (earlier == null || earlier['kind'] != 'addExpense') return entryId;
+    at = earlier;
+  }
+  return !identical(at, entry) && at['author'] == me
+      ? at['id'] as String
+      : entryId;
+}
+
+/// Who may correct the expense [expenseId] on [folded] (§10.4, §10.8), read
+/// from [log]: the author of the entry that puts it on the bill, and — when
+/// that is a restatement a removal wrote — the author of the first expense it
+/// restates, whose expense it stays. Empty when [folded] holds no such
+/// expense.
+///
+/// The two the fold admits an amendment of that entry from, and nobody else.
+List<String> expenseCorrectors({
+  required splitz.FoldedBill folded,
+  required List<Map<String, dynamic>> log,
+  required String expenseId,
+}) {
+  final entryId = folded.expenseEntries[expenseId];
+  final author = folded.expenseAuthors[expenseId];
+  if (entryId == null || author == null) return const [];
+  final byId = {for (final e in log) e['id']: e};
+  final entry = byId[entryId];
+  if (entry == null) return [author];
+  var at = entry;
+  final seen = <Object?>{};
+  while (at['kind'] == 'addExpense' &&
+      at['targetId'] is String &&
+      seen.add(at['id'])) {
+    final earlier = byId[at['targetId']];
+    if (earlier == null || earlier['kind'] != 'addExpense') return [author];
+    at = earlier;
+  }
+  final first = identical(at, entry) ? null : at['author'];
+  return [author, if (first is String && first != author) first];
+}

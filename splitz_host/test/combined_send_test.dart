@@ -29,7 +29,7 @@ const usdcBase = TradableAsset(
   FakeHost ana,
   List<Map<String, dynamic>> entries,
 })
-_bill() {
+_bill({bool caiPaid = true}) {
   final hosts = {
     for (final id in ['ana', 'ben', 'cai']) id: FakeHost(me: id),
   };
@@ -66,16 +66,17 @@ _bill() {
         'among': ['ana', 'ben'],
       },
     ),
-    splitz.addExpense(
-      host: at('cai'),
-      expenseId: 'x2',
-      paidBy: 'cai',
-      amount: 4000,
-      split: {
-        'type': 'equal',
-        'among': ['ana', 'cai'],
-      },
-    ),
+    if (caiPaid)
+      splitz.addExpense(
+        host: at('cai'),
+        expenseId: 'x2',
+        paidBy: 'cai',
+        amount: 4000,
+        split: {
+          'type': 'equal',
+          'among': ['ana', 'cai'],
+        },
+      ),
     splitz.setRate(host: at('ana'), currency: 'EUR', minorUnitsPerZec: 51234),
   ];
   final log = splitz.BillLog(hosts['ana']!, entries: entries);
@@ -156,6 +157,21 @@ void main() {
     expect(sent.note.swap!.to, 'ben');
   });
 
+  test('a request paying nobody in ZEC has nothing for a swap to join', () {
+    final b = _bill(caiPaid: false);
+    expect(b.obligation.carriedTo, isEmpty);
+    expect(
+      () => _combined(b),
+      throwsA(
+        isA<protocol.SplitError>().having(
+          (e) => e.code,
+          'code',
+          protocol.SplitCode.zip321NoPayments,
+        ),
+      ),
+    );
+  });
+
   test('a deposit that needs a memo, and a payee the request already pays, '
       'are refused', () {
     final b = _bill();
@@ -165,8 +181,8 @@ void main() {
     );
     expect(
       () => _combined(b, to: 'cai', amount: 2000),
-      throwsA(isA<SwapException>()),
-      reason: 'Cai is already in the request',
+      throwsA(isA<ArgumentError>()),
+      reason: 'Cai is already in the request: a caller error',
     );
   });
 

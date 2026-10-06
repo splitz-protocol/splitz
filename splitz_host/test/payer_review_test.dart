@@ -91,13 +91,17 @@ const eveLater = 'u1eve5555555555555555555';
   );
 }
 
-const reasons = {'no_address': 'has no address'};
+const reasons = {
+  'no_address': 'has no address',
+  replacedAddressWords: 'address changed',
+};
 
 /// One line per fact, so taking a line away takes exactly one fact away.
 const screen = [
   'Cat', // unpayable: who
   'has no address', // unpayable: why
-  'Ben', // replaced address
+  'Ben', // replaced address: whose
+  'address changed', // replaced address: that it changed
   'Dan', // awaiting
   '512.34', // rate figure
   '0.07807316', // Ben's output
@@ -141,6 +145,7 @@ void main() {
       (ReviewRule.unpayable, 'Cat'),
       (ReviewRule.unpayable, 'has no address'),
       (ReviewRule.replacedAddress, 'Ben'),
+      (ReviewRule.replacedAddress, 'address changed'),
       (ReviewRule.awaiting, 'Dan'),
       (ReviewRule.rate, '512.34'),
       (ReviewRule.output, '0.07807316'),
@@ -164,7 +169,7 @@ void main() {
 
   test('an amount inside a longer number is not shown', () {
     final b = bill();
-    final shown = [...screen]..[5] = '0.078073169';
+    final shown = [...screen]..[6] = '0.078073169';
     expect(
       checkPayerReview(
         obligation: b.obligation,
@@ -179,7 +184,7 @@ void main() {
   test('a different address sharing the first ten characters is not '
       'shown', () {
     final b = bill();
-    final shown = [...screen]..[6] = 'u1ben1111122222…';
+    final shown = [...screen]..[7] = 'u1ben1111122222…';
     expect(
       checkPayerReview(
         obligation: b.obligation,
@@ -200,7 +205,10 @@ void main() {
         visibleText: screen,
         reasonWords: const {},
       ).map((f) => (f.rule, f.expected)),
-      [(ReviewRule.unpayable, 'no_address')],
+      [
+        (ReviewRule.unpayable, 'no_address'),
+        (ReviewRule.replacedAddress, replacedAddressWords),
+      ],
     );
   });
 
@@ -222,7 +230,7 @@ void main() {
     const lower = 'by a later choice';
     const eveSecond = {'eve': 1};
     final lowerScreen = [...screen]
-      ..[8] = eveLater
+      ..[9] = eveLater
       ..add('Eve')
       ..add(lower);
 
@@ -465,6 +473,22 @@ void main() {
         reasonWords: reasons,
       ),
       isEmpty,
+    );
+  });
+
+  test('a change is said once for each payee whose address changed', () {
+    // §14.2: a name is on every review that pays its holder, so it says
+    // nothing about a change. Two payees replaced and the change said once
+    // leaves one of them unflagged.
+    final b = bill();
+    expect(
+      checkPayerReview(
+        obligation: b.obligation,
+        folded: b.folded,
+        visibleText: [...screen]..removeAt(3),
+        reasonWords: reasons,
+      ).map((f) => (f.rule, f.expected)),
+      [(ReviewRule.replacedAddress, 'address changed')],
     );
   });
 }

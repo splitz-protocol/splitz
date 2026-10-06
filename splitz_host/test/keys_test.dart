@@ -195,6 +195,26 @@ void main() {
       );
     });
 
+    test('NFKC is Unicode 17.0\'s, so every implementation agrees (§15.1)', () {
+      // U+209D, U+D7A4 and U+1DFCD: no Unicode 17.0 decomposition, so kept
+      // as written; the same bytes the Rust host derives.
+      for (final (c, utf8Hex) in [
+        ('\u{209D}', 'e2829d'),
+        ('\u{D7A4}', 'ed9ea4'),
+        ('\u{1DFCD}', 'f09dbf8d'),
+      ]) {
+        expect(
+          identitySecretFromMnemonic(mnemonic: 'w${c}x', passphrase: c),
+          _hex('77${utf8Hex}7800$utf8Hex'),
+        );
+      }
+      // And a decomposed letter still meets its precomposed one.
+      expect(
+        identitySecretFromMnemonic(mnemonic: 'a\u{0308}', passphrase: ''),
+        identitySecretFromMnemonic(mnemonic: '\u{00E4}', passphrase: ''),
+      );
+    });
+
     test('account 0 carries no index, account 1 does', () {
       expect(identitySecretFromMnemonic(mnemonic: 'm', passphrase: 'p'), [
         0x6d,

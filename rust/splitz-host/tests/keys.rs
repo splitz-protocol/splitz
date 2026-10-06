@@ -278,6 +278,21 @@ fn a_mnemonic_derives_the_same_identity_in_every_wallet() {
     );
 }
 
+/// §15.1: NFKC as Unicode 17.0 defines it, so every implementation agrees.
+#[test]
+fn nfkc_is_unicode_seventeens_in_every_implementation() {
+    for c in ['\u{209D}', '\u{D7A4}', '\u{1DFCD}'] {
+        let secret =
+            splitz_host::identity_secret_from_mnemonic(&format!("w{c}x"), &c.to_string(), 0)
+                .unwrap();
+        assert_eq!(secret, format!("w{c}x\0{c}").into_bytes(), "{c:?}");
+    }
+    assert_eq!(
+        splitz_host::identity_secret_from_mnemonic("a\u{0308}", "", 0).unwrap(),
+        splitz_host::identity_secret_from_mnemonic("\u{00E4}", "", 0).unwrap()
+    );
+}
+
 #[test]
 fn account_zero_carries_no_index_and_account_one_does() {
     let zero = splitz_host::identity_secret_from_mnemonic("m", "p", 0).unwrap();

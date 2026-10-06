@@ -107,10 +107,15 @@ String rateFigure(splitz.ExchangeRate rate) {
   return '$sign$whole.${digits.substring(digits.length - exponent)}';
 }
 
+/// The key in [checkPayerReview]'s `reasonWords` for the screen's words that
+/// a payee's address was replaced (§14.2).
+const String replacedAddressWords = 'replaced_address';
+
 /// §14.2's facts for [obligation] on [folded], against [visibleText].
 ///
 /// [reasonWords] maps each §8.5 reason code to the words the screen uses for
-/// it. [via] is the payer's choice of payouts the obligation was rendered with
+/// it, and [replacedAddressWords] to its words that an address was replaced,
+/// which it shows once for each payee whose address was. [via] is the payer's choice of payouts the obligation was rendered with
 /// (`obligationVia`), and [lowerWords] the screen's words for a recipient paid
 /// by one other than their first; a choice for somebody the obligation does
 /// not pay needs nothing shown. [unexplainedWords] are the screen's words for
@@ -151,7 +156,12 @@ List<ReviewFinding> checkPayerReview({
     );
   }
 
+  // A change is shown by saying so, once for each person whose address
+  // changed: a name alone is on every review that pays them, and says
+  // nothing about the change. The screen's words for it are
+  // [reasonWords]'s `replaced_address`.
   final replaced = <String>{};
+  final changedWords = reasonWords[replacedAddressWords] ?? '';
   for (final r in folded.replacedAddresses) {
     if (!replaced.add(r.id)) continue;
     final who = name(r.id);
@@ -160,6 +170,13 @@ List<ReviewFinding> checkPayerReview({
       'whose pay-to address was replaced',
       who,
       text.contains(who),
+    );
+    need(
+      ReviewRule.replacedAddress,
+      'that $who\'s pay-to address was replaced',
+      changedWords.isEmpty ? replacedAddressWords : changedWords,
+      changedWords.isNotEmpty &&
+          changedWords.allMatches(text).length >= replaced.length,
     );
   }
 

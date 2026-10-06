@@ -47,41 +47,9 @@ class WalletBillHost extends splitz.BillHost {
   splitz.Randomness get randomBytes =>
       (int n) => Uint8List.fromList(_wallet.randomBytes(n));
 
-  /// Maps the wallet's four send phases onto the protocol's three.
-  ///
-  /// `aborted` and `failed` are one answer to a bill — nothing was spent — and
-  /// differ only in the message a person is shown. `pendingBroadcast` keeps its
-  /// own state: it is the one outcome from which nothing may be recorded and no
-  /// retry is safe.
   @override
-  splitz.Broadcast get broadcast => (String uri) async {
-    final outcome = await _wallet.sender.send(uri);
-    switch (outcome.phase) {
-      case WalletSendPhase.succeeded:
-        final txid = outcome.txid;
-        // Pending, not failed: the wallet says money left, and without an
-        // id nothing can be recorded — but a retry could pay it twice.
-        if (txid == null) {
-          return const splitz.Sent.pending(
-            detail: 'the wallet reported a send with no transaction id',
-          );
-        }
-        return splitz.Sent.sent(txid);
-      case WalletSendPhase.pendingBroadcast:
-        return splitz.Sent.pending(
-          detail:
-              outcome.statusMessage ??
-              'The transaction was created but not broadcast yet. '
-                  'Check its status before trying again.',
-          txid: outcome.txid,
-        );
-      case WalletSendPhase.failed:
-      case WalletSendPhase.aborted:
-        return splitz.Sent.failed(
-          detail: outcome.error ?? 'The transaction could not be sent.',
-        );
-    }
-  };
+  splitz.Broadcast get broadcast =>
+      (String uri) async => sentOf(await _wallet.sender.send(uri));
 
   /// Null until an identity has been loaded for this account.
   ///
@@ -99,4 +67,38 @@ class WalletBillHost extends splitz.BillHost {
   /// (§14.6). Null reads every address the protocol admits.
   @override
   splitz.ReadsAddress? get readsAddress => _readsAddress;
+}
+
+/// Maps the wallet's four send phases onto the protocol's three.
+///
+/// `aborted` and `failed` are one answer to a bill — nothing was spent — and
+/// differ only in the message a person is shown. `pendingBroadcast` keeps its
+/// own state: it is the one outcome from which nothing may be recorded and no
+/// retry is safe.
+splitz.Sent sentOf(WalletSendOutcome outcome) {
+  switch (outcome.phase) {
+    case WalletSendPhase.succeeded:
+      final txid = outcome.txid;
+      // Pending, not failed: the wallet says money left, and without an
+      // id nothing can be recorded — but a retry could pay it twice.
+      if (txid == null) {
+        return const splitz.Sent.pending(
+          detail: 'the wallet reported a send with no transaction id',
+        );
+      }
+      return splitz.Sent.sent(txid);
+    case WalletSendPhase.pendingBroadcast:
+      return splitz.Sent.pending(
+        detail:
+            outcome.statusMessage ??
+            'The transaction was created but not broadcast yet. '
+                'Check its status before trying again.',
+        txid: outcome.txid,
+      );
+    case WalletSendPhase.failed:
+    case WalletSendPhase.aborted:
+      return splitz.Sent.failed(
+        detail: outcome.error ?? 'The transaction could not be sent.',
+      );
+  }
 }

@@ -165,7 +165,24 @@ fn a_memo_deposit_and_a_payee_the_request_already_pays_are_refused() {
             AT
         )
         .is_err());
-        assert!(combined_send(bill_id, bill, owed, &quote(None, bill), "cai", 2000, AT).is_err());
+        assert!(matches!(
+            combined_send(bill_id, bill, owed, &quote(None, bill), "cai", 2000, AT),
+            Err(HostError::Malformed(_))
+        ));
+    });
+}
+
+#[test]
+fn a_request_paying_nobody_in_zec_has_nothing_for_a_swap_to_join() {
+    with_bill(|_, _, owed, bill_id, bill| {
+        let mut nobody = owed.clone();
+        nobody.request.payments.clear();
+        match combined_send(bill_id, bill, &nobody, &quote(None, bill), "ben", 4000, AT) {
+            Err(HostError::Protocol(e)) => {
+                assert_eq!(e.code, splitz_core::code::ZIP321_NO_PAYMENTS)
+            }
+            other => panic!("{other:?}"),
+        }
     });
 }
 

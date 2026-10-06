@@ -53,6 +53,7 @@ fn folded(expenses: Vec<Expense>, authors: &[(&str, &str)]) -> FoldedBill {
         amendment_of: BTreeMap::new(),
         close_entry: None,
         closed_over: String::new(),
+        last_close_at: None,
     }
 }
 
@@ -71,7 +72,9 @@ fn a_refund_that_moves_the_whole_unexplained_part_onto_the_payer_names_it() {
         vec![expense("cara:r", "me", -1000, &["me", "ben"])],
         &[("cara:r", "cara")],
     );
-    let found = refunds_behind(&settlement(500, vec![]), &f).expect("a refund");
+    let found = refunds_behind(&settlement(500, vec![]), &f)
+        .unwrap()
+        .expect("a refund");
     assert_eq!(found.refunded, 500);
     assert_eq!(found.authors, vec!["cara".to_owned()]);
 }
@@ -79,7 +82,7 @@ fn a_refund_that_moves_the_whole_unexplained_part_onto_the_payer_names_it() {
 #[test]
 fn an_overpayment_is_not_a_refund() {
     let f = folded(vec![expense("me:d", "me", 1000, &["me", "ben"])], &[]);
-    assert_eq!(refunds_behind(&settlement(500, vec![]), &f), None);
+    assert_eq!(refunds_behind(&settlement(500, vec![]), &f).unwrap(), None);
 }
 
 #[test]
@@ -88,7 +91,7 @@ fn a_refund_smaller_than_the_unexplained_part_does_not_account_for_it() {
         vec![expense("cara:r", "me", -200, &["me", "ben"])],
         &[("cara:r", "cara")],
     );
-    assert_eq!(refunds_behind(&settlement(500, vec![]), &f), None);
+    assert_eq!(refunds_behind(&settlement(500, vec![]), &f).unwrap(), None);
 }
 
 #[test]
@@ -105,5 +108,5 @@ fn a_settlement_its_covers_explain_has_nothing_to_account_for() {
             amount: 500,
         }],
     );
-    assert_eq!(refunds_behind(&covered, &f), None);
+    assert_eq!(refunds_behind(&covered, &f).unwrap(), None);
 }

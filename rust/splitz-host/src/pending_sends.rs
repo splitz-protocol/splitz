@@ -377,6 +377,9 @@ pub enum NamedSendRefusal {
     Waiting,
     /// The wallet shows it went through: it is recorded, not cleared.
     Mined,
+    /// The wallet's history could not be read, so nothing says the
+    /// transaction can no longer land.
+    Unread,
 }
 
 /// Whether `send`'s note may be removed on a person's word that nothing left
@@ -387,7 +390,9 @@ pub enum NamedSendRefusal {
 ///
 /// A transaction neither mined nor expired may still be broadcast, and one
 /// mined went through; either way clearing the note lets the debt go out a
-/// second time. Expired, or absent from the history, it can no longer land.
+/// second time. Expired, or absent from a history that was read, it can no
+/// longer land. A history that could not be read says neither, and the note
+/// stays: taking a failed read for "absent" sends the debt twice.
 pub fn named_send_refusal(
     send: &PendingSend,
     state: Option<TransactionState>,
@@ -396,11 +401,13 @@ pub fn named_send_refusal(
     match state {
         Some(TransactionState::Waiting) => Some(NamedSendRefusal::Waiting),
         Some(TransactionState::Mined) => Some(NamedSendRefusal::Mined),
+        Some(TransactionState::Unread) => Some(NamedSendRefusal::Unread),
         Some(TransactionState::Expired) | None => None,
     }
 }
 
-/// Where a transaction the wallet holds stands.
+/// Where a transaction the wallet built stands in its history. `None` where
+/// one is asked for means the history was read and does not hold it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransactionState {
     /// In a block: it went through.
@@ -409,6 +416,8 @@ pub enum TransactionState {
     Waiting,
     /// Expired unmined: it can no longer go through.
     Expired,
+    /// The history could not be read: it may be in any state above.
+    Unread,
 }
 
 /// Why this device may not withdraw its own record of a shielded payment.
@@ -418,6 +427,9 @@ pub enum OwnPaymentWithdrawal {
     Mined,
     /// The wallet still holds that transaction and may send it.
     Waiting,
+    /// The wallet's history could not be read, so nothing says the
+    /// transaction can no longer reach the payee.
+    Unread,
 }
 
 /// Whether this device, `me`, may withdraw its own record of `payment`, given
@@ -428,7 +440,8 @@ pub enum OwnPaymentWithdrawal {
 /// or may yet reach, the payee, and it is paid twice. Only a `shieldedZec`
 /// record the payer wrote names a transaction this wallet can look up; a cash
 /// or swap record, or one somebody else wrote, is decided by §10.8 alone, and
-/// `state` `None` (the history does not hold it) or expired leaves it free.
+/// `state` `None` (a history that was read does not hold it) or expired leaves
+/// it free; an unread history leaves it held.
 pub fn own_payment_withdrawal_refusal(
     payment: &splitz_core::PaymentRecord,
     me: &str,
@@ -440,6 +453,7 @@ pub fn own_payment_withdrawal_refusal(
     match state {
         Some(TransactionState::Mined) => Some(OwnPaymentWithdrawal::Mined),
         Some(TransactionState::Waiting) => Some(OwnPaymentWithdrawal::Waiting),
+        Some(TransactionState::Unread) => Some(OwnPaymentWithdrawal::Unread),
         Some(TransactionState::Expired) | None => None,
     }
 }

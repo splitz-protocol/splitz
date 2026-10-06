@@ -451,4 +451,106 @@ void main() {
       expect(own.mayWithdrawJoins, isTrue);
     },
   );
+
+  group('after a removal restates somebody else\'s expense', () {
+    Future<(Table, Map<String, dynamic>, String, List<Map<String, dynamic>>)>
+    restated() async {
+      final t = await Table.open();
+      final e2 = await t.expense(t.ben, 'e2', 900, {
+        'type': 'equal',
+        'among': ['ana', t.benId, 'cal'],
+      }, paidBy: t.benId);
+      final log = [...t.log, e2];
+      final (plan, written) = await t.remove(log, t.ana, 'ana');
+      expect(plan.complete, isTrue);
+      final restatement =
+          written.firstWhere((e) => e['kind'] == 'addExpense')['id'] as String;
+      return (t, e2, restatement, [...log, ...written]);
+    }
+
+    Future<Map<String, dynamic>> amend(
+      Table t,
+      Map<String, dynamic> target,
+      Map<String, dynamic> payload,
+    ) async {
+      t.benWallet.tick(const Duration(hours: 2));
+      return splitz.signEntry(
+        host: t.ben,
+        entry: splitz.amendEntry(
+          host: t.ben,
+          targetId: target['id'] as String,
+          member: 'expense',
+          payload: payload,
+        ),
+        billId: t.bill,
+      );
+    }
+
+    test('its author corrects it, and cal stays off (§10.8)', () async {
+      final (t, _, restatement, log) = await restated();
+      final written = log.firstWhere((e) => e['id'] == restatement);
+      final fix = await amend(t, written, {
+        ...(written['expense'] as Map).cast<String, dynamic>(),
+        'amount': 950,
+      });
+      final after = await t.fold([...log, fix]);
+      expect(after.setAside, isEmpty);
+      expect(total(after), 950);
+      expect(after.bill.participant('cal'), isNull);
+      final held = splitz.BillLog(t.ben, entries: log, billId: t.bill);
+      expect(held.refusalOf(fix), isNull);
+    });
+
+    test(
+      'amending the replaced original is refused before it is written',
+      () async {
+        final (t, e2, _, log) = await restated();
+        final back = await amend(
+          t,
+          e2,
+          (e2['expense'] as Map).cast<String, dynamic>(),
+        );
+        final held = splitz.BillLog(t.ben, entries: log, billId: t.bill);
+        expect(held.refusalOf(back), protocol.SplitCode.unauthorizedEntry);
+        // The fold alone would admit it and put cal back: what the host's
+        // refusal stands against.
+        final admitted = await t.fold([...log, back]);
+        expect(admitted.bill.participant('cal'), isNotNull);
+      },
+    );
+
+    test('its author withdraws it by their own first entry', () async {
+      final (t, e2, restatement, log) = await restated();
+      final folded = await t.fold(log);
+      final restatedId = folded.bill.expenses.single.id;
+      expect(
+        expenseWithdrawalTarget(
+          folded: folded,
+          log: log,
+          expenseId: restatedId,
+          me: t.benId,
+        ),
+        e2['id'],
+      );
+      // The creator, who wrote the restatement, withdraws that.
+      expect(
+        expenseWithdrawalTarget(
+          folded: folded,
+          log: log,
+          expenseId: restatedId,
+          me: 'ana',
+        ),
+        restatement,
+      );
+      t.benWallet.tick(const Duration(hours: 2));
+      final off = await splitz.signEntry(
+        host: t.ben,
+        entry: splitz.voidEntry(host: t.ben, targetId: e2['id'] as String),
+        billId: t.bill,
+      );
+      final after = await t.fold([...log, off]);
+      expect(after.bill.expenses, isEmpty);
+      expect(after.bill.participant('cal'), isNull);
+    });
+  });
 }

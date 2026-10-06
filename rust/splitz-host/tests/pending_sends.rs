@@ -507,6 +507,11 @@ fn withdrawing_ones_own_shielded_record_is_refused_while_mined_or_waiting() {
         refusal(&p, "me", Some(TransactionState::Waiting)),
         Some(OwnPaymentWithdrawal::Waiting)
     );
+    // §14.4: a failed read is not "absent".
+    assert_eq!(
+        refusal(&p, "me", Some(TransactionState::Unread)),
+        Some(OwnPaymentWithdrawal::Unread)
+    );
 }
 
 #[test]
@@ -550,6 +555,12 @@ fn a_note_naming_its_transaction_is_held_while_it_waits_or_once_it_went_through(
         None
     );
     assert_eq!(named_send_refusal(&named, None), None);
+    // A history that could not be read keeps the note: clearing it on a
+    // failed read sends the debt twice.
+    assert_eq!(
+        named_send_refusal(&named, Some(TransactionState::Unread)),
+        Some(NamedSendRefusal::Unread)
+    );
     // A note naming none is unsent_claim_refusal's.
     assert_eq!(
         named_send_refusal(&send("b1"), Some(TransactionState::Waiting)),

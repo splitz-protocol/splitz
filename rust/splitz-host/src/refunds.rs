@@ -26,11 +26,25 @@ pub struct RefundsBehind {
 /// the whole unexplained part may a host call it a refund; otherwise the bill
 /// holds no refund that explains it — a confirmed payment above what was owed
 /// leaves the same figure — and a host says only that no debt explains it.
-pub fn refunds_behind(settlement: &Settlement, folded: &FoldedBill) -> Option<RefundsBehind> {
-    let unexplained = settlement.unexplained();
+///
+/// Refused with `amount_overflow` when `settlement`'s figures leave the
+/// signed 64-bit range (`Settlement::unexplained`).
+pub fn refunds_behind(
+    settlement: &Settlement,
+    folded: &FoldedBill,
+) -> splitz_core::Result<Option<RefundsBehind>> {
+    let unexplained = settlement.unexplained()?;
     if unexplained <= 0 {
-        return None;
+        return Ok(None);
     }
+    Ok(refunds_explaining(settlement, folded, unexplained))
+}
+
+fn refunds_explaining(
+    settlement: &Settlement,
+    folded: &FoldedBill,
+    unexplained: i64,
+) -> Option<RefundsBehind> {
     let mut refunded = 0i64;
     let mut authors: BTreeSet<String> = BTreeSet::new();
     for e in &folded.bill.expenses {

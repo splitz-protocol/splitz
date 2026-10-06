@@ -98,10 +98,15 @@ pub fn rate_figure(rate: &ExchangeRate) -> String {
     format!("{sign}{whole}.{fraction}")
 }
 
+/// The key in `check_payer_review`'s `reason_words` for the screen's words
+/// that a payee's address was replaced (§14.2).
+pub const REPLACED_ADDRESS_WORDS: &str = "replaced_address";
+
 /// §14.2's facts for `obligation` on `folded`, against `visible_text`.
 ///
 /// `reason_words` maps each §8.5 reason code to the words the screen uses for
-/// it. `via` is the payer's choice of payouts the obligation was rendered with
+/// it, and `REPLACED_ADDRESS_WORDS` to its words that an address was
+/// replaced, which it shows once for each payee whose address was. `via` is the payer's choice of payouts the obligation was rendered with
 /// (`obligation_via`), and `lower_words` the screen's words for a recipient
 /// paid by one other than their first; a choice for somebody the obligation
 /// does not pay needs nothing shown. Findings come in the order of §14.2's list; within a rule, in the order
@@ -153,7 +158,15 @@ pub fn check_payer_review(
         );
     }
 
+    // A change is shown by saying so, once for each person whose address
+    // changed: a name alone is on every review that pays them, and says
+    // nothing about the change. The screen's words for it are
+    // `reason_words`' `replaced_address`.
     let mut replaced = BTreeSet::new();
+    let changed_words = reason_words
+        .get(REPLACED_ADDRESS_WORDS)
+        .map(String::as_str)
+        .unwrap_or("");
     for r in &folded.replaced_addresses {
         if !replaced.insert(r.id.as_str()) {
             continue;
@@ -163,8 +176,18 @@ pub fn check_payer_review(
         need(
             ReviewRule::ReplacedAddress,
             "whose pay-to address was replaced".to_owned(),
-            who,
+            who.clone(),
             shown,
+        );
+        need(
+            ReviewRule::ReplacedAddress,
+            format!("that {who}'s pay-to address was replaced"),
+            if changed_words.is_empty() {
+                REPLACED_ADDRESS_WORDS.to_owned()
+            } else {
+                changed_words.to_owned()
+            },
+            !changed_words.is_empty() && text.matches(changed_words).count() >= replaced.len(),
         );
     }
 
@@ -215,7 +238,7 @@ pub fn check_payer_review(
     }
 
     for s in &obligation.settlements {
-        if s.unexplained() <= 0 {
+        if s.unexplained()? <= 0 {
             continue;
         }
         let who = name(&s.to);

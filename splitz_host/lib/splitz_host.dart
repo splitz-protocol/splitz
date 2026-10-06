@@ -1,6 +1,6 @@
 /// Split bills in a Zcash wallet — everything except the screens.
 ///
-/// `package:splitz` decides what a bill is, what anyone owes and which payment
+/// `package:splitz_core` decides what a bill is, what anyone owes and which payment
 /// request settles it. This package is what a wallet needs around that: the
 /// seam it plugs into, entry signing, sealing, the log it keeps, and the sync
 /// that moves a bill between devices.
@@ -27,6 +27,7 @@ export 'src/pending_sends.dart';
 export 'src/pricing.dart';
 export 'src/refunds.dart';
 export 'src/activity.dart';
+export 'src/added_people.dart';
 export 'src/relay.dart';
 export 'src/removal_plan.dart';
 export 'src/split_draft.dart';

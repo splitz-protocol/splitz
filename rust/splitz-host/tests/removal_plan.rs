@@ -13,8 +13,10 @@ use splitz_core::host::{
 use splitz_core::Expense;
 use splitz_core::{net_balances, participant_id};
 use splitz_host::{
-    plan_merge, plan_removal, removal_entries, split_merged, split_without, RemovalBlock,
-    RemovalEdit, RemovalPlan, WalletBillHost,
+    activity_of, add_person_entry, awaiting_confirmation_for, confirmer_for, expense_correctors,
+    expense_withdrawal_target, plan_merge, plan_removal, removal_entries, split_merged,
+    split_without, BillEvent, BillEventKind, RemovalBlock, RemovalEdit, RemovalPlan,
+    WalletBillHost,
 };
 use std::collections::{BTreeMap, HashMap};
 use support::FakeWallet;
@@ -108,7 +110,7 @@ impl Bill {
     }
 
     fn withdraw(&mut self, who: &str, target_id: &str) -> Value {
-        self.write(who, |h| void_entry(h, target_id).unwrap())
+        self.write(who, |h| void_entry(h, target_id, None).unwrap())
     }
 
     fn held<R>(&self, read: impl FnOnce(&BillLog) -> R) -> R {
@@ -547,11 +549,11 @@ fn the_same_plan_held_back_by_something_else_is_not_the_plan_any_more() {
 
 #[test]
 fn the_protocol_refuses_the_removal_the_plan_says_is_held_back() {
-    // The fold's own §10.8 check agrees with the plan: a removal planned as
-    // blocked is set aside with participant_still_named.
+    // The fold's own §10.8 check agrees with the plan when somebody else's
+    // entry names them: the removal is set aside with participant_still_named.
     let mut b = Bill::new();
     b.join("ben");
-    b.expense("ben", "hotel", "ben", 2000, equal(&["ana", "ben"]), None);
+    b.expense("ana", "hotel", "ben", 2000, equal(&["ana", "ben"]), None);
     assert!(b.plan("ben", "ana").names_them());
     let ben = b.joins["ben"].clone();
     let removal = b.withdraw("ana", &ben);
@@ -1185,4 +1187,427 @@ fn a_closed_bill_returns_a_plan_a_payment_holds_back() {
     assert_eq!(plan.blockers.len(), 1);
     assert_eq!(plan.blockers[0].block, RemovalBlock::Payment);
     assert!(!plan.complete());
+}
+
+#[test]
+fn their_own_entry_holds_the_plan_back_but_not_the_fold() {
+    // §10.8: an entry the person wrote never holds their removal back, so one
+    // written after it cannot undo it. A removal written past the plan sets
+    // their own expense aside, as the creator withdrawing it would.
+    let mut b = Bill::new();
+    b.join("ben");
+    b.expense("ben", "hotel", "ben", 2000, equal(&["ana", "ben"]), None);
+    assert!(b.plan("ben", "ana").names_them());
+    let ben = b.joins["ben"].clone();
+    let removal = b.withdraw("ana", &ben);
+    let folded = b.fold();
+    assert!(!folded.set_aside.iter().any(|s| s.id == id_of(&removal)));
+    assert!(folded.bill.participant("ben").is_none());
+    assert!(folded.bill.expenses.is_empty());
+    assert!(folded
+        .set_aside
+        .iter()
+        .any(|s| s.code == code::UNKNOWN_PARTICIPANT));
+}
+
+/// §10.5, §14.11: Josh, added by the creator and paid before he joined from a
+/// device of his own under another id.
+fn paid_before_josh_joined() -> (Bill, String) {
+    let mut b = Bill::new();
+    b.join("cai");
+    b.join("josh");
+    b.expense(
+        "ana",
+        "x1",
+        "josh",
+        3000,
+        equal(&["ana", "cai", "josh"]),
+        None,
+    );
+    b.write("cai", |h| {
+        record_payment(
+            h,
+            "tx1:josh",
+            "josh",
+            1000,
+            "shieldedZec",
+            Some(&"aa".repeat(32)),
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+    });
+    let jo = participant_id(&fake_key("jo")).unwrap();
+    b.write(&jo, |h| {
+        join_bill(h, Some("Josh"), Some("u1jo"), Some(&fake_key("jo")), None).unwrap()
+    });
+    (b, jo)
+}
+
+#[test]
+fn the_creator_confirms_a_payment_to_somebody_they_added_as_them() {
+    let (mut b, _) = paid_before_josh_joined();
+    let folded = b.fold();
+    let pay = folded.bill.payments[0].clone();
+    assert_eq!(confirmer_for(&folded, &pay, "ana").as_deref(), Some("josh"));
+    assert_eq!(awaiting_confirmation_for(&folded, "ana").len(), 1);
+    let record = folded.payment_digests[&pay.id].clone();
+    b.write("josh", |h| {
+        confirm_payment(h, &pay.id, "recipientConfirmed", None, &record).unwrap()
+    });
+    let after = b.fold();
+    assert!(after.set_aside.is_empty(), "{:?}", after.set_aside);
+    assert!(after.bill.confirmed_payments.contains(&pay.id));
+    assert_eq!(net_balances(&after.bill).unwrap()["cai"], 0);
+    assert!(awaiting_confirmation_for(&after, "ana").is_empty());
+}
+
+#[test]
+fn nobody_else_confirms_for_somebody_added() {
+    let (b, jo) = paid_before_josh_joined();
+    let folded = b.fold();
+    let pay = &folded.bill.payments[0];
+    assert_eq!(confirmer_for(&folded, pay, "cai"), None);
+    assert_eq!(confirmer_for(&folded, pay, &jo), None);
+    assert!(awaiting_confirmation_for(&folded, "cai").is_empty());
+}
+
+/// The creator paid Josh, whom they added: a payment the creator would then
+/// confirm themselves.
+fn the_creator_paid_josh() -> Bill {
+    let mut b = Bill::new();
+    b.join("josh");
+    b.write("ana", |h| {
+        record_payment(h, "tx4:josh", "josh", 700, "cash", None, None, None, None).unwrap()
+    });
+    b
+}
+
+#[test]
+fn the_creator_does_not_confirm_a_payment_they_made() {
+    let folded = the_creator_paid_josh().fold();
+    let pay = &folded.bill.payments[0];
+    assert_eq!(pay.from, "ana");
+    assert_eq!(confirmer_for(&folded, pay, "ana"), None);
+    assert!(awaiting_confirmation_for(&folded, "ana").is_empty());
+    // Josh, on a device of his own under this id, still confirms it.
+    assert_eq!(confirmer_for(&folded, pay, "josh").as_deref(), Some("josh"));
+}
+
+#[test]
+fn the_creator_does_not_confirm_for_somebody_who_joined_with_a_key() {
+    let mut b = Bill::new();
+    let jo = participant_id(&fake_key("jo")).unwrap();
+    b.write(&jo, |h| {
+        join_bill(h, Some("Jo"), Some("u1jo"), Some(&fake_key("jo")), None).unwrap()
+    });
+    b.write("ana", |h| {
+        record_payment(
+            h,
+            "tx3:jo",
+            &jo,
+            500,
+            "shieldedZec",
+            Some(&"cc".repeat(32)),
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+    });
+    let folded = b.fold();
+    let pay = &folded.bill.payments[0];
+    assert_eq!(confirmer_for(&folded, pay, "ana"), None);
+    assert_eq!(
+        confirmer_for(&folded, pay, &jo).as_deref(),
+        Some(jo.as_str())
+    );
+}
+
+#[test]
+fn a_person_added_by_hand_is_written_as_them_and_unsigned() {
+    let mut b = Bill::new();
+    b.join("ben");
+    let folded = b.fold();
+    let entry = b.write("ana", |h| add_person_entry(h, &folded, "jo", "Jo").unwrap());
+    assert_eq!(entry["author"], "jo");
+    assert!(entry.get("sig").is_none());
+    let after = b.fold();
+    assert_eq!(
+        after.bill.participant("jo").map(|p| p.name.as_str()),
+        Some("Jo")
+    );
+    assert!(after.set_aside.is_empty(), "{:?}", after.set_aside);
+}
+
+#[test]
+fn a_person_added_under_a_taken_id_or_none_is_refused() {
+    let mut b = Bill::new();
+    b.join("ben");
+    let folded = b.fold();
+    let codes: Vec<String> = ["ben", "ana", ""]
+        .iter()
+        .map(|id| {
+            let mut code_of = String::new();
+            b.write("ana", |h| {
+                code_of = add_person_entry(h, &folded, id, "X")
+                    .unwrap_err()
+                    .code
+                    .to_owned();
+                serde_json::json!({})
+            });
+            b.log.pop();
+            code_of
+        })
+        .collect();
+    assert_eq!(
+        codes,
+        vec![
+            code::DUPLICATE_PARTICIPANT,
+            code::DUPLICATE_PARTICIPANT,
+            code::BILL_MISSING_ENTRY_PAYLOAD
+        ]
+    );
+}
+
+#[test]
+fn a_second_add_under_a_hand_added_id_is_refused_and_a_different_one_joins() {
+    let mut b = Bill::new();
+    let folded = b.fold();
+    b.write("ana", |h| add_person_entry(h, &folded, "jo", "Jo").unwrap());
+    let with_jo = b.fold();
+    let mut refused = String::new();
+    b.write("ana", |h| {
+        refused = add_person_entry(h, &with_jo, "jo", "Joanna")
+            .unwrap_err()
+            .code
+            .to_owned();
+        serde_json::json!({})
+    });
+    b.log.pop();
+    assert_eq!(refused, code::DUPLICATE_PARTICIPANT);
+    b.write("ana", |h| {
+        add_person_entry(h, &with_jo, "sam", "Jo").unwrap()
+    });
+    let after = b.fold();
+    assert!(after.set_aside.is_empty(), "{:?}", after.set_aside);
+    assert_eq!(
+        after.bill.participant("jo").map(|p| p.name.as_str()),
+        Some("Jo")
+    );
+    assert!(after.bill.participant("sam").is_some());
+}
+
+/// §10.8: after a removal restates Ben's expense, Ben may correct it, and a
+/// host refuses to write an amendment of the original it replaced, which the
+/// fold would admit and which would put Cal back on the bill.
+#[test]
+fn amending_the_expense_a_removal_replaced_is_refused_before_it_is_written() {
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cal");
+    let original = b.expense("ben", "x2", "ben", 900, equal(&["ana", "ben", "cal"]), None);
+    let plan = b.plan("cal", "ana");
+    assert!(plan.complete());
+    let written: Vec<Value> = {
+        let ana = &b.wallets["ana"];
+        removal_entries(&WalletBillHost::new(ana), &plan).unwrap()
+    };
+    let restated = written
+        .iter()
+        .find(|e| e["kind"] == "addExpense")
+        .unwrap()
+        .clone();
+    for e in written {
+        b.write("ana", |_| e);
+    }
+    let original_id = id_of(&original);
+    let back = b.write("ben", |h| {
+        amend_entry(h, &original_id, "expense", original["expense"].clone()).unwrap()
+    });
+    b.log.pop();
+    assert_eq!(
+        b.held(|log| log.refusal_of(&back).unwrap()).as_deref(),
+        Some(code::UNAUTHORIZED_ENTRY)
+    );
+    let mut payload = restated["expense"].clone();
+    payload["amount"] = json!(950);
+    let restated_id = id_of(&restated);
+    let fix = b.write("ben", |h| {
+        amend_entry(h, &restated_id, "expense", payload).unwrap()
+    });
+    b.log.pop();
+    assert_eq!(b.held(|log| log.refusal_of(&fix).unwrap()), None);
+}
+
+#[test]
+fn the_author_of_a_restated_expense_withdraws_their_first_entry() {
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cal");
+    let original = b.expense("ben", "x2", "ben", 900, equal(&["ana", "ben", "cal"]), None);
+    let plan = b.plan("cal", "ana");
+    let written: Vec<Value> = {
+        let ana = &b.wallets["ana"];
+        removal_entries(&WalletBillHost::new(ana), &plan).unwrap()
+    };
+    let restatement = id_of(written.iter().find(|e| e["kind"] == "addExpense").unwrap());
+    for e in written {
+        b.write("ana", |_| e);
+    }
+    let folded = b.fold();
+    let expense = folded.bill.expenses[0].id.clone();
+    assert_eq!(
+        expense_withdrawal_target(&folded, &b.log, &expense, "ben"),
+        Some(id_of(&original))
+    );
+    assert_eq!(
+        expense_withdrawal_target(&folded, &b.log, &expense, "ana"),
+        Some(restatement)
+    );
+    let original_id = id_of(&original);
+    b.write("ben", |h| void_entry(h, &original_id, None).unwrap());
+    let after = b.fold();
+    assert!(after.bill.expenses.is_empty());
+    assert!(after.bill.participant("cal").is_none());
+}
+
+/// The bill's history, as `activity_of` reads it.
+fn history(b: &Bill) -> Vec<BillEvent> {
+    let folded = b.fold();
+    let ordered = b.held(|log| log.entries());
+    activity_of(&ordered, &folded.bill, &folded.set_aside, &folded.withdrawn)
+}
+
+fn carry_out(b: &mut Bill, plan: &RemovalPlan) {
+    let written = removal_entries(&WalletBillHost::new(&b.wallets["ana"]), plan).unwrap();
+    for e in written {
+        b.write("ana", |_| e);
+    }
+}
+
+#[test]
+fn a_merge_reads_as_a_correction_moving_their_part_to_whom_they_are_merged_into() {
+    let mut b = Bill::new();
+    b.join("bo");
+    b.write("josh", |h| {
+        join_bill(h, Some("Josh"), None, None, None).unwrap()
+    });
+    let dinner = b.expense(
+        "bo",
+        "dinner",
+        "josh",
+        3000,
+        equal(&["ana", "josh"]),
+        Some("Dinner"),
+    );
+    let ordered = b.held(|log| log.entries());
+    let plan = plan_merge(&b.fold(), "ana", &ordered, "josh", "bo", "ana").unwrap();
+    carry_out(&mut b, &plan);
+    let events = history(&b);
+    let restated = events
+        .iter()
+        .find(|e| e.kind == BillEventKind::ExpenseAmended)
+        .expect("the restatement");
+    assert_eq!(restated.subject.as_deref(), Some(id_of(&dinner).as_str()));
+    assert_eq!(restated.author, "ana");
+    assert_eq!(restated.amount_minor_units, Some(3000));
+    assert_eq!(restated.description.as_deref(), Some("Dinner"));
+    assert_eq!(restated.taken_off.as_deref(), Some("josh"));
+    assert_eq!(restated.moved_to.as_deref(), Some("bo"));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|e| e.kind == BillEventKind::ExpenseAdded)
+            .count(),
+        1,
+        "a restatement is not a second expense"
+    );
+}
+
+#[test]
+fn a_removal_spreading_their_share_names_nobody_it_moved_to() {
+    let mut b = Bill::new();
+    b.join("ben");
+    b.join("cai");
+    b.expense(
+        "ana",
+        "taxi",
+        "ana",
+        3000,
+        equal(&["ana", "ben", "cai"]),
+        None,
+    );
+    let plan = b.plan("ben", "ana");
+    carry_out(&mut b, &plan);
+    let events = history(&b);
+    let restated = events
+        .iter()
+        .find(|e| e.kind == BillEventKind::ExpenseAmended)
+        .expect("the restatement");
+    assert_eq!(restated.taken_off.as_deref(), Some("ben"));
+    assert_eq!(restated.moved_to, None);
+}
+
+#[test]
+fn an_author_correcting_their_own_expense_says_the_new_amount_and_takes_nobody_off() {
+    let mut b = Bill::new();
+    b.join("ben");
+    let taxi = b.expense("ana", "taxi", "ana", 3000, equal(&["ana", "ben"]), None);
+    let mut payload = taxi["expense"].clone();
+    payload["amount"] = json!(2500);
+    let target = id_of(&taxi);
+    b.write("ana", |h| {
+        amend_entry(h, &target, "expense", payload).unwrap()
+    });
+    let amended = history(&b).remove(0);
+    assert_eq!(amended.kind, BillEventKind::ExpenseAmended);
+    assert_eq!(amended.amount_minor_units, Some(2500));
+    assert_eq!(amended.taken_off, None);
+    assert_eq!(amended.moved_to, None);
+}
+
+#[test]
+fn its_author_and_after_a_merge_the_creator_and_its_author_may_correct_it() {
+    let mut b = Bill::new();
+    b.join("bo");
+    b.write("josh", |h| {
+        join_bill(h, Some("Josh"), None, None, None).unwrap()
+    });
+    b.expense("bo", "dinner", "josh", 3000, equal(&["ana", "josh"]), None);
+    let ordered = b.held(|log| log.entries());
+    let dinner = b.fold().bill.expenses[0].id.clone();
+    assert_eq!(expense_correctors(&b.fold(), &ordered, &dinner), vec!["bo"]);
+    let plan = plan_merge(&b.fold(), "ana", &ordered, "josh", "bo", "ana").unwrap();
+    carry_out(&mut b, &plan);
+    let folded = b.fold();
+    let restated = folded.bill.expenses[0].id.clone();
+    let ordered = b.held(|log| log.entries());
+    assert_eq!(
+        expense_correctors(&folded, &ordered, &restated),
+        vec!["ana", "bo"]
+    );
+
+    let entry_id = folded.expense_entries[&restated].clone();
+    let current = ordered.iter().find(|e| id_of(e) == entry_id).unwrap();
+    let mut payload = current["expense"].clone();
+    payload["amount"] = json!(2800);
+    b.write("bo", |h| {
+        amend_entry(h, &entry_id, "expense", payload).unwrap()
+    });
+    let after = b.fold();
+    assert!(after.set_aside.is_empty(), "{:?}", after.set_aside);
+    assert_eq!(after.bill.expenses[0].amount, 2800);
+}
+
+#[test]
+fn somebody_else_is_not_named_and_an_unknown_expense_names_nobody() {
+    let mut b = Bill::new();
+    b.join("ben");
+    b.expense("ben", "taxi", "ben", 3000, equal(&["ana", "ben"]), None);
+    let ordered = b.held(|log| log.entries());
+    let taxi = b.fold().bill.expenses[0].id.clone();
+    assert_eq!(expense_correctors(&b.fold(), &ordered, &taxi), vec!["ben"]);
+    assert!(expense_correctors(&b.fold(), &ordered, "nope").is_empty());
 }

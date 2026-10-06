@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use splitz_core::host::FoldedBill;
-use splitz_core::{Bill, ExchangeRate, Identities, PaymentRecord};
-use splitz_host::{concerns_before_confirming, PaymentConcern};
+use splitz_core::{Bill, ExchangeRate, Identities, Participant, PaymentRecord};
+use splitz_host::{concerns_before_confirming, joined_as_me, PaymentConcern};
 
 fn eur(per: i64) -> ExchangeRate {
     ExchangeRate {
@@ -44,6 +44,7 @@ fn bill(rate_by: &str) -> FoldedBill {
         amendment_of: BTreeMap::new(),
         close_entry: None,
         closed_over: String::new(),
+        last_close_at: None,
     }
 }
 
@@ -103,4 +104,30 @@ fn the_creator_prices_a_bill_only_they_have_not_priced() {
     assert!(creator_rate_missing(&unpriced, "ana"));
     assert!(!creator_rate_missing(&bill("ana"), "ana"));
     assert!(!creator_rate_missing(&bill("ben"), "ben"));
+}
+
+/// §10.7: on the bill as itself only when the fold binds the id it holds.
+#[test]
+fn a_device_is_joined_only_when_the_fold_binds_its_id() {
+    let mut folded = bill("ana");
+    assert!(!joined_as_me(&folded, "vic"), "not on the bill at all");
+    folded.bill.participants.push(Participant {
+        id: "vic".into(),
+        name: "Vic".into(),
+        pay_to: Some("u1mal".into()),
+        identity_key: None,
+        payouts: vec![],
+    });
+    assert!(
+        !joined_as_me(&folded, "vic"),
+        "a record somebody planted under the id"
+    );
+    folded
+        .identities
+        .bound
+        .insert("vic".into(), "vic-key".into());
+    assert!(
+        joined_as_me(&folded, "vic"),
+        "bound by the device's own join"
+    );
 }

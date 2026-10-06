@@ -894,10 +894,12 @@ pub fn swap_deposit(
 ///
 /// `bill` is the bill as the store holds it now, and `obligation` this
 /// payer's obligation read from it. Refuses a request that carries nobody in
-/// ZEC and a swap to a payee the request already pays, which would be paid
-/// twice; then, with [`HostError::SwapRefused`], whatever
-/// [`swap_send_refusal`] refuses the swap leg at `at`, as it would a deposit
-/// sent alone.
+/// ZEC with `zip321_no_payments` ([`HostError::Protocol`]), the request a swap
+/// would join holding no payment; then, with [`HostError::SwapRefused`],
+/// whatever [`swap_send_refusal`] refuses the swap leg at `at`, as it would a
+/// deposit sent alone. A swap to a payee the request already pays, who would
+/// be paid twice, is a caller's error ([`HostError::Malformed`]): a host
+/// offers a swap leg only for a payee the request leaves out.
 pub fn combined_send(
     bill_id: &str,
     bill: &Bill,
@@ -909,16 +911,15 @@ pub fn combined_send(
 ) -> Result<SwapDeposit, HostError> {
     let zec = obligation.carried_to();
     if zec.is_empty() || obligation.request.payments.is_empty() {
-        return Err(HostError::Swap {
-            message: "the request carries nobody to pay in ZEC".to_owned(),
-            transient: false,
-        });
+        return Err(HostError::Protocol(splitz_core::SplitError::new(
+            splitz_core::code::ZIP321_NO_PAYMENTS,
+            "The request carries nobody to pay in ZEC",
+        )));
     }
     if zec.contains_key(to) {
-        return Err(HostError::Swap {
-            message: "the request already pays this payee".to_owned(),
-            transient: false,
-        });
+        return Err(HostError::Malformed(
+            "the request already pays this payee".to_owned(),
+        ));
     }
     if let Some(refusal) = swap_send_refusal(
         quote,

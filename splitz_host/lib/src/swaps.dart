@@ -890,11 +890,13 @@ SwapDeposit swapDeposit({
 /// half from the note (§14.3).
 ///
 /// [bill] is the bill as the store holds it now, and [obligation] this
-/// payer's obligation read from it. Refuses with [SwapException] a request
-/// that carries nobody in ZEC and a swap to a payee the request already pays,
-/// which would be paid twice; then with [SwapRefused] whatever
-/// [swapSendRefusal] refuses the swap leg at [at], as it would a deposit sent
-/// alone.
+/// payer's obligation read from it. Refuses a request that carries nobody in
+/// ZEC with `zip321_no_payments`, the request a swap would join holding no
+/// payment; then with [SwapRefused] whatever [swapSendRefusal] refuses the
+/// swap leg at [at], as it would a deposit sent alone. A swap to a payee the
+/// request already pays, who would be paid twice, is a caller's error
+/// ([ArgumentError]): a host offers a swap leg only for a payee the request
+/// leaves out.
 SwapDeposit combinedSend({
   required String billId,
   required protocol.Bill bill,
@@ -906,10 +908,13 @@ SwapDeposit combinedSend({
 }) {
   final zec = obligation.carriedTo;
   if (zec.isEmpty || obligation.request.payments.isEmpty) {
-    throw const SwapException('the request carries nobody to pay in ZEC');
+    throw const protocol.SplitError(
+      protocol.SplitCode.zip321NoPayments,
+      'The request carries nobody to pay in ZEC',
+    );
   }
   if (zec.containsKey(to)) {
-    throw const SwapException('the request already pays this payee');
+    throw ArgumentError.value(to, 'to', 'the request already pays them');
   }
   final refusal = swapSendRefusal(
     quote,

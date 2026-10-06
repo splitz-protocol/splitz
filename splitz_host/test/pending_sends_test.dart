@@ -494,6 +494,19 @@ void main() {
       );
     });
 
+    test('held when the history could not be read', () {
+      // §14.4: a failed read is not "absent". Taking it for that would offer
+      // the debt again while the payment may still land.
+      expect(
+        ownPaymentWithdrawalRefusal(
+          payment(),
+          me: 'me',
+          state: TransactionState.unread,
+        ),
+        OwnPaymentWithdrawal.unread,
+      );
+    });
+
     test('free once it expired, or when the history does not hold it', () {
       expect(
         ownPaymentWithdrawalRefusal(
@@ -548,6 +561,12 @@ void main() {
 
     test('allowed once it expired, or the history does not hold it', () {
       expect(namedSendRefusal(named, state: TransactionState.expired), isNull);
+      // A history that could not be read keeps the note: clearing it on a
+      // failed read sends the debt twice.
+      expect(
+        namedSendRefusal(named, state: TransactionState.unread),
+        NamedSendRefusal.unread,
+      );
       expect(namedSendRefusal(named, state: null), isNull);
     });
 

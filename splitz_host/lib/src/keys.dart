@@ -268,11 +268,9 @@ List<int> identitySecretFromMnemonic({
     maxAccountIndex,
     'accountIndex',
   );
-  final words = unorm
-      .nfkc(mnemonic)
-      .split(_whiteSpace)
-      .where((w) => w.isNotEmpty)
-      .join(' ');
+  final words = _nfkc(
+    mnemonic,
+  ).split(_whiteSpace).where((w) => w.isNotEmpty).join(' ');
   if (words.isEmpty) {
     throw ArgumentError.value(
       mnemonic,
@@ -283,7 +281,7 @@ List<int> identitySecretFromMnemonic({
   return [
     ...utf8.encode(words),
     0,
-    ...utf8.encode(unorm.nfkc(passphrase)),
+    ...utf8.encode(_nfkc(passphrase)),
     if (accountIndex != 0) ...[
       0,
       (accountIndex >> 24) & 0xff,
@@ -305,3 +303,44 @@ class BillKeyConflict implements Exception {
   String toString() =>
       'BillKeyConflict: this device already holds a different key for $billId';
 }
+
+/// §15.1's NFKC, as Unicode 17.0 defines it.
+///
+/// The code points here are ones this package's normaliser changes and
+/// Unicode 17.0's tables leave as they are — characters a later version
+/// gave a decomposition, and U+D7A4, one past the last Hangul syllable — so
+/// they are kept as written: one passphrase derives one identity in every
+/// implementation. Normalising the text between them, and not across them,
+/// changes nothing else: none of them combines with a neighbour.
+String _nfkc(String text) {
+  final out = StringBuffer();
+  final run = StringBuffer();
+  void flush() {
+    if (run.isEmpty) return;
+    out.write(unorm.nfkc(run.toString()));
+    run.clear();
+  }
+
+  for (final rune in text.runes) {
+    if (_laterThan17.any((r) => rune >= r.$1 && rune <= r.$2)) {
+      flush();
+      out.writeCharCode(rune);
+    } else {
+      run.writeCharCode(rune);
+    }
+  }
+  flush();
+  return out.toString();
+}
+
+const List<(int, int)> _laterThan17 = [
+  (0x0558, 0x0558),
+  (0x058B, 0x058C),
+  (0x209D, 0x209F),
+  (0xD7A4, 0xD7A4),
+  (0x107BB, 0x107BF),
+  (0x1B123, 0x1B126),
+  (0x1D6A6, 0x1D6A6),
+  (0x1DF95, 0x1DF95),
+  (0x1DFCD, 0x1DFFF),
+];

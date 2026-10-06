@@ -488,7 +488,6 @@ UnsentClaimRefusal? unsentClaimRefusal(
   return null;
 }
 
-/// Where a transaction the wallet holds stands.
 /// Why a person may not clear a note that names its transaction (§14.3).
 enum NamedSendRefusal {
   /// The wallet still holds the transaction and may broadcast it.
@@ -496,6 +495,10 @@ enum NamedSendRefusal {
 
   /// The wallet shows it went through: it is recorded, not cleared.
   mined,
+
+  /// The wallet's history could not be read, so nothing says the
+  /// transaction can no longer land.
+  unread,
 }
 
 /// Whether [send]'s note may be removed on a person's word that nothing left
@@ -505,7 +508,9 @@ enum NamedSendRefusal {
 ///
 /// A transaction neither mined nor expired may still be broadcast, and one
 /// mined went through; either way clearing the note lets the debt go out a
-/// second time. Expired, or absent from the history, it can no longer land.
+/// second time. Expired, or absent from a history that was read, it can no
+/// longer land. A history that could not be read says neither, and the note
+/// stays: taking a failed read for "absent" sends the debt twice.
 NamedSendRefusal? namedSendRefusal(
   PendingSend send, {
   required TransactionState? state,
@@ -514,10 +519,13 @@ NamedSendRefusal? namedSendRefusal(
   return switch (state) {
     TransactionState.waiting => NamedSendRefusal.waiting,
     TransactionState.mined => NamedSendRefusal.mined,
+    TransactionState.unread => NamedSendRefusal.unread,
     TransactionState.expired || null => null,
   };
 }
 
+/// Where a transaction the wallet built stands in its history. Null where
+/// one is asked for means the history was read and does not hold it.
 enum TransactionState {
   /// In a block: it went through.
   mined,
@@ -527,6 +535,9 @@ enum TransactionState {
 
   /// Expired unmined: it can no longer go through.
   expired,
+
+  /// The history could not be read: it may be in any state above.
+  unread,
 }
 
 /// Why this device may not withdraw its own record of a shielded payment.
@@ -536,6 +547,10 @@ enum OwnPaymentWithdrawal {
 
   /// The wallet still holds that transaction and may send it.
   waiting,
+
+  /// The wallet's history could not be read, so nothing says the
+  /// transaction can no longer reach the payee.
+  unread,
 }
 
 /// Whether this device, [me], may withdraw its own record of [payment], given
@@ -546,7 +561,8 @@ enum OwnPaymentWithdrawal {
 /// or may yet reach, the payee, and it is paid twice. Only a `shieldedZec`
 /// record the payer wrote names a transaction this wallet can look up; a cash
 /// or swap record, or one somebody else wrote, is decided by §10.8 alone, and
-/// [state] null (the history does not hold it) or expired leaves it free.
+/// [state] null (a history that was read does not hold it) or expired
+/// leaves it free; an unread history leaves it held.
 OwnPaymentWithdrawal? ownPaymentWithdrawalRefusal(
   splitz.PaymentRecord payment, {
   required String me,
@@ -560,6 +576,7 @@ OwnPaymentWithdrawal? ownPaymentWithdrawalRefusal(
   return switch (state) {
     TransactionState.mined => OwnPaymentWithdrawal.mined,
     TransactionState.waiting => OwnPaymentWithdrawal.waiting,
+    TransactionState.unread => OwnPaymentWithdrawal.unread,
     TransactionState.expired || null => null,
   };
 }

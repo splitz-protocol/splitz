@@ -9,9 +9,10 @@
 //! and a folded bill and nothing else — so it lives here and every wallet gets
 //! the same history.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde_json::Value;
+use splitz_core::host::FoldedBill;
 use splitz_core::{Bill, PaymentRecord, SetAside};
 
 /// What one entry did.
@@ -73,6 +74,13 @@ pub struct BillEvent {
     /// settled tells a payer a debt is discharged that the payee has never
     /// agreed was paid.
     pub confirmed: bool,
+    /// For a restatement (§10.8) — the creator rewriting somebody else's
+    /// expense while taking a person off — the participant it takes off.
+    pub taken_off: Option<String>,
+    /// For a restatement, the one participant who takes over `taken_off`'s
+    /// part — paying in their place, or holding their share — when exactly
+    /// one does: a merge (§14.11). None when the part is spread over the rest.
+    pub moved_to: Option<String>,
 }
 
 impl BillEvent {
@@ -106,6 +114,12 @@ pub fn activity_of(
     // every member a line shows. A copy read twice doubles an expense and
     // turns a join into a changed address.
     let mut seen: HashSet<&str> = HashSet::new();
+    let mut by_id: HashMap<&str, &Value> = HashMap::new();
+    for entry in entries {
+        if let Some(id) = entry.get("id").and_then(Value::as_str) {
+            by_id.entry(id).or_insert(entry);
+        }
+    }
     for entry in entries {
         if !seen.insert(entry.get("id").and_then(Value::as_str).unwrap_or_default()) {
             continue;
@@ -128,6 +142,7 @@ pub fn activity_of(
             set_aside,
             &gone,
             &bill.confirmed_payments,
+            &by_id,
             rejoined,
         ));
     }
@@ -161,11 +176,82 @@ fn number(entry: &Value, key: &str, name: &str) -> Option<i64> {
         .and_then(Value::as_i64)
 }
 
+/// Who a restatement takes off `before`, and the one participant who takes
+/// over their part, or none for either when the two do not say.
+///
+/// Taken off: the one id `before` names and `after` does not. Taken over by:
+/// the one other id whose part differs — paying in their place, named where
+/// they were, or holding a larger figure.
+fn moved(before: &Value, after: &Value) -> Option<(String, Option<String>)> {
+    let was = parts(before);
+    let now = parts(after);
+    let gone: Vec<&String> = was.keys().filter(|id| !now.contains_key(*id)).collect();
+    let [gone] = gone.as_slice() else {
+        return None;
+    };
+    let changed: Vec<&String> = now
+        .iter()
+        .filter(|(id, part)| *id != *gone && was.get(*id) != Some(part))
+        .map(|(id, _)| id)
+        .collect();
+    let to = match changed.as_slice() {
+        [one] => Some((*one).clone()),
+        _ => None,
+    };
+    Some(((*gone).clone(), to))
+}
+
+/// Each id `expense` names, with what it names them for: paying, and their
+/// place in every list and figure of the split.
+fn parts(expense: &Value) -> BTreeMap<String, String> {
+    let mut parts: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut add = |id: Option<&str>, part: String| {
+        if let Some(id) = id {
+            parts.entry(id.to_owned()).or_default().push(part);
+        }
+    };
+    add(
+        expense.get("paidBy").and_then(Value::as_str),
+        "paidBy".into(),
+    );
+    if let Some(split) = expense.get("split").filter(|v| v.is_object()) {
+        if let Some(among) = split.get("among").and_then(Value::as_array) {
+            for id in among {
+                add(id.as_str(), "among".into());
+            }
+        }
+        for member in ["amounts", "basisPoints", "shareCounts"] {
+            if let Some(figures) = split.get(member).and_then(Value::as_object) {
+                for (id, value) in figures {
+                    add(Some(id), format!("{member}={value}"));
+                }
+            }
+        }
+        if let Some(items) = split.get("items").and_then(Value::as_array) {
+            for (i, item) in items.iter().enumerate() {
+                if let Some(shared_by) = item.get("sharedBy").and_then(Value::as_array) {
+                    for id in shared_by {
+                        add(id.as_str(), format!("item{i}"));
+                    }
+                }
+            }
+        }
+    }
+    parts
+        .into_iter()
+        .map(|(id, mut p)| {
+            p.sort();
+            (id, p.join(","))
+        })
+        .collect()
+}
+
 fn event(
     entry: &Value,
     set_aside: &[SetAside],
     withdrawn: &HashSet<&str>,
     confirmed: &BTreeSet<String>,
+    by_id: &HashMap<&str, &Value>,
     rejoined: bool,
 ) -> BillEvent {
     let id = text(entry, "id").unwrap_or_default();
@@ -187,6 +273,8 @@ fn event(
         withdrawn: withdrawn.contains(id.as_str()),
         refused_code: refused,
         confirmed: false,
+        taken_off: None,
+        moved_to: None,
     };
 
     match entry.get("kind").and_then(Value::as_str) {
@@ -205,6 +293,28 @@ fn event(
             built.subject = member(entry, "participant", "id");
             built.description = member(entry, "participant", "name");
         }
+        // A restatement names the entry it replaces (§10.8): a correction of
+        // that expense, not a second one.
+        Some("addExpense") if entry.get("targetId").is_some_and(Value::is_string) => {
+            let restates = text(entry, "targetId");
+            built.kind = BillEventKind::ExpenseAmended;
+            built.amount_minor_units = number(entry, "expense", "amount");
+            built.description = member(entry, "expense", "description");
+            let before = restates
+                .as_deref()
+                .and_then(|t| by_id.get(t))
+                .and_then(|e| e.get("expense"))
+                .filter(|v| v.is_object());
+            if let (Some(before), Some(after)) =
+                (before, entry.get("expense").filter(|v| v.is_object()))
+            {
+                if let Some((off, to)) = moved(before, after) {
+                    built.taken_off = Some(off);
+                    built.moved_to = to;
+                }
+            }
+            built.subject = restates;
+        }
         Some("addExpense") => {
             built.kind = BillEventKind::ExpenseAdded;
             built.subject = member(entry, "expense", "paidBy");
@@ -217,6 +327,8 @@ fn event(
         Some("amendEntry") => {
             built.kind = BillEventKind::ExpenseAmended;
             built.subject = text(entry, "targetId");
+            built.amount_minor_units = number(entry, "expense", "amount");
+            built.description = member(entry, "expense", "description");
         }
         Some("voidEntry") => {
             built.kind = BillEventKind::EntryWithdrawn;
@@ -248,6 +360,49 @@ fn event(
         _ => {}
     }
     built
+}
+
+/// Who this device writes a confirmation of `payment` as, or none when it
+/// may not confirm it (§10.5, §14.11).
+///
+/// The payee confirms their own payment. The creator also confirms one paid
+/// to somebody they added by hand — a participant who states no key and has
+/// bound none (§10.7) — written as that person and unsigned, as their join
+/// was. Nobody else on the bill can, so without this a payment to somebody
+/// who never joins from a device of their own, or who joined under a key of
+/// their own and so under another id, never settles.
+///
+/// Never the payer: a creator who paid somebody they added would otherwise
+/// settle the debt by asserting twice that they paid it.
+pub fn confirmer_for(folded: &FoldedBill, payment: &PaymentRecord, me: &str) -> Option<String> {
+    if payment.to == me {
+        return Some(me.to_owned());
+    }
+    if me != folded.creator_id || payment.from == me {
+        return None;
+    }
+    let payee = folded.bill.participant(&payment.to)?;
+    if payee.identity_key.is_some() || folded.identities.bound.contains_key(&payment.to) {
+        return None;
+    }
+    Some(payment.to.clone())
+}
+
+/// The payments this device may confirm, newest first: those
+/// [`confirmer_for`] names a confirmer for, not yet confirmed.
+pub fn awaiting_confirmation_for(folded: &FoldedBill, me: &str) -> Vec<PaymentRecord> {
+    let mut mine: Vec<PaymentRecord> = folded
+        .bill
+        .payments
+        .iter()
+        .filter(|p| {
+            !folded.bill.confirmed_payments.contains(&p.id)
+                && confirmer_for(folded, p, me).is_some()
+        })
+        .cloned()
+        .collect();
+    mine.sort_by(|a, b| b.at.cmp(&a.at));
+    mine
 }
 
 /// The payments this device may confirm, newest first (§10.5).

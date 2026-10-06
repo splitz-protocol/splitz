@@ -974,13 +974,197 @@ void main() {
   });
 
   test('the protocol refuses the removal the plan says is held back', () {
-    // The fold's own §10.8 check agrees with the plan: a removal planned as
-    // blocked is set aside with participant_still_named.
+    // The fold's own §10.8 check agrees with the plan when somebody else's
+    // entry names them: the removal is set aside with participant_still_named.
     final b = _Bill()..join('ben');
-    b.expense('ben', 'hotel', 'ben', 2000, _equal(['ana', 'ben']));
+    b.expense('ana', 'hotel', 'ben', 2000, _equal(['ana', 'ben']));
     expect(b.plan('ben').namesThem, isTrue);
     final removal = b.withdraw('ana', b.joins['ben']!);
     final aside = b.fold().setAside.where((s) => s.id == removal['id']);
     expect(aside.single.code, protocol.SplitCode.participantStillNamed);
+  });
+
+  test('their own entry holds the plan back but not the fold', () {
+    // §10.8: an entry the person wrote never holds their removal back, so
+    // one written after it cannot undo it. A removal written past the plan
+    // sets their own expense aside, as the creator withdrawing it would.
+    final b = _Bill()..join('ben');
+    b.expense('ben', 'hotel', 'ben', 2000, _equal(['ana', 'ben']));
+    expect(b.plan('ben').namesThem, isTrue);
+    final removal = b.withdraw('ana', b.joins['ben']!);
+    final folded = b.fold();
+    expect(folded.setAside.where((s) => s.id == removal['id']), isEmpty);
+    expect(folded.bill.participant('ben'), isNull);
+    expect(folded.bill.expenses, isEmpty);
+    expect(
+      folded.setAside.map((s) => s.code),
+      contains(protocol.SplitCode.unknownParticipant),
+    );
+  });
+
+  group('the history of a removal', () {
+    List<BillEvent> history(_Bill b) {
+      final f = b.fold();
+      return activityOf(
+        b.log,
+        f.bill,
+        setAside: f.setAside,
+        withdrawn: f.withdrawn,
+      );
+    }
+
+    void carryOut(_Bill b, RemovalPlan plan) {
+      for (final e in removalEntries(host: b.host('ana'), plan: plan)) {
+        b.write('ana', (_) => e);
+      }
+    }
+
+    test('a merge reads as a correction moving their part to whom they '
+        'are merged into', () {
+      final b = _Bill()..join('bo');
+      b.write('josh', (h) => entries.joinBill(host: h, name: 'Josh'));
+      final dinner = b.expense(
+        'bo',
+        'dinner',
+        'josh',
+        3000,
+        _equal(['ana', 'josh']),
+        description: 'Dinner',
+      );
+      carryOut(
+        b,
+        planMerge(
+          folded: b.fold(),
+          creatorId: 'ana',
+          log: b.log,
+          from: 'josh',
+          into: 'bo',
+          me: 'ana',
+        ),
+      );
+      final restated = history(
+        b,
+      ).firstWhere((e) => e.kind == BillEventKind.expenseAmended);
+      expect(restated.subject, dinner['id']);
+      expect(restated.author, 'ana');
+      expect(restated.amountMinorUnits, 3000);
+      expect(restated.description, 'Dinner');
+      expect(restated.takenOff, 'josh');
+      expect(restated.movedTo, 'bo');
+      expect(
+        history(b).where((e) => e.kind == BillEventKind.expenseAdded),
+        hasLength(1),
+        reason: 'a restatement is not a second expense',
+      );
+    });
+
+    test('a removal spreading their share names nobody it moved to', () {
+      final b = _Bill()
+        ..join('ben')
+        ..join('cai');
+      b.expense('ana', 'taxi', 'ana', 3000, _equal(['ana', 'ben', 'cai']));
+      carryOut(b, b.plan('ben'));
+      final restated = history(
+        b,
+      ).firstWhere((e) => e.kind == BillEventKind.expenseAmended);
+      expect(restated.takenOff, 'ben');
+      expect(restated.movedTo, isNull);
+    });
+
+    test('an author correcting their own expense says the new amount, and '
+        'takes nobody off', () {
+      final b = _Bill()..join('ben');
+      final taxi = b.expense(
+        'ana',
+        'taxi',
+        'ana',
+        3000,
+        _equal(['ana', 'ben']),
+      );
+      b.write(
+        'ana',
+        (h) => entries.amendEntry(
+          host: h,
+          targetId: taxi['id'] as String,
+          member: 'expense',
+          payload: {
+            ...(taxi['expense'] as Map<String, dynamic>),
+            'amount': 2500,
+          },
+        ),
+      );
+      final amended = history(b).first;
+      expect(amended.kind, BillEventKind.expenseAmended);
+      expect(amended.amountMinorUnits, 2500);
+      expect(amended.takenOff, isNull);
+      expect(amended.movedTo, isNull);
+    });
+  });
+
+  group('who may correct an expense', () {
+    test('its author, and after a merge, the creator and its author', () {
+      final b = _Bill()..join('bo');
+      b.write('josh', (h) => entries.joinBill(host: h, name: 'Josh'));
+      b.expense('bo', 'dinner', 'josh', 3000, _equal(['ana', 'josh']));
+      expect(
+        expenseCorrectors(
+          folded: b.fold(),
+          log: b.log,
+          expenseId: b.fold().bill.expenses.single.id,
+        ),
+        ['bo'],
+      );
+      final plan = planMerge(
+        folded: b.fold(),
+        creatorId: 'ana',
+        log: b.log,
+        from: 'josh',
+        into: 'bo',
+        me: 'ana',
+      );
+      for (final e in removalEntries(host: b.host('ana'), plan: plan)) {
+        b.write('ana', (_) => e);
+      }
+      final restated = b.fold().bill.expenses.single.id;
+      final who = expenseCorrectors(
+        folded: b.fold(),
+        log: b.log,
+        expenseId: restated,
+      );
+      expect(who, ['ana', 'bo']);
+
+      // Each one named is one the fold admits a correction from.
+      final entryId = b.fold().expenseEntries[restated]!;
+      final current = b.log.firstWhere((e) => e['id'] == entryId);
+      b.write(
+        'bo',
+        (h) => entries.amendEntry(
+          host: h,
+          targetId: entryId,
+          member: 'expense',
+          payload: {
+            ...(current['expense'] as Map<String, dynamic>),
+            'amount': 2800,
+          },
+        ),
+      );
+      expect(b.fold().setAside, isEmpty);
+      expect(b.fold().bill.expenses.single.amount, 2800);
+    });
+
+    test('somebody else is not named, and an unknown expense names nobody', () {
+      final b = _Bill()..join('ben');
+      b.expense('ben', 'taxi', 'ben', 3000, _equal(['ana', 'ben']));
+      final who = expenseCorrectors(
+        folded: b.fold(),
+        log: b.log,
+        expenseId: b.fold().bill.expenses.single.id,
+      );
+      expect(who, ['ben']);
+      expect(
+        expenseCorrectors(folded: b.fold(), log: b.log, expenseId: 'nope'),
+        isEmpty,
+      );
+    });
   });
 }

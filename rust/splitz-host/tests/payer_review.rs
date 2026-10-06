@@ -10,6 +10,7 @@ use splitz_core::host::{
     set_rate, BillHost, BillLog, FoldedBill, PayerObligation, Sent, CREATOR_KEY_BYTES,
 };
 use splitz_core::ExchangeRate;
+use splitz_host::payer_review::REPLACED_ADDRESS_WORDS;
 use splitz_host::{check_payee_review, check_payer_review, rate_figure, ReviewRule};
 
 const BEN_OLD: &str = "u1benold0000000000000000";
@@ -117,21 +118,28 @@ fn bill_via(via: &BTreeMap<String, i64>) -> (PayerObligation, FoldedBill) {
 }
 
 fn reasons() -> BTreeMap<String, String> {
-    BTreeMap::from([("no_address".to_owned(), "has no address".to_owned())])
+    BTreeMap::from([
+        ("no_address".to_owned(), "has no address".to_owned()),
+        (
+            REPLACED_ADDRESS_WORDS.to_owned(),
+            "address changed".to_owned(),
+        ),
+    ])
 }
 
 /// One line per fact, so taking a line away takes exactly one fact away.
 fn screen() -> Vec<String> {
     [
-        "Cat",            // unpayable: who
-        "has no address", // unpayable: why
-        "Ben",            // replaced address
-        "Dan",            // awaiting
-        "512.34",         // rate figure
-        "0.07807316",     // Ben's output
-        "u1ben11111…",    // Ben's address, the first 10 characters
-        "0.01951829",     // Eve's output
-        EVE,              // Eve's address, whole
+        "Cat",             // unpayable: who
+        "has no address",  // unpayable: why
+        "Ben",             // replaced address: whose
+        "address changed", // replaced address: that it changed
+        "Dan",             // awaiting
+        "512.34",          // rate figure
+        "0.07807316",      // Ben's output
+        "u1ben11111…",     // Ben's address, the first 10 characters
+        "0.01951829",      // Eve's output
+        EVE,               // Eve's address, whole
     ]
     .map(str::to_owned)
     .to_vec()
@@ -195,6 +203,7 @@ fn each_fact_taken_away_is_exactly_its_own_finding() {
         (ReviewRule::Unpayable, "Cat"),
         (ReviewRule::Unpayable, "has no address"),
         (ReviewRule::ReplacedAddress, "Ben"),
+        (ReviewRule::ReplacedAddress, "address changed"),
         (ReviewRule::Awaiting, "Dan"),
         (ReviewRule::Rate, "512.34"),
         (ReviewRule::Output, "0.07807316"),
@@ -216,7 +225,7 @@ fn each_fact_taken_away_is_exactly_its_own_finding() {
 #[test]
 fn an_amount_inside_a_longer_number_is_not_shown() {
     let mut shown = screen();
-    shown[5] = "0.078073169".to_owned();
+    shown[6] = "0.078073169".to_owned();
     assert_eq!(
         found(&shown, &reasons()),
         [(ReviewRule::Output, "0.07807316".to_owned())]
@@ -226,7 +235,7 @@ fn an_amount_inside_a_longer_number_is_not_shown() {
 #[test]
 fn a_different_address_sharing_the_first_ten_characters_is_not_shown() {
     let mut shown = screen();
-    shown[6] = "u1ben1111122222…".to_owned();
+    shown[7] = "u1ben1111122222…".to_owned();
     assert_eq!(
         found(&shown, &reasons()),
         [(ReviewRule::Output, BEN.to_owned())]
@@ -237,7 +246,13 @@ fn a_different_address_sharing_the_first_ten_characters_is_not_shown() {
 fn a_reason_the_wallet_gives_no_words_for_is_a_finding() {
     assert_eq!(
         found(&screen(), &BTreeMap::new()),
-        [(ReviewRule::Unpayable, "no_address".to_owned())]
+        [
+            (ReviewRule::Unpayable, "no_address".to_owned()),
+            (
+                ReviewRule::ReplacedAddress,
+                REPLACED_ADDRESS_WORDS.to_owned()
+            ),
+        ]
     );
 }
 
@@ -276,7 +291,7 @@ fn lower_found(
 
 fn lower_screen() -> Vec<String> {
     let mut shown = screen();
-    shown[8] = EVE_LATER.to_owned();
+    shown[9] = EVE_LATER.to_owned();
     shown.push("Eve".to_owned());
     shown.push(LOWER.to_owned());
     shown
@@ -496,7 +511,7 @@ fn a_payment_the_bill_does_not_explain_names_who_and_says_so() {
     let owed = obligation_via(&ben, &folded, &BTreeMap::new())
         .unwrap()
         .unwrap();
-    assert_eq!(owed.settlements[0].unexplained(), 5000);
+    assert_eq!(owed.settlements[0].unexplained().unwrap(), 5000);
 
     let words = "more than the bill explains";
     let unexplained = |shown: &[&str], words: &str| -> Vec<String> {
@@ -533,4 +548,16 @@ fn a_short_form_is_whole_or_ten_characters_and_an_ellipsis() {
         format!("{}…", "😀".repeat(10))
     );
     assert_eq!(short_form(BEN), format!("{}…", &BEN[..10]));
+}
+
+#[test]
+fn a_change_is_said_once_for_each_payee_whose_address_changed() {
+    // §14.2: a name is on every review that pays its holder, so it says
+    // nothing about a change.
+    let mut shown = screen();
+    shown.remove(3);
+    assert_eq!(
+        found(&shown, &reasons()),
+        [(ReviewRule::ReplacedAddress, "address changed".to_owned())]
+    );
 }

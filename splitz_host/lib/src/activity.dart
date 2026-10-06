@@ -10,6 +10,7 @@
 /// the same history.
 library;
 
+import 'package:splitz_core/host.dart' as host;
 import 'package:splitz_core/splitz_core.dart' as splitz;
 
 /// What one entry did.
@@ -49,6 +50,8 @@ class BillEvent {
     this.withdrawn = false,
     this.refusedCode,
     this.confirmed = false,
+    this.takenOff,
+    this.movedTo,
   });
 
   final String entryId;
@@ -100,6 +103,15 @@ class BillEvent {
   /// agreed was paid.
   final bool confirmed;
 
+  /// For a restatement (§10.8) — the creator rewriting somebody else's
+  /// expense while taking a person off — the participant it takes off.
+  final String? takenOff;
+
+  /// For a restatement, the one participant who takes over [takenOff]'s part
+  /// — paying in their place, or holding their share — when exactly one
+  /// does: a merge (§14.11). Null when the part is spread over the rest.
+  final String? movedTo;
+
   /// Whether this entry took effect at all.
   bool get applied => !withdrawn && refusedCode == null;
 }
@@ -129,6 +141,9 @@ List<BillEvent> activityOf(
   // line shows. A copy read twice doubles an expense and turns a join into a
   // changed address.
   final seen = <Object?>{};
+  final byId = <Object?, Map<String, dynamic>>{
+    for (final e in entries) e['id']: e,
+  };
   for (final entry in entries) {
     if (!seen.add(entry['id'])) continue;
     var rejoined = false;
@@ -141,7 +156,9 @@ List<BillEvent> activityOf(
           participant is Map<String, dynamic> && participant['payTo'] != null;
       rejoined = id != null && carriesAddress && !joined.add(id);
     }
-    events.add(_event(entry, refusals, gone, confirmed, rejoined: rejoined));
+    events.add(
+      _event(entry, refusals, gone, confirmed, byId, rejoined: rejoined),
+    );
   }
   // Newest first, and no second ordering rule: §10.2 already fixes the order
   // of a log, `entries` arrives in it, and every device agrees on it. Sorting
@@ -155,7 +172,8 @@ BillEvent _event(
   Map<String, dynamic> entry,
   Map<String, splitz.SetAside> refusals,
   Set<String> withdrawn,
-  Set<String> confirmed, {
+  Set<String> confirmed,
+  Map<Object?, Map<String, dynamic>> byId, {
   bool rejoined = false,
 }) {
   final id = _text(entry['id']) ?? '';
@@ -176,6 +194,8 @@ BillEvent _event(
     String? method,
     String? reference,
     bool isConfirmed = false,
+    String? takenOff,
+    String? movedTo,
   }) => BillEvent(
     entryId: base.entryId,
     kind: kind,
@@ -189,6 +209,8 @@ BillEvent _event(
     withdrawn: base.withdrawn,
     refusedCode: base.refusedCode,
     confirmed: isConfirmed,
+    takenOff: takenOff,
+    movedTo: movedTo,
   );
 
   Map<String, dynamic>? object(String key) {
@@ -215,6 +237,23 @@ BillEvent _event(
 
     case 'addExpense':
       final expense = object('expense');
+      // A restatement names the entry it replaces (§10.8): a correction of
+      // that expense, not a second one.
+      final restates = _text(entry['targetId']);
+      if (restates != null) {
+        final before = byId[restates]?['expense'];
+        final moved = before is Map<String, dynamic> && expense != null
+            ? _moved(before, expense)
+            : null;
+        return make(
+          BillEventKind.expenseAmended,
+          subject: restates,
+          amount: _whole(expense?['amount']),
+          description: _text(expense?['description']),
+          takenOff: moved?.$1,
+          movedTo: moved?.$2,
+        );
+      }
       return make(
         BillEventKind.expenseAdded,
         subject: _text(expense?['paidBy']),
@@ -226,9 +265,12 @@ BillEvent _event(
     // §10.8): a reader without it can say something was changed or
     // withdrawn, and not what.
     case 'amendEntry':
+      final expense = object('expense');
       return make(
         BillEventKind.expenseAmended,
         subject: _text(entry['targetId']),
+        amount: _whole(expense?['amount']),
+        description: _text(expense?['description']),
       );
 
     case 'voidEntry':
@@ -288,6 +330,46 @@ List<splitz.PaymentRecord> awaitingConfirmationBy(
       payment,
 ]..sort((a, b) => b.at.compareTo(a.at));
 
+/// Who this device writes a confirmation of [payment] as, or null when it
+/// may not confirm it (§10.5, §14.11).
+///
+/// The payee confirms their own payment. The creator also confirms one paid
+/// to somebody they added by hand — a participant who states no key and has
+/// bound none (§10.7) — written as that person and unsigned, as their join
+/// was. Nobody else on the bill can, so without this a payment to somebody
+/// who never joins from a device of their own, or who joined under a key of
+/// their own and so under another id, never settles.
+///
+/// Never the payer: a creator who paid somebody they added would otherwise
+/// settle the debt by asserting twice that they paid it.
+String? confirmerFor(
+  host.FoldedBill folded,
+  splitz.PaymentRecord payment,
+  String me,
+) {
+  if (payment.to == me) return me;
+  if (me != folded.creatorId || payment.from == me) return null;
+  final payee = folded.bill.participant(payment.to);
+  if (payee == null ||
+      payee.identityKey != null ||
+      folded.identities.bound.containsKey(payment.to)) {
+    return null;
+  }
+  return payment.to;
+}
+
+/// The payments this device may confirm, newest first: those [confirmerFor]
+/// names a confirmer for, not yet confirmed.
+List<splitz.PaymentRecord> awaitingConfirmationFor(
+  host.FoldedBill folded,
+  String me,
+) => [
+  for (final payment in folded.bill.payments)
+    if (!folded.bill.confirmedPayments.contains(payment.id) &&
+        confirmerFor(folded, payment, me) != null)
+      payment,
+]..sort((a, b) => b.at.compareTo(a.at));
+
 /// [value] when it is a string. An entry's members are whatever its author
 /// wrote once ingress has checked the ids (§10.1), and the history reads what
 /// it can rather than failing the bill for a member the fold set aside.
@@ -295,3 +377,67 @@ String? _text(Object? value) => value is String ? value : null;
 
 /// [value] when it is an integer; see [_text].
 int? _whole(Object? value) => value is int ? value : null;
+
+/// Who a restatement takes off [before], and the one participant who takes
+/// over their part, or null for either when the two do not say.
+///
+/// Taken off: the one id [before] names and [after] does not. Taken over by:
+/// the one other id whose part differs — paying in their place, named where
+/// they were, or holding a larger figure.
+(String?, String?)? _moved(
+  Map<String, dynamic> before,
+  Map<String, dynamic> after,
+) {
+  final was = _parts(before);
+  final now = _parts(after);
+  final gone = [
+    for (final id in was.keys)
+      if (!now.containsKey(id)) id,
+  ];
+  if (gone.length != 1) return null;
+  final changed = [
+    for (final id in now.keys)
+      if (id != gone.single && was[id] != now[id]) id,
+  ];
+  return (gone.single, changed.length == 1 ? changed.single : null);
+}
+
+/// Each id [expense] names, with what it names them for: paying, and their
+/// place in every list and figure of the split.
+Map<String, String> _parts(Map<String, dynamic> expense) {
+  final parts = <String, List<String>>{};
+  void add(Object? id, String part) {
+    if (id is String) (parts[id] ??= []).add(part);
+  }
+
+  add(expense['paidBy'], 'paidBy');
+  final split = expense['split'];
+  if (split is Map) {
+    final among = split['among'];
+    if (among is List) {
+      for (final id in among) {
+        add(id, 'among');
+      }
+    }
+    for (final member in const ['amounts', 'basisPoints', 'shareCounts']) {
+      final figures = split[member];
+      if (figures is Map) {
+        for (final e in figures.entries) {
+          add(e.key, '$member=${e.value}');
+        }
+      }
+    }
+    final items = split['items'];
+    if (items is List) {
+      for (var i = 0; i < items.length; i++) {
+        final sharedBy = items[i] is Map ? (items[i] as Map)['sharedBy'] : null;
+        if (sharedBy is List) {
+          for (final id in sharedBy) {
+            add(id, 'item$i');
+          }
+        }
+      }
+    }
+  }
+  return {for (final e in parts.entries) e.key: (e.value..sort()).join(',')};
+}

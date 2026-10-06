@@ -356,7 +356,7 @@ fn a_correction_and_a_withdrawal_each_name_their_target() {
     payload["amount"] = json!(2500);
     let amend = amend_entry(&host, &taxi_id, "expense", payload).unwrap();
     ana.tick();
-    let withdraw = void_entry(&host, &taxi_id).unwrap();
+    let withdraw = void_entry(&host, &taxi_id, None).unwrap();
 
     let history = history_of(&ana, vec![create, join, taxi, amend, withdraw]);
     let withdrawal = history

@@ -2,7 +2,7 @@
 
 use splitz_core::host::{BillHost, Sent, SignEntry, VerifyEntry};
 
-use crate::wallet::{SplitsWallet, WalletSendPhase};
+use crate::wallet::{SplitsWallet, WalletSendOutcome, WalletSendPhase};
 
 /// Hands `splitz-core` what SPEC.md §13 says a wallet owes it.
 ///
@@ -66,38 +66,8 @@ impl BillHost for WalletBillHost<'_> {
         self.wallet.random_bytes(byte_count)
     }
 
-    /// Maps the wallet's four send phases onto the protocol's three (§14.3).
-    ///
-    /// `Aborted` and `Failed` are one answer to a bill — nothing was spent —
-    /// and differ only in the message a person is shown. `PendingBroadcast`
-    /// keeps its own state: it is the one outcome from which nothing may be
-    /// recorded and no retry is safe.
     fn broadcast(&self, payment_request_uri: &str) -> Sent {
-        let outcome = self.wallet.sender().send(payment_request_uri);
-        match outcome.phase {
-            WalletSendPhase::Succeeded => match outcome.txid {
-                Some(txid) => Sent::sent(txid),
-                // Pending, not failed: the wallet says money left, and a
-                // retry could pay it twice.
-                None => Sent::pending(
-                    Some("the wallet reported a send with no transaction id".to_owned()),
-                    None,
-                ),
-            },
-            WalletSendPhase::PendingBroadcast => Sent::pending(
-                Some(outcome.status_message.unwrap_or_else(|| {
-                    "The transaction was created but not broadcast yet. \
-                     Check its status before trying again."
-                        .to_owned()
-                })),
-                outcome.txid,
-            ),
-            WalletSendPhase::Failed | WalletSendPhase::Aborted => Sent::failed(Some(
-                outcome
-                    .error
-                    .unwrap_or_else(|| "The transaction could not be sent.".to_owned()),
-            )),
-        }
+        sent_of(self.wallet.sender().send(payment_request_uri))
     }
 
     fn signer(&self) -> Option<SignEntry<'_>> {
@@ -106,5 +76,38 @@ impl BillHost for WalletBillHost<'_> {
 
     fn verifier(&self) -> Option<VerifyEntry<'_>> {
         self.verify
+    }
+}
+
+/// Maps the wallet's four send phases onto the protocol's three (§14.3).
+///
+/// `Aborted` and `Failed` are one answer to a bill — nothing was spent — and
+/// differ only in the message a person is shown. `PendingBroadcast` keeps its
+/// own state: it is the one outcome from which nothing may be recorded and no
+/// retry is safe.
+pub fn sent_of(outcome: WalletSendOutcome) -> Sent {
+    match outcome.phase {
+        WalletSendPhase::Succeeded => match outcome.txid {
+            Some(txid) => Sent::sent(txid),
+            // Pending, not failed: the wallet says money left, and a retry
+            // could pay it twice.
+            None => Sent::pending(
+                Some("the wallet reported a send with no transaction id".to_owned()),
+                None,
+            ),
+        },
+        WalletSendPhase::PendingBroadcast => Sent::pending(
+            Some(outcome.status_message.unwrap_or_else(|| {
+                "The transaction was created but not broadcast yet. \
+                 Check its status before trying again."
+                    .to_owned()
+            })),
+            outcome.txid,
+        ),
+        WalletSendPhase::Failed | WalletSendPhase::Aborted => Sent::failed(Some(
+            outcome
+                .error
+                .unwrap_or_else(|| "The transaction could not be sent.".to_owned()),
+        )),
     }
 }
