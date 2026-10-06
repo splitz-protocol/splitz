@@ -1064,7 +1064,7 @@ void main(List<String> args) {
   );
   final cat = Device(120);
   const catZec =
-      'u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7';
+      'u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl';
   final withCat = [
     ...taxi,
     joinBillEntry(

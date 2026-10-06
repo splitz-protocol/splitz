@@ -11,7 +11,7 @@ import 'support/fake_wallet.dart';
 
 /// `tools/corpus/_spec.py` ADDRESSES[1], so the request renders (§8.6).
 const caiZec =
-    'u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7';
+    'u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl';
 const benBase = '0xben000000000000000000000000000000000000';
 
 const usdcBase = TradableAsset(

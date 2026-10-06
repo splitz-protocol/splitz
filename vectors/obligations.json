@@ -70,7 +70,7 @@
         {
           "id": "ben",
           "name": "Ben",
-          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          "payTo": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
         },
         {
           "id": "cai",
@@ -87,14 +87,14 @@
       "skipUnpayable": false,
       "includeFiat": true,
       "expect": {
-        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana&address.1=u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7&amount.1=0.00973264&fiat.1=MXN:9246&memo.1=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label.1=Ben",
+        "uri": "zcash:?address=u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx&amount=0.00737264&fiat=MXN:7004&memo=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label=Ana&address.1=u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl&amount.1=0.00973264&fiat.1=MXN:9246&memo.1=c3BsaXR6OnRUeFY2ZzJTeDdDY0dkMHJxOHpPNFE&label.1=Ben",
         "payments": [
           {
             "address": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx",
             "zatoshi": 737264
           },
           {
-            "address": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7",
+            "address": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl",
             "zatoshi": 973264
           }
         ],
@@ -993,7 +993,7 @@
         {
           "id": "ben",
           "name": "Ben",
-          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          "payTo": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
         },
         {
           "id": "cai",
@@ -1053,7 +1053,7 @@
         {
           "id": "ben",
           "name": "Ben",
-          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          "payTo": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
         },
         {
           "id": "cai",
@@ -1095,7 +1095,7 @@
         {
           "id": "ben",
           "name": "Ben",
-          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          "payTo": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
         },
         {
           "id": "cai",
@@ -1243,7 +1243,7 @@
         {
           "id": "ben",
           "name": "Ben",
-          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          "payTo": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
         },
         {
           "id": "cai",
@@ -1285,7 +1285,7 @@
         {
           "id": "ben",
           "name": "Ben",
-          "payTo": "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+          "payTo": "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
         },
         {
           "id": "cai",

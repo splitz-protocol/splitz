@@ -636,7 +636,7 @@ func run(origin: String, downOrigin: String) async throws {
     check("a bill paying nobody in ZEC has no request for a swap to join",
           noZec != nil && !(noZec!.detail.hasPrefix("threw")), noZec?.detail ?? "nil")
     let cat = try Device(120)
-    let catZec = "u16cynw2u6nshm44gjv9vy9dvav6zvvksphexzjs3tjke8mr3p942er0pu8held7zy7wpjxzqgkpdrjzd72h7pwf34df8a0xcv0su3acx7"
+    let catZec = "u1nztelxna9h7w0vtpd2xjhxt4lpu8s9cmdl8n8vcr7actf2ny45nd07cy8cyuhuvw3axcp545y0ktq9cezuzx84jyhex8dk4tdvwhu4dl"
     let withCat = taxi + [
         try joinBillEntry(facts: cat.facts(), billId: taxiId, name: "Cat", payTo: catZec,
                           identityKey: cat.key, payouts: [], seed: cat.seed),
