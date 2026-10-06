@@ -41,9 +41,14 @@ impl Settlement {
     /// negative total, so a peer can attribute a refund to somebody who never
     /// agreed to it. The victim's settlement then exceeds every debt the bill
     /// records for them.
-    pub fn unexplained(&self) -> i64 {
-        let covered: i64 = self.covers.iter().map(|c| c.amount).sum();
-        (self.amount - covered).max(0)
+    ///
+    /// Refused with `amount_overflow` when the covers, or the amount less
+    /// them, leave the signed 64-bit range: a settlement handed in across a
+    /// boundary is not one §6 produced.
+    pub fn unexplained(&self) -> Result<i64> {
+        let covered =
+            crate::money::checked_sum(self.covers.iter().map(|c| c.amount), code::AMOUNT_OVERFLOW)?;
+        Ok(crate::money::checked_sub(self.amount, covered, code::AMOUNT_OVERFLOW)?.max(0))
     }
 
     /// Whether any part of this payment discharges a debt owed to somebody

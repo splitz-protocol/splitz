@@ -98,6 +98,7 @@ class Settled {
     required this.result,
     this.txid,
     this.detail,
+    this.code,
     this.records = const [],
   });
 
@@ -110,6 +111,10 @@ class Settled {
 
   /// What to put in front of a person when nothing was recorded.
   final String? detail;
+
+  /// The §12 code, when a protocol rule refused the send; [detail] is then
+  /// that code's plain-language sentence (`describeCode`).
+  final String? code;
 
   /// The payment entries, one per recipient. Already appended to the log —
   /// returned so a caller can hand them to a peer, not so a caller can decide
@@ -231,7 +236,11 @@ Future<Settled> settle(
 ) async {
   // §14.9: nothing is paid on a bill its creator has not closed.
   if (settleRefusal(log.fold()) case final refused?) {
-    return Settled(result: SendResult.failed, detail: refused);
+    return Settled(
+      result: SendResult.failed,
+      code: refused,
+      detail: splitz.describeCode(refused) ?? refused,
+    );
   }
   final uri = obligation.uri;
   if (uri == null) {

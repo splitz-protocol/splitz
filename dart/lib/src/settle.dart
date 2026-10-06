@@ -45,14 +45,16 @@ class Settlement {
   /// total, so a peer can attribute a refund to somebody who never agreed to
   /// it. The victim's settlement then exceeds every debt the bill records for
   /// them, and coverage goes quiet precisely when it is needed.
+  ///
+  /// Refused with `amount_overflow` when the covers, or the amount less them,
+  /// leave the signed 64-bit range: a settlement handed in across a boundary
+  /// is not one §6 produced.
   int get unexplained {
-    var covered = 0;
-    for (final c in covers) {
-      covered += c.amount;
-    }
+    final covered = checkedSum([for (final c in covers) c.amount]);
     // For a plan from balances, where §6.3 requires coverage to be empty,
     // this is the whole amount — the true answer, since no debts were given.
-    return amount > covered ? amount - covered : 0;
+    final rest = checkedSubtract(amount, covered);
+    return rest > 0 ? rest : 0;
   }
 
   /// Whether any part of this payment discharges a debt owed to somebody other

@@ -873,12 +873,23 @@ with, in this order:
 2. every other letter in U+0000–U+024F, U+0370–U+037E, U+0380–U+0523,
    U+0531–U+0556 and U+1E00–U+1FFF lower-cased, and none elsewhere, so every
    implementation folds alike whatever Unicode version its library carries;
-3. invisible format characters and combining marks removed, and every run of
+3. invisible characters removed — U+00AD, U+034F, U+061C, U+115F–U+1160,
+   U+17B4–U+17B5, U+180B–U+180F, U+200B–U+200F, U+202A–U+202E,
+   U+2060–U+206F, U+3164, U+FE00–U+FE0F, U+FEFF, U+FFA0 and
+   U+E0000–U+E0FFF — and combining marks in U+0300–U+036F, U+1AB0–U+1AFF,
+   U+1DC0–U+1DFF, U+20D0–U+20FF and U+FE20–U+FE2F removed; every run of
    Unicode White_Space collapsed to one space, none leading;
 4. fullwidth and mathematical alphanumerics mapped to the ASCII letter or
-   digit they draw, precomposed Latin letters to their base letter, lower-case
-   Cyrillic and Greek letters that render as Latin ones to it, and `l`, `1`,
-   `ı`, `ǀ` and `ӏ` to `i`, which a sans-serif capital I is drawn as.
+   digit they draw; the precomposed Latin letters in U+00C0–U+0233 that
+   decompose to a plain letter and combining marks mapped to that letter
+   (outside that range, a precomposed letter keeps its marks: `ẹ` U+1EB9 does
+   not meet `e`); lower-case Cyrillic and Greek letters that render as Latin
+   ones mapped to it; and `l`, `1`, `ı`, `ǀ` and `ӏ` to `i`, which a
+   sans-serif capital I is drawn as.
+
+These sets are the whole of steps 3 and 4. Characters outside them — other
+combining marks, other format characters — are kept, so every implementation
+folds alike whatever Unicode version its library carries.
 
 The vectors in both host packages' naming tests pin the table.
 
@@ -894,7 +905,7 @@ first: a list of `{"type": "zec", "address": …}`, `{"type": "swap", "asset": �
 "chain": …, "address": …}` or `{"type": "cash"}`. Optional; empty means none is
 declared and `payTo` stands in. A host MUST NOT write a `zec` payout with no
 `address`, or a `swap` payout missing its `asset`, `chain` or `address`, or
-naming any of them as an empty or white-space string (`bill_type_error`): a
+naming any of them as an empty or white-space string (`payout_incomplete`): a
 payer takes such a payout as one it cannot pay and moves to the next
 preference (§14.8), so the person is paid in a way they did not ask for first.
 
@@ -1011,11 +1022,11 @@ on the destination chain — and the chain it names is the `chain` of the `swap`
 payout being settled, which the payment does not repeat. A reader that shows a
 reference as a Zcash transaction because it looks like a txid is wrong for
 every swap. A host MUST NOT write a `swap` payment with no `reference`, or one
-that is only white space (`bill_type_error`): neither side could find the swap
-again.
+that is only white space (`swap_missing_reference`): neither side could find
+the swap again.
 
 A host MUST NOT write a payment whose `amount` is zero or less
-(`negative_amount`). A reader still accepts a zero `amount`, so a log another
+(`payment_not_positive`). A reader still accepts a zero `amount`, so a log another
 writer produced folds alike everywhere; but a payment of nothing records
 nothing, and while unconfirmed it withholds the whole debt it names from its
 payer's next request (§14.4).
@@ -1316,6 +1327,14 @@ aside with `rate_currency_mismatch`. Every amount on the bill is in that
 currency, so a rate in another refuses every request priced against it, and
 one dated ahead would hold that refusal over every later correction.
 
+**An `addExpense` MUST be authored by somebody who joined** — a participant
+on the bill, or one whose `joinBill` was withdrawn (§10.8), whose earlier
+entries still stand — and one that is not is set aside with
+`unknown_participant`, after the check that its `paidBy` is on the bill. An
+expense is somebody's word about who paid and who shared; one written by
+anybody else holding the invite puts a debt on the bill under a name nobody
+on it has seen, and reopens a closed bill (§10.9).
+
 **A `setRate` MUST be authored by a participant on the bill**, and one that is
 not is set aside with `unknown_participant`. The rate decides how much ZEC
 every request carries, so a rate written by somebody who owes nothing and is
@@ -1349,11 +1368,12 @@ MUST be their derivation (§9.4).
 
 **The checks of this section run in this order**, so that an entry wrong in
 two ways is refused for the same reason by every reader: the entry is an
-object; it nests no deeper than 62 levels (§11.2); its kind is one of the eight;
+object; it nests no deeper than 62 levels (§11.2); its kind is one of the nine;
 its `sig`, when present, is a string; its `v`, when present, is in range;
 every string is Unicode scalar values (§2.3); every number is an integer a
 signed 64-bit value holds (§9.3); it carries at most one of `rate`, `expense`,
-`payment` and `confirmation`; every payload member it carries is an object;
+`payment`, `confirmation` and `close`; every payload member it carries is an
+object;
 `targetId`, when present, is a string; `basis`, when present, is a string;
 the payload its kind uses is present;
 every id inside that payload is a string; a `voidEntry` or `amendEntry` names
@@ -1934,6 +1954,17 @@ published none. §10.4's rules then bind the honest and inconvenience nobody
 else, and a wallet that wants them to mean something has every participant
 publish a key on joining.
 
+**A device is on a bill as itself only once the fold binds its id.** A record
+under a device's id is not enough: anybody holding the invite can write an
+unsigned `joinBill` under an id they know — ids are the same on every bill,
+so anybody who has shared one with the person knows it — carrying their own
+payout, before the person joins. A host MUST NOT treat itself as joined while
+the fold binds no key to its id, and writes its own signed join, which binds
+its key and takes the record back: the planted copy, unsigned and authored as
+a now-bound participant, is set aside. `joinedAsMe` / `joined_as_me` in both
+host packages answer it, and `join_needed` in the binding says why a
+device must still join: `not_joined` or `not_bound`.
+
 ### 10.8 Who may withdraw an entry
 
 §10.4 gave one rule for both correction and withdrawal: an `amendEntry` or a
@@ -2015,15 +2046,43 @@ them. Applying them in one pass leaves a withdrawn withdrawal still in effect,
 so the entry it removed never comes back and §10.8's own table is unenforceable.
 
 **Taking somebody off the bill.** A `voidEntry` targeting a `joinBill` MUST be
-refused with `participant_still_named` when any surviving entry names that
-participant — as an expense's `paidBy` or in its split, as a payment's `from`
-or `to`, or as a confirmation's author. An amended entry names them if either
+refused with `participant_still_named` when any surviving entry that
+participant did not write names them — as an expense's `paidBy` or in its
+split, or as a payment's `from` or `to`. An amended entry names them if either
 the amendment or the entry it corrects does: the amendment may yet be set
 aside when it is applied (§10.4), and the entry then applies as written.
 
+An entry the participant wrote themselves never holds back their removal.
+Counting it would let them undo it with one entry naming themselves, written
+after it: their join comes back with its old payout and a debt owed to them,
+and no join is written that anybody sees. Their own entries then name
+somebody not on the bill and are set aside. Coming back is a new `joinBill`.
+**A restated expense stays its author's to correct.** A restatement is
+written by the creator, or by the expense's author, taking somebody off; an
+`amendEntry` of it MAY also be authored by whoever wrote the expense it
+restates — following a chain of restatements to the first — and §10.4
+otherwise holds. Withdrawing the restatement stays its author's and the
+creator's alone: withdrawn, it puts back the expense it replaced, which still
+names whoever was taken off. The expense's author withdraws the expense by
+withdrawing their own first entry, which leaves the restatement stale and the
+removal standing (`expenseWithdrawalTarget` / `expense_withdrawal_target` name
+the entry to withdraw, and `expenseCorrectors` / `expense_correctors` who may
+correct it). A host MUST NOT write an `amendEntry` of an entry the
+log holds but does not have in force — a withdrawn entry, or one a
+restatement replaced — and refuses with `unauthorized_entry`: the fold admits
+it, the restatement goes stale, and the person taken off is back (`refusalOf`
+/ `refusal_of`).
+
+A removal plan (below) still counts the person's own entries, so an honest
+removal sets aside no record they wrote of money they paid or received; the
+fold's rule is what stands against one written after it. A removal written
+past the plan sets the person's own entries aside, each reported with its
+code: no more than their author or the creator could already do by
+withdrawing them (§10.8's table).
+
 The fold cannot apply an entry naming somebody who is not on the bill, so
-without this rule removing the person who spent the most silently drops every
-expense they paid for and zeroes the bill. The check runs after every other
+without this rule removing somebody silently drops every expense another
+participant entered naming them, as payer or in the split. The check runs after every other
 withdrawal is resolved, so withdrawing their expenses first and then removing
 them is permitted — and is two visible acts rather than one silent one.
 
@@ -2130,7 +2189,13 @@ resolved:
   passes these checks (`restatement_superseded`).
 
 A restatement that does not apply is set aside with its code, leaves its
-target as it stood, and names nobody for the still-named check. A withdrawn
+target as it stood, and names nobody for the still-named check. These checks
+choose the one restatement that replaces its target **before** its own expense
+is applied: one that passes them replaces the target and supersedes every
+later one even when its expense is then set aside — a split §4 refuses, a
+`paidBy` not on the bill — and the expense is then off the bill until it is
+written again. A host MUST NOT write a restatement its own trial fold sets
+aside (§10.8, "Asking before writing"), so an honest removal never does this. A withdrawn
 restatement does not apply, so withdrawing one puts its target back, or lets
 the next restatement of it apply. A restatement's target can be a
 restatement; ids are digests of their entries, so the chain ends.
@@ -2172,33 +2237,54 @@ that is by writing a `closeBill`:
 ```
 
 ```
-covers = base64url( SHA-256( "splitz-close-v1" || canonical({"expenses": E}) )[0..16] )
+covers = base64url( SHA-256( "splitz-close-v2" || canonical({"balances": B}) )[0..16] )
 ```
 
-where `E` is the bill's `expenses` exactly as §10.3 materialises them, in the
-bill's order, and `canonical` is §9's encoding. The fold reports the bill
-**closed**, naming the close (`closeEntry`), while a close in force:
+where `B` maps each participant to what the bill's expenses alone leave them
+— the amounts they paid less their shares under §4, summed over every
+expense §10.3 applies, in minor units as a JSON integer — and holds only the
+participants whose figure is not zero. Payments and confirmations play no
+part. `canonical` is §9's encoding, which orders `B`'s members. The fold
+reports this digest as what a close written now covers (`closedOver` /
+`closed_over`), and reports the bill **closed**, naming the close
+(`closeEntry`), while a close in force:
 
 - was written by the creator — any other author's is set aside with
   `unauthorized_entry`, and so is the creator's when a verifying fold has not
   bound the creator's key;
-- carries `covers` as 16 bytes of base64url — otherwise it is set aside with
+- carries `covers` as 16 bytes in §9.4's canonical unpadded base64url — a
+  padded, non-canonical or other-length value is set aside with
   `bill_type_error`;
-- covers the expenses as they now stand;
+- covers what the expenses now leave everybody owing;
 - and is the creator's latest close by §10.2's order, counting one withdrawn.
 
 A withdrawn close is a reopen: it stays the latest, so the bill reads open
 even when its expenses return to what an earlier close covered, and two
-closes over one set of expenses take one reopen. A close set aside decides
-nothing. A later close over fewer expenses than the bill now holds leaves it
+closes over one set of expenses take one reopen. A withdrawn close reopens
+whether or not it was well formed: withdrawing it is the creator saying the
+bill is open. A close set aside and not withdrawn decides nothing. A close is
+amended as any entry is (§10.4: by its author, the creator), and the
+amendment's `covers` is what it covers. A later close over fewer expenses than the bill now holds leaves it
 open, whatever an earlier close covered.
 
 **A close is not dated against the expenses.** Only one close against another is put in §10.2's order. Any expense added, corrected or withdrawn
-after the creator closed the bill gives another digest, and the bill is open
-again, whatever `at` that expense carries. Deciding by time would let a clock
-set back keep a bill closed over an expense it never saw. A close is withdrawn
+after the creator closed the bill that changes what somebody owes gives
+another digest, and the bill is open again, whatever `at` that expense
+carries. Deciding by time would let a clock set back keep a bill closed over
+an expense it never saw. An expense that moves nobody's figure — one paid by
+and shared by the same person, say — leaves it closed: what the creator
+closed is what everybody owes, and that has not changed. A close is withdrawn
 by the creator alone (§10.8's default: its author), which reopens the bill; a
 fresh close over the expenses as they stand closes it again.
+
+**A close or reopen is dated after the last one.** The latest close decides,
+so a creator writing from a second device whose clock trails the reopen it
+read would write a close that sorts before that reopen and never closes,
+however often it is written. A host MUST date a close, and the withdrawal of
+a close, no earlier than one millisecond after the latest `at` (§9.3) of any
+close in the log or any withdrawal of one, when that is later than its own
+clock. `closeFor` / `close_for` and `reopenFor` / `reopen_for` do, from
+`FoldedBill.lastCloseAt` / `last_close_at`.
 
 Payments and confirmations do not change what a close covers. A payment is
 admitted to an open bill exactly as to a closed one: one somebody already made
@@ -2544,6 +2630,23 @@ not stop the rest of a sync: anybody who has the channel can push one.
 **The code is part of the protocol; the message that accompanies it is prose
 and is not.** A user-facing string MUST be derived from the code.
 
+Every refusal a host function returns for a person to read carries one of
+these codes. The failures that carry none are not refusals of what a person
+asked for, and a host says them in its own words: a transport or a provider
+that did not answer as it should — the relay, a price source, a swap
+provider (`SplitsRelayException`, `SplitsSyncException`, `ZecPriceException`,
+`SwapException` in the Dart host; `Relay`, `Sync`, `Price`, `Swap` in the
+Rust host's `HostError`); storage that would not read or write
+(`BillStorageUnreadable`; `Storage`, `Unreadable`); a send still under way
+(`SendInFlight`, `Unrecordable`; `SendInFlight`); a held key the bill does
+not match (`BillKeyConflict`; `KeyConflict`, `ForeignKey`); and a caller's
+own error, an argument no honest flow passes (`ArgumentError`; `Malformed`);
+a blob this device holds that will not seal or open, before any peer's
+content is read (`SealingException`; `Sealing`); and a fault in the host
+itself (`UnansweredSignatureQuestion`, and `SeedDriverException` in
+development builds). `SwapRefused` / `SwapRefused` carries a typed refusal,
+which a host words.
+
 `vectors/messages.json` gives one plain-language sentence per code, which a
 host MAY show as it stands. Both implementations return it from
 `describeCode` / `describe_code`, and answer empty for a code they do not
@@ -2670,7 +2773,10 @@ binding, runs the payer's list against the text a review screen shows. It is
 given the obligation about to be sent, the folded bill and the strings the
 screen displays, and answers each fact above that the text does not contain:
 every unpayable recipient's name and the wallet's words for its reason, the
-name of every participant whose address was replaced, every participant a
+name of every participant whose address was replaced together with the
+wallet's words that it was (given under `replaced_address`, and found once
+for each such participant: a name is on every review that pays its holder
+and says nothing about a change), every participant a
 pending payment is owed to or went to, every recipient the payer chose to pay
 by a lower preference with the wallet's words for it, every recipient paid
 more than the bill's debts explain with the wallet's words for that, the rate
@@ -2739,9 +2845,12 @@ names its transaction is decided by where the wallet's history shows that
 transaction instead: the host MUST NOT remove it on that word while the
 transaction is neither mined nor expired, since the wallet may still broadcast
 it, or once it is mined, since it went through and is recorded rather than
-cleared; expired, or absent from the history, it can no longer land
-(`namedSendRefusal` / `named_send_refusal`, `pending_send_named_refusal` in
-the binding).
+cleared; expired, or absent from a history the wallet read, it can no
+longer land. **A history that could not be read is neither**, and MUST NOT
+be taken for "absent": the note stays (`unread`). Taking a failed read for
+absent clears the note while the transaction may still go out, and the debt
+is sent a second time (`namedSendRefusal` / `named_send_refusal`,
+`pending_send_named_refusal` in the binding).
 
 ### 14.4 A pending payment withholds the whole debt
 
@@ -2773,6 +2882,17 @@ paid is still in the plan §6 produces.
   that does not fit is withheld whole, and names the recipients paid beyond
   their own settlement. Later expenses can leave more pending than is owed,
   and the request then carries nothing.
+- What other payers have in flight to a payee counts too. A settlement MUST
+  be withheld when the payments recorded to its payee by **other** payers —
+  each record written by its own payer, none confirmed — together with what
+  this request already carries to that payee, leave less than the
+  settlement owing on what the plan still owes the payee in total. §6 plans
+  from confirmed balances, so a confirmation can move a debt onto a payee
+  another payer is already paying: asked for it, the payer pays them twice,
+  and somebody else is left short until the payee passes it on. The held
+  debt reports what others have in flight to the payee (`othersPaid` /
+  `others_paid`), and the payee releases it by withdrawing a record of money
+  that never came (§10.8).
 - Where the amount pending is **less** than the debt, the **whole** debt is
   withheld rather than the remainder. Requesting the remainder overpays by the
   pending amount if that payment lands.
@@ -2793,9 +2913,10 @@ withdrawal of its record is what releases the debt.
 MUST NOT withdraw its own record of a `shieldedZec` payment while its wallet
 shows the transaction the record names mined or still sending: withdrawn, the
 debt is offered again while the first payment has reached, or may yet reach,
-the payee. Once that transaction has expired unmined, or when the wallet holds
-no such transaction, §10.8 alone decides. `ownPaymentWithdrawalRefusal`
-implements the check in both host packages.
+the payee. Once that transaction has expired unmined, or when a history the
+wallet read holds no such transaction, §10.8 alone decides; a history that
+could not be read leaves the record held (`unread`), as for a note above.
+`ownPaymentWithdrawalRefusal` implements the check in both host packages.
 
 ### 14.5 A peer who is current and a peer who is behind are different answers
 
@@ -2913,6 +3034,18 @@ what the record states, and withdrawing it asks the payer to pay the debt a
 second time. A `short`, `unstated`, `disputed`, `underpriced` or `unbound`
 record is not evidence, and stays the payee's to withdraw.
 
+**Neither side withdraws a confirmed record.** A host MUST NOT write a
+`voidEntry` of a payment record the bill holds confirmed (§10.5): the payee
+has said it arrived, and withdrawn, the debt is asked for again. §10.8 would
+admit it; a host refuses.
+
+**Each of these is decided when the withdrawal is written.** A host decides
+§14.4's, §14.7's and the confirmed rule against the bill as it folds it in
+the same step that writes the `voidEntry` — not against the bill a screen
+showed when it offered the withdrawal. A confirmation or an arrival that syncs
+in while a person reads a dialog would otherwise be withdrawn on their tap,
+and the debt asked for again.
+
 ### 14.8 Paying by a lower preference
 
 A recipient's first payout decides how they are paid (§9.1). A payer MAY
@@ -2956,6 +3089,12 @@ NOT send a request, send a swap deposit, or write a record of a cash payment,
 and refuses each with `bill_not_closed` (`settleRefusal` /
 `settle_refusal`). A debt read off an open bill can still change, and money
 sent against it cannot be taken back.
+
+`swapSendRefusal`, `swapDeposit` and `combinedSend` read a bill, not a fold,
+and do not know whether it is closed: a host MUST ask `settleRefusal` of the
+folded bill before calling any of them, as it does before a request. The
+binding's `swap_send_refusal` and `combined_send` fold the entries they are
+handed and refuse an open bill with `bill_not_closed` themselves.
 
 A host MUST NOT write an expense, a correction or a withdrawal of one on a
 closed bill, and refuses with `bill_closed` (`expenseRefusal` /
@@ -3012,9 +3151,10 @@ and in the split — then the added name's joins withdrawn, written in one
 merge as §10.8's removal is.
 
 - A host MUST refuse to merge a participant whose record states an
-  `identityKey`, or to whom §10.7 binds one: they joined as themselves, and
-  folding them into somebody else hands their debts and credits to another
-  person.
+  `identityKey`, or to whom §10.7 binds one, with `unauthorized_entry`: they
+  joined as themselves, and folding them into somebody else hands their debts
+  and credits to another person. A merge naming somebody not on the bill, or
+  one person twice, is refused with `unknown_participant`.
 - Only the creator's merge is complete. Anybody else's would restate
   expenses they did not write and withdraw a join they may not (§10.8).
 - In a split, a figure (`amounts`, `basisPoints`, `shareCounts`) is added
@@ -3031,6 +3171,20 @@ merge as §10.8's removal is.
   or a confirmation by them holds the merge back, as each holds back a
   removal. A merge restates expenses, so §14.9 refuses it with `bill_closed`
   while the bill is closed.
+
+**A payment to the added name is confirmed by the creator, as them.** The
+added name holds no key, so nobody can confirm a payment to them as
+themselves, and a payment made to them before the person joined holds the
+merge back for good: without a confirmation the bill never settles. A host
+MUST let the creator confirm a payment whose payee states no `identityKey`
+and is bound to no key (§10.7), written as that payee and unsigned, as their
+`joinBill` was — the fold admits it as it admits any unbound author's entry.
+It MUST NOT offer this to anybody but the creator, nor for a payee who
+states or has bound a key, nor for a payment the creator made: a payer who
+confirms their own payment asserts twice that they paid it (§10.5). `confirmerFor` / `confirmer_for` answer who writes
+a confirmation of a payment, and `awaitingConfirmationFor` /
+`awaiting_confirmation_for` list what a device may confirm;
+`confirm_payment_for_entry` and `awaiting_my_confirmation` in the binding.
 
 ## 15. The wallet seam
 
@@ -3080,15 +3234,17 @@ The device itself: who it speaks as, what it can spend, where its secrets go.
   unrecoverable; it still signs correctly.
 - A wallet whose account comes from a BIP39 mnemonic MUST supply as its
   identity secret the mnemonic and the BIP39 passphrase, each in Unicode NFKC
-  — two texts share an NFKC form exactly when they share the NFKD form BIP39
-  hashes, so every spelling of one wallet's words is one participant, and
-  text as a keyboard types it is unchanged — the mnemonic's words joined by
-  one ASCII space whatever Unicode White_Space separated them, each UTF-8
-  encoded,
-  joined by one zero byte, and for any ZIP 32 account index other than 0, one
+  as Unicode 17.0 defines it, the mnemonic's words joined by one ASCII space
+  whatever Unicode White_Space separated them, each UTF-8 encoded, joined by
+  one zero byte, and for any ZIP 32 account index other than 0, one
   further zero byte and the index as four big-endian bytes
   (`identitySecretFromMnemonic` / `identity_secret_from_mnemonic`; the binding
-  answers the seed directly with `identity_seed_from_mnemonic`). The index is
+  answers the seed directly with `identity_seed_from_mnemonic`). Two texts
+  share an NFKC form exactly when they share the NFKD form BIP39 hashes, so
+  every spelling of one wallet's words is one participant, and text as a
+  keyboard types it is unchanged. A code point a later Unicode version gave a
+  decomposition is kept as written, so the identity does not move with a
+  library's tables. The index is
   below 2^31; an empty mnemonic derives an identity anyone can compute, and a
   zero byte inside either text would let two inputs join to one secret, so
   both are refused. One layout in every wallet is what makes one person one participant

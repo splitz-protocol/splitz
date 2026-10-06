@@ -57,7 +57,11 @@ void main() {
     final host = _Counting(d.ana, () => broadcasts++);
     final settled = await settle(host, d.log, owed);
     expect(settled.result, SendResult.failed);
-    expect(settled.detail, splitz.SplitCode.billNotClosed);
+    expect(settled.code, splitz.SplitCode.billNotClosed);
+    expect(
+      settled.detail,
+      splitz.describeCode(splitz.SplitCode.billNotClosed),
+    );
     expect(broadcasts, 0, reason: 'nothing reaches the wallet');
     expect(d.log.fold().bill.payments, isEmpty);
   });

@@ -130,6 +130,9 @@ pub struct Settled {
     pub txid: Option<String>,
     /// What to put in front of a person when nothing was recorded.
     pub detail: Option<String>,
+    /// The §12 code, when a protocol rule refused the send; `detail` is then
+    /// that code's plain-language sentence (`describe_code`).
+    pub code: Option<String>,
     /// The payment entries, one per recipient. Already appended to the log —
     /// returned so a caller can hand them to a peer, not so a caller can
     /// decide whether to keep them.
@@ -242,7 +245,12 @@ pub fn settle(
         return Ok(Settled {
             result: SendResult::Failed,
             txid: None,
-            detail: Some(refused.to_owned()),
+            detail: Some(
+                crate::error::describe_code(refused)
+                    .unwrap_or(refused)
+                    .to_owned(),
+            ),
+            code: Some(refused.to_owned()),
             records: Vec::new(),
         });
     }
@@ -252,6 +260,7 @@ pub fn settle(
             txid: None,
             detail: Some("there is nothing to send".to_owned()),
             records: Vec::new(),
+            code: None,
         });
     };
 
@@ -264,6 +273,7 @@ pub fn settle(
             txid: None,
             detail: Some("there is nothing this request can carry".to_owned()),
             records: Vec::new(),
+            code: None,
         });
     }
 
@@ -279,6 +289,7 @@ pub fn settle(
             txid: sent.txid,
             detail: sent.detail,
             records: Vec::new(),
+            code: None,
         });
     }
 
@@ -290,6 +301,7 @@ pub fn settle(
             txid: None,
             detail: Some("the wallet reported a send with no transaction id".to_owned()),
             records: Vec::new(),
+            code: None,
         });
     };
 
@@ -306,6 +318,7 @@ pub fn settle(
         txid: Some(txid),
         detail: None,
         records,
+        code: None,
     })
 }
 

@@ -66,6 +66,31 @@ def cases():
             "expect": withholdings(plan, b, payer, recorded_by),
         })
 
+    # Section 14.4 across payers. A confirmation re-plans from confirmed
+    # balances and moves a debt onto ana, whom dee is already paying with a
+    # record of his own: asked for again, ana is paid twice.
+    EVE, DEE = who("eve", ADDRESSES[3]), who("dee", ADDRESSES[4])
+    PAYERS = [ANA, EVE, DEE]
+    case("a_payee_another_payer_is_already_paying_is_not_asked_for_again",
+         [settle("eve", "ana", 1105)],
+         bill(PAYERS, [pay("p1", "dee", "ana", 1105)]), "eve",
+         {"p1": "dee"})
+    # A record the payee wrote is their word, not a payment in flight.
+    case("a_record_the_payee_wrote_holds_nothing_back_from_another_payer",
+         [settle("eve", "ana", 1105)],
+         bill(PAYERS, [pay("p1", "dee", "ana", 1105)]), "eve",
+         {"p1": "ana"})
+    # What others have in flight leaves room for the rest of the payee's
+    # credit, and that is still asked for.
+    case("another_payers_payment_leaves_room_for_the_rest",
+         [settle("eve", "ana", 505), settle("dee", "ana", 600)],
+         bill(PAYERS, [pay("p1", "dee", "ana", 600)]), "eve",
+         {"p1": "dee"})
+    case("another_payers_part_payment_holds_back_what_it_covers",
+         [settle("eve", "ana", 505), settle("dee", "ana", 600)],
+         bill(PAYERS, [pay("p1", "dee", "ana", 900)]), "eve",
+         {"p1": "dee"})
+
     # Section 14.4 with section 6.3's coverage. Ana owed ben and has paid
     # him, not yet confirmed; netting reroutes the debt so the plan asks her
     # to pay cai. The settlement covers the debt already paid, so it waits.
@@ -172,7 +197,11 @@ def cases():
          bill(THREE, payments=[pay("p1", "cai", "ana", 4500)],
               confirmed=["p1"]), "cai")
 
-    case("somebody_elses_pending_payment_holds_nothing_back",
+    # Somebody else's pending payment to the same payee covers what the plan
+    # still owes her: once it lands she is paid, so cai's debt waits on it
+    # rather than paying her twice. Ana releases it by withdrawing a record
+    # of money that never came (section 10.8).
+    case("somebody_elses_pending_payment_to_the_payee_holds_the_debt",
          [settle("cai", "ana", 4500)],
          bill(THREE, payments=[pay("p1", "ben", "ana", 4500)]), "cai")
 

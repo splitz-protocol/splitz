@@ -1856,15 +1856,17 @@ def derive_entry_id(entry):
 
 
 PAYMENT_DIGEST_DOMAIN = "splitz-payment-v1"
-CLOSE_DIGEST_DOMAIN = "splitz-close-v1"
+CLOSE_DIGEST_DOMAIN = "splitz-close-v2"
 
 
-def close_digest(expenses):
-    """Section 10.9. What a close covers: the digest of the bill's expenses
-    as the fold materialised them, in the bill's order. Any expense added,
-    corrected or withdrawn since gives another digest, and the close no
-    longer holds."""
-    return _derive_id(CLOSE_DIGEST_DOMAIN, {"expenses": expenses})
+def close_digest(balances):
+    """Section 10.9. What a close covers: the digest of what each
+    participant's expenses leave them owed or owing -- paid less share, in
+    minor units -- over the participants whose figure is not zero. An expense
+    that changes what somebody owes gives another digest, and the close no
+    longer holds; one that changes nobody's figure leaves it closed."""
+    return _derive_id(CLOSE_DIGEST_DOMAIN,
+                      {"balances": {k: v for k, v in balances.items() if v != 0}})
 
 
 def payment_digest(payment):
@@ -2253,6 +2255,20 @@ def fold(entries, bill_id=None, verify=None):
     by_id = {e["id"]: e for e in entries}
 
     # Amendments: authored by the author of their target, same payload kind.
+    def restated_from(target):
+        """Section 10.8. Who wrote the expense a restatement replaces,
+        following a chain of restatements to the first; None for an entry
+        that restates nothing."""
+        at, seen = target, set()
+        while (at.get("kind") == "addExpense" and isinstance(at.get("targetId"), str)
+               and at["id"] not in seen):
+            seen.add(at["id"])
+            earlier = by_id.get(at["targetId"])
+            if earlier is None or earlier.get("kind") != "addExpense":
+                return None
+            at = earlier
+        return None if at is target else at.get("author")
+
     for e in entries:
         if e["kind"] != "amendEntry":
             continue
@@ -2260,7 +2276,7 @@ def fold(entries, bill_id=None, verify=None):
         if target is None:
             aside(e, "unknown_entry", "amends an entry the log does not hold")
             continue
-        if e["author"] != target["author"]:
+        if e["author"] != target["author"] and e["author"] != restated_from(target):
             aside(e, "unauthorized_entry", "amends an entry it did not write")
             continue
         want = PAYLOAD_FOR.get(target["kind"])
@@ -2428,9 +2444,12 @@ def fold(entries, bill_id=None, verify=None):
     for e in removals:
         target = by_id[e["targetId"]]
         gone = target.get("participant", {}).get("id")
+        # An entry the person wrote never holds their own removal back: one
+        # written after it would otherwise put them back on the bill, with
+        # their old payout and a debt owed to them, with no join anyone sees.
         surviving = [o for o in entries
                      if o["id"] not in voided and o["kind"] != "voidEntry"
-                     and o["id"] not in unapplied]
+                     and o["id"] not in unapplied and o["author"] != gone]
         named = False
         for other in surviving:
             # The amendment and the entry it corrects are both read: the
@@ -2455,8 +2474,6 @@ def fold(entries, bill_id=None, verify=None):
                     pay = _as_dict(eff.get("payment"))
                     if gone in (pay.get("from"), pay.get("to")):
                         named = True
-                elif other["kind"] == "confirmPayment" and other["author"] == gone:
-                    named = True
             if named:
                 break
         if named:
@@ -2534,6 +2551,11 @@ def fold(entries, bill_id=None, verify=None):
             replaced.append({"id": pid, "from": before, "to": _destination(p)})
         participants[pid] = p
 
+    # Everybody whose join was withdrawn: taken off the bill, and the author
+    # of entries that still stand.
+    joined_once = {_as_dict(e.get("participant")).get("id") for e in entries
+                   if e["kind"] == "joinBill" and e["id"] in voided}
+
     # Section 10.1. The latest live setRate by a participant decides, by
     # section 10.2's order, so the answer is a function of the log and not of
     # which device last spoke. Decided after the participants, because only
@@ -2610,6 +2632,10 @@ def fold(entries, bill_id=None, verify=None):
                 elif ex["currency"] != currency:
                     raise Refused("currency_mismatch")
                 if ex.get("paidBy") not in participants:
+                    raise Refused("unknown_participant")
+                # An expense is written by somebody who joined: on the bill,
+                # or taken off it since, whose earlier entries still stand.
+                if e["author"] not in participants and e["author"] not in joined_once:
                     raise Refused("unknown_participant")
                 decode_expense(ex, currency, set(participants))
                 # SPEC.md 10.3 step 5: an expense id is its author's own, so
@@ -2694,6 +2720,10 @@ def fold(entries, bill_id=None, verify=None):
             payment_entries[pay["id"]] = e["id"]
             payment_digests[pay["id"]] = payment_digest(version["payment"])
 
+    # What the expenses alone leave each participant: payments move
+    # `running` only once confirmed, below. A close covers this (10.9).
+    over = close_digest(running)
+
     # Confirmations, in a pass of their own once every payment is on the bill.
     known = {p["id"] for p in payments}
     confirmed = set()
@@ -2758,7 +2788,6 @@ def fold(entries, bill_id=None, verify=None):
     # and an earlier close never comes back into force. Nothing about it is
     # dated: an expense written after the close, by any clock, changes the
     # digest and reopens the bill.
-    over = close_digest(expenses)
     close_entry = None
     for e in entries:
         if e["kind"] != "closeBill" or e["id"] in unapplied:
@@ -2808,6 +2837,7 @@ def fold(entries, bill_id=None, verify=None):
         "rateEntry": rate_entry,
         "rateAuthor": rate_author,
         "closeEntry": close_entry,
+        "closedOver": over,
         "withdrawn": sorted(voided),
         # Section 10.2. Total: rows sharing an id are ordered by code.
         "setAside": sorted(set_aside, key=lambda r: (r["id"].encode("utf-8"),
@@ -3006,6 +3036,23 @@ def withholdings(plan, bill, payer, recorded_by=None):
     room = _checked_sum(own.values()) - _checked_sum(pending.values())
     beyond_to = _by_id(beyond)
 
+    # What every other payer has in flight to each payee, each record
+    # written by its own payer, against what the plan still owes that payee.
+    # Section 6 plans from confirmed balances, so a confirmation can move a
+    # debt onto a payee another payer is already paying; asked for again,
+    # they are paid twice.
+    credit = {}
+    for s in plan:
+        credit[s["to"]] = _in_range(credit.get(s["to"], 0) + s["amount"])
+    inbound = {}
+    for p in bill.get("payments") or ():
+        if p["from"] == payer or p["id"] in confirmed:
+            continue
+        if recorded_by is not None and recorded_by.get(p["id"]) != p["from"]:
+            continue
+        inbound[p["to"]] = _in_range(inbound.get(p["to"], 0) + p["amount"])
+    left = {t: credit.get(t, 0) - inbound.get(t, 0) for t in credit}
+
     carried, awaiting = [], []
     for s in mine:
         # The payee's own pending payments, and what was paid beyond their
@@ -3024,16 +3071,22 @@ def withholdings(plan, bill, payer, recorded_by=None):
             # back, is theirs.
             awaiting.append({"to": s["to"], "owed": s["amount"],
                              "paid": _checked_sum([held[t] for t in paid_to]),
-                             "paidTo": paid_to})
+                             "paidTo": paid_to, "othersPaid": 0})
         elif s["amount"] > room:
             # Only money paid beyond some settlement can leave too little
             # room: what was paid within one is that settlement's, and it is
             # held above.
             awaiting.append({"to": s["to"], "owed": s["amount"],
                              "paid": _checked_sum([beyond[t] for t in beyond_to]),
-                             "paidTo": beyond_to})
+                             "paidTo": beyond_to, "othersPaid": 0})
+        elif s["amount"] > left.get(s["to"], 0):
+            # Other payers' records to this payee cover what the plan still
+            # owes them: held until those are confirmed or withdrawn.
+            awaiting.append({"to": s["to"], "owed": s["amount"], "paid": 0,
+                             "paidTo": [], "othersPaid": inbound[s["to"]]})
         else:
             room -= s["amount"]
+            left[s["to"]] -= s["amount"]
             carried.append(s)
     return {"carried": carried, "awaiting": awaiting}
 

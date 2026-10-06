@@ -41,7 +41,11 @@ Map<String, dynamic> closeFor(BillHost host, FoldedBill folded) {
       'Only the creator closes a bill',
     );
   }
-  return closeBill(host: host, covers: folded.closedOver);
+  return closeBill(
+    host: host,
+    covers: folded.closedOver,
+    notBefore: folded.lastCloseAt,
+  );
 }
 
 /// The entry that reopens [folded], withdrawing the close it is closed by
@@ -55,5 +59,5 @@ Map<String, dynamic>? reopenFor(BillHost host, FoldedBill folded) {
       'Only the creator reopens a bill',
     );
   }
-  return voidEntry(host: host, targetId: close);
+  return voidEntry(host: host, targetId: close, notBefore: folded.lastCloseAt);
 }

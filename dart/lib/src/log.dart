@@ -181,13 +181,19 @@ String paymentDigest(Map<String, dynamic> payment) =>
     _deriveId(paymentDigestDomain, payment);
 
 /// The domain separator a close's digest covers (§10.9).
-const String closeDigestDomain = 'splitz-close-v1';
+const String closeDigestDomain = 'splitz-close-v2';
 
-/// What a close covers (§10.9): the digest of the bill's expenses as the fold
-/// materialised them, in the bill's order. Any expense added, corrected or
-/// withdrawn since gives another digest, and the close no longer holds.
-String closeDigest(List<Map<String, dynamic>> expenses) =>
-    _deriveId(closeDigestDomain, {'expenses': expenses});
+/// What a close covers (§10.9): the digest of what each participant's
+/// expenses leave them owed or owing — paid less share, in minor units —
+/// over the participants whose figure is not zero. An expense that changes
+/// what somebody owes gives another digest, and the close no longer holds;
+/// one that changes nobody's figure leaves it closed.
+String closeDigest(Map<String, int> balances) => _deriveId(closeDigestDomain, {
+      'balances': {
+        for (final MapEntry(:key, :value) in balances.entries)
+          if (value != 0) key: value,
+      },
+    });
 
 /// `value` as a map, or an empty one.
 ///
@@ -520,6 +526,7 @@ class FoldResult {
     required this.rateEntry,
     required this.rateAuthor,
     this.closeEntry,
+    this.closedOver = '',
     this.inForce = const [],
     this.amendmentOf = const {},
   });
@@ -527,6 +534,10 @@ class FoldResult {
   /// The creator's close the bill is closed by (§10.9), or null while it is
   /// open: no close, or none covering the expenses as they now stand.
   final String? closeEntry;
+
+  /// What a close written now would cover: [closeDigest] over the balances
+  /// the bill's expenses leave, as this fold applied them (§10.9).
+  final String closedOver;
 
   /// The materialised bill, as a wire-form map.
   final Map<String, dynamic> bill;
@@ -731,8 +742,25 @@ FoldResult foldLog(List<Object?> rawEntries,
   void aside(Map<String, dynamic> e, String code) =>
       setAside.add(SetAside(e['id'] as String, code));
 
-  // Amendments: authored by the author of their target, carrying a payload of
-  // the target's kind. An amendment replaces its target wholesale, so one
+  // §10.8. Who wrote the expense a restatement replaces, following a chain
+  // of restatements to the first. A restatement is written by the creator
+  // taking somebody off, and the expense stays its author's to correct.
+  String? restatedFrom(Map<String, dynamic> target) {
+    var at = target;
+    final seen = <Object?>{};
+    while (at['kind'] == 'addExpense' &&
+        at['targetId'] is String &&
+        seen.add(at['id'])) {
+      final earlier = byId[at['targetId']];
+      if (earlier == null || earlier['kind'] != 'addExpense') return null;
+      at = earlier;
+    }
+    return identical(at, target) ? null : at['author'] as String?;
+  }
+
+  // Amendments: authored by the author of their target — or, for a
+  // restatement, of the expense it restates — carrying a payload of the
+  // target's kind. An amendment replaces its target wholesale, so one
   // carrying no payload silently deletes what it claims to correct.
   for (final e in entries) {
     if (e['kind'] != 'amendEntry') continue;
@@ -741,7 +769,8 @@ FoldResult foldLog(List<Object?> rawEntries,
       aside(e, SplitCode.unknownEntry);
       continue;
     }
-    if (e['author'] != target['author']) {
+    if (e['author'] != target['author'] &&
+        e['author'] != restatedFrom(target)) {
       aside(e, SplitCode.unauthorizedEntry);
       continue;
     }
@@ -958,9 +987,14 @@ FoldResult foldLog(List<Object?> rawEntries,
     final gone = _mapOf(target['participant'])['id'];
     var named = false;
     for (final other in entries) {
+      // An entry the person wrote never holds their own removal back: one
+      // written after it would otherwise put them back on the bill, with
+      // their old payout and a debt owed to them, with no join anyone sees.
+      // Such an entry names somebody not on the bill and is set aside.
       if (voided.contains(other['id']) ||
           other['kind'] == 'voidEntry' ||
-          unapplied.contains(other['id'])) {
+          unapplied.contains(other['id']) ||
+          other['author'] == gone) {
         continue;
       }
       // The amendment and the entry it corrects are both read: the amendment
@@ -985,9 +1019,6 @@ FoldResult foldLog(List<Object?> rawEntries,
         } else if (other['kind'] == 'recordPayment') {
           final pay = _mapOf(eff['payment']);
           if (pay['from'] == gone || pay['to'] == gone) named = true;
-        } else if (other['kind'] == 'confirmPayment' &&
-            other['author'] == gone) {
-          named = true;
         }
       }
       if (named) break;
@@ -1090,6 +1121,14 @@ FoldResult foldLog(List<Object?> rawEntries,
     participants[id] = p;
   }
 
+  // Everybody whose join was withdrawn: taken off the bill, and the author of
+  // entries that still stand.
+  final joinedOnce = {
+    for (final e in entries)
+      if (e['kind'] == 'joinBill' && voided.contains(e['id']))
+        _mapOf(e['participant'])['id'],
+  };
+
   // §10.1. The latest live setRate by a participant decides, by §10.2's
   // order, so the answer is a function of the log and not of which device last
   // spoke. Decided after the participants, because only they may set it.
@@ -1171,6 +1210,16 @@ FoldResult foldLog(List<Object?> rawEntries,
         if (!participants.containsKey(ex['paidBy'])) {
           raise(
               SplitCode.unknownParticipant, 'Paid by somebody not on the bill');
+        }
+        // An expense is somebody's word about who paid and who shared, so it
+        // is written by somebody who joined: on the bill, or taken off it
+        // since, whose earlier entries still stand. Anybody else holding the
+        // invite would otherwise put debts on the bill under a name nobody
+        // knows, and reopen a closed one (§10.9).
+        if (!participants.containsKey(e['author']) &&
+            !joinedOnce.contains(e['author'])) {
+          raise(SplitCode.unknownParticipant,
+              'Written by somebody who never joined');
         }
         final decoded =
             decodeExpense(ex, billCurrency, participants.keys.toSet());
@@ -1258,6 +1307,10 @@ FoldResult foldLog(List<Object?> rawEntries,
     }
   }
 
+  // What the expenses alone leave each participant: payments move `running`
+  // only once confirmed, below. A close covers this (§10.9).
+  final over = closeDigest(running);
+
   // Confirmations in a pass of their own, once every payment is on the bill: a
   // confirmation may arrive before the payment it vouches for, and a single
   // pass would set aside one that is merely early.
@@ -1327,11 +1380,11 @@ FoldResult foldLog(List<Object?> rawEntries,
   }
 
   // §10.9. The creator's latest close by §10.2's order decides, withdrawn or
-  // not: it closes the bill while it is live and covers the expenses exactly
-  // as they stand. Withdrawn, it is a reopen, and an earlier close never comes
-  // back into force. Nothing about it is dated: an expense written after the
-  // close, by any clock, changes the digest and reopens the bill.
-  final over = closeDigest(expenses);
+  // not: it closes the bill while it is live and covers what the expenses
+  // leave everybody owing as it stands. Withdrawn, it is a reopen, and an
+  // earlier close never comes back into force. Nothing about it is dated: an
+  // expense written after the close, by any clock, that changes what somebody
+  // owes changes the digest and reopens the bill.
   String? closeEntry;
   for (final e in entries) {
     if (e['kind'] != 'closeBill' || unapplied.contains(e['id'])) continue;
@@ -1400,5 +1453,6 @@ FoldResult foldLog(List<Object?> rawEntries,
     },
     rateAuthor: rateAuthor,
     closeEntry: closeEntry,
+    closedOver: over,
   );
 }

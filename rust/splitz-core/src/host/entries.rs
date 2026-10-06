@@ -41,6 +41,20 @@ fn at(host: &dyn BillHost) -> Result<String> {
     canonical_instant(&host.now())
 }
 
+/// The host's instant, or one millisecond after `not_before` when that is
+/// later: an entry that must sort after one already in the log does, whatever
+/// this device's clock says.
+fn at_after(host: &dyn BillHost, not_before: Option<&str>) -> Result<String> {
+    let now = at(host)?;
+    match not_before {
+        Some(earliest) => {
+            let after = crate::instant::millisecond_after(earliest)?;
+            Ok(if after > now { after } else { now })
+        }
+        None => Ok(now),
+    }
+}
+
 /// Opens a bill. Its id is the digest of this entry (§9.4).
 ///
 /// `creator_key` is the key §10.7 binds the creator by, so the creator needs
@@ -465,21 +479,26 @@ pub fn amend_expense(
 
 /// A close of the bill for settling (§10.9), over the expenses whose digest is
 /// `covers`: `FoldedBill::closed_over` as the writer's device folds it.
-pub fn close_bill(host: &dyn BillHost, covers: &str) -> Result<Value> {
+///
+/// Dated after `not_before` when that is later than the clock: §10.9 decides
+/// by the latest close, and a device whose clock trails the reopen it read
+/// would otherwise write a close that sorts before it and never closes.
+pub fn close_bill(host: &dyn BillHost, covers: &str, not_before: Option<&str>) -> Result<Value> {
     let mut close = Map::new();
     close.insert("covers".to_owned(), Value::from(covers));
     let mut body = Map::new();
     body.insert("kind".to_owned(), Value::from("closeBill"));
     body.insert("close".to_owned(), Value::Object(close));
-    sealed(host, body)
+    sealed_at(host, body, at_after(host, not_before)?)
 }
 
-/// Withdraws an entry. Who may is §10.8's decision.
-pub fn void_entry(host: &dyn BillHost, target_id: &str) -> Result<Value> {
+/// Withdraws an entry. Who may is §10.8's decision. Dated after `not_before`
+/// when that is later than the clock, as `close_bill` is.
+pub fn void_entry(host: &dyn BillHost, target_id: &str, not_before: Option<&str>) -> Result<Value> {
     let mut body = Map::new();
     body.insert("kind".to_owned(), Value::from("voidEntry"));
     body.insert("targetId".to_owned(), Value::from(target_id));
-    sealed(host, body)
+    sealed_at(host, body, at_after(host, not_before)?)
 }
 
 /// Signs `entry` with the host's signer (§10.6), or returns it unchanged when
@@ -520,10 +539,14 @@ pub fn sign_entry(host: &dyn BillHost, entry: &Value, bill_id: &str) -> Result<V
 /// every member but `id`, `sig` and `v` — deriving it earlier would digest an
 /// entry that is not the one written.
 fn sealed(host: &dyn BillHost, body: Map<String, Value>) -> Result<Value> {
+    sealed_at(host, body, at(host)?)
+}
+
+fn sealed_at(host: &dyn BillHost, body: Map<String, Value>, at: String) -> Result<Value> {
     let mut entry = Map::new();
     entry.insert("v".to_owned(), Value::from(ENTRY_VERSION));
     entry.insert("author".to_owned(), Value::from(host.me()));
-    entry.insert("at".to_owned(), Value::from(at(host)?));
+    entry.insert("at".to_owned(), Value::from(at));
     for (key, value) in body {
         entry.insert(key, value);
     }

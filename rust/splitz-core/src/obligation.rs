@@ -230,6 +230,11 @@ pub struct Awaiting {
     /// when netting rerouted the debt (§6.3): the payment to confirm, or to
     /// take back, is theirs.
     pub paid_to: Vec<String>,
+    /// What other payers have sent `to` and is waiting to be confirmed, each
+    /// record written by its own payer, when that is why the debt is held: it
+    /// already covers what the plan still owes `to`. Zero otherwise, and
+    /// `paid` is then this payer's own.
+    pub others_paid: i64,
 }
 
 /// `bill` with each participant `via` names paid by the payout chosen for
@@ -332,6 +337,33 @@ pub fn withholdings(
         - checked_sum(pending.values().copied(), code::AMOUNT_OVERFLOW)?;
     let beyond_paid = checked_sum(beyond.values().copied(), code::AMOUNT_OVERFLOW)?;
 
+    // What every other payer has in flight to each payee, each record written
+    // by its own payer, against what the plan still owes that payee. §6 plans
+    // from confirmed balances, so a confirmation can move a debt onto a payee
+    // another payer is already paying; asked for again, they are paid twice.
+    let mut credit: BTreeMap<&str, i64> = BTreeMap::new();
+    for s in plan {
+        let held = credit.entry(s.to.as_str()).or_insert(0);
+        *held = checked_add(*held, s.amount, code::AMOUNT_OVERFLOW)?;
+    }
+    let mut inbound: BTreeMap<&str, i64> = BTreeMap::new();
+    for p in &bill.payments {
+        if p.from == payer || bill.confirmed_payments.contains(&p.id) {
+            continue;
+        }
+        if let Some(authors) = recorded_by {
+            if authors.get(&p.id) != Some(&p.from) {
+                continue;
+            }
+        }
+        let held = inbound.entry(p.to.as_str()).or_insert(0);
+        *held = checked_add(*held, p.amount, code::AMOUNT_OVERFLOW)?;
+    }
+    let mut left: BTreeMap<&str, i64> = credit
+        .iter()
+        .map(|(to, owed)| (*to, owed - inbound.get(to).copied().unwrap_or(0)))
+        .collect();
+
     let mut carried = Vec::new();
     let mut awaiting = Vec::new();
     for s in plan.iter().filter(|s| s.from == payer) {
@@ -355,6 +387,7 @@ pub fn withholdings(
                 owed: s.amount,
                 paid: checked_sum(held.values().copied(), code::AMOUNT_OVERFLOW)?,
                 paid_to: held.keys().map(|t| (*t).to_owned()).collect(),
+                others_paid: 0,
             });
         } else if s.amount > room {
             // Only money paid beyond some settlement can leave too little
@@ -365,9 +398,23 @@ pub fn withholdings(
                 owed: s.amount,
                 paid: beyond_paid,
                 paid_to: beyond.keys().map(|t| (*t).to_owned()).collect(),
+                others_paid: 0,
+            });
+        } else if s.amount > left.get(s.to.as_str()).copied().unwrap_or(0) {
+            // Other payers' records to this payee cover what the plan still
+            // owes them: held until those are confirmed or withdrawn.
+            awaiting.push(Awaiting {
+                to: s.to.clone(),
+                owed: s.amount,
+                paid: 0,
+                paid_to: Vec::new(),
+                others_paid: inbound.get(s.to.as_str()).copied().unwrap_or(0),
             });
         } else {
             room -= s.amount;
+            if let Some(remaining) = left.get_mut(s.to.as_str()) {
+                *remaining -= s.amount;
+            }
             carried.push(s.clone());
         }
     }

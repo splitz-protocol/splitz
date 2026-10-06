@@ -131,15 +131,22 @@ pub fn payment_digest(payment: &Value) -> Result<String> {
 }
 
 /// The domain separator a close's digest covers (§10.9).
-pub const CLOSE_DIGEST_DOMAIN: &str = "splitz-close-v1";
+pub const CLOSE_DIGEST_DOMAIN: &str = "splitz-close-v2";
 
-/// What a close covers (§10.9): the digest of the bill's expenses as the
-/// fold materialised them, in the bill's order. Any expense added, corrected
-/// or withdrawn since gives another digest, and the close no longer holds.
-pub fn close_digest(expenses: &[Value]) -> Result<String> {
+/// What a close covers (§10.9): the digest of what each participant's
+/// expenses leave them owed or owing — paid less share, in minor units —
+/// over the participants whose figure is not zero. An expense that changes
+/// what somebody owes gives another digest, and the close no longer holds;
+/// one that changes nobody's figure leaves it closed.
+pub fn close_digest(balances: &BTreeMap<String, i64>) -> Result<String> {
+    let nonzero: Map<String, Value> = balances
+        .iter()
+        .filter(|(_, v)| **v != 0)
+        .map(|(k, v)| (k.clone(), Value::from(*v)))
+        .collect();
     derive_id(
         CLOSE_DIGEST_DOMAIN,
-        &serde_json::json!({ "expenses": expenses }),
+        &serde_json::json!({ "balances": nonzero }),
     )
 }
 
@@ -656,6 +663,9 @@ pub struct FoldResult {
     /// The creator's close the bill is closed by (§10.9), or none while it is
     /// open: no close, or none covering the expenses as they now stand.
     pub close_entry: Option<String>,
+    /// What a close written now would cover: `close_digest` over the
+    /// balances the bill's expenses leave, as this fold applied them (§10.9).
+    pub closed_over: String,
     /// The entries in force, in §10.2's order: admitted at ingress, not
     /// withdrawn or replaced, not a withdrawal, and not a restatement that
     /// does not apply. What §10.8's still-named check reads, whether or not
@@ -848,8 +858,28 @@ pub fn fold_log_verified(
         };
     }
 
-    // Amendments: authored by the author of their target, carrying a payload
-    // of the target's kind. An amendment replaces its target wholesale, so one
+    // §10.8. Who wrote the expense a restatement replaces, following a chain
+    // of restatements to the first. A restatement is written by the creator
+    // taking somebody off, and the expense stays its author's to correct.
+    let restated_from = |target: &Value| -> Option<String> {
+        let mut at = target;
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        while field(at, "kind") == "addExpense"
+            && at.get("targetId").and_then(Value::as_str).is_some()
+            && seen.insert(field(at, "id"))
+        {
+            let earlier = by_id.get(field(at, "targetId"))?;
+            if field(earlier, "kind") != "addExpense" {
+                return None;
+            }
+            at = earlier;
+        }
+        (!std::ptr::eq(at, target)).then(|| field(at, "author").to_owned())
+    };
+
+    // Amendments: authored by the author of their target — or, for a
+    // restatement, of the expense it restates — carrying a payload of the
+    // target's kind. An amendment replaces its target wholesale, so one
     // carrying no payload silently deletes what it claims to correct.
     for entry in &entries {
         if field(entry, "kind") != "amendEntry" {
@@ -859,7 +889,9 @@ pub fn fold_log_verified(
             aside!(entry, code::UNKNOWN_ENTRY);
             continue;
         };
-        if field(entry, "author") != field(target, "author") {
+        if field(entry, "author") != field(target, "author")
+            && Some(field(entry, "author").to_owned()) != restated_from(target)
+        {
             aside!(entry, code::UNAUTHORIZED_ENTRY);
             continue;
         }
@@ -1130,9 +1162,15 @@ pub fn fold_log_verified(
     for (void_id, gone) in removals {
         let mut named = false;
         for other in &entries {
+            // An entry the person wrote never holds their own removal back:
+            // one written after it would otherwise put them back on the bill,
+            // with their old payout and a debt owed to them, with no join
+            // anyone sees. Such an entry names somebody not on the bill and is
+            // set aside.
             if voided.contains(field(other, "id"))
                 || field(other, "kind") == "voidEntry"
                 || unapplied.contains(field(other, "id"))
+                || field(other, "author") == gone
             {
                 continue;
             }
@@ -1155,9 +1193,6 @@ pub fn fold_log_verified(
                                 named = true;
                             }
                         }
-                    }
-                    "confirmPayment" if field(other, "author") == gone => {
-                        named = true;
                     }
                     _ => {}
                 }
@@ -1284,6 +1319,14 @@ pub fn fold_log_verified(
         participants.insert(id, p);
     }
 
+    // Everybody whose join was withdrawn: taken off the bill, and the author
+    // of entries that still stand.
+    let joined_once: BTreeSet<String> = entries
+        .iter()
+        .filter(|e| field(e, "kind") == "joinBill" && voided.contains(field(e, "id")))
+        .filter_map(|e| e.get("participant").map(|p| field(p, "id").to_owned()))
+        .collect();
+
     // §10.1. The latest live setRate by a participant decides, by §10.2's
     // order, so the answer is a function of the log and not of which device
     // last spoke. Decided after the participants, because only they may set
@@ -1401,6 +1444,19 @@ pub fn fold_log_verified(
                         return Err(SplitError::new(
                             code::UNKNOWN_PARTICIPANT,
                             "Paid by somebody not on the bill",
+                        ));
+                    }
+                    // An expense is somebody's word about who paid and who
+                    // shared, so it is written by somebody who joined: on the
+                    // bill, or taken off it since, whose earlier entries still
+                    // stand. Anybody else holding the invite would otherwise
+                    // put debts on the bill under a name nobody knows, and
+                    // reopen a closed one (§10.9).
+                    let author = field(entry, "author");
+                    if !participants.contains_key(author) && !joined_once.contains(author) {
+                        return Err(SplitError::new(
+                            code::UNKNOWN_PARTICIPANT,
+                            "Written by somebody who never joined",
                         ));
                     }
                     let d = crate::serialization::decode_expense(&ex, &currency, &ids)?;
@@ -1550,6 +1606,10 @@ pub fn fold_log_verified(
         }
     }
 
+    // What the expenses alone leave each participant: payments move `running`
+    // only once confirmed, below. A close covers this (§10.9).
+    let over = close_digest(&running)?;
+
     // Confirmations in a pass of their own, once every payment is on the bill:
     // one may arrive before the payment it vouches for, and a single pass
     // would set aside one that is merely early.
@@ -1673,12 +1733,11 @@ pub fn fold_log_verified(
     }
 
     // §10.9. The creator's latest close by §10.2's order decides, withdrawn
-    // or not: it closes the bill while it is live and covers the expenses
-    // exactly as they stand. Withdrawn, it is a reopen, and an earlier close
-    // never comes back into force. Nothing about it is dated: an expense
-    // written after the close, by any clock, changes the digest and reopens
-    // the bill.
-    let over = close_digest(&expenses)?;
+    // or not: it closes the bill while it is live and covers what the
+    // expenses leave everybody owing as it stands. Withdrawn, it is a reopen,
+    // and an earlier close never comes back into force. Nothing about it is
+    // dated: an expense written after the close, by any clock, that changes
+    // what somebody owes changes the digest and reopens the bill.
     let mut close_entry: Option<String> = None;
     for entry in &entries {
         let id = field(entry, "id");
@@ -1763,6 +1822,7 @@ pub fn fold_log_verified(
         rate_entry,
         rate_author,
         close_entry,
+        closed_over: over,
         in_force: entries_in_force,
         amendment_of,
     })

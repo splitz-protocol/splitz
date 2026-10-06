@@ -209,7 +209,13 @@ void main() {
       ],
       'awaiting': [
         for (final a in w.awaiting)
-          {'to': a.to, 'owed': a.owed, 'paid': a.paid, 'paidTo': a.paidTo},
+          {
+            'to': a.to,
+            'owed': a.owed,
+            'paid': a.paid,
+            'paidTo': a.paidTo,
+            'othersPaid': a.othersPaid,
+          },
       ],
     });
   });
@@ -345,6 +351,7 @@ void main() {
       'rateEntry': r.rateEntry,
       'rateAuthor': r.rateAuthor,
       'closeEntry': r.closeEntry,
+      'closedOver': r.closedOver,
       'withdrawn': r.withdrawn,
       'setAside': [
         // The reason is prose (SPEC.md §12); only the code is compared.

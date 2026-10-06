@@ -45,6 +45,7 @@ class FoldedBill {
     this.amendmentOf = const {},
     this.closeEntry,
     this.closedOver = '',
+    this.lastCloseAt,
   });
 
   final splitz.Bill bill;
@@ -103,9 +104,14 @@ class FoldedBill {
   /// The creator's close the bill is closed by (§10.9), or null while open.
   final String? closeEntry;
 
-  /// The digest of the expenses as they stand (§10.9): what a close written
-  /// now covers.
+  /// The digest of what the expenses leave everybody owing (§10.9): what a
+  /// close written now covers.
   final String closedOver;
+
+  /// The latest `at`, as §9.3 reads it, of any close in the log or any
+  /// withdrawal of one, or null when there is none. A close or reopen this
+  /// device writes is dated after it (§10.9).
+  final String? lastCloseAt;
 
   /// Whether the bill is closed for settling (§10.9, §14.9).
   bool get closed => closeEntry != null;
@@ -144,8 +150,6 @@ class BillLog {
     return merged.refused;
   }
 
-  /// Folds to a bill (§10.3).
-  ///
   /// The §12 code the fold would set [entry] aside with were it appended to
   /// this log, or null when it would apply (§10.8, "Asking before writing").
   ///
@@ -155,7 +159,26 @@ class BillLog {
   /// waits on an entry this device may not hold yet and applies once a sync
   /// brings it; any other is written, synced and refused on every device for
   /// good, so a host writes nothing on one.
+  ///
+  /// An amendment of an entry the log holds but no longer has in force — a
+  /// withdrawn entry, or an expense a restatement replaced — is refused with
+  /// `unauthorized_entry`, though the fold would admit it (§10.8): amending
+  /// the expense a removal restated makes the restatement stale and puts the
+  /// person taken off back on the bill.
   String? refusalOf(Map<String, dynamic> entry) {
+    if (entry['kind'] == 'amendEntry') {
+      final target = entry['targetId'];
+      final held = _entries.any((e) => e['id'] == target);
+      if (held) {
+        try {
+          if (!fold().inForce.contains(target)) {
+            return splitz.SplitCode.unauthorizedEntry;
+          }
+        } on splitz.SplitError catch (e) {
+          return e.code;
+        }
+      }
+    }
     try {
       splitz.checkEntry(entry);
     } on splitz.SplitError catch (e) {
@@ -174,6 +197,27 @@ class BillLog {
       // log naming none — is refused whole.
       return e.code;
     }
+  }
+
+  String? _lastCloseAt() {
+    final closes = {
+      for (final e in _entries)
+        if (e['kind'] == 'closeBill') e['id'],
+    };
+    String? latest;
+    for (final e in _entries) {
+      final aboutClose = e['kind'] == 'closeBill' ||
+          (e['kind'] == 'voidEntry' && closes.contains(e['targetId']));
+      if (!aboutClose) continue;
+      final String at;
+      try {
+        at = splitz.canonicalInstant(e['at']);
+      } on splitz.SplitError {
+        continue;
+      }
+      if (latest == null || at.compareTo(latest) > 0) latest = at;
+    }
+    return latest;
   }
 
   /// Throws only when the log opens no bill at all — no entries, or none that
@@ -201,10 +245,8 @@ class BillLog {
       inForce: result.inForce,
       amendmentOf: result.amendmentOf,
       closeEntry: result.closeEntry,
-      closedOver: splitz.closeDigest([
-        for (final e in result.bill['expenses'] as List)
-          (e as Map).cast<String, dynamic>(),
-      ]),
+      closedOver: result.closedOver,
+      lastCloseAt: _lastCloseAt(),
     );
   }
 

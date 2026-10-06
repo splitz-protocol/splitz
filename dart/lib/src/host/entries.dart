@@ -394,40 +394,68 @@ Map<String, dynamic> amendExpense({
 
 /// A close of the bill for settling (§10.9), over the expenses whose digest
 /// is [covers]: [FoldedBill.closedOver] as the writer's device folds it.
+///
+/// Dated after [notBefore] when that is later than the clock: §10.9 decides
+/// by the latest close, and a device whose clock trails the reopen it read
+/// would otherwise write a close that sorts before it and never closes.
 Map<String, dynamic> closeBill({
   required BillHost host,
   required String covers,
+  String? notBefore,
 }) {
-  return _sealed(host, <String, dynamic>{
-    'kind': 'closeBill',
-    'close': <String, dynamic>{'covers': covers},
-  });
+  return _sealed(
+      host,
+      <String, dynamic>{
+        'kind': 'closeBill',
+        'close': <String, dynamic>{'covers': covers},
+      },
+      notBefore: notBefore);
 }
 
-/// Withdraws an entry. Who may is §10.8's decision.
+/// Withdraws an entry. Who may is §10.8's decision. Dated after [notBefore]
+/// when that is later than the clock, as [closeBill] is.
 Map<String, dynamic> voidEntry({
   required BillHost host,
   required String targetId,
+  String? notBefore,
 }) {
-  return _sealed(host, <String, dynamic>{
-    'kind': 'voidEntry',
-    'targetId': targetId,
-  });
+  return _sealed(
+      host,
+      <String, dynamic>{
+        'kind': 'voidEntry',
+        'targetId': targetId,
+      },
+      notBefore: notBefore);
 }
 
-String _at(BillHost host) =>
-    splitz.canonicalInstant(host.now().toUtc().toIso8601String());
+String _at(BillHost host, [String? notBefore]) {
+  final now = host.now().toUtc();
+  if (notBefore != null) {
+    // A millisecond after: §9.3's instants are compared to the millisecond,
+    // so this sorts after [notBefore] under §10.2 whatever its spelling.
+    final after = DateTime.parse(splitz.canonicalInstant(notBefore))
+        .add(const Duration(milliseconds: 1));
+    if (after.isAfter(now)) {
+      return splitz.canonicalInstant(after.toIso8601String());
+    }
+  }
+  return splitz.canonicalInstant(now.toIso8601String());
+}
 
 /// Fills in the members every entry carries and derives §9.5's id.
 ///
 /// The id is derived last, over the finished entry, because the digest covers
 /// every member but `id`, `sig` and `v` — deriving it earlier would digest an
 /// entry that is not the one written.
-Map<String, dynamic> _sealed(BillHost host, Map<String, dynamic> body) {
+Map<String, dynamic> _sealed(
+  BillHost host,
+  Map<String, dynamic> body, {
+  String? notBefore,
+}) {
   final entry = <String, dynamic>{
     'v': entryVersion,
     'author': host.me,
-    'at': _at(host),
+    'at': _at(host, notBefore),
     ...body,
   };
   entry['id'] = splitz.deriveEntryId(entry);

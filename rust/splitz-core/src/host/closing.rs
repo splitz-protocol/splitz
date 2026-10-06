@@ -43,7 +43,7 @@ pub fn close_for(host: &dyn BillHost, folded: &FoldedBill) -> Result<Value> {
             "Only the creator closes a bill",
         ));
     }
-    close_bill(host, &folded.closed_over)
+    close_bill(host, &folded.closed_over, folded.last_close_at.as_deref())
 }
 
 /// The entry that reopens `folded`, withdrawing the close it is closed by
@@ -58,5 +58,5 @@ pub fn reopen_for(host: &dyn BillHost, folded: &FoldedBill) -> Result<Option<Val
             "Only the creator reopens a bill",
         ));
     }
-    void_entry(host, close).map(Some)
+    void_entry(host, close, folded.last_close_at.as_deref()).map(Some)
 }

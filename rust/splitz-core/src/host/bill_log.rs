@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 use crate::authority::Identities;
-use crate::error::Result;
+use crate::error::{code, Result};
 use crate::log::{
     fold_log, fold_log_verified, merge_logs, order_entries, ReplacedAddress, SetAside,
 };
@@ -76,9 +76,13 @@ pub struct FoldedBill {
     pub amendment_of: BTreeMap<String, String>,
     /// The creator's close the bill is closed by (§10.9), or none while open.
     pub close_entry: Option<String>,
-    /// The digest of the expenses as they stand (§10.9): what a close written
-    /// now covers.
+    /// The digest of what the expenses leave everybody owing (§10.9): what a
+    /// close written now covers.
     pub closed_over: String,
+    /// The latest `at`, as §9.3 reads it, of any close in the log or any
+    /// withdrawal of one, or none. A close or reopen this device writes is
+    /// dated after it (§10.9).
+    pub last_close_at: Option<String>,
 }
 
 impl FoldedBill {
@@ -152,8 +156,6 @@ impl<'h> BillLog<'h> {
         Ok(merged.refused)
     }
 
-    /// Folds to a bill (§10.3).
-    ///
     /// The §12 code the fold would set `entry` aside with were it appended to
     /// this log, or `None` when it would apply (§10.8, "Asking before
     /// writing").
@@ -164,9 +166,31 @@ impl<'h> BillLog<'h> {
     /// [`CODES_AN_ENTRY_OUTGROWS`] waits on an entry this device may not hold
     /// yet and applies once a sync brings it; any other is written, synced and
     /// refused on every device for good, so a host writes nothing on one.
+    ///
+    /// An amendment of an entry the log holds but no longer has in force — a
+    /// withdrawn entry, or an expense a restatement replaced — is refused with
+    /// `unauthorized_entry`, though the fold would admit it (§10.8): amending
+    /// the expense a removal restated makes the restatement stale and puts
+    /// the person taken off back on the bill.
     pub fn refusal_of(&self, entry: &Value) -> Result<Option<String>> {
         if let Err(e) = crate::log::check_entry(entry) {
             return Ok(Some(e.code.to_owned()));
+        }
+        if entry.get("kind").and_then(Value::as_str) == Some("amendEntry") {
+            let target = entry.get("targetId").and_then(Value::as_str);
+            let held = self
+                .entries
+                .iter()
+                .any(|e| e.get("id").and_then(Value::as_str) == target);
+            if let (true, Some(target)) = (held, target) {
+                match self.fold() {
+                    Ok(folded) if !folded.in_force.iter().any(|id| id == target) => {
+                        return Ok(Some(code::UNAUTHORIZED_ENTRY.to_owned()));
+                    }
+                    Err(e) => return Ok(Some(e.code.to_owned())),
+                    Ok(_) => {}
+                }
+            }
         }
         let mut entries = self.entries.clone();
         entries.push(entry.clone());
@@ -196,13 +220,7 @@ impl<'h> BillLog<'h> {
                 fold_log_verified(&self.entries, self.bill_id.as_deref(), Some(verify))?
             }
         };
-        let expenses = result
-            .bill
-            .get("expenses")
-            .and_then(serde_json::Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let closed_over = crate::log::close_digest(&expenses)?;
+        let closed_over = result.closed_over.clone();
         Ok(FoldedBill {
             bill: decode_bill(&result.bill)?,
             creator_id: result.creator.clone(),
@@ -221,7 +239,35 @@ impl<'h> BillLog<'h> {
             amendment_of: result.amendment_of,
             close_entry: result.close_entry,
             closed_over,
+            last_close_at: self.last_close_at(),
         })
+    }
+
+    fn last_close_at(&self) -> Option<String> {
+        fn kind(e: &serde_json::Value) -> &str {
+            e.get("kind").and_then(|v| v.as_str()).unwrap_or("")
+        }
+        let closes: std::collections::BTreeSet<&str> = self
+            .entries
+            .iter()
+            .filter(|e| kind(e) == "closeBill")
+            .filter_map(|e| e.get("id").and_then(|v| v.as_str()))
+            .collect();
+        self.entries
+            .iter()
+            .filter(|e| {
+                kind(e) == "closeBill"
+                    || (kind(e) == "voidEntry"
+                        && e.get("targetId")
+                            .and_then(|v| v.as_str())
+                            .is_some_and(|t| closes.contains(t)))
+            })
+            .filter_map(|e| {
+                e.get("at")
+                    .and_then(|v| v.as_str())
+                    .and_then(|at| crate::instant::canonical_instant(at).ok())
+            })
+            .max()
     }
 
     /// True when this log opens a bill. A log a peer has only half-delivered

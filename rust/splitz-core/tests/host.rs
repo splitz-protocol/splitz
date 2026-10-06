@@ -15,8 +15,8 @@ use std::collections::BTreeSet;
 use splitz_core::host::{
     accept_scan, add_expense, authored_id, base64url_no_pad, close_for, confirm_payment,
     create_bill, delta_for, invite_for, join_bill, obligation_for, read_scan, record_payment,
-    record_send, request_stands, set_rate, settle, shareable_bill, sign_entry, void_entry,
-    BillHost, BillLog, Scanned, SendResult, Sent, SignEntry, VerifyEntry,
+    record_send, reopen_for, request_stands, set_rate, settle, settle_refusal, shareable_bill,
+    sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent, SignEntry, VerifyEntry,
 };
 use splitz_core::{
     check_entry, net_balances, participant_id, sha256_hex, signing_message, Delta, Invite,
@@ -235,7 +235,7 @@ fn every_entry_kind_this_layer_writes_passes_ingress() {
         .unwrap(),
         confirm_payment(&ana, "tx1", "shieldedZec", Some("memo"), "r").unwrap(),
         set_rate(&ana, "EUR", 51234, Some("test")).unwrap(),
-        void_entry(&ana, "e1").unwrap(),
+        void_entry(&ana, "e1", None).unwrap(),
     ];
     assert_eq!(written.len(), 7, "one per entry kind this layer writes");
     for entry in &written {
@@ -449,8 +449,10 @@ fn a_refusal_is_known_before_the_entry_is_written() {
     };
     let expense = id_of("addExpense", None);
     let ben_join = id_of("joinBill", Some("ben"));
-    let ask =
-        |who: &FakeHost, target: &str| log.refusal_of(&void_entry(who, target).unwrap()).unwrap();
+    let ask = |who: &FakeHost, target: &str| {
+        log.refusal_of(&void_entry(who, target, None).unwrap())
+            .unwrap()
+    };
     assert_eq!(ask(&ben, &expense).as_deref(), Some("unauthorized_entry"));
     assert_eq!(
         ask(&ana, &ben_join).as_deref(),
@@ -1253,4 +1255,47 @@ fn a_second_correction_keeps_what_the_first_one_changed() {
     assert_eq!((e.amount, e.description.as_str()), (6000, "supper"));
     let missing = amend_expense(&ana, &folded, "ana:x9", None, Some(1), None, None);
     assert_eq!(missing.unwrap_err().code, "unknown_entry");
+}
+
+#[test]
+fn a_close_from_a_device_whose_clock_trails_the_reopen_closes() {
+    // §10.9: the creator reopens on one device and closes again on a second
+    // whose clock is behind the reopen. The close is dated after the reopen,
+    // so it is the latest and the bill is closed.
+    let phone = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let mut entries = dinner(&phone, &ben);
+    phone.tick();
+    let log = BillLog::with_entries(&phone, entries.clone());
+    entries.push(reopen_for(&phone, &log.fold().unwrap()).unwrap().unwrap());
+    let log = BillLog::with_entries(&phone, entries.clone());
+    assert!(!log.fold().unwrap().closed());
+
+    let tablet = FakeHost::new("ana");
+    let close = close_for(&tablet, &log.fold().unwrap()).unwrap();
+    assert!(close["at"].as_str().unwrap() > tablet.now().as_str());
+    entries.push(close);
+    let folded = BillLog::with_entries(&phone, entries.clone())
+        .fold()
+        .unwrap();
+    assert!(folded.closed());
+    assert_eq!(settle_refusal(&folded), None);
+
+    // And a reopen from the trailing device reopens.
+    entries.push(reopen_for(&tablet, &folded).unwrap().unwrap());
+    let folded = BillLog::with_entries(&phone, entries).fold().unwrap();
+    assert!(!folded.closed());
+}
+
+#[test]
+fn a_device_whose_clock_is_ahead_dates_a_close_by_its_own_clock() {
+    let ana = FakeHost::paid_at("ana", "u1ana");
+    let ben = FakeHost::paid_at("ben", "u1ben");
+    let entries = dinner(&ana, &ben);
+    for _ in 0..10 {
+        ana.tick();
+    }
+    let log = BillLog::with_entries(&ana, entries);
+    let reopen = reopen_for(&ana, &log.fold().unwrap()).unwrap().unwrap();
+    assert_eq!(reopen["at"].as_str().unwrap(), ana.now());
 }

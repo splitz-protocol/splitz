@@ -447,6 +447,31 @@ FOLD_CASES = [
      BASE + [C, void("v4", "ana", "p1", 6)], C["id"]),
     ("a_participant_still_named_cannot_be_removed",
      BASE + [void("v5", "ana", "j2", 6)], C["id"]),
+    # §10.8. An entry the removed person writes after their removal never
+    # brings them back: one naming themselves as payer would otherwise restore
+    # their join, their payout and a debt owed to them, with no join written.
+    ("the_removed_person_cannot_come_back_by_an_expense_of_their_own",
+     [C, J_ANA, J_BEN, void("v9", "ana", "j2", 6),
+      {"v": 1, "id": "e9", "author": "ben", "kind": "addExpense", "at": AT(7),
+       "expense": {"id": "ben:x9", "description": "taxi", "paidBy": "ben",
+                   "amount": 9000, "at": AT(7),
+                   "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
+    ("the_removed_person_cannot_come_back_by_a_payment_of_their_own",
+     [C, J_ANA, J_BEN, void("v9", "ana", "j2", 6),
+      {"v": 1, "id": "p9", "author": "ben", "kind": "recordPayment",
+       "at": AT(7),
+       "payment": {"id": "ben:y9", "from": "ben", "to": "ana", "amount": 100,
+                   "method": "cash", "at": AT(7)}}], C["id"]),
+    # Somebody else's entry naming them still holds the removal back, whenever
+    # it was written: that is an expense the removal would otherwise drop.
+    ("an_entry_by_somebody_else_still_holds_the_removal_back",
+     [C, J_ANA, J_BEN, void("v9", "ana", "j2", 6),
+      {"v": 1, "id": "e8", "author": "ana", "kind": "addExpense", "at": AT(7),
+       "expense": {"id": "ana:x8", "description": "taxi", "paidBy": "ana",
+                   "amount": 9000, "at": AT(7),
+                   "split": {"type": "equal", "among": ["ana", "ben"]}}}],
+     C["id"]),
     ("removing_the_expense_first_lets_the_person_go",
      BASE + [void("v6", "ana", "e1", 6), void("v7", "ben", "p1", 6),
              void("v8", "ben", "j2", 7)], C["id"]),
@@ -673,7 +698,50 @@ CORRECTED = {"v": 1, "id": "ad", "author": "ben", "kind": "amendEntry",
                          "split": {"type": "equal",
                                    "among": ["ana", "ben", "cai"]}}}
 
+def amend_restated(eid, author, target, xid, minute, amount):
+    return {"v": 1, "id": eid, "author": author, "kind": "amendEntry",
+            "at": AT(minute), "targetId": target,
+            "expense": {"id": xid, "description": "dinner", "paidBy": "ben",
+                        "amount": amount, "at": AT(3),
+                        "split": {"type": "equal", "among": ["ana", "ben"]}}}
+
+
 RESTATEMENT_CASES = [
+    # Section 10.8. A restatement by the creator taking somebody off leaves
+    # the expense its author's to correct. Withdrawing the restatement is not
+    # theirs: it would put back the expense as it named who was taken off.
+    # They withdraw the expense by withdrawing their own entry.
+    ("the_author_corrects_their_expense_after_the_creator_restated_it",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             amend_restated("ar", "ben", "r1", "ana:din", 7, 8000)], C["id"]),
+    ("the_author_may_not_withdraw_the_restatement",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             void("vr", "ben", "r1", 7)], C["id"]),
+    ("the_author_withdraws_their_restated_expense_by_their_own_entry",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             void("ve", "ben", "ed", 7)], C["id"]),
+    ("somebody_else_still_may_not_correct_a_restated_expense",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             amend_restated("ar", "cai", "r1", "ana:din", 7, 8000)], C["id"]),
+    ("the_author_corrects_through_a_chain_of_restatements",
+     TRIO + [restate("r1", "ana", "ed", "ana:din", 6),
+             restate("r2", "ana", "r1", "ana:din2", 7, among=("ana",)),
+             amend_restated("ar", "ben", "r2", "ana:din2", 8, 8000)], C["id"]),
+    # Section 10.8. Chosen before its expense is applied: a restatement whose
+    # own split section 4 refuses still replaces its target, and supersedes
+    # a later one.
+    ("a_restatement_whose_expense_is_refused_still_replaces_its_target",
+     TRIO + [dict(restate("r1", "ana", "ed", "ana:din", 6),
+                  expense=dict(restate("r1", "ana", "ed", "ana:din", 6)["expense"],
+                               split={"type": "exact",
+                                      "amounts": {"ana": 1, "ben": 1}}))],
+     C["id"]),
+    ("a_restatement_whose_expense_is_refused_supersedes_a_later_one",
+     TRIO + [dict(restate("r1", "ana", "ed", "ana:din", 6),
+                  expense=dict(restate("r1", "ana", "ed", "ana:din", 6)["expense"],
+                               split={"type": "exact",
+                                      "amounts": {"ana": 1, "ben": 1}})),
+             restate("r2", "ana", "ed", "ana:din2", 7)], C["id"]),
     ("a_restatement_replaces_its_target",
      TRIO + [restate("r1", "ana", "ed", "ana:din", 6)], C["id"]),
     ("two_restatements_of_one_expense_leave_one",
@@ -1396,13 +1464,37 @@ E2_EARLY = dict(E2, id="e2b", at=AT(1), expense=dict(E2["expense"], at=AT(1)))
 
 
 def _over(entries):
-    return close_digest(fold(sealed(entries))["bill"]["expenses"])
+    return fold(sealed(entries))["closedOver"]
 
 
 OVER = _over(BASE)
 OVER_TAXI = _over(BASE + [E2])
 
+def _exp(eid, author, paid_by, amount, among, minute):
+    return {"v": 1, "id": eid, "author": author, "kind": "addExpense",
+            "at": AT(minute),
+            "expense": {"id": f"{author}:{eid}", "description": "taxi",
+                        "paidBy": paid_by, "amount": amount, "at": AT(minute),
+                        "split": {"type": "equal", "among": list(among)}}}
+
+
 CLOSE_CASES = [
+    # An expense is written by somebody who joined. One written by anybody
+    # else holding the invite is set aside and leaves a closed bill closed.
+    ("an_expense_by_somebody_who_never_joined_is_set_aside",
+     BASE + [closing("c1", "ana", 5, OVER),
+             _exp("z1", "zed", "ana", 3000, ("ana", "ben"), 6)], None),
+    # A close covers what the expenses leave everybody owing, so an expense
+    # that moves nobody's figure leaves the bill closed.
+    ("an_expense_moving_nobodys_balance_leaves_it_closed",
+     BASE + [closing("c1", "ana", 5, OVER),
+             _exp("x5", "ben", "ben", 1000, ("ben",), 6)], None),
+    # Somebody taken off the bill wrote entries that still stand: an expense
+    # they entered for others is theirs to have written.
+    ("an_expense_by_somebody_since_taken_off_still_stands",
+     [C, J_ANA, J_BEN, J_CAI,
+      _exp("x6", "ben", "ana", 3000, ("ana", "cai"), 5),
+      void("v6", "ana", "j2", 6)], None),
     ("a_bill_its_creator_closed_is_closed",
      BASE + [closing("c1", "ana", 5, OVER)], None),
     ("a_close_by_anybody_else_is_set_aside",
@@ -1418,6 +1510,12 @@ CLOSE_CASES = [
              closing("c2", "ana", 7, OVER_TAXI)], None),
     ("a_close_naming_no_digest_is_set_aside",
      BASE + [closing("c1", "ana", 5, 123)], None),
+    # Section 10.9. Withdrawing a close reopens the bill, well formed or not.
+    ("withdrawing_a_malformed_close_reopens_the_bill",
+     BASE + [closing("c1", "ana", 5, OVER), closing("c2", "ana", 6, 123),
+             void("v2", "ana", "c2", 7)], None),
+    ("a_padded_digest_is_not_one",
+     BASE + [closing("c1", "ana", 5, OVER + "==")], None),
     ("an_open_bill_names_no_close", BASE, None),
     # A close is withdrawn by its author, the creator, alone.
     ("a_close_withdrawn_by_anybody_else_stands",

@@ -1,7 +1,265 @@
 {
   "description": "What a request carries and what is held back. SPEC.md section 14.",
-  "count": 21,
+  "count": 25,
   "cases": [
+    {
+      "name": "a_payee_another_payer_is_already_paying_is_not_asked_for_again",
+      "plan": [
+        {
+          "from": "eve",
+          "to": "ana",
+          "amount": 1105
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "eve",
+            "name": "Eve",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "dee",
+            "to": "ana",
+            "amount": 1105,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "eve",
+      "recordedBy": {
+        "p1": "dee"
+      },
+      "expect": {
+        "carried": [],
+        "awaiting": [
+          {
+            "to": "ana",
+            "owed": 1105,
+            "paid": 0,
+            "paidTo": [],
+            "othersPaid": 1105
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_record_the_payee_wrote_holds_nothing_back_from_another_payer",
+      "plan": [
+        {
+          "from": "eve",
+          "to": "ana",
+          "amount": 1105
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "eve",
+            "name": "Eve",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "dee",
+            "to": "ana",
+            "amount": 1105,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "eve",
+      "recordedBy": {
+        "p1": "ana"
+      },
+      "expect": {
+        "carried": [
+          {
+            "from": "eve",
+            "to": "ana",
+            "amount": 1105
+          }
+        ],
+        "awaiting": []
+      }
+    },
+    {
+      "name": "another_payers_payment_leaves_room_for_the_rest",
+      "plan": [
+        {
+          "from": "eve",
+          "to": "ana",
+          "amount": 505
+        },
+        {
+          "from": "dee",
+          "to": "ana",
+          "amount": 600
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "eve",
+            "name": "Eve",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "dee",
+            "to": "ana",
+            "amount": 600,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "eve",
+      "recordedBy": {
+        "p1": "dee"
+      },
+      "expect": {
+        "carried": [
+          {
+            "from": "eve",
+            "to": "ana",
+            "amount": 505
+          }
+        ],
+        "awaiting": []
+      }
+    },
+    {
+      "name": "another_payers_part_payment_holds_back_what_it_covers",
+      "plan": [
+        {
+          "from": "eve",
+          "to": "ana",
+          "amount": 505
+        },
+        {
+          "from": "dee",
+          "to": "ana",
+          "amount": 600
+        }
+      ],
+      "bill": {
+        "v": 1,
+        "id": "b1",
+        "name": "Dinner",
+        "currency": "EUR",
+        "splitMode": "equal",
+        "participants": [
+          {
+            "id": "ana",
+            "name": "Ana",
+            "payTo": "u13j3q8q8f9hx2nx0w9l52dqksy4png7fgm0lqjh8ahn9enyvz5z9xnwzdcdjmpf756s2y88rnyr9px4f4k9w03sl6fr4vwsqcvg8ggfjx"
+          },
+          {
+            "id": "eve",
+            "name": "Eve",
+            "payTo": "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0"
+          },
+          {
+            "id": "dee",
+            "name": "Dee",
+            "payTo": "u1dqavtnjvu42hlsjw6sc2mxajqlyt03zg8l4luykz9fnchunq74nqxhfp58h5n5xfpyqhheax8thta8lfkjgp8wqwsavc0g4mgu4du02c"
+          }
+        ],
+        "expenses": [],
+        "payments": [
+          {
+            "id": "p1",
+            "from": "dee",
+            "to": "ana",
+            "amount": 900,
+            "currency": "EUR",
+            "method": "shieldedZec",
+            "at": "2026-10-28T19:30:00.000Z"
+          }
+        ],
+        "confirmedPayments": []
+      },
+      "payer": "eve",
+      "recordedBy": {
+        "p1": "dee"
+      },
+      "expect": {
+        "carried": [],
+        "awaiting": [
+          {
+            "to": "ana",
+            "owed": 505,
+            "paid": 0,
+            "paidTo": [],
+            "othersPaid": 900
+          }
+        ]
+      }
+    },
     {
       "name": "a_rerouted_debt_already_paid_is_not_asked_for_again",
       "plan": [
@@ -65,7 +323,8 @@
             "paid": 1000,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -143,7 +402,8 @@
             "paidTo": [
               "ben",
               "cai"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -356,7 +616,8 @@
             "paid": 180,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           },
           {
             "to": "cai",
@@ -364,7 +625,8 @@
             "paid": 180,
             "paidTo": [
               "cai"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -484,7 +746,8 @@
             "paid": 20,
             "paidTo": [
               "cai"
-            ]
+            ],
+            "othersPaid": 0
           },
           {
             "to": "cai",
@@ -492,7 +755,8 @@
             "paid": 200,
             "paidTo": [
               "cai"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -553,7 +817,8 @@
             "paid": 1000,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -614,7 +879,8 @@
             "paid": 300,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -691,7 +957,8 @@
             "paid": 300,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -763,7 +1030,8 @@
             "paid": 300,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -909,7 +1177,8 @@
             "paid": 1,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -1071,7 +1340,8 @@
             "paid": 4500,
             "paidTo": [
               "ana"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -1132,7 +1402,8 @@
             "paid": 2000,
             "paidTo": [
               "ana"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -1202,7 +1473,8 @@
             "paid": 3500,
             "paidTo": [
               "ana"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -1268,7 +1540,7 @@
       }
     },
     {
-      "name": "somebody_elses_pending_payment_holds_nothing_back",
+      "name": "somebody_elses_pending_payment_to_the_payee_holds_the_debt",
       "plan": [
         {
           "from": "cai",
@@ -1315,14 +1587,16 @@
       },
       "payer": "cai",
       "expect": {
-        "carried": [
+        "carried": [],
+        "awaiting": [
           {
-            "from": "cai",
             "to": "ana",
-            "amount": 4500
+            "owed": 4500,
+            "paid": 0,
+            "paidTo": [],
+            "othersPaid": 4500
           }
-        ],
-        "awaiting": []
+        ]
       }
     },
     {
@@ -1442,7 +1716,8 @@
             "paid": 4500,
             "paidTo": [
               "ana"
-            ]
+            ],
+            "othersPaid": 0
           },
           {
             "to": "ben",
@@ -1450,7 +1725,8 @@
             "paid": 1000,
             "paidTo": [
               "ben"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }
@@ -1532,7 +1808,8 @@
             "paid": 100,
             "paidTo": [
               "ana"
-            ]
+            ],
+            "othersPaid": 0
           }
         ]
       }

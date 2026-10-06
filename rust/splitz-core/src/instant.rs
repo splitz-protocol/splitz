@@ -94,3 +94,68 @@ pub fn canonical_instant(text: &str) -> Result<String> {
         "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis}Z"
     ))
 }
+
+/// The instant one millisecond after `text`, as §9.3 writes one. §10.2
+/// compares instants to the millisecond, so this sorts after `text` whatever
+/// its spelling. The last instant the grammar has stays where it is.
+pub(crate) fn millisecond_after(text: &str) -> Result<String> {
+    let canonical = canonical_instant(text)?;
+    let num = |from: usize, to: usize| -> u32 {
+        canonical[from..to]
+            .parse()
+            .expect("canonical_instant writes digits here")
+    };
+    let (mut year, mut month, mut day) = (num(0, 4), num(5, 7), num(8, 10));
+    let (mut hour, mut minute, mut second) = (num(11, 13), num(14, 16), num(17, 19));
+    let mut millis = num(20, 23) + 1;
+    if millis == 1000 {
+        millis = 0;
+        second += 1;
+    }
+    if second == 60 {
+        second = 0;
+        minute += 1;
+    }
+    if minute == 60 {
+        minute = 0;
+        hour += 1;
+    }
+    if hour == 24 {
+        hour = 0;
+        day += 1;
+    }
+    if day > days_in_month(year, month) {
+        day = 1;
+        month += 1;
+    }
+    if month == 13 {
+        month = 1;
+        year += 1;
+    }
+    if year > 9999 {
+        return Ok(canonical);
+    }
+    Ok(format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::millisecond_after;
+
+    #[test]
+    fn one_millisecond_later_carries_through_every_field() {
+        for (from, to) in [
+            ("2026-10-28T19:10:01Z", "2026-10-28T19:10:01.001Z"),
+            ("2026-10-28T19:10:01.0009Z", "2026-10-28T19:10:01.001Z"),
+            ("2026-10-28T19:59:59.999Z", "2026-10-28T20:00:00.000Z"),
+            ("2026-12-31T23:59:59.999Z", "2027-01-01T00:00:00.000Z"),
+            ("2028-02-28T23:59:59.999Z", "2028-02-29T00:00:00.000Z"),
+            ("2027-02-28T23:59:59.999Z", "2027-03-01T00:00:00.000Z"),
+            ("9999-12-31T23:59:59.999Z", "9999-12-31T23:59:59.999Z"),
+        ] {
+            assert_eq!(millisecond_after(from).unwrap(), to, "{from}");
+        }
+    }
+}

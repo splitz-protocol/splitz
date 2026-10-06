@@ -215,7 +215,7 @@ def log(rng, corrupt=0, pair=None):
     # close was written.
     if rng.random() < 0.5:
         try:
-            over = _spec.close_digest(_spec.fold(sealed)["bill"]["expenses"])
+            over = _spec.fold(sealed)["closedOver"]
         except _spec.Refused:
             over = "A" * 22     # a log no reader folds still takes a close
         for _ in range(rng.randint(1, 2)):

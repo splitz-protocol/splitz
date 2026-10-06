@@ -212,7 +212,13 @@ Bill choosePayouts(Bill bill, Map<String, int> via) {
 /// A debt held back because a payment to that participant is unconfirmed
 /// (§14.4).
 class Awaiting {
-  const Awaiting(this.to, this.owed, this.paid, this.paidTo);
+  const Awaiting(
+    this.to,
+    this.owed,
+    this.paid,
+    this.paidTo, {
+    this.othersPaid = 0,
+  });
 
   /// Who the plan says is owed.
   final String to;
@@ -229,6 +235,12 @@ class Awaiting {
   /// netting rerouted the debt (§6.3): the payment to confirm, or to take
   /// back, is theirs.
   final List<String> paidTo;
+
+  /// What other payers have sent [to] and is waiting to be confirmed, each
+  /// record written by its own payer, when that is why the debt is held: it
+  /// already covers what the plan still owes [to]. Zero otherwise, and
+  /// [paid] is then this payer's own.
+  final int othersPaid;
 }
 
 /// One payer's settlements, split into what a request may carry and what
@@ -291,6 +303,25 @@ Withholdings withholdings(
       checkedSum([for (final s in mine) s.amount]) - checkedSum(pending.values);
   final beyondTo = sortedUtf8(beyond.keys);
 
+  // What every other payer has in flight to each payee, each record written
+  // by its own payer, against what the plan still owes that payee. §6 plans
+  // from confirmed balances, so a confirmation can move a debt onto a payee
+  // another payer is already paying; asked for again, they are paid twice.
+  final credit = <String, int>{};
+  for (final s in plan) {
+    credit[s.to] = checkedAdd(credit[s.to] ?? 0, s.amount);
+  }
+  final inbound = <String, int>{};
+  for (final p in bill.payments) {
+    if (p.from == payer || bill.confirmedPayments.contains(p.id)) continue;
+    if (recordedBy != null && recordedBy[p.id] != p.from) continue;
+    inbound[p.to] = checkedAdd(inbound[p.to] ?? 0, p.amount);
+  }
+  final left = <String, int>{
+    for (final MapEntry(:key, :value) in credit.entries)
+      key: value - (inbound[key] ?? 0),
+  };
+
   final carried = <Settlement>[];
   final awaiting = <Awaiting>[];
   for (final s in mine) {
@@ -311,8 +342,14 @@ Withholdings withholdings(
       // what was paid within one is that settlement's, and it is held above.
       awaiting.add(Awaiting(s.to, s.amount,
           checkedSum([for (final t in beyondTo) beyond[t]!]), beyondTo));
+    } else if (s.amount > (left[s.to] ?? 0)) {
+      // Other payers' records to this payee cover what the plan still owes
+      // them: held until those are confirmed or withdrawn.
+      awaiting.add(Awaiting(s.to, s.amount, 0, const [],
+          othersPaid: inbound[s.to] ?? 0));
     } else {
       room -= s.amount;
+      left[s.to] = left[s.to]! - s.amount;
       carried.add(s);
     }
   }

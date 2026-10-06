@@ -278,6 +278,7 @@ fn withholdings() {
             }).collect::<Vec<_>>(),
             "awaiting": w.awaiting.iter().map(|a| json!({
                 "to": a.to, "owed": a.owed, "paid": a.paid, "paidTo": a.paid_to,
+                "othersPaid": a.others_paid,
             })).collect::<Vec<_>>(),
         }))
     });
@@ -418,6 +419,7 @@ fn log() {
             "rateEntry": r.rate_entry,
             "rateAuthor": r.rate_author,
             "closeEntry": r.close_entry,
+            "closedOver": r.closed_over,
             "withdrawn": r.withdrawn,
             // The reason is prose (SPEC.md §12); only the code is compared.
             "setAside": r.set_aside.iter().map(|a| json!({
@@ -612,7 +614,7 @@ fn coverage() {
                     "from": d.from, "to": d.to, "amount": d.amount,
                 })).collect::<Vec<_>>(),
                 "rerouted": s.is_rerouted(),
-                "unexplained": s.unexplained(),
+                "unexplained": s.unexplained().unwrap(),
             })).collect::<Vec<_>>(),
             "isOptimal": plan.is_optimal,
             "paymentCount": plan.payment_count(),
