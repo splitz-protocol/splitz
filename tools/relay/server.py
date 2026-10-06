@@ -16,10 +16,10 @@ has and when they arrived. Nothing here logs a blob.
     python3 tools/relay/server.py --port 39300
 
 Binds 127.0.0.1 unless `--host` says otherwise. A simulator reaches loopback
-on the host; a phone does not, so a run on phones puts this behind HTTPS —
-`tools/relay/funnel.sh` at a stable Tailscale origin, or `tools/relay/public.sh`
-at a quick tunnel whose origin changes every start — rather than opening it on
-the LAN, which would need a cleartext exception in the wallet on each platform.
+on the host; a phone does not, and syncs through the same relay deployed as a
+Worker over HTTPS (`tools/relay/cloudflare`) rather than through this one
+opened on the LAN, which would need a cleartext exception in the wallet on
+each platform.
 
 **Bounded, because it may be reachable by strangers.** One request body is at
 most `MAX_BODY_BYTES`; everything held is at most `MAX_HELD_CHARS`. A body
