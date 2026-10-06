@@ -1,8 +1,9 @@
 # Integrating splitz into a wallet
 
 The whole surface is four steps: net the bill, plan the settlement, price it,
-render one payer's obligation as a payment request. `renderObligation` does the
-last two of those, so the shortest wallet makes three calls.
+render one payer's obligation as a payment request. `settleBill` does the first
+two of those and `renderObligation` the last two, so the shortest wallet makes
+two calls.
 
 There are two imports, and a wallet usually wants both. The protocol —
 `package:splitz_core/splitz_core.dart`, `splitz_core::` — is what this page's first two
@@ -17,7 +18,7 @@ A wallet in Kotlin, Swift or JavaScript reaches the same protocol through
 See **Kotlin, Dart and JavaScript**.
 
 How to add the dependency, by git and pinned to a commit, is in the README
-under **Use it in your wallet**.
+under **Use It in a Wallet**.
 
 ## Dart
 
@@ -1307,6 +1308,25 @@ a payment of nothing (`payment_not_positive`), a swap with no reference
 (`payout_incomplete`), in an entry or an amendment of one.
 [`payment_entries_for_send`, `record_payment_entry`, `confirm_payment_entry`,
 `entry_refusal`]
+
+**Withdrawing a restated expense** (§10.8). After a removal restates your
+expense, `expenseWithdrawalTarget` names the entry you withdraw to take it
+off — your own first one, not the creator's restatement, which would put
+back the person removed. `expenseCorrectors` names who may correct an
+expense — its entry's author, and after a restatement the person who first
+wrote it too — so offer Edit and Withdraw to each of them.
+[`expense_withdrawal_target`, `expense_correctors`]
+
+**Joined as yourself** (§10.7). A record under your id is not proof you
+joined: anybody holding the invite can plant one with their own payout.
+`joinedAsMe` answers whether the fold binds your key to your id; while it is
+false, write your own signed join. [`join_needed`]
+
+**Confirming for somebody added** (§14.11). The creator confirms a payment to
+somebody it added by hand, who holds no key, writing as them and unsigned.
+`confirmerFor` answers who writes a confirmation of a payment — the payee, or
+the creator as that person — and `awaitingConfirmationFor` lists what a device
+may confirm. [`confirm_payment_for_entry`, `awaiting_my_confirmation`]
 
 **Paying a lower preference** (§14.8). `payoutFallback` takes your reason for
 each declared payout you cannot pay and answers the next you can and why the

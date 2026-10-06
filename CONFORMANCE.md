@@ -9,9 +9,11 @@ new implementation; where the two disagree, `SPEC.md` is right.
 
 Three things, and the third is the one most implementations miss.
 
-**1. Reproduce the corpus.** `vectors/` holds 995 cases across 24 files.
+**1. Reproduce the corpus.** `vectors/` holds 1014 cases across 24 files.
 Every case carries a `name`, its inputs, and either `expect` (the value the
-implementation must produce) or `error` (the §12 code it must refuse with).
+implementation must produce) or `error` (the §12 code it must refuse with) —
+or, for a case about how large a request may be, `expectLength` and
+`expectLastIndex`, which a request of that size is checked against.
 `vectors/README.md` describes each file's shape.
 
 **Refusing for the wrong reason is a failure.** "This bill is from a newer
@@ -92,7 +94,7 @@ Amounts are integer minor units throughout. Instants are canonical (§9.3).
 
 ## Lanes CI does not run
 
-`.github/workflows/ci.yml` runs thirteen jobs. Nine lanes in the tree are not
+`.github/workflows/ci.yml` runs fourteen jobs. Nine lanes in the tree are not
 among them, because each needs a toolchain, a device or a daemon no hosted
 runner carries by default. They pass on a developer machine and nothing
 re-checks them, so a change that breaks one is found by hand or not at all:

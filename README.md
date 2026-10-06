@@ -77,7 +77,7 @@ Kotlin, Swift and JavaScript use the binding (`rust/splitz-ffi`), packaged by
 | `splitz_host/`, `rust/splitz-host` | the wallet layer: signing, storage, sync, swaps |
 | `rust/splitz-ffi`, `tools/package` | the binding and its packages |
 | `tools/relay` | the relay |
-| `vectors/` | 995 cases in 24 files, in no particular language |
+| `vectors/` | 1014 cases in 24 files, in no particular language |
 | `tools/` | the checks beyond the test cases |
 
 ## Development
