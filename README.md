@@ -34,7 +34,8 @@ dart run example/dinner.dart
 ```
 
 It prints a shared bill, the fewest payments that settle it, and the one
-payment request a payer signs. For the full app, see
+payment request a payer signs. To try the full app on an Android phone,
+install the [demo APK](https://github.com/KamaIOps/vizor-wallet-splits/releases/tag/splits-demo-1); its source is
 [vizor-wallet-splits](https://github.com/KamaIOps/vizor-wallet-splits).
 
 ## Use It in a Wallet
