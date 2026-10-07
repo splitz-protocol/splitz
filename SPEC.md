@@ -2064,8 +2064,8 @@ restates — following a chain of restatements to the first — and §10.4
 otherwise holds. Withdrawing the restatement stays its author's and the
 creator's alone: withdrawn, it puts back the expense it replaced, which still
 names whoever was taken off. The expense's author takes the expense off by
-withdrawing its first entry, which leaves the restatement stale and the
-removal standing, and so does the creator, who may withdraw any expense
+withdrawing its first entry, which takes the restatement with it and leaves
+the removal standing, and so does the creator, who may withdraw any expense
 (`expenseWithdrawalTarget` / `expense_withdrawal_target` name the entry to
 withdraw, and `expenseCorrectors` / `expense_correctors` who may correct it). A host MUST NOT write an `amendEntry` of an entry the
 log holds but does not have in force — a withdrawn entry, or one a
@@ -2181,10 +2181,12 @@ resolved:
   holds (`unknown_entry`);
 - its author may withdraw the target by the table above — the target's
   author or the bill's creator (`unauthorized_entry`);
-- the target is on the bill — not withdrawn, and, when the target is itself a
-  restatement, the one that applies to its own target — and the amendment the
-  fold applies to the target is the one `basis` names, or none when `basis`
-  is absent (`restatement_stale`);
+- the target is not withdrawn — a restatement of a withdrawn expense goes
+  with it: it applies to nothing and is not set aside, and it applies again
+  if that withdrawal is itself withdrawn;
+- when the target is itself a restatement, it is the one that applies to its
+  own target, and the amendment the fold applies to the target is the one
+  `basis` names, or none when `basis` is absent (`restatement_stale`);
 - and no earlier restatement of the same target, by §10.2's order, also
   passes these checks (`restatement_superseded`).
 

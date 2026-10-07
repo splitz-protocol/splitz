@@ -1102,6 +1102,9 @@ pub fn fold_log_verified(
                     {
                         Some(code::UNAUTHORIZED_ENTRY)
                     }
+                    // Withdrawn with its target: nothing to apply, nothing
+                    // refused.
+                    Some(_) if voided.contains(target_id.as_str()) => continue,
                     Some(_)
                         if !on_bill
                             || r.get("basis").and_then(Value::as_str).map(str::to_owned)

@@ -2408,6 +2408,9 @@ def fold(entries, bill_id=None, verify=None):
                 aside(r, "amend_kind_mismatch", "restates what is no expense")
             elif r["author"] not in (target["author"], creator):
                 aside(r, "unauthorized_entry", "may not withdraw its target")
+            elif target_id in voided:
+                # Withdrawn with its target: nothing to apply, nothing refused.
+                continue
             elif not on_bill or r.get("basis") != basis:
                 aside(r, "restatement_stale", "its target changed under it")
             elif chosen is not None:

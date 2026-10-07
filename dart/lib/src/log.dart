@@ -930,6 +930,9 @@ FoldResult foldLog(List<Object?> rawEntries,
         aside(r, SplitCode.amendKindMismatch);
       } else if (r['author'] != target['author'] && r['author'] != creator) {
         aside(r, SplitCode.unauthorizedEntry);
+      } else if (voided.contains(targetId)) {
+        // Withdrawn with its target: nothing to apply, nothing refused.
+        continue;
       } else if (!onBill || r['basis'] != basis) {
         aside(r, SplitCode.restatementStale);
       } else if (chosen != null) {

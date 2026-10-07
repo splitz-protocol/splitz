@@ -9,7 +9,7 @@ new implementation; where the two disagree, `SPEC.md` is right.
 
 Three things, and the third is the one most implementations miss.
 
-**1. Reproduce the corpus.** `vectors/` holds 1014 cases across 24 files.
+**1. Reproduce the corpus.** `vectors/` holds 1016 cases across 24 files.
 Every case carries a `name`, its inputs, and either `expect` (the value the
 implementation must produce) or `error` (the §12 code it must refuse with) —
 or, for a case about how large a request may be, `expectLength` and
