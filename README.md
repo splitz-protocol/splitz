@@ -28,8 +28,8 @@ on it and keeps its own keys, storage and sending (`SPEC.md` §13).
 With Dart 3.11.4 or later:
 
 ```
-git clone https://github.com/KamaIOps/Splitz-Protocol.git
-cd Splitz-Protocol/dart
+git clone https://github.com/splitz-protocol/splitz.git
+cd splitz/dart
 dart run example/dinner.dart
 ```
 
@@ -50,20 +50,20 @@ Dart needs both packages pinned to the same **full 40-character commit sha**:
 dependencies:
   splitz_core:
     git:
-      url: https://github.com/KamaIOps/Splitz-Protocol.git
+      url: https://github.com/splitz-protocol/splitz.git
       path: dart
       ref: <full commit sha>
   splitz_host:
     git:
-      url: https://github.com/KamaIOps/Splitz-Protocol.git
+      url: https://github.com/splitz-protocol/splitz.git
       path: splitz_host
       ref: <full commit sha>
 ```
 
 ```toml
 [dependencies]
-splitz-core = { git = "https://github.com/KamaIOps/Splitz-Protocol", rev = "<commit sha>" }
-splitz-host = { git = "https://github.com/KamaIOps/Splitz-Protocol", rev = "<commit sha>" }
+splitz-core = { git = "https://github.com/splitz-protocol/splitz", rev = "<commit sha>" }
+splitz-host = { git = "https://github.com/splitz-protocol/splitz", rev = "<commit sha>" }
 ```
 
 Kotlin, Swift and JavaScript use the binding (`rust/splitz-ffi`), packaged by

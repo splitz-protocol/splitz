@@ -2,8 +2,8 @@ name: splitz_host
 description: "What a Zcash wallet needs around package:splitz_core — the seam, entry signing, sealing, the log, the sync, and where keys live. No screens, no wallet named, no Flutter."
 version: 0.1.0
 publish_to: none
-repository: https://github.com/KamaIOps/Splitz-Protocol
-homepage: https://github.com/KamaIOps/Splitz-Protocol
+repository: https://github.com/splitz-protocol/splitz
+homepage: https://github.com/splitz-protocol/splitz
 
 environment:
   sdk: ^3.11.4

@@ -2,8 +2,8 @@ name: splitz_core
 description: A shared-bill protocol for Zcash wallets. Exact integer money, deterministic settlement, ZIP 321 output.
 version: 1.0.0
 publish_to: none
-repository: https://github.com/KamaIOps/Splitz-Protocol
-homepage: https://github.com/KamaIOps/Splitz-Protocol
+repository: https://github.com/splitz-protocol/splitz
+homepage: https://github.com/splitz-protocol/splitz
 
 environment:
   sdk: ^3.5.0

@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 description = "The splitz protocol and its wallet plumbing, across a foreign function boundary."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/KamaIOps/Splitz-Protocol"
+repository = "https://github.com/splitz-protocol/splitz"
 # Held back from crates.io for the same reason the other two are.
 publish = false
 # The crate is its sources; the tests are lanes of the repository, as for

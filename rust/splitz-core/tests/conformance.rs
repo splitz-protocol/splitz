@@ -26,7 +26,7 @@ fn require_corpus() {
     assert!(
         std::path::Path::new(&dir).is_dir(),
         "no corpus at {dir}. Point SPLITZ_VECTORS at a checkout of \
-         https://github.com/KamaIOps/Splitz-Protocol to run the conformance \
+         https://github.com/splitz-protocol/splitz to run the conformance \
          suite."
     );
 }

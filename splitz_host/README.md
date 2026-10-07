@@ -8,5 +8,5 @@ identity live, swaps, and activity. No screens, no wallet named, no Flutter.
 A wallet implements `SplitsWallet` — who it speaks as, how it sends, where its
 secrets go — and every rule of the protocol comes from `splitz_core`.
 
-See the [repository](https://github.com/KamaIOps/Splitz-Protocol) for
+See the [repository](https://github.com/splitz-protocol/splitz) for
 `SPEC.md`, `INTEGRATING.md` and the tests.

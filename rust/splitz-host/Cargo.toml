@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.88"
 description = "What a Zcash wallet needs around the splitz protocol: the seam it plugs into, entry signing, sealing, the log, the sync, and where keys live."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/KamaIOps/Splitz-Protocol"
+repository = "https://github.com/splitz-protocol/splitz"
 # Held back from crates.io for the same reason `splitz-core` is: a publish
 # there cannot be undone. Both come off together when the product is released.
 publish = false
