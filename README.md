@@ -28,7 +28,7 @@ on it and keeps its own keys, storage and sending (`SPEC.md` §13).
 With Dart 3.11.4 or later:
 
 ```
-git clone https://github.com/splitz-protocol/splitz.git
+git clone --branch preview https://github.com/splitz-protocol/splitz.git
 cd splitz/dart
 dart run example/dinner.dart
 ```
@@ -39,6 +39,9 @@ install the [demo APK](https://github.com/KamaIOps/vizor-wallet-splits/releases/
 [vizor-wallet-splits](https://github.com/KamaIOps/vizor-wallet-splits), and its
 `SPLITS.md` builds it for iOS simulators and Android emulators and walks two of
 them through a bill with no money needed.
+
+The `preview` tag, in this repository and in vizor-wallet-splits, is a fixed
+snapshot to try. `main` keeps moving past it.
 
 ## Use It in a Wallet
 
