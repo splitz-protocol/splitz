@@ -166,6 +166,7 @@ fn a_screen_that_shows_every_fact_passes_and_one_missing_is_named() {
             HashMap::new(),
             String::new(),
             String::new(),
+            String::new(),
         )
         .unwrap()
     };
@@ -214,6 +215,7 @@ fn an_obligation_the_binding_did_not_write_is_refused() {
             full_screen(),
             words(),
             HashMap::new(),
+            String::new(),
             String::new(),
             String::new(),
         )
@@ -302,6 +304,7 @@ fn a_recipient_paid_by_a_lower_preference_is_checked() {
             HashMap::new(),
             via.clone(),
             lower.to_owned(),
+            String::new(),
             String::new(),
         )
         .unwrap()

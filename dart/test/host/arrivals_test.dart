@@ -516,4 +516,32 @@ void main() {
     expect(memoTxids([folded], 'ana'), {_t1});
     expect(memoTxids([folded], 'ben'), isEmpty);
   });
+
+  group('a wallet history row is received (§14.7)', () {
+    HistoryTransaction row(String txid,
+            {int height = 100, bool expired = false, int delta = 5000}) =>
+        HistoryTransaction(
+            txid: txid,
+            minedHeight: height,
+            expiredUnmined: expired,
+            balanceDelta: delta);
+
+    test('mined, unexpired and raising the balance is received', () {
+      final got = receivedTransactions([row(_t1), row(_t2, delta: 1)]);
+      expect([for (final t in got) (t.txid, t.zatoshi, t.memos)],
+          [(_t1, 5000, null), (_t2, 1, null)]);
+    });
+
+    test('each exclusion holds on its own, at its boundary', () {
+      expect(isReceived(row(_t1, height: 0)), isFalse, reason: 'mempool');
+      expect(isReceived(row(_t1, height: -1)), isFalse);
+      expect(isReceived(row(_t1, height: 1)), isTrue);
+      expect(isReceived(row(_t1, expired: true)), isFalse);
+      expect(isReceived(row(_t1, delta: 0)), isFalse, reason: 'own send');
+      expect(isReceived(row(_t1, delta: -15000)), isFalse);
+      expect(
+          receivedTransactions([row(_t1, height: 0), row(_t2, expired: true)]),
+          isEmpty);
+    });
+  });
 }

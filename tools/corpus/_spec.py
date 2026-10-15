@@ -1128,9 +1128,31 @@ def decode_payload(text):
 
 # --- Section 11.3: sealing --------------------------------------------------
 
-SEALED_VERSION = 1
+SEALED_VERSION = 2
 NONCE_BYTES = 24
 TAG_BYTES = 16
+# Section 11.3. The plaintext lengths a version 2 frame pads to.
+SEALED_BUCKETS = (512, 1024, 2048, 4096, 8192, 16384, 32768)
+
+
+def pad_sealed(plaintext):
+    """Section 11.3. The plaintext, 0x80, then zeros to the smallest bucket
+    holding both; refused when none does."""
+    need = len(plaintext) + 1
+    for bucket in SEALED_BUCKETS:
+        if bucket >= need:
+            return plaintext + b"\x80" + b"\x00" * (bucket - need)
+    raise Refused("sealed_too_large")
+
+
+def unpad_sealed(padded):
+    """Section 11.3. Only a bucket's length, ending 0x80 then zeros, opens."""
+    if len(padded) not in SEALED_BUCKETS:
+        raise Refused("sealed_malformed")
+    stripped = padded.rstrip(b"\x00")
+    if not stripped or stripped[-1] != 0x80:
+        raise Refused("sealed_malformed")
+    return stripped[:-1]
 
 
 def parse_sealed_frame(text):

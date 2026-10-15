@@ -1,10 +1,10 @@
 // A SPEC.md §15.5 relay over HTTP: `POST <origin>/c/<channel>` with
-// `{"blobs":[…]}` adds blobs, `GET <origin>/c/<channel>` returns every blob
+// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>` returns every blob
 // the channel holds.
 //
 // The library decides what goes on the wire and what an answer means
-// (`relay_channel_url`, `relay_push_body`, `relay_push_answer`,
-// `relay_fetch_answer`); this class moves the bytes with the `fetch` it is
+// (`relay_channel_url`, `relay_push_body`, `relay_work_asked`,
+// `relay_push_answer`, `relay_fetch_answer`); this class moves the bytes with the `fetch` it is
 // given, the global one of Node 18 and later by default. An answer is read
 // whatever its HTTP status: the body says whether the relay took a push.
 //
@@ -19,6 +19,7 @@ import {
   relay_fetch_answer,
   relay_push_answer,
   relay_push_body,
+  relay_work_asked,
 } from "./splitz_ffi.js";
 
 export class SplitzRelay {
@@ -36,12 +37,19 @@ export class SplitzRelay {
 
   /// Adds `blobs` to `channel`. Pushing a blob the channel already holds
   /// changes nothing, so a retry cannot create a duplicate. An empty list
-  /// makes no request.
+  /// makes no request. The push carries work (§15.5), stamped at 16 bits
+  /// and once more at the base a refusal asks for.
   async push(channel, blobs) {
-    const body = relay_push_body(blobs);
+    const body = relay_push_body(channel, blobs, 16);
     if (body === undefined) return;
     const url = relay_channel_url(this.origin, channel);
-    relay_push_answer(await this._exchange("POST", url, body));
+    const answer = await this._exchange("POST", url, body);
+    const asked = relay_work_asked(answer, 16);
+    if (asked === undefined) {
+      relay_push_answer(answer);
+      return;
+    }
+    relay_push_answer(await this._exchange("POST", url, relay_push_body(channel, blobs, asked)));
   }
 
   /// Every blob `channel` currently holds, including ones the caller already

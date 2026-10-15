@@ -3,14 +3,17 @@
 use chacha20poly1305::aead::Aead;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use serde_json::Value;
-use splitz_core::{frame_sealed, sealed_nonce, sealed_plaintext, NONCE_BYTES, TAG_BYTES};
+use splitz_core::{
+    frame_sealed, pad_sealed, sealed_nonce, sealed_plaintext, unpad_sealed, NONCE_BYTES, TAG_BYTES,
+};
 
 use crate::error::HostError;
 use crate::keys::KEY_LENGTH_BYTES;
 use crate::signing::base64url_decode;
 
-/// Blob layout version, the first byte of every blob, so a later change to the
-/// framing or the cipher is recognised rather than fed to the wrong decoder.
+/// Blob layout version this writes, the first byte of every blob, so a later
+/// change to the framing or the cipher is recognised rather than fed to the
+/// wrong decoder. [`Sealing::open`] reads every version from 1 to this one.
 ///
 /// §11.3 fixes it; it is not restated here.
 pub const BLOB_VERSION: u8 = splitz_core::SEALED_VERSION;
@@ -38,14 +41,18 @@ impl Sealing {
     /// always seals to the same blob while two different entries never share a
     /// nonce — the one condition the cipher requires. Idempotence is what
     /// keeps a channel finite: a relay keyed by blob content stores an entry
-    /// once however often it is pushed.
+    /// once however often it is pushed. Refused for an entry no bucket holds
+    /// (§11.3, `sealed_too_large`).
     pub fn seal(&self, entry: &Value, bill_key: &str) -> Result<String, HostError> {
         let cipher = self.cipher(bill_key)?;
         // Canonical, not this encoder's key order. The nonce comes from these
         // bytes, so a device ordering keys differently would seal one entry
         // into a second blob that every device opens perfectly and none can
         // recognise as the same entry.
+        // Padded to a bucket (§11.3), so the blob's size says which bucket the
+        // entry fell in and not how long it is.
         let clear = sealed_plaintext(entry)
+            .and_then(|plain| pad_sealed(&plain))
             .map_err(|e| HostError::Sealing(format!("An entry is not sealable: {e}")))?;
         let nonce = sealed_nonce(&clear);
         let body = cipher
@@ -65,9 +72,9 @@ impl Sealing {
             return Err(HostError::Sealing("Empty blob".to_owned()));
         }
         let version = bytes[0];
-        if version != BLOB_VERSION {
+        if !(1..=BLOB_VERSION).contains(&version) {
             return Err(HostError::Sealing(format!(
-                "Blob is format v{version}; this build reads v{BLOB_VERSION}"
+                "Blob is format v{version}; this build reads v1 to v{BLOB_VERSION}"
             )));
         }
         let body = &bytes[1..];
@@ -90,7 +97,16 @@ impl Sealing {
         // corrupt, or crafted by a key-holder to break decoding — is reported
         // the same way, so a sync skips it like any other unopenable blob
         // instead of the refusal aborting the whole pull.
-        let text = String::from_utf8(clear)
+        let plain = if version == 1 {
+            clear
+        } else {
+            unpad_sealed(&clear)
+                .map_err(|e| {
+                    HostError::Sealing(format!("Opened blob is not padded as §11.3 pads: {e}"))
+                })?
+                .to_vec()
+        };
+        let text = String::from_utf8(plain)
             .map_err(|_| HostError::Sealing("Opened blob is not UTF-8".to_owned()))?;
         let decoded: Value = splitz_core::parse_json(&text)
             .map_err(|e| HostError::Sealing(format!("Opened blob is not JSON: {e}")))?;

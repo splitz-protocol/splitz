@@ -124,6 +124,16 @@ RENAMES = {
     "authoredId": "authored_id",
     "txidKey": "txid_key",
     "txidInSendOrder": "txid_in_send_order",
+    "isReceived": "is_received",
+    "padSealed": "pad_sealed",
+    "unpadSealed": "unpad_sealed",
+    "sealedSizeRefusal": "sealed_size_refusal",
+    "sealedBuckets": "SEALED_BUCKETS",
+    "relayWorkBase": "RELAY_WORK_BASE",
+    "relayWorkUnitChars": "RELAY_WORK_UNIT_CHARS",
+    "relaySyncSeconds": "RELAY_SYNC_SECONDS",
+    "isTransparentAddress": "is_transparent_address",
+    "receivedTransactions": "received_transactions",
     "requestStands": "request_stands",
     "codesAnEntryOutgrows": "CODES_AN_ENTRY_OUTGROWS",
     "zatoshiCoversPayment": "zatoshi_covers_payment",
@@ -251,9 +261,11 @@ def rust_surface(source: Path) -> set[str]:
 def _split_params(text: str) -> list[str]:
     """Top-level comma-separated parameters, ignoring nested brackets."""
     out, depth, cur = [], 0, ""
-    for ch in text:
+    for i, ch in enumerate(text):
         if ch in "<([{":
             depth += 1
+        elif ch == ">" and i > 0 and text[i - 1] == "-":
+            pass  # the `->` of a closure type closes nothing
         elif ch in ">)]}":
             depth -= 1
         if ch == "," and depth == 0:
@@ -305,6 +317,10 @@ def dart_signatures(source: Path, recurse: bool = False) -> dict[str, list[str]]
                 continue
             body = text[match.end() - 1 + len(params) + 2 :].lstrip()
             # A declaration, not a call: what follows the list is a body.
+            for marker in ("async*", "async", "sync*"):
+                if body.startswith(marker):
+                    body = body[len(marker) :].lstrip()
+                    break
             if not (body.startswith("{") or body.startswith("=>")):
                 continue
             cleaned = params.replace("{", "").replace("}", "")
@@ -317,12 +333,12 @@ def rust_signatures(source: Path) -> dict[str, list[str]]:
     for path in sorted(source.glob("*.rs")):
         text = path.read_text(encoding="utf-8")
         text = re.split(r"^#\[cfg\(test\)\]", text, maxsplit=1, flags=re.M)[0]
-        for match in re.finditer(
-            r"^pub\s+fn\s+(\w+)\s*(?:<[^>]*>)?\s*\(([^;{]*?)\)\s*(?:->|\{)",
-            text,
-            re.M | re.S,
-        ):
-            sigs[match.group(1)] = _split_params(match.group(2))
+        for match in re.finditer(r"^pub\s+fn\s+(\w+)\s*(?:<[^>]*>)?\s*\(", text, re.M):
+            # Scanned, not matched: a closure parameter's `FnOnce()` holds a
+            # `)` followed by `->`, which a lazy match takes for the list's end.
+            params = _param_text(text, match.end() - 1)
+            if params is not None:
+                sigs[match.group(1)] = _split_params(params)
     return sigs
 
 

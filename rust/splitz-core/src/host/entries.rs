@@ -13,8 +13,9 @@
 use serde_json::{Map, Value};
 
 use crate::authority::signing_message;
-use crate::error::Result;
+use crate::error::{Result, SplitError};
 use crate::instant::canonical_instant;
+use crate::invite::sealed_size_refusal;
 use crate::log::{derive_bill_id, derive_entry_id};
 
 use super::host::BillHost;
@@ -520,17 +521,29 @@ pub fn void_entry(host: &dyn BillHost, target_id: &str, not_before: Option<&str>
 /// `bill_id` is the bill the entry is written for, and is part of what is
 /// signed (§10.6), so the signature does not verify on any other bill. A
 /// `createBill` entry's bill is its own id.
+///
+/// Refused with `sealed_too_large` when the entry it returns cannot be sealed
+/// (§11.3): written, it would stay on this device and reach no other.
 pub fn sign_entry(host: &dyn BillHost, entry: &Value, bill_id: &str) -> Result<Value> {
-    let Some(sign) = host.signer() else {
-        return Ok(entry.clone());
+    let signed = match host.signer() {
+        None => entry.clone(),
+        Some(sign) => {
+            let signature = sign(signing_message(entry, bill_id)?.as_bytes());
+            let mut object = entry
+                .as_object()
+                .cloned()
+                .unwrap_or_else(serde_json::Map::new);
+            object.insert("sig".to_owned(), Value::from(signature));
+            Value::Object(object)
+        }
     };
-    let signature = sign(signing_message(entry, bill_id)?.as_bytes());
-    let mut object = entry
-        .as_object()
-        .cloned()
-        .unwrap_or_else(serde_json::Map::new);
-    object.insert("sig".to_owned(), Value::from(signature));
-    Ok(Value::Object(object))
+    if let Some(code) = sealed_size_refusal(&signed)? {
+        return Err(SplitError::new(
+            code,
+            "This entry is too large to seal (§11.3)",
+        ));
+    }
+    Ok(signed)
 }
 
 /// Fills in the members every entry carries and derives §9.5's id.

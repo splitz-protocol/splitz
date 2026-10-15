@@ -2,17 +2,24 @@
 library;
 
 import 'package:splitz_core/host.dart' show Payout;
-import 'package:splitz_core/splitz_core.dart' show Participant;
+import 'package:splitz_core/splitz_core.dart'
+    show Participant, isTransparentAddress;
 
 /// [first], then every payout [who] declares that it does not take the place
-/// of, in their declared order.
+/// of, in their declared order — except that a transparent Zcash payout is
+/// never put ahead of a shielded one.
 ///
 /// A record with no payouts declares its `payTo` as its one Zcash payout, and
 /// one with neither declares nothing. [first] takes the place of every
-/// declared payout of its own type, and a `swap` only of the same asset
-/// (compared case-insensitively; the chain does not distinguish): one way to
-/// be paid per kind, so order — which is preference — is never reshuffled by
-/// an edit. Pure; nothing is written.
+/// declared payout of its own type, a `zec` payout only of those as public as
+/// it (transparent against transparent, shielded against shielded, by
+/// [isTransparentAddress]), and a `swap` only of the same asset (compared
+/// case-insensitively; the chain does not distinguish): one way to be paid
+/// per kind, so order — which is preference — is never reshuffled by an
+/// edit. A transparent [first] goes directly after the last shielded Zcash
+/// payout the list keeps, when it keeps one: a payment to it is public on
+/// chain, so it is opted into as a fallback and never displaces a private
+/// one (§9.1). Pure; nothing is written.
 List<Payout> rankedPayouts(Participant who, Payout first) {
   final payTo = who.payTo;
   final declared = who.payouts.isNotEmpty
@@ -21,11 +28,20 @@ List<Payout> rankedPayouts(Participant who, Payout first) {
           if (payTo != null && payTo.isNotEmpty)
             Payout(type: 'zec', address: payTo),
         ];
+  bool public(Payout p) => isTransparentAddress(p.address ?? '');
   bool replaced(Payout p) =>
       p.type == first.type &&
-      (p.type != 'swap' ||
-          (p.asset ?? '').toUpperCase() == (first.asset ?? '').toUpperCase());
-  return [first, ...declared.where((p) => !replaced(p))];
+      switch (p.type) {
+        'swap' =>
+          (p.asset ?? '').toUpperCase() == (first.asset ?? '').toUpperCase(),
+        'zec' => public(p) == public(first),
+        _ => true,
+      };
+  final kept = [...declared.where((p) => !replaced(p))];
+  final at = first.type == 'zec' && public(first)
+      ? kept.lastIndexWhere((p) => p.type == 'zec' && !public(p)) + 1
+      : 0;
+  return [...kept.take(at), first, ...kept.skip(at)];
 }
 
 /// The payout a payer's wallet settles a debt by when it cannot pay by the

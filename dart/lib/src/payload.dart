@@ -29,8 +29,14 @@ const String billPrefix = 'splitz1:';
 /// The prefix a delta carries. A delta never carries an invite.
 const String deltaPrefix = 'splitzd1:';
 
-/// The sealed frame version.
-const int sealedVersion = 1;
+/// The sealed frame version this library writes. A reader opens every
+/// version from 1 to this one: 1 seals the bare plaintext, 2 pads it to a
+/// bucket (§11.3).
+const int sealedVersion = 2;
+
+/// The plaintext lengths a version 2 frame pads to, in bytes, smallest first
+/// (§11.3). A blob's size then says only which bucket its entry fell in.
+const List<int> sealedBuckets = [512, 1024, 2048, 4096, 8192, 16384, 32768];
 
 /// XChaCha20-Poly1305 nonce length, in bytes.
 const int nonceBytes = 24;
@@ -321,6 +327,54 @@ List<int> sealedPlaintext(Map<String, dynamic> entry) =>
 /// plaintexts it holds no key for.
 List<int> sealedNonce(List<int> plaintext) =>
     sha256(plaintext).sublist(0, nonceBytes);
+
+/// [plaintext] padded for a version 2 frame (§11.3): followed by `0x80` and
+/// then zeros, to the smallest of [sealedBuckets] that holds it and the
+/// `0x80`. Refused with `sealed_too_large` when none does.
+///
+/// Deterministic, so one entry still seals to one blob.
+List<int> padSealed(List<int> plaintext) {
+  final need = plaintext.length + 1;
+  for (final bucket in sealedBuckets) {
+    if (bucket >= need) {
+      return [...plaintext, 0x80, ...List<int>.filled(bucket - need, 0)];
+    }
+  }
+  raise(
+      SplitCode.sealedTooLarge,
+      'An entry of ${plaintext.length} bytes is over the '
+      '${sealedBuckets.last - 1} a sealed update carries');
+}
+
+/// The plaintext [padded] holds, as [padSealed] wrote it (§11.3).
+///
+/// Refused with `sealed_malformed` unless its length is one of
+/// [sealedBuckets] and it ends in `0x80` followed only by zeros: one
+/// plaintext has one padding, so a blob padded any other way is not one a
+/// writer produced.
+List<int> unpadSealed(List<int> padded) {
+  if (!sealedBuckets.contains(padded.length)) {
+    raise(SplitCode.sealedMalformed,
+        'A padded update of ${padded.length} bytes is no bucket\'s length');
+  }
+  var end = padded.length;
+  while (end > 0 && padded[end - 1] == 0) {
+    end--;
+  }
+  if (end == 0 || padded[end - 1] != 0x80) {
+    raise(SplitCode.sealedMalformed, 'An update is not padded with 0x80');
+  }
+  return padded.sublist(0, end - 1);
+}
+
+/// `sealed_too_large` when [entry] cannot be sealed (§11.3) — its canonical
+/// bytes and the padding marker are over the largest of [sealedBuckets] —
+/// or null when it can. A host writes no entry this refuses: it would reach
+/// no other device.
+String? sealedSizeRefusal(Map<String, dynamic> entry) =>
+    sealedPlaintext(entry).length + 1 > sealedBuckets.last
+        ? SplitCode.sealedTooLarge
+        : null;
 
 /// Frames a sealed [body] for a transport (§11.3).
 ///

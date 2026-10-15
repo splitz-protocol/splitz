@@ -57,10 +57,14 @@ void main() {
 
   test('answers a push and a fetch as server.py does', () async {
     final channel = channelForRun(run, 'answers');
+    final work = await relayWorkStamp(channel, ['a', 'b'], relayWorkBase);
     final (pushed, ok) = await raw(
       'POST',
       '/c/$channel',
-      '{"blobs":["a","b"]}',
+      jsonEncode({
+        'blobs': ['a', 'b'],
+        'work': work,
+      }),
     );
     expect(pushed, 200);
     expect(ok, {'ok': true});
@@ -76,6 +80,14 @@ void main() {
     expect((await raw('GET', '/c/not-a-digest')).$1, 404);
     expect((await raw('POST', '/c/$channel', '{"blobs": 7}')).$1, 400);
     expect((await raw('POST', '/c/$channel', 'not json')).$1, 400);
+    // §15.5: a push with no work, or a stamp that is not a nonce.
+    final (status, asked) = await raw('POST', '/c/$channel', '{"blobs":["x"]}');
+    expect(status, 428);
+    expect(asked, {'error': 'a push carries work', 'work': 16});
+    expect(
+      (await raw('POST', '/c/$channel', '{"blobs":["x"],"work":"1a"}')).$1,
+      400,
+    );
     final over = 'x' * (64 * 1024 + 1);
     expect(
       (await raw(

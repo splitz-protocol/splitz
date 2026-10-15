@@ -890,12 +890,24 @@ package in module `SplitzFFI`, the npm package from its entry point. Sources are
 
 The channel is `channelForBill(billId)` (`channel_for_bill` in JavaScript).
 Blobs are what `blobsToPush` returns, and what `fetch` returns goes to
-`openBlobs`. The wire is `POST <origin>/c/<channel>` with `{"blobs":[…]}` and
-`GET <origin>/c/<channel>`, as `tools/relay/server.py` serves it; the binding's
-`relayChannelUrl`, `relayPushBody`, `relayPushAnswer` and `relayFetchAnswer`
-decide the URL, the body and what an answer means, so every client — and
-`splitz_host`'s `HttpSplitsRelay` — refuses alike. A client written for another
-network route calls those four directly.
+`openBlobs`. The wire is `POST <origin>/c/<channel>` with
+`{"blobs":[…],"work":"<nonce>"}` and `GET <origin>/c/<channel>`, as
+`tools/relay/server.py` serves it. `work` is SPEC.md §15.5's stamp, in place of
+anything that names the sender: `relayPushBody(channel, blobs, base)` finds it,
+which takes about 2^16 hashes for an ordinary push, so call it off the thread
+that draws. A relay that wants more answers with the base it asks for;
+`relayWorkAsked(answer, 16)` reads it, and the push is stamped once more at
+that base and sent again. The binding's `relayChannelUrl`, `relayPushBody`,
+`relayWorkAsked`, `relayPushAnswer` and `relayFetchAnswer` decide the URL, the
+body and what an answer means, so every client — and `splitz_host`'s
+`HttpSplitsRelay` — refuses alike. A client written for another network route
+calls those five directly, and sends them over the route the wallet's own
+traffic takes (§15.5): over Tor when the wallet's Tor is on.
+
+Sync every bill the device holds every `relaySyncSeconds()` (30) seconds,
+whatever is on screen, and push a write at the next tick rather than at once:
+a relay that sees one bill polled faster, or a push the moment something is
+typed, learns which bill is open and when somebody is at their phone.
 
 Every failure is the binding's host error (`SplitzException.Host`,
 `SplitzError.Host`, `SplitzErrorHost`) with `transient` saying whether a retry
@@ -1173,11 +1185,15 @@ with your words for "paid by a lower preference", and it asks that every such
 recipient be named with them. `unexplainedWords` are your words for a payment
 carrying more than the debts the bill records explain
 (`Settlement.unexplained`, §6.3): a review that leaves them out while a payee
-is paid an unexplained part is a finding.
+is paid an unexplained part is a finding. `publicWords` are your words that a
+payment is public on chain: every output to a transparent address
+(`isTransparentAddress` in the host packages, `parseAddress(address).transparent`
+on the binding; §9.1) needs its payee's name and those words, once for each
+such output.
 
 A wallet on the binding runs the same check with `checkPayerReview(facts,
 billId, entries, obligation, visibleText, reasonWords, via, lowerWords,
-unexplainedWords)`: the
+unexplainedWords, publicWords)`: the
 bill crosses as its entries, as it does for `obligationOf`, and `obligation` is
 the one `obligationOf` or `obligationVia` gave. `renderAmount` and
 `rateFigure` write the figures. An

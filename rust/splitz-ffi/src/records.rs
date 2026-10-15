@@ -318,6 +318,19 @@ pub struct IncomingTransaction {
     pub memos: Option<Vec<String>>,
 }
 
+/// One transaction in a wallet's history, as §14.7 reads it.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct HistoryTransaction {
+    /// In the order a send reports it: see `txid_in_send_order`.
+    pub txid: String,
+    /// The height of the block that mined it; zero or less when not mined.
+    pub mined_height: i64,
+    /// Whether its expiry height passed without it being mined.
+    pub expired_unmined: bool,
+    /// What it brought the account less what it took from it, in zatoshi.
+    pub balance_delta: i64,
+}
+
 /// A payment record to this device, and the transaction it names (§14.7).
 #[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
 pub struct Arrival {
@@ -389,6 +402,10 @@ pub struct ParsedAddress {
     pub receivers: Vec<u32>,
     /// Whether a memo reaches the recipient.
     pub can_receive_memo: bool,
+    /// Whether a payment to it is public on chain: `p2pkh`, `p2sh` or `tex`
+    /// (§9.1). A wallet says so to a person declaring it as a payout and to a
+    /// payer sending to it.
+    pub transparent: bool,
 }
 
 /// One payment a wallet is about to make, as its own ZIP 321 reader produced
@@ -447,6 +464,9 @@ pub enum ReviewRule {
     /// Every recipient paid more than the debts the bill records explain
     /// (§6).
     Unexplained,
+    /// Every output to a transparent address: a payment public on chain
+    /// (§9.1).
+    PublicOutput,
     /// The rate the request was priced at.
     Rate,
     /// The ZEC amount and address of every output.

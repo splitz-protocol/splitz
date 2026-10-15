@@ -1,9 +1,18 @@
 {
   "description": "Sealed entry frames. SPEC.md section 11.3.",
-  "count": 9,
+  "count": 10,
   "cases": [
     {
       "name": "a_well_formed_frame",
+      "frame": "Am5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
+      "expect": {
+        "version": 2,
+        "nonce": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5u",
+        "bodyBytes": 24
+      }
+    },
+    {
+      "name": "a_version_1_frame_still_reads",
       "frame": "AW5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
       "expect": {
         "version": 1,
@@ -13,9 +22,9 @@
     },
     {
       "name": "the_shortest_legal_frame",
-      "frame": "AW5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2M",
+      "frame": "Am5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2M",
       "expect": {
-        "version": 1,
+        "version": 2,
         "nonce": "bm5ubm5ubm5ubm5ubm5ubm5ubm5ubm5u",
         "bodyBytes": 16
       }
@@ -27,7 +36,7 @@
     },
     {
       "name": "a_version_from_the_future",
-      "frame": "Am5ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
+      "frame": "A25ubm5ubm5ubm5ubm5ubm5ubm5ubm5ubmNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjYw",
       "error": "sealed_future_version"
     },
     {

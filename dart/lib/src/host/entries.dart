@@ -481,15 +481,25 @@ Map<String, dynamic> _sealed(
 /// [billId] is the bill the entry is written for, and is part of what is
 /// signed (§10.6), so the signature does not verify on any other bill. A
 /// `createBill` entry's bill is its own id.
+///
+/// Refused with `sealed_too_large` when the entry it returns cannot be sealed
+/// (§11.3): written, it would stay on this device and reach no other.
 Future<Map<String, dynamic>> signEntry({
   required BillHost host,
   required Map<String, dynamic> entry,
   required String billId,
 }) async {
   final sign = host.sign;
-  if (sign == null) return entry;
-  final message = utf8.encode(splitz.signingMessage(entry, billId));
-  return <String, dynamic>{...entry, 'sig': await sign(message)};
+  final signed = sign == null
+      ? entry
+      : <String, dynamic>{
+          ...entry,
+          'sig': await sign(utf8.encode(splitz.signingMessage(entry, billId))),
+        };
+  if (splitz.sealedSizeRefusal(signed) case final code?) {
+    splitz.raise(code, 'This entry is too large to seal (§11.3)');
+  }
+  return signed;
 }
 
 /// Unpadded base64url, the encoding every key, nonce and id in the protocol

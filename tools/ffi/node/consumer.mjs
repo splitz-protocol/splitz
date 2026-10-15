@@ -287,10 +287,20 @@ console.log("ben's review screen shows what §14.2 says it must");
 const zec = splitz.render_amount(owed.request.payments[0].zatoshi);
 const screen = [`Pay Ana ${zec} ZEC`, "to u1ana",
                 `at ${splitz.rate_figure(owed.rate)} EUR per ZEC, set by Ana`];
-const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "", "");
+const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "", "", "");
 check("a screen showing every fact passes", shown.length === 0, JSON.stringify(screen));
+check("a transparent address is public, a shielded one is not (§9.1)",
+      splitz.parse_address("t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs").transparent && !splitz.parse_address("u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf").transparent,
+      "parse_address.transparent");
+check("a relay sync is on a fixed tick; a refusal names the work it asks (§15.5)",
+      splitz.relay_sync_seconds() === 30 &&
+        splitz.relay_work_asked('{"error":"not enough work","work":18}', 16) === 18 &&
+        splitz.relay_work_asked('{"error":"not enough work","work":16}', 16) === undefined &&
+        splitz.relay_work_asked('{"error":"x","work":41}', 16) === undefined &&
+        splitz.relay_work_asked('{"ok":true}', 16) === undefined,
+      `${splitz.relay_work_asked('{"work":18}', 16)}`);
 const noAddress = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed,
-    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "", "");
+    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "", "", "");
 check("one without the output's address is told exactly that",
       noAddress.length === 1 && noAddress[0].rule === splitz.ReviewRule.Output &&
         noAddress[0].fact === "the address Ana is paid at" && noAddress[0].expected === "u1ana",
@@ -673,6 +683,18 @@ const digest = "00".repeat(31) + "ab";
 check("a txid in digest order is reversed (§14.7)",
       splitz.txid_in_send_order(digest) === "ab" + "00".repeat(31) && splitz.txid_in_send_order("abc") === undefined,
       `${splitz.txid_in_send_order(digest)}`);
+const raised = splitz.fee_raised_problem(10000n, 10001n);
+check("a fee above the one reviewed is refused, the one reviewed is not (§14.2)",
+      raised?.includes("Nothing was sent") === true && splitz.fee_raised_problem(10000n, 10000n) === undefined,
+      `${raised}`);
+const arrived = splitz.received_transactions([
+  { txid: "ab".repeat(32), mined_height: 7n, expired_unmined: false, balance_delta: 5000n },
+  { txid: "cd".repeat(32), mined_height: 0n, expired_unmined: false, balance_delta: 5000n },
+  { txid: "ef".repeat(32), mined_height: 7n, expired_unmined: false, balance_delta: -100n },
+]);
+check("only a mined row raising the balance is received (§14.7)",
+      arrived.length === 1 && arrived[0].txid === "ab".repeat(32) && Number(arrived[0].zatoshi) === 5000,
+      `${arrived.map((t) => t.txid)}`);
 check("a typed figure is read in integers (§2.1)",
       Number(splitz.parse_amount_in("12.34", "EUR")) === 1234 &&
         splitz.parse_amount_in("1,000", "KWD") === undefined &&

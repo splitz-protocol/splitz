@@ -394,10 +394,18 @@ void main() {
       produce({'channel': channelFor(c['billId'] as String)});
       return;
     }
+    if (c.containsKey('padded')) {
+      final padded =
+          base64Url.decode(base64Url.normalize(c['padded'] as String));
+      produce({'plaintext': utf8.decode(unpadSealed(padded))});
+      return;
+    }
     final plaintext = sealedPlaintext(c['entry'] as Map<String, dynamic>);
+    final padded = padSealed(plaintext);
     produce({
       'plaintext': utf8.decode(plaintext),
-      'nonce': base64UrlEncode(sealedNonce(plaintext)).replaceAll('=', ''),
+      'paddedBytes': padded.length,
+      'nonce': base64UrlEncode(sealedNonce(padded)).replaceAll('=', ''),
     });
   });
 

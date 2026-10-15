@@ -216,19 +216,31 @@ void main() {
       return (response.statusCode, text);
     }
 
-    String push(List<String> blobs) => jsonEncode({'blobs': blobs});
+    /// [blobs] pushed with the work the relay asks for now: an unstamped
+    /// push is answered with the base, as a client learns it (§15.5).
+    Future<(int, String)> push(List<String> blobs) async {
+      final (_, asked) = await post(jsonEncode({'blobs': blobs}));
+      final base = jsonDecode(asked)['work'] as int;
+      final chars = blobs.fold<int>(0, (n, b) => n + b.length);
+      final work = await relayWorkStamp(
+        origin.pathSegments.last,
+        blobs,
+        relayWorkBits(chars, base: base),
+      );
+      return post(jsonEncode({'blobs': blobs, 'work': work}));
+    }
 
     test('a push under both bounds is stored', () async {
-      expect((await post(push(['0123456789']))).$1, 200);
-      expect((await post(push(['abcdefghij']))).$1, 200);
+      expect((await push(['0123456789'])).$1, 200);
+      expect((await push(['abcdefghij'])).$1, 200);
     });
 
     test(
       'a push that would cross what the relay holds is refused whole',
       () async {
-        final (status, _) = await post(push(['ABCDEFGHIJK', 'z']));
+        final (status, _) = await push(['ABCDEFGHIJK', 'z']);
         expect(status, 507);
-        final (_, held) = await post(push(['0123456789']));
+        final (_, held) = await push(['0123456789']);
         expect(
           jsonDecode(held)['ok'],
           isTrue,
@@ -240,7 +252,9 @@ void main() {
     test(
       'a body over the request bound is refused, however it is framed',
       () async {
-        final big = push(['x' * 2000]);
+        final big = jsonEncode({
+          'blobs': ['x' * 2000],
+        });
         expect((await post(big)).$1, 413);
         expect((await post(big, chunked: true)).$1, 413);
       },
@@ -252,7 +266,9 @@ void main() {
         // Two megabytes cannot be written before the relay answers, so the
         // client is mid-write when the refusal arrives. Closing with those
         // bytes unread resets the connection and the client never sees 413.
-        final huge = push(['x' * 2000000]);
+        final huge = jsonEncode({
+          'blobs': ['x' * 2000000],
+        });
         for (var i = 0; i < 3; i++) {
           expect((await post(huge)).$1, 413);
         }

@@ -1,11 +1,11 @@
 import Foundation
 
 /// A SPEC.md §15.5 relay over HTTP: `POST <origin>/c/<channel>` with
-/// `{"blobs":[…]}` adds blobs, `GET <origin>/c/<channel>` returns every blob
+/// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>` returns every blob
 /// the channel holds.
 ///
 /// The library decides what goes on the wire and what an answer means
-/// (`relayChannelUrl`, `relayPushBody`, `relayPushAnswer`,
+/// (`relayChannelUrl`, `relayPushBody`, `relayWorkAsked`, `relayPushAnswer`,
 /// `relayFetchAnswer`); this class moves the bytes with the `URLSession` it is
 /// given. An answer is read whatever its HTTP status: the body says whether
 /// the relay took a push.
@@ -30,9 +30,17 @@ public final class SplitzRelay {
     /// changes nothing, so a retry cannot create a duplicate. An empty list
     /// makes no request.
     public func push(channel: String, blobs: [String]) async throws {
-        guard let body = try relayPushBody(blobs: blobs) else { return }
+        // The push carries work (§15.5), stamped at 16 bits and once more at
+        // the base a refusal asks for.
         let url = try relayChannelUrl(origin: origin, channel: channel)
-        try relayPushAnswer(body: try await exchange(method: "POST", url: url, body: body))
+        guard let body = try relayPushBody(channel: channel, blobs: blobs, base: 16) else { return }
+        let answer = try await exchange(method: "POST", url: url, body: body)
+        guard let asked = relayWorkAsked(body: answer, done: 16),
+              let again = try relayPushBody(channel: channel, blobs: blobs, base: asked) else {
+            try relayPushAnswer(body: answer)
+            return
+        }
+        try relayPushAnswer(body: try await exchange(method: "POST", url: url, body: again))
     }
 
     /// Every blob `channel` currently holds, including ones the caller

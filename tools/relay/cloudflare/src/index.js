@@ -1,8 +1,8 @@
 // The bill relay (SPEC.md §15.5) as a Cloudflare Worker, for an origin that
 // stays up when no laptop does.
 //
-//     POST /c/<channel>   {"blobs": [...]}  -> {"ok": true}
-//     GET  /c/<channel>                     -> {"blobs": [...]}
+//     POST /c/<channel>   {"blobs": [...], "work": "<nonce>"}  -> {"ok": true}
+//     GET  /c/<channel>                                       -> {"blobs": [...]}
 //
 // The same two routes, answers and bounds as tools/relay/server.py: a channel
 // is 64 lower-case hex digits, a blob at most MAX_BLOB_CHARS, a body at most
@@ -15,20 +15,31 @@
 // checked against the whole store's bound and applied whole or not at all.
 //
 // A public origin takes pushes from anyone, so two bounds keep one sender
-// from filling it for everybody:
-//   - one client address adds at most MAX_SOURCE_CHARS in a UTC day; past it
-//     the push is 429;
+// from filling it for everybody, and neither names the sender:
+//   - a push carries work (SPEC.md §15.5): a decimal nonce whose SHA-256 over
+//     "splitz-relay-work-v1|<channel>|<h>|<nonce>", <h> the hex SHA-256 of
+//     every blob's own SHA-256 in order, has `workBits` leading zero bits. That is WORK_BASE, one
+//     more per doubling of the 1024-character units the push carries, and up
+//     to 8 more as the store fills, so filling it costs more the fuller it
+//     is. Too little is 428 with the base asked now as `work`; checking it is
+//     one hash;
 //   - a channel nobody has pushed to for EXPIRE_DAYS is dropped, so what a
 //     stranger wrote does not stay once they stop.
+// A push with no `work` is 428 too, unless LEGACY_UNSTAMPED is "1": then it
+// is held to the per-address bound below instead, for clients built before
+// pushes carried work.
 // There is no bound per channel: anybody holding an invite knows its channel,
 // and one that filled it would stop every other participant's pushes.
-// What these turn away: several devices behind one address adding more than a
-// day's bound between them, and a bill nobody has written to in EXPIRE_DAYS,
+// What these turn away: a push whose work is short, which a client stamps
+// again at the base the answer names; under LEGACY_UNSTAMPED, several devices
+// behind one address adding more than a day's bound between them, and a bill nobody has written to in EXPIRE_DAYS,
 // which a device that still holds it pushes again on its next sync. Expiry
 // runs before a fetch is answered and before a push is compared with what the
 // channel holds, so that push stores everything it carries.
 //
-// An IPv6 sender is counted by its /64: one connection is handed a whole /64,
+// Under LEGACY_UNSTAMPED, one client address adds at most MAX_SOURCE_CHARS
+// of unstamped pushes in a UTC day; past it the push is 429. An IPv6 sender
+// is counted by its /64: one connection is handed a whole /64,
 // so counting single addresses would hand each sender 2^64 bounds. An address
 // is held only as SHA-256 of a random salt kept for that UTC day and the
 // address. A day's salt is deleted with that day's counts, after which
@@ -40,6 +51,40 @@ const MAX_BLOB_CHARS = 64 * 1024;
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
 const CHANNEL = /^[0-9a-f]{64}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const WORK_BASE = 16;
+const WORK_UNIT_CHARS = 1024;
+const NONCE = /^[0-9]{1,20}$/;
+
+// The leading zero bits a push of `chars` characters needs at a store holding
+// `held` of `maxHeld`.
+export const workBase = (held, maxHeld) => WORK_BASE + Math.floor((8 * held) / maxHeld);
+export const workBits = (chars, base) => {
+  const units = Math.max(1, Math.ceil(chars / WORK_UNIT_CHARS));
+  return base + (units - 1).toString(2).replace(/^0$/, "").length;
+};
+
+const sha256 = async (bytes) => new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+const utf8 = (text) => new TextEncoder().encode(text);
+
+// The hex SHA-256 of every blob's own SHA-256, in order: fixed-length pieces,
+// so no other list of blobs hashes to it.
+const blobsDigest = async (blobs) => {
+  const each = await Promise.all(blobs.map((b) => sha256(utf8(b))));
+  const all = new Uint8Array(32 * each.length);
+  each.forEach((d, i) => all.set(d, 32 * i));
+  return hex(await sha256(all));
+};
+
+// The leading zero bits of `nonce`'s stamp of `blobs` on `channel`.
+export const workDone = async (channel, blobs, nonce) => {
+  const digest = await sha256(utf8(`splitz-relay-work-v1|${channel}|${await blobsDigest(blobs)}|${nonce}`));
+  let bits = 0;
+  for (const byte of digest) {
+    if (byte !== 0) return bits + Math.clz32(byte) - 24;
+    bits += 8;
+  }
+  return bits;
+};
 
 // The part of an address one sender controls: an IPv4 address whole, an IPv6
 // address's first 64 bits.
@@ -76,6 +121,7 @@ export default {
       return answer(413, { error: `a body over ${MAX_BODY_BYTES} bytes` });
     }
     const store = env.RELAY.get(env.RELAY.idFromName("relay"));
+    // Read only for an unstamped push under LEGACY_UNSTAMPED.
     const source = request.headers.get("CF-Connecting-IP") ?? "";
     return store.handle(
       request.method,
@@ -94,6 +140,7 @@ export class Relay extends DurableObject {
     this.maxHeld = Number(env.MAX_HELD_CHARS ?? 512 * 1024 * 1024);
     this.maxSource = Number(env.MAX_SOURCE_CHARS ?? 64 * 1024 * 1024);
     this.expireMs = Number(env.EXPIRE_DAYS ?? 180) * DAY_MS;
+    this.legacy = env.LEGACY_UNSTAMPED === "1";
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS blobs (" +
         "seq INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT NOT NULL, blob TEXT NOT NULL, " +
@@ -167,20 +214,30 @@ export class Relay extends DurableObject {
       return answer(413, { error: `a body over ${MAX_BODY_BYTES} bytes` });
     }
     let blobs;
+    let work;
     try {
-      blobs = JSON.parse(raw || "{}").blobs;
+      ({ blobs, work } = JSON.parse(raw || "{}"));
       if (!Array.isArray(blobs) || blobs.some((b) => typeof b !== "string")) throw new Error();
+      if (work !== undefined && (typeof work !== "string" || !NONCE.test(work))) throw new Error();
     } catch {
       return answer(400, { error: "not a push" });
     }
     if (blobs.some((b) => b.length > MAX_BLOB_CHARS)) {
       return answer(413, { error: `a blob over ${MAX_BLOB_CHARS} characters` });
     }
-    // Taken before anything is read: the digest is awaited, and every step
-    // after it runs without yielding, so no other push lands in between.
+    // Taken before anything is read: the digests are awaited, and every step
+    // after them runs without yielding, so no other push lands in between.
+    const done = work === undefined ? -1 : await workDone(channel, blobs, work);
     const day = Math.floor(now / DAY_MS);
-    const counted = await this.sourceKey(source, day);
+    const counted = work === undefined && this.legacy ? await this.sourceKey(source, day) : null;
     this.expire(now);
+    const base = workBase(this.sql.exec("SELECT chars FROM held WHERE id = 0").one().chars, this.maxHeld);
+    if (work === undefined && !this.legacy) {
+      return answer(428, { error: "a push carries work", work: base });
+    }
+    if (work !== undefined && done < workBits(blobs.reduce((n, b) => n + b.length, 0), base)) {
+      return answer(428, { error: "not enough work", work: base });
+    }
     // A repeat is the ordinary case, not an error: sync is idempotent, and a
     // relay that grew on every retry would punish a flaky connection.
     const seen = new Set(
@@ -200,8 +257,11 @@ export class Relay extends DurableObject {
       return answer(507, { error: "the relay is full" });
     }
     const sent =
-      this.sql.exec("SELECT chars FROM source_days WHERE source = ? AND day = ?", counted, day).toArray()[0]?.chars ?? 0;
-    if (sent + grow > this.maxSource) {
+      counted === null
+        ? 0
+        : (this.sql.exec("SELECT chars FROM source_days WHERE source = ? AND day = ?", counted, day).toArray()[0]
+            ?.chars ?? 0);
+    if (counted !== null && sent + grow > this.maxSource) {
       return answer(429, { error: "this address has pushed its bound for today" });
     }
     this.ctx.storage.transactionSync(() => {
@@ -214,13 +274,15 @@ export class Relay extends DurableObject {
         grow,
         now,
       );
-      this.sql.exec(
-        "INSERT INTO source_days (source, day, chars) VALUES (?, ?, ?) " +
-          "ON CONFLICT (source, day) DO UPDATE SET chars = chars + excluded.chars",
-        counted,
-        day,
-        grow,
-      );
+      if (counted !== null) {
+        this.sql.exec(
+          "INSERT INTO source_days (source, day, chars) VALUES (?, ?, ?) " +
+            "ON CONFLICT (source, day) DO UPDATE SET chars = chars + excluded.chars",
+          counted,
+          day,
+          grow,
+        );
+      }
     });
     return answer(200, { ok: true });
   }

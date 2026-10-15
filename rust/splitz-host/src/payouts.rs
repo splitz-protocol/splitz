@@ -1,16 +1,22 @@
 //! Editing the payouts a participant declares (SPEC.md §9.1).
 
-use splitz_core::{Participant, Payout};
+use splitz_core::{is_transparent_address, Participant, Payout};
 
 /// `first`, then every payout `who` declares that it does not take the place
-/// of, in their declared order.
+/// of, in their declared order — except that a transparent Zcash payout is
+/// never put ahead of a shielded one.
 ///
 /// A record with no payouts declares its `pay_to` as its one Zcash payout, and
 /// one with neither declares nothing. `first` takes the place of every
-/// declared payout of its own kind, and a `swap` only of the same asset
-/// (compared case-insensitively; the chain does not distinguish): one way to
-/// be paid per kind, so order — which is preference — is never reshuffled by
-/// an edit. Pure; nothing is written.
+/// declared payout of its own kind, a `zec` payout only of those as public as
+/// it (transparent against transparent, shielded against shielded, by
+/// [`is_transparent_address`]), and a `swap` only of the same asset (compared
+/// case-insensitively; the chain does not distinguish): one way to be paid
+/// per kind, so order — which is preference — is never reshuffled by an edit.
+/// A transparent `first` goes directly after the last shielded Zcash payout
+/// the list keeps, when it keeps one: a payment to it is public on chain, so
+/// it is opted into as a fallback and never displaces a private one (§9.1).
+/// Pure; nothing is written.
 pub fn ranked_payouts(who: &Participant, first: &Payout) -> Vec<Payout> {
     let synthesised;
     let declared: &[Payout] = if !who.payouts.is_empty() {
@@ -26,15 +32,28 @@ pub fn ranked_payouts(who: &Participant, first: &Payout) -> Vec<Payout> {
     } else {
         &[]
     };
+    let public = |p: &Payout| is_transparent_address(p.address.as_deref().unwrap_or(""));
     let replaced = |p: &Payout| {
         p.kind == first.kind
-            && (p.kind != "swap"
-                || p.asset.as_deref().unwrap_or("").to_uppercase()
-                    == first.asset.as_deref().unwrap_or("").to_uppercase())
+            && match p.kind.as_str() {
+                "swap" => {
+                    p.asset.as_deref().unwrap_or("").to_uppercase()
+                        == first.asset.as_deref().unwrap_or("").to_uppercase()
+                }
+                "zec" => public(p) == public(first),
+                _ => true,
+            }
     };
-    std::iter::once(first.clone())
-        .chain(declared.iter().filter(|p| !replaced(p)).cloned())
-        .collect()
+    let mut kept: Vec<Payout> = declared.iter().filter(|p| !replaced(p)).cloned().collect();
+    let at = if first.kind == "zec" && public(first) {
+        kept.iter()
+            .rposition(|p| p.kind == "zec" && !public(p))
+            .map_or(0, |i| i + 1)
+    } else {
+        0
+    };
+    kept.insert(at, first.clone());
+    kept
 }
 
 /// The payout a payer's wallet settles a debt by when it cannot pay by the

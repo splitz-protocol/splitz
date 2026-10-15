@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use serde_json::Value;
-use splitz_core::SetAside;
+use splitz_core::{sealed_size_refusal, SetAside};
 
 use crate::error::{HostError, Result, SyncFailure};
 use crate::keys::SplitsKeys;
@@ -26,6 +26,14 @@ pub struct SyncResult {
     /// unless somebody is counting.
     pub unopenable: usize,
 }
+
+/// The seconds between one sync of every held bill and the next (§15.5).
+///
+/// One interval for every bill, whatever is on screen, and a write waits for
+/// the next tick: a relay sees when a channel is read and written, and a
+/// client that polls only the open bill, or pushes the moment something is
+/// typed, tells it which bill is being looked at and when.
+pub const RELAY_SYNC_SECONDS: u32 = 30;
 
 /// Syncs one bill through a relay.
 ///
@@ -87,10 +95,17 @@ impl<'a> SplitsSync<'a> {
         }
         let key = self.require_key(bill_id)?;
         refuse_foreign_key(self.keys, bill_id, &key, &entries)?;
-        let blobs = entries
-            .iter()
-            .map(|entry| Sealing.seal(entry, &key))
-            .collect::<std::result::Result<Vec<_>, _>>()?;
+        // An entry no bucket holds is not pushed, and the rest still are: this
+        // device never writes one (`sign_entry` refuses it), but a peer's can
+        // arrive through an older frame, and one entry must not hold back
+        // every other this device has to send.
+        let mut blobs = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            if matches!(sealed_size_refusal(entry), Ok(Some(_))) {
+                continue;
+            }
+            blobs.push(Sealing.seal(entry, &key)?);
+        }
         let fresh: Vec<String> = blobs.into_iter().filter(|b| !held.contains(b)).collect();
         if !fresh.is_empty() {
             self.relay.push(&channel_for_bill(bill_id), &fresh)?;

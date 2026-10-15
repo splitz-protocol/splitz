@@ -559,10 +559,17 @@ fn seal() {
         if let Some(bill_id) = c["billId"].as_str() {
             return Ok(json!({"channel": splitz_core::channel_for(bill_id)}));
         }
+        if let Some(padded) = c["padded"].as_str() {
+            let padded = splitz_core::zip321::unbase64url(padded).expect("base64url");
+            let plaintext = splitz_core::unpad_sealed(&padded)?;
+            return Ok(json!({"plaintext": String::from_utf8(plaintext.to_vec()).unwrap()}));
+        }
         let plaintext = splitz_core::sealed_plaintext(&c["entry"])?;
+        let padded = splitz_core::pad_sealed(&plaintext)?;
         Ok(json!({
-            "plaintext": String::from_utf8(plaintext.clone()).unwrap(),
-            "nonce": splitz_core::host::base64url_no_pad(&splitz_core::sealed_nonce(&plaintext)),
+            "plaintext": String::from_utf8(plaintext).unwrap(),
+            "paddedBytes": padded.len(),
+            "nonce": splitz_core::host::base64url_no_pad(&splitz_core::sealed_nonce(&padded)),
         }))
     });
 }

@@ -44,6 +44,45 @@ pub fn txid_in_send_order(digest_order_hex: &str) -> Option<String> {
     )
 }
 
+/// One transaction in a wallet's history, as §14.7 reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryTransaction {
+    /// In the order a send reports it: see [`txid_in_send_order`].
+    pub txid: String,
+    /// The height of the block that mined it; zero or less when it is not
+    /// mined.
+    pub mined_height: i64,
+    /// Whether its expiry height passed without it being mined.
+    pub expired_unmined: bool,
+    /// What it brought this account less what it took from it, in zatoshi.
+    pub balance_delta: i64,
+}
+
+/// Whether `row` is a transaction this account received (§14.7): mined, not
+/// expired unmined, and leaving the account with more than it had.
+///
+/// A payment from somebody else spends none of this account's notes, so its
+/// balance change is its outputs to this account; a transaction that also
+/// spent from this account is one of its own, never a payer's.
+pub fn is_received(row: &HistoryTransaction) -> bool {
+    row.mined_height > 0 && !row.expired_unmined && row.balance_delta > 0
+}
+
+/// Every transaction of `history` that [`is_received`] admits, each with its
+/// balance change as the zatoshi it brought, in `history`'s order. Memos are
+/// left unknown; a wallet that reads them adds them.
+pub fn received_transactions(history: &[HistoryTransaction]) -> Vec<IncomingTransaction> {
+    history
+        .iter()
+        .filter(|row| is_received(row))
+        .map(|row| IncomingTransaction {
+            txid: row.txid.clone(),
+            zatoshi: row.balance_delta,
+            memos: None,
+        })
+        .collect()
+}
+
 /// Money this wallet received in one transaction: the sum of that
 /// transaction's outputs to this account, in zatoshi.
 ///

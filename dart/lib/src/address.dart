@@ -94,6 +94,23 @@ const int _f4Max = 4194368;
 
 Never _invalid(String message) => raise(SplitCode.addressInvalid, message);
 
+/// Whether [text] is an address §8.6 decodes as transparent — `p2pkh`,
+/// `p2sh` or `tex` — so that a payment to it is public on chain (§9.1, §14.2).
+///
+/// Only what §8.6 decodes is called transparent: a string it refuses is not,
+/// since nothing is known of it, and every kind §8.6 does not decode that a
+/// reader might is shielded.
+bool isTransparentAddress(String text) {
+  try {
+    return switch (parseAddress(text).kind) {
+      AddressKind.p2pkh || AddressKind.p2sh || AddressKind.tex => true,
+      AddressKind.sapling || AddressKind.unified => false,
+    };
+  } on SplitError {
+    return false;
+  }
+}
+
 /// Answers §8.6 for [text], or refuses with `address_invalid`.
 ///
 /// The text is taken exactly: no whitespace is trimmed, and Bech32 and

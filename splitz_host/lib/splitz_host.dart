@@ -29,6 +29,7 @@ export 'src/refunds.dart';
 export 'src/activity.dart';
 export 'src/added_people.dart';
 export 'src/relay.dart';
+export 'src/relay_work.dart';
 export 'src/removal_plan.dart';
 export 'src/split_draft.dart';
 export 'src/swap_watch.dart';

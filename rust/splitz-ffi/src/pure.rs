@@ -785,6 +785,15 @@ pub fn proposal_problem(uri: String, outputs: Vec<ffi::ProposedOutput>) -> Optio
     splitz_host::proposal_problem(&uri, &outputs)
 }
 
+/// Why a proposal whose fee is `fee` may not be sent to a payer who reviewed
+/// `reviewed_fee`, both zatoshi, in words for the payer, or `None` when it
+/// may (§14.2). A wallet discards a refused proposal and broadcasts nothing:
+/// the send is a failed one (§14.3).
+#[uniffi::export]
+pub fn fee_raised_problem(reviewed_fee: i64, fee: i64) -> Option<String> {
+    splitz_host::fee_raised_problem(reviewed_fee, fee)
+}
+
 /// The body of a swap provider's answer with HTTP `status`, refused when the
 /// status says no: a 4xx or 5xx body is never read as a quote. The refusal
 /// carries the provider's own `message`; a 5xx is transient.
@@ -845,6 +854,7 @@ pub fn parse_address(address: String) -> Result<ffi::ParsedAddress> {
         kind: parsed.kind.as_str().to_owned(),
         receivers: parsed.receivers,
         can_receive_memo: parsed.can_receive_memo,
+        transparent: splitz_core::is_transparent_address(&address),
     })
 }
 
@@ -1143,6 +1153,32 @@ pub fn txid_in_send_order(digest_order_hex: String) -> Option<String> {
     splitz_core::host::txid_in_send_order(&digest_order_hex)
 }
 
+/// Every transaction of `history` this account received (§14.7): mined, not
+/// expired unmined, and raising the account's balance, which is the zatoshi
+/// it brought. In `history`'s order, memos unknown.
+#[uniffi::export]
+pub fn received_transactions(
+    history: Vec<ffi::HistoryTransaction>,
+) -> Vec<ffi::IncomingTransaction> {
+    let history: Vec<splitz_core::host::HistoryTransaction> = history
+        .into_iter()
+        .map(|h| splitz_core::host::HistoryTransaction {
+            txid: h.txid,
+            mined_height: h.mined_height,
+            expired_unmined: h.expired_unmined,
+            balance_delta: h.balance_delta,
+        })
+        .collect();
+    splitz_core::host::received_transactions(&history)
+        .into_iter()
+        .map(|t| ffi::IncomingTransaction {
+            txid: t.txid,
+            zatoshi: t.zatoshi,
+            memos: t.memos,
+        })
+        .collect()
+}
+
 /// The seed a BIP39 wallet account signs with (§15.1), from its mnemonic,
 /// passphrase and ZIP 32 account index.
 ///
@@ -1233,12 +1269,33 @@ pub fn relay_channel_url(origin: String, channel: String) -> Result<String> {
     )?)
 }
 
-/// The JSON body of `POST <origin>/c/<channel>`, or `None` when `blobs` is
-/// empty and no request is made. A blob over 65536 characters is refused, not
-/// transient, before anything is sent.
+/// The JSON body of `POST <origin>/c/<channel>`, `{"blobs":[…],"work":"…"}`,
+/// stamped (§15.5) for a relay asking `base` leading zero bits — 16, or what
+/// `relay_work_asked` read from a refusal — or `None` when `blobs` is empty
+/// and no request is made. A blob over 65536 characters is refused, not
+/// transient, before anything is sent. The stamp takes about 2^`base` hashes
+/// and more for a large push, so call it off the thread that draws.
 #[uniffi::export]
-pub fn relay_push_body(blobs: Vec<String>) -> Result<Option<String>> {
-    Ok(splitz_host::HttpSplitsRelay::push_body(&blobs)?)
+pub fn relay_push_body(channel: String, blobs: Vec<String>, base: u32) -> Result<Option<String>> {
+    Ok(splitz_host::HttpSplitsRelay::push_body(
+        &channel, &blobs, base,
+    )?)
+}
+
+/// The seconds between one sync of every held bill and the next (§15.5): one
+/// interval whatever is on screen, and a write pushed at the next tick.
+#[uniffi::export]
+pub fn relay_sync_seconds() -> u32 {
+    splitz_host::RELAY_SYNC_SECONDS
+}
+
+/// The base a relay that refused a push asks for now, read from the body it
+/// answered with, when it is above `done` and at most 40; `None` otherwise.
+/// A wallet stamps the push once more at that base (`relay_push_body`) and
+/// sends it again; a second refusal stands.
+#[uniffi::export]
+pub fn relay_work_asked(body: String, done: u32) -> Option<u32> {
+    splitz_host::HttpSplitsRelay::work_asked(&body, done)
 }
 
 /// Reads the body the relay answered a push with, whatever the HTTP status.
@@ -2079,6 +2136,11 @@ pub fn rate_figure(rate: ffi::ExchangeRate) -> String {
 /// obligation was made with (`obligation_via`, empty for `obligation_of`),
 /// and `lower_words` the screen's words for a recipient paid by a payout
 /// other than their first (§14.8); empty words are a finding when one is.
+/// `unexplained_words` are the screen's words for a payment carrying more
+/// than the bill's debts explain (§6), and `public_words` its words that a
+/// payment is public on chain, shown once for each output to a transparent
+/// address (`parse_address`'s `transparent`); empty words are a finding
+/// when one is.
 ///
 /// The strings are joined with a line break and each fact is looked for as a
 /// case-sensitive substring: an amount as [`render_amount`] writes it with no
@@ -2102,6 +2164,7 @@ pub fn check_payer_review(
     via: HashMap<String, i64>,
     lower_words: String,
     unexplained_words: String,
+    public_words: String,
 ) -> Result<Vec<ffi::ReviewFinding>> {
     let obligation = payer_obligation(&obligation)?;
     let folded = folded_bill(&facts, &bill_id, &entries)?;
@@ -2115,6 +2178,7 @@ pub fn check_payer_review(
         &via,
         &lower_words,
         &unexplained_words,
+        &public_words,
     )?;
     Ok(found.into_iter().map(review_finding).collect())
 }
@@ -2178,6 +2242,7 @@ fn review_finding(f: splitz_host::ReviewFinding) -> ffi::ReviewFinding {
             splitz_host::ReviewRule::Awaiting => ffi::ReviewRule::Awaiting,
             splitz_host::ReviewRule::LowerPreference => ffi::ReviewRule::LowerPreference,
             splitz_host::ReviewRule::Unexplained => ffi::ReviewRule::Unexplained,
+            splitz_host::ReviewRule::PublicOutput => ffi::ReviewRule::PublicOutput,
             splitz_host::ReviewRule::Rate => ffi::ReviewRule::Rate,
             splitz_host::ReviewRule::Output => ffi::ReviewRule::Output,
             splitz_host::ReviewRule::PayeeZec => ffi::ReviewRule::PayeeZec,

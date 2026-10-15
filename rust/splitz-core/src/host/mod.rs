@@ -26,8 +26,8 @@ pub mod sharing;
 pub mod totals;
 
 pub use arrivals::{
-    arrivals_for, memo_txids, txid_in_send_order, txid_key, zatoshi_covers_payment, Arrival,
-    Arrivals, IncomingTransaction,
+    arrivals_for, is_received, memo_txids, received_transactions, txid_in_send_order, txid_key,
+    zatoshi_covers_payment, Arrival, Arrivals, HistoryTransaction, IncomingTransaction,
 };
 pub use bill_log::{BillLog, FoldedBill, CODES_AN_ENTRY_OUTGROWS};
 pub use closing::{close_for, expense_refusal, reopen_for, settle_refusal};

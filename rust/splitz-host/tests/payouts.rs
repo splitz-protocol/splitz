@@ -170,3 +170,69 @@ fn a_first_payout_this_wallet_cannot_pay_is_passed_over_for_the_next_it_can() {
     assert_eq!(payout_fallback(&[]), None);
     assert_eq!(payout_fallback(&[no("a")]), None);
 }
+
+const UA: &str = "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf";
+const ZS: &str = "zs1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpq6d8g";
+const T1: &str = "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs";
+const T3: &str = "t3JZcvsuaXE6ygokL4XUiZSTrQBUoPYFnXJ";
+const TEX: &str = "tex1s2rt77ggv6q989lr49rkgzmh5slsksa9khdgte";
+
+fn ranked(declared: Vec<Payout>, first: Payout, pay_to: Option<&str>) -> Vec<String> {
+    ranked_payouts(&who(pay_to, declared), &first)
+        .into_iter()
+        .map(|p| match p.address {
+            Some(a) if p.kind == "zec" => a.chars().take(4).collect(),
+            _ => p.kind,
+        })
+        .collect()
+}
+
+#[test]
+fn a_transparent_zec_payout_goes_after_the_shielded_one_never_ahead() {
+    assert_eq!(ranked(vec![zec(UA)], zec(T1), None), ["u1l8", "t1Hs"]);
+    assert_eq!(
+        ranked(
+            vec![swap("USDC", "eth", "0xa"), zec(UA), cash()],
+            zec(T1),
+            None
+        ),
+        ["swap", "u1l8", "t1Hs", "cash"]
+    );
+    assert_eq!(ranked(vec![], zec(T1), Some(UA)), ["u1l8", "t1Hs"]);
+}
+
+#[test]
+fn p2sh_and_tex_are_transparent_and_replace_a_transparent_one_in_place() {
+    assert_eq!(
+        ranked(vec![zec(UA), zec(T1)], zec(T3), None),
+        ["u1l8", "t3JZ"]
+    );
+    assert_eq!(
+        ranked(vec![cash(), zec(UA), zec(T1)], zec(TEX), None),
+        ["cash", "u1l8", "tex1"]
+    );
+}
+
+#[test]
+fn a_transparent_zec_payout_with_no_shielded_one_goes_first() {
+    assert_eq!(ranked(vec![cash()], zec(T1), None), ["t1Hs", "cash"]);
+    assert_eq!(ranked(vec![], zec(T1), None), ["t1Hs"]);
+}
+
+#[test]
+fn a_shielded_payout_replaces_only_a_shielded_one_and_goes_first() {
+    assert_eq!(ranked(vec![zec(T1)], zec(UA), None), ["u1l8", "t1Hs"]);
+    assert_eq!(
+        ranked(vec![zec(UA), zec(T1), cash()], zec(ZS), None),
+        ["zs1q", "t1Hs", "cash"]
+    );
+}
+
+#[test]
+fn an_address_section_8_6_does_not_decode_is_not_taken_for_transparent() {
+    assert_eq!(ranked(vec![zec("zA")], zec(T1), None), ["zA", "t1Hs"]);
+    assert_eq!(
+        ranked(vec![zec(T1), zec("zA")], zec(UA), None),
+        ["u1l8", "t1Hs"]
+    );
+}

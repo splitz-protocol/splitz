@@ -28,15 +28,16 @@ class SplitsSealing {
 
   final Cipher _cipher;
 
-  /// Blob layout version, the first byte of every blob, so a later change to
-  /// the framing or the cipher is recognised rather than fed to the wrong
-  /// decoder.
+  /// Blob layout version this writes, the first byte of every blob, so a
+  /// later change to the framing or the cipher is recognised rather than fed
+  /// to the wrong decoder. [open] reads every version from 1 to this one.
   ///
   /// §11.3 fixes it; it is not restated here.
   static const int blobVersion = protocol.sealedVersion;
 
   /// Seals one entry into a base64url string safe for a URL, a QR payload or a
-  /// JSON field.
+  /// JSON field. Raises a `sealed_too_large` [protocol.SplitError] for an
+  /// entry no bucket holds (§11.3).
   ///
   /// The nonce is derived from the sealed bytes, so the same entry always seals
   /// to the same blob while two different entries never share a nonce — the one
@@ -52,7 +53,10 @@ class SplitsSealing {
     // bytes, so a device ordering keys differently would seal one entry into a
     // second blob that every device opens perfectly and none can recognise as
     // the same entry.
-    final clear = utf8.encode(protocol.canonicalJson(entry));
+    // Padded to a bucket (§11.3), so the blob's size says which bucket the
+    // entry fell in and not how long it is. An entry over the largest bucket
+    // raises `sealed_too_large`.
+    final clear = protocol.padSealed(protocol.sealedPlaintext(entry));
     final box = await _cipher.encrypt(
       clear,
       secretKey: key,
@@ -76,9 +80,9 @@ class SplitsSealing {
     if (bytes.isEmpty) throw const SealingException('Empty blob');
 
     final version = bytes[0];
-    if (version != blobVersion) {
+    if (version < 1 || version > blobVersion) {
       throw SealingException(
-        'Blob is format v$version; this build reads v$blobVersion',
+        'Blob is format v$version; this build reads v1 to v$blobVersion',
       );
     }
 
@@ -111,9 +115,16 @@ class SplitsSealing {
     // or crafted by a key-holder to break decoding — is reported the same way,
     // so a sync skips it like any other unopenable blob instead of the
     // exception aborting the whole pull.
+    final List<int> plain;
+    try {
+      plain = version == 1 ? clear : protocol.unpadSealed(clear);
+    } on protocol.SplitError catch (e) {
+      throw SealingException('Opened blob is not padded as §11.3 pads: $e');
+    }
+
     final Object? decoded;
     try {
-      decoded = jsonDecode(utf8.decode(clear));
+      decoded = jsonDecode(utf8.decode(plain));
     } on FormatException catch (e) {
       throw SealingException('Opened blob is not JSON: ${e.message}');
     }

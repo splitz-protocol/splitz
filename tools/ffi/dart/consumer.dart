@@ -564,8 +564,26 @@ void main(List<String> args) {
     const {},
     '',
     '',
+    '',
   );
   check('a screen showing every fact passes', shown.isEmpty, '$screen');
+  check(
+    'a transparent address is public, a shielded one is not (§9.1)',
+    parseAddress('t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs').transparent &&
+        !parseAddress(
+          'u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf',
+        ).transparent,
+    'parseAddress.transparent',
+  );
+  check(
+    'a relay sync is on a fixed tick; a refusal names the work it asks (§15.5)',
+    relaySyncSeconds() == 30 &&
+        relayWorkAsked('{"error":"not enough work","work":18}', 16) == 18 &&
+        relayWorkAsked('{"error":"not enough work","work":16}', 16) == null &&
+        relayWorkAsked('{"error":"x","work":41}', 16) == null &&
+        relayWorkAsked('{"ok":true}', 16) == null,
+    '${relayWorkAsked('{"work":18}', 16)}',
+  );
   final noAddress = checkPayerReview(
     ben.facts(),
     billId,
@@ -574,6 +592,7 @@ void main(List<String> args) {
     [for (final l in screen) l == 'to u1ana' ? 'to your contact' : l],
     const {},
     const {},
+    '',
     '',
     '',
   );
@@ -1322,6 +1341,41 @@ void main(List<String> args) {
     txidInSendOrder(digest) == 'ab${'00' * 31}' &&
         txidInSendOrder('abc') == null,
     '${txidInSendOrder(digest)}',
+  );
+  final raised = feeRaisedProblem(10000, 10001);
+  check(
+    'a fee above the one reviewed is refused, the one reviewed is not (§14.2)',
+    raised != null &&
+        raised.contains('Nothing was sent') &&
+        feeRaisedProblem(10000, 10000) == null,
+    '$raised',
+  );
+  final arrived = receivedTransactions([
+    HistoryTransaction(
+      txid: 'ab' * 32,
+      minedHeight: 7,
+      expiredUnmined: false,
+      balanceDelta: 5000,
+    ),
+    HistoryTransaction(
+      txid: 'cd' * 32,
+      minedHeight: 0,
+      expiredUnmined: false,
+      balanceDelta: 5000,
+    ),
+    HistoryTransaction(
+      txid: 'ef' * 32,
+      minedHeight: 7,
+      expiredUnmined: false,
+      balanceDelta: -100,
+    ),
+  ]);
+  check(
+    'only a mined row raising the balance is received (§14.7)',
+    arrived.length == 1 &&
+        arrived.first.txid == 'ab' * 32 &&
+        arrived.first.zatoshi == 5000,
+    '${[for (final t in arrived) t.txid]}',
   );
   check(
     'a typed figure is read in integers (§2.1)',

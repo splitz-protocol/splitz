@@ -8,6 +8,14 @@ import 'relay.dart';
 import 'sealing.dart';
 import 'store.dart';
 
+/// The seconds between one sync of every held bill and the next (§15.5).
+///
+/// One interval for every bill, whatever is on screen, and a write waits for
+/// the next tick: a relay sees when a channel is read and written, and a
+/// client that polls only the open bill, or pushes the moment something is
+/// typed, tells it which bill is being looked at and when.
+const int relaySyncSeconds = 30;
+
 /// Syncs one bill through a relay.
 ///
 /// Everything promised about the relay lives here: entries are sealed under the
@@ -94,8 +102,14 @@ class SplitsSync {
     if (entries.isEmpty) return entries;
     final key = await _requireKey(billId);
     await _refuseForeignKey(billId, key, entries);
+    // An entry no bucket holds is not pushed, and the rest still are: this
+    // device never writes one (`signEntry` refuses it), but a peer's can
+    // arrive through an older frame, and one entry must not hold back every
+    // other this device has to send.
     final blobs = [
-      for (final entry in entries) await _sealing.seal(entry, key),
+      for (final entry in entries)
+        if (protocol.sealedSizeRefusal(entry) == null)
+          await _sealing.seal(entry, key),
     ];
     final fresh = [
       for (final blob in blobs)

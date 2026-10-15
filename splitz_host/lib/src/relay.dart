@@ -5,6 +5,8 @@ import 'dart:convert';
 
 import 'package:splitz_core/splitz_core.dart' as splitz;
 
+import 'relay_work.dart';
+
 /// A dumb store of ciphertext blobs, grouped into per-bill channels.
 ///
 /// It moves bytes for the participant who left before dessert and cannot be
@@ -107,8 +109,10 @@ typedef JsonGet = Future<String> Function(Uri url);
 
 /// A relay backed by an HTTP blob store.
 ///
-/// Two routes under [origin]: `POST /c/<channel>` with `{"blobs":[…]}` adds
-/// blobs, `GET /c/<channel>` returns them. The server stores opaque bytes keyed
+/// Two routes under [origin]: `POST /c/<channel>` with
+/// `{"blobs":[…],"work":"…"}` adds blobs, `GET /c/<channel>` returns them. `work` is a
+/// stamp for those blobs ([relayWorkStamp]): what a push carries in place of
+/// anything that names its sender. The server stores opaque bytes keyed
 /// by the channel hash — never the bill id, never plaintext.
 ///
 /// The two calls are injected rather than made here, so bill sync takes the
@@ -145,12 +149,16 @@ class HttpSplitsRelay implements SplitsRelay {
   /// so a push is split into requests that each fit. Mirrored by the server.
   static const int maxBodyBytes = 32 * 1024 * 1024;
 
+  /// The bytes a body keeps free for its stamp: `,"work":"`, at most 20
+  /// digits, and `"`.
+  static const int workRoom = 32;
+
   /// [blobs] as the push bodies that carry them, in order, each at most
-  /// [maxBodyBytes]. Every blob is at most [maxBlobChars], so every body
-  /// holds at least one.
+  /// [maxBodyBytes] once stamped. Every blob is at most [maxBlobChars], so
+  /// every body holds at least one.
   static List<String> pushBodies(List<String> blobs) {
     const open = '{"blobs":[', close = ']}';
-    const empty = open.length + close.length;
+    const empty = open.length + close.length + workRoom;
     final bodies = <String>[];
     var batch = <String>[];
     var size = empty;
@@ -186,14 +194,36 @@ class HttpSplitsRelay implements SplitsRelay {
       }
     }
     for (final request in pushBodies(blobs)) {
-      final String body;
-      try {
-        body = await _post(_channelUrl(channel), request);
-      } on Object catch (e) {
-        throw SplitsRelayException('Could not reach the relay: $e');
-      }
-      final decoded = _decode(body);
-      if (decoded['ok'] != true) {
+      final batch = [
+        for (final b in (jsonDecode(request) as Map)['blobs'] as List)
+          b as String,
+      ];
+      final chars = batch.fold<int>(0, (n, b) => n + b.length);
+      var base = relayWorkBase;
+      // A relay that asks for more work than was done answers what it asks
+      // for now, and the push is stamped once more for that.
+      for (var attempt = 0; ; attempt++) {
+        final nonce = await relayWorkStamp(
+          channel,
+          batch,
+          relayWorkBits(chars, base: base),
+        );
+        final String body;
+        try {
+          body = await _post(
+            _channelUrl(channel),
+            jsonEncode({'blobs': batch, 'work': nonce}),
+          );
+        } on Object catch (e) {
+          throw SplitsRelayException('Could not reach the relay: $e');
+        }
+        final decoded = _decode(body);
+        if (decoded['ok'] == true) break;
+        final asked = decoded['work'];
+        if (attempt == 0 && asked is int && asked > base && asked <= 40) {
+          base = asked;
+          continue;
+        }
         throw SplitsRelayException('The relay refused the push: $body');
       }
     }

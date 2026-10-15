@@ -141,3 +141,103 @@ fn anything_a_key_holder_seals_comes_back_entry_shaped_or_not() {
     let blob = Sealing.seal(&not_an_entry, &key).unwrap();
     assert_eq!(Sealing.open(&blob, &key).unwrap(), not_an_entry);
 }
+
+/// A frame of `version` sealing `clear` as it is, padded or not.
+fn seal_raw(version: u8, clear: &[u8], key: &str) -> String {
+    use chacha20poly1305::aead::Aead;
+    use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
+    let cipher = XChaCha20Poly1305::new(base64url_decode(key).unwrap().as_slice().into());
+    let nonce = splitz_core::sealed_nonce(clear);
+    let body = cipher.encrypt(XNonce::from_slice(&nonce), clear).unwrap();
+    let mut raw = vec![version];
+    raw.extend_from_slice(&nonce);
+    raw.extend_from_slice(&body);
+    base64url_encode(&raw)
+}
+
+fn sealed_bytes(blob: &str) -> usize {
+    base64url_decode(blob).unwrap().len() - 41
+}
+
+#[test]
+fn a_blob_is_as_long_as_its_bucket_not_its_entry() {
+    let key = a_key(3);
+    assert_eq!(
+        sealed_bytes(&Sealing.seal(&an_entry("Ana"), &key).unwrap()),
+        512
+    );
+    assert_eq!(
+        sealed_bytes(&Sealing.seal(&an_entry(&"A".repeat(40)), &key).unwrap()),
+        512
+    );
+    assert_eq!(
+        sealed_bytes(&Sealing.seal(&an_entry(&"A".repeat(600)), &key).unwrap()),
+        1024
+    );
+    assert_eq!(
+        base64url_decode(&Sealing.seal(&an_entry("Ana"), &key).unwrap()).unwrap()[0],
+        2
+    );
+}
+
+#[test]
+fn a_version_1_blob_sealed_unpadded_still_opens() {
+    let key = a_key(3);
+    let entry = an_entry("Ana");
+    let v1 = seal_raw(1, &splitz_core::sealed_plaintext(&entry).unwrap(), &key);
+    assert_eq!(Sealing.open(&v1, &key).unwrap(), entry);
+}
+
+#[test]
+fn a_version_2_blob_padded_any_other_way_is_refused() {
+    let key = a_key(3);
+    let plain = splitz_core::sealed_plaintext(&an_entry("Ana")).unwrap();
+    let mut short = plain.clone();
+    short.push(0x80);
+    short.resize(510, 0);
+    let mut no_marker = plain.clone();
+    no_marker.resize(512, 0);
+    for clear in [plain.clone(), short, no_marker] {
+        assert!(
+            Sealing.open(&seal_raw(2, &clear, &key), &key).is_err(),
+            "{}",
+            clear.len()
+        );
+    }
+    let good = splitz_core::pad_sealed(&plain).unwrap();
+    assert_eq!(
+        Sealing.open(&seal_raw(2, &good, &key), &key).unwrap(),
+        an_entry("Ana")
+    );
+}
+
+#[test]
+fn a_version_of_zero_is_refused() {
+    let key = a_key(3);
+    let v0 = seal_raw(
+        0,
+        &splitz_core::sealed_plaintext(&an_entry("Ana")).unwrap(),
+        &key,
+    );
+    assert!(Sealing.open(&v0, &key).is_err());
+}
+
+#[test]
+fn an_entry_no_bucket_holds_is_refused_one_byte_under_is_not() {
+    let key = a_key(3);
+    // `{"n":"…"}` is 8 bytes around the string; the marker is one more.
+    let sized = |bytes: usize| json!({"n": "x".repeat(bytes - 8)});
+    assert_eq!(
+        splitz_core::sealed_size_refusal(&sized(32767)).unwrap(),
+        None
+    );
+    assert_eq!(
+        sealed_bytes(&Sealing.seal(&sized(32767), &key).unwrap()),
+        32768
+    );
+    assert_eq!(
+        splitz_core::sealed_size_refusal(&sized(32768)).unwrap(),
+        Some("sealed_too_large")
+    );
+    assert!(Sealing.seal(&sized(32768), &key).is_err());
+}

@@ -41,7 +41,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use splitz_core::host::{FoldedBill, PayerObligation};
-use splitz_core::{render_amount, ExchangeRate, PaymentRecord};
+use splitz_core::{is_transparent_address, render_amount, ExchangeRate, PaymentRecord};
 
 use crate::currencies::currency_exponent;
 
@@ -60,6 +60,9 @@ pub enum ReviewRule {
     /// Every recipient paid more than the debts the bill records explain
     /// (§6).
     Unexplained,
+    /// Every output to a transparent address: a payment public on chain
+    /// (§9.1).
+    PublicOutput,
     /// The rate the request was priced at.
     Rate,
     /// The ZEC amount and address of every output.
@@ -109,9 +112,15 @@ pub const REPLACED_ADDRESS_WORDS: &str = "replaced_address";
 /// replaced, which it shows once for each payee whose address was. `via` is the payer's choice of payouts the obligation was rendered with
 /// (`obligation_via`), and `lower_words` the screen's words for a recipient
 /// paid by one other than their first; a choice for somebody the obligation
-/// does not pay needs nothing shown. Findings come in the order of §14.2's list; within a rule, in the order
-/// the obligation or the fold gives the facts. Refused only for an output
-/// whose zatoshi §8.1 cannot render, which no rendered obligation carries.
+/// does not pay needs nothing shown. `unexplained_words` are the screen's
+/// words for a payment carrying more than the debts the bill records explain
+/// (§6), and `public_words` its words that a payment is public on chain,
+/// shown once for each output to a transparent address
+/// ([`is_transparent_address`]) beside the name of who it pays. Findings come
+/// in the order of §14.2's list; within a rule, in the order the obligation
+/// or the fold gives the facts. Refused only for an output whose zatoshi §8.1
+/// cannot render, which no rendered obligation carries.
+#[allow(clippy::too_many_arguments)]
 pub fn check_payer_review(
     obligation: &PayerObligation,
     folded: &FoldedBill,
@@ -120,6 +129,7 @@ pub fn check_payer_review(
     via: &BTreeMap<String, i64>,
     lower_words: &str,
     unexplained_words: &str,
+    public_words: &str,
 ) -> splitz_core::Result<Vec<ReviewFinding>> {
     let text = visible_text.join("\n");
     let names: BTreeMap<&str, &str> = folded
@@ -261,6 +271,37 @@ pub fn check_payer_review(
         );
     }
 
+    // Said once for each public output, so one warning cannot stand for a
+    // second recipient paid in the open.
+    let request = &obligation.request;
+    let publics: Vec<&String> = request
+        .payments
+        .iter()
+        .zip(&request.recipients)
+        .filter(|(payment, _)| is_transparent_address(&payment.address))
+        .map(|(_, to)| to)
+        .collect();
+    for to in &publics {
+        let who = name(to);
+        let shown = text.contains(&who);
+        need(
+            ReviewRule::PublicOutput,
+            "who is paid at a public address".to_owned(),
+            who.clone(),
+            shown,
+        );
+        need(
+            ReviewRule::PublicOutput,
+            format!("that the payment to {who} is public"),
+            if public_words.is_empty() {
+                "public_output".to_owned()
+            } else {
+                public_words.to_owned()
+            },
+            !public_words.is_empty() && text.matches(public_words).count() >= publics.len(),
+        );
+    }
+
     let figure = rate_figure(&obligation.rate);
     let shown = shows_number(&text, &figure);
     need(
@@ -270,7 +311,6 @@ pub fn check_payer_review(
         shown,
     );
 
-    let request = &obligation.request;
     for (payment, to) in request.payments.iter().zip(&request.recipients) {
         let who = name(to);
         let amount = render_amount(payment.zatoshi)?;

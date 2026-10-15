@@ -7,7 +7,7 @@ import base64, hashlib, json, pathlib, sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from _spec import (ADDRESSES, non_canonical, encode_payload, decode_payload, parse_sealed_frame,
                    b64url, canonical_json, check_entry, seal_log, Refused,
-                   PAYLOAD_CAP, NONCE_BYTES, TAG_BYTES)
+                   PAYLOAD_CAP, NONCE_BYTES, TAG_BYTES, pad_sealed, unpad_sealed)
 
 AT = "2026-10-28T19:30:00.000Z"
 ENTRY = {"v": 1, "id": "e1", "author": "ana", "kind": "addExpense", "at": AT}
@@ -207,10 +207,11 @@ def sealed_cases():
 
     out = []
     for name, text in [
-        ("a_well_formed_frame",        frame(1)),
-        ("the_shortest_legal_frame",   frame(1, NONCE_BYTES, TAG_BYTES)),
+        ("a_well_formed_frame",        frame(2)),
+        ("a_version_1_frame_still_reads", frame(1)),
+        ("the_shortest_legal_frame",   frame(2, NONCE_BYTES, TAG_BYTES)),
         ("a_version_of_zero",          frame(0)),
-        ("a_version_from_the_future",  frame(2)),
+        ("a_version_from_the_future",  frame(3)),
         ("too_short_to_hold_a_nonce",  b64url(bytes([1]) + b"n" * 10)),
         ("too_short_to_hold_a_tag",    b64url(bytes([1]) + b"n" * NONCE_BYTES + b"c" * 4)),
         ("not_base64url",              "!!!not base64!!!"),
@@ -225,6 +226,24 @@ def sealed_cases():
             case["error"] = r.code
         out.append(case)
     return out
+
+
+def seal_case(name, entry):
+    """One entry sealed: its canonical plaintext, how long it pads to, and
+    the nonce of the padded bytes — what the cipher is given."""
+    plaintext = canonical_json(entry).encode("utf-8")
+    case = {"name": name, "entry": entry}
+    try:
+        padded = pad_sealed(plaintext)
+    except Refused as r:
+        case["error"] = r.code
+        return case
+    case["expect"] = {
+        "plaintext": canonical_json(entry),
+        "paddedBytes": len(padded),
+        "nonce": b64url(hashlib.sha256(padded).digest()[:NONCE_BYTES]),
+    }
+    return case
 
 
 def seal_cases():
@@ -242,15 +261,30 @@ def seal_cases():
         ("a_unicode_name", {"v": 1, "kind": "joinBill", "name": "Ana\u00e9"}),
         ("an_empty_object", {}),
     ]:
-        plaintext = canonical_json(entry).encode("utf-8")
-        out.append({
-            "name": name,
-            "entry": entry,
-            "expect": {
-                "plaintext": canonical_json(entry),
-                "nonce": b64url(hashlib.sha256(plaintext).digest()[:NONCE_BYTES]),
-            },
-        })
+        out.append(seal_case(name, entry))
+    # Section 11.3's buckets, at and either side of a boundary. `{"n":"x…"}`
+    # is 8 bytes of JSON around the string, and the marker takes one more.
+    for name, length in [
+        ("fills_the_first_bucket", 511),
+        ("one_over_the_first_bucket", 512),
+        ("fills_the_largest_bucket", 32767),
+        ("one_over_the_largest_bucket", 32768),
+    ]:
+        out.append(seal_case(name, {"n": "x" * (length - 8)}))
+    for name, padded in [
+        ("a_padded_plaintext_opens", b"{}" + b"\x80" + b"\x00" * 509),
+        ("padding_that_is_only_the_marker", b"{" + b"\x00" * 510 + b"\x80"),
+        ("a_length_no_bucket_has", b"{}" + b"\x80" + b"\x00" * 508),
+        ("no_marker_before_the_zeros", b"{}" + b"\x00" * 510),
+        ("a_marker_followed_by_a_byte", b"{}" + b"\x80" + b"\x00" * 508 + b"\x01"),
+        ("all_zeros", b"\x00" * 512),
+    ]:
+        case = {"name": name, "padded": b64url(padded)}
+        try:
+            case["expect"] = {"plaintext": unpad_sealed(padded).decode("utf-8")}
+        except Refused as r:
+            case["error"] = r.code
+        out.append(case)
     for name, bill_id in [
         ("a_derived_bill_id", "HqA9d4fLlNHBmVZHGH3s6w"),
         ("a_short_id", "b"),

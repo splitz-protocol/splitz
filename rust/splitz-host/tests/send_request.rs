@@ -5,8 +5,8 @@ use std::cell::Cell;
 use splitz_core::host::ProposedOutput;
 use splitz_core::{render_uri, Zip321Payment};
 use splitz_host::{
-    proposal_problem, send_payment_request, swap_answer, HostError, WalletSendOutcome,
-    WalletSendPhase,
+    fee_raised_problem, proposal_problem, send_payment_request, send_reviewed_payment_request,
+    swap_answer, HostError, WalletSendOutcome, WalletSendPhase,
 };
 
 fn request() -> String {
@@ -148,4 +148,73 @@ fn a_swap_answer_is_read_by_its_status_first() {
     );
     assert!(refusal(503, "upstream down").1);
     assert!(swap_answer(200, &[0xff, 0xfe, 0x41]).unwrap().contains('A'));
+}
+
+#[test]
+fn a_raised_fee_is_refused_in_words_and_an_equal_or_lower_one_is_not() {
+    assert_eq!(
+        fee_raised_problem(10000, 15000).as_deref(),
+        Some(
+            "The fee went up from 0.0001 ZEC to 0.00015 ZEC since you reviewed this \
+             payment. Nothing was sent; review it again."
+        )
+    );
+    assert!(fee_raised_problem(10000, 10001).is_some());
+    assert_eq!(fee_raised_problem(10000, 10000), None);
+    assert_eq!(fee_raised_problem(10000, 5000), None);
+}
+
+#[test]
+fn a_fee_figure_no_amount_renders_is_said_in_zatoshi() {
+    assert!(fee_raised_problem(0, 1)
+        .unwrap()
+        .starts_with("The fee went up from 0 zatoshi to 0.00000001 ZEC"));
+    assert!(fee_raised_problem(-5, splitz_core::MAX_ZATOSHI + 1)
+        .unwrap()
+        .contains("-5 zatoshi to 2100000000000001 zatoshi"));
+}
+
+fn reviewed_send(fee: i64, read: Vec<ProposedOutput>) -> (WalletSendOutcome, Vec<String>) {
+    let calls = std::cell::RefCell::new(Vec::new());
+    let outcome = send_reviewed_payment_request(
+        &request(),
+        10000,
+        || Ok(read),
+        || {
+            calls.borrow_mut().push("propose".to_owned());
+            Ok((7, fee))
+        },
+        |p: i32| calls.borrow_mut().push(format!("discard {p}")),
+        |p: i32| {
+            calls.borrow_mut().push(format!("broadcast {p}"));
+            sent()
+        },
+    );
+    (outcome, calls.into_inner())
+}
+
+#[test]
+fn a_raised_fee_discards_the_proposal_and_broadcasts_nothing() {
+    let both = vec![out("u1ben", 9246), out("u1ana", 7004)];
+    let (outcome, calls) = reviewed_send(10001, both);
+    assert_eq!(outcome.phase, WalletSendPhase::Failed);
+    assert!(outcome.error.unwrap().contains("Nothing was sent"));
+    assert_eq!(calls, ["propose", "discard 7"]);
+}
+
+#[test]
+fn the_reviewed_fee_or_less_is_broadcast() {
+    for fee in [10000, 9999, 0] {
+        let both = vec![out("u1ben", 9246), out("u1ana", 7004)];
+        let (outcome, calls) = reviewed_send(fee, both);
+        assert_eq!(outcome.phase, WalletSendPhase::Succeeded, "{fee}");
+        assert_eq!(calls, ["propose", "broadcast 7"]);
+    }
+}
+
+#[test]
+fn a_request_read_differently_builds_nothing_to_discard() {
+    let (outcome, calls) = reviewed_send(10000, vec![out("u1ana", 7004)]);
+    assert_eq!(outcome.phase, WalletSendPhase::Failed);
+    assert!(calls.is_empty());
 }

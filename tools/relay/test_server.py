@@ -13,12 +13,29 @@ import subprocess
 import sys
 import tempfile
 import threading
+import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import server  # noqa: E402
 
 CH = "a" * 64
+
+
+def stamp(channel, blobs, bits):
+    """The first nonce from zero whose stamp has `bits` leading zero bits."""
+    n = 0
+    while server.work_done(channel, blobs, str(n)) < bits:
+        n += 1
+    return str(n)
+
+
+def short_stamp(channel, blobs, bits):
+    """A nonce whose stamp has exactly `bits - 1` leading zero bits."""
+    n = 0
+    while server.work_done(channel, blobs, str(n)) != bits - 1:
+        n += 1
+    return str(n)
 
 
 def reset(state_file):
@@ -119,7 +136,8 @@ def a_stop_by_any_signal_keeps_the_last_push():
                 origin = relay.stdout.readline().split()[-1]
                 push = urllib.request.Request(
                     f"{origin}/c/{CH}",
-                    data=json.dumps({"blobs": [stop.name]}).encode(),
+                    data=json.dumps({"blobs": [stop.name],
+                                     "work": stamp(CH, [stop.name], 16)}).encode(),
                     method="POST",
                 )
                 with urllib.request.urlopen(push) as answer:
@@ -143,8 +161,62 @@ def a_stop_by_any_signal_keeps_the_last_push():
                 assert json.load(f) == {CH: [stop.name]}, stop.name
 
 
+def a_push_carries_enough_work():
+    """§15.5. Unstamped, short, replayed for other blobs, or not a nonce is
+    refused; a stamp at the bits asked, sized to the push, is stored; the
+    legacy flag takes an unstamped push."""
+    assert stamp(CH, ["x"], 16) == "127719"
+    assert stamp(CH, ["x", "y"], 16) == "103390"
+    # One list of blobs re-split into another is another stamp.
+    assert server.work_done(CH, ["a", "b"], stamp(CH, ["a\nb"], 16)) < 16
+    assert server.work_bits(0, 16) == 16 and server.work_bits(1024, 16) == 16
+    assert server.work_bits(1025, 16) == 17 and server.work_bits(2049, 16) == 18
+    assert server.work_base(0, 512) == 16 and server.work_base(256, 512) == 20
+    assert server.work_base(511, 512) == 23
+    here = os.path.dirname(os.path.abspath(__file__))
+
+    def post(origin, body):
+        request = urllib.request.Request(
+            f"{origin}/c/{CH}", data=json.dumps(body).encode(), method="POST")
+        try:
+            with urllib.request.urlopen(request) as answer:
+                return answer.status, json.load(answer)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    for legacy in (False, True):
+        relay = subprocess.Popen(
+            [sys.executable, os.path.join(here, "server.py"), "--port", "0"]
+            + (["--legacy-unstamped"] if legacy else []),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        try:
+            origin = relay.stdout.readline().split()[-1]
+            if legacy:
+                assert post(origin, {"blobs": ["old"]})[0] == 200
+                continue
+            assert post(origin, {"blobs": ["u"]}) == (
+                428, {"error": "a push carries work", "work": 16})
+            assert post(origin, {"blobs": ["s"], "work": short_stamp(CH, ["s"], 16)})[0] == 428
+            assert post(origin, {"blobs": ["r"], "work": stamp(CH, ["x"], 16)})[0] == 428
+            assert post(origin, {"blobs": ["x"], "work": "abc"})[0] == 400
+            assert post(origin, {"blobs": ["x"], "work": 127719})[0] == 400
+            assert post(origin, {"blobs": ["x"], "work": None})[0] == 400
+            assert post(origin, {"blobs": ["x"], "work": stamp(CH, ["x"], 16)}) == (
+                200, {"ok": True})
+            big = ["b" * 2049]
+            assert post(origin, {"blobs": big, "work": short_stamp(CH, big, 18)})[0] == 428
+            assert post(origin, {"blobs": big, "work": stamp(CH, big, 18)})[0] == 200
+        finally:
+            relay.kill()
+            relay.wait()
+            relay.stdout.close()
+            relay.stderr.close()
+
+
 if __name__ == "__main__":
     for test in (
+        a_push_carries_enough_work,
         a_stop_during_a_save_keeps_every_push,
         a_failed_save_is_tried_again,
         a_stop_by_any_signal_keeps_the_last_push,

@@ -6,11 +6,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /// A SPEC.md §15.5 relay over HTTP: `POST <origin>/c/<channel>` with
-/// `{"blobs":[…]}` adds blobs, `GET <origin>/c/<channel>` returns every blob
+/// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>` returns every blob
 /// the channel holds.
 ///
 /// The library decides what goes on the wire and what an answer means
-/// (`relayChannelUrl`, `relayPushBody`, `relayPushAnswer`,
+/// (`relayChannelUrl`, `relayPushBody`, `relayWorkAsked`, `relayPushAnswer`,
 /// `relayFetchAnswer`); this class moves the bytes with `HttpURLConnection`,
 /// which every JVM and every Android API level carries. An answer is read
 /// whatever its HTTP status: the body says whether the relay took a push.
@@ -33,10 +33,18 @@ class SplitzRelay(
 
     /// Adds `blobs` to `channel`. Pushing a blob the channel already holds
     /// changes nothing, so a retry cannot create a duplicate. An empty list
-    /// makes no request.
+    /// makes no request. The push carries work (§15.5), stamped at 16 bits
+    /// and once more at the base a refusal asks for, so it is slow to call.
     fun push(channel: String, blobs: List<String>) {
-        val body = relayPushBody(blobs) ?: return
-        relayPushAnswer(exchange("POST", relayChannelUrl(origin, channel), body))
+        val url = relayChannelUrl(origin, channel)
+        val body = relayPushBody(channel, blobs, 16u) ?: return
+        val answer = exchange("POST", url, body)
+        val asked = relayWorkAsked(answer, 16u)
+        if (asked == null) {
+            relayPushAnswer(answer)
+            return
+        }
+        relayPushAnswer(exchange("POST", url, relayPushBody(channel, blobs, asked)!!))
     }
 
     /// Every blob `channel` currently holds, including ones the caller

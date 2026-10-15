@@ -1299,3 +1299,19 @@ fn a_device_whose_clock_is_ahead_dates_a_close_by_its_own_clock() {
     let reopen = reopen_for(&ana, &log.fold().unwrap()).unwrap().unwrap();
     assert_eq!(reopen["at"].as_str().unwrap(), ana.now());
 }
+
+#[test]
+fn sign_entry_refuses_an_entry_no_sealed_update_carries_signed_or_not() {
+    let ana = FakeHost::new("ana");
+    let huge = join_bill(&ana, Some(&"A".repeat(33000)), None, None, None).unwrap();
+    let err = sign_entry(&ana, &huge, TEST_BILL).unwrap_err();
+    assert_eq!(err.code, "sealed_too_large");
+    let signer = signing_host("ana", &fake_key("ana"), Some("u1ana"));
+    let err = sign_entry(&signer, &huge, TEST_BILL).unwrap_err();
+    assert_eq!(err.code, "sealed_too_large");
+    let join = join_bill(&signer, Some("Ana"), Some("u1ana"), None, None).unwrap();
+    assert!(sign_entry(&signer, &join, TEST_BILL)
+        .unwrap()
+        .get("sig")
+        .is_some());
+}

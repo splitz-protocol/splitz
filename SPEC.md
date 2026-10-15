@@ -929,6 +929,21 @@ A record that declares no payouts declares its `payTo` as one `zec` payout for
 this purpose, and one with neither declares nothing. `rankedPayouts` /
 `ranked_payouts` takes a participant and the new payout and returns that list.
 
+**Shielded first; transparent by opting in.** A `zec` payout whose address
+§8.6 decodes as `p2pkh`, `p2sh` or `tex` is **transparent**
+(`isTransparentAddress` / `is_transparent_address`): a payment to it, its
+amount and its sender's transparent inputs are public on chain, and it can
+carry no memo (§8.3), so §14.7 cannot tie it to a bill. Every other `zec`
+payout is shielded for this purpose, including an address §8.6 refuses,
+since nothing is known of it. A host MUST NOT declare a transparent payout
+unless the person chose it, and MUST tell them, when they do, that payments
+to it are public. In the list it writes, a transparent `zec` payout replaces
+only a transparent one and a shielded `zec` payout only a shielded one, and a
+new transparent payout is placed directly after the last shielded `zec`
+payout the list keeps, or first when it keeps none: it is a fallback the
+person opted into, and never displaces a private way of being paid. A reader
+still takes the order as written (§14.8).
+
 **A participant id MUST be a non-empty string holding no `:`**
 (`bill_bad_participant_id`). `:` ends the part of an expense or payment id
 that names its author (§10.3): an author whose id holds one mints nothing, so
@@ -2544,13 +2559,28 @@ coordinate one.
 **The key** is the 32 bytes the invite carries as `k` (§11.1).
 
 **The plaintext** is the entry's canonical JSON (§9.3), UTF-8 — **canonical,
-not whatever the encoder emitted.** The nonce is derived from these bytes, so
+not whatever the encoder emitted** — padded (below) in a version 2 frame. The nonce is derived from these bytes, so
 two implementations ordering keys differently seal one entry into two different
 blobs and a relay keyed by content holds both. Neither can detect it alone:
 each opens its own perfectly.
 
-**The nonce** is `SHA-256(plaintext)` truncated to 24 bytes. Derived rather
-than random, so the same entry always seals to the same blob: a relay stores it
+**The padding.** A version 2 frame seals the plaintext followed by one `0x80`
+byte and then zero bytes, to the smallest of 512, 1024, 2048, 4096, 8192,
+16384 and 32768 bytes that holds both (`padSealed` / `pad_sealed`). A blob's
+size then says which bucket its entry fell in and not how long it is: a join,
+a payment and a small expense look alike. An entry whose canonical bytes and
+the marker are over 32768 is refused with `sealed_too_large`
+(`sealedSizeRefusal` / `sealed_size_refusal`), and a host MUST NOT write one:
+`signEntry` / `sign_entry` refuses it, since sealed it reaches no other
+device. A push leaves out an entry that cannot be sealed and sends the rest,
+so one such entry from a peer never holds back the others. A reader opens a
+version 2 plaintext only when its length is a bucket's and it ends in `0x80`
+and then only zeros (`unpadSealed` / `unpad_sealed`); anything else is
+`sealed_malformed`, because one plaintext has one padding.
+
+**The nonce** is `SHA-256(plaintext)` truncated to 24 bytes, over the padded
+bytes in a version 2 frame. Derived rather than random, and padding is
+deterministic, so the same entry always seals to the same blob: a relay stores it
 once however many times it is pushed, and two devices that both hold an entry
 produce byte-identical ciphertext.
 
@@ -2567,7 +2597,8 @@ cipher's output — ciphertext followed by its tag. The whole is unpadded
 base64url. A reader knowing the fixed nonce and tag lengths splits it apart
 with no length fields.
 
-The version is **1**. A reader MUST refuse one above its own with
+The version written is **2**; a reader opens versions 1 and 2, and version
+1 seals the plaintext without padding. A reader MUST refuse one above its own with
 `sealed_future_version` rather than guess, and one below 1, an unparseable
 body, or a frame too short to hold a nonce and a tag with `sealed_malformed`.
 **A version of zero is a malformed frame and not a future format:** telling
@@ -2580,9 +2611,8 @@ the same channel, and a relay that only ever sees traffic cannot run it
 backwards.
 
 **What a relay is not told, and what it still learns.** It never sees a name,
-an amount or an address. It does see how many blobs a channel holds, how large
-they are, and when each changed — which is a count of entries and a rhythm of
-activity. A wallet that needs more than that needs a different transport, and
+an amount or an address. It does see how many blobs a channel holds, which bucket each fell in, and
+when each changed — which is a count of entries and a rhythm of activity. A wallet that needs more than that needs a different transport, and
 this protocol does not specify one.
 
 **A blob that does not open** — wrong key, altered bytes, or a plaintext that
@@ -2619,7 +2649,8 @@ not stop the rest of a sync: anybody who has the channel can push one.
 `invite_bad_expiry`, `invite_bad_link`, `invite_key_mismatch`,
 `payload_not_a_payload`, `payload_damaged`,
 `payload_missing_body`, `payload_future_version`, `payload_too_large`,
-`sealed_malformed`, `sealed_future_version`, `zip321_no_payments`,
+`sealed_malformed`, `sealed_future_version`, `sealed_too_large`,
+`zip321_no_payments`,
 `zip321_too_many_payments`, `zip321_amount_not_positive`,
 `zip321_amount_too_large`, `zip321_memo_too_large`, `zip321_bad_address`,
 `zip321_bad_currency_code`, `zip321_fiat_not_positive`,
@@ -2748,6 +2779,8 @@ nothing to omit.
 - Every pay-to address the fold recorded as replaced (§10.3).
 - Every debt with a payment recorded and not yet confirmed (§10.5).
 - Every recipient paid by a preference other than their first (§14.8).
+- Every output to a transparent address (§9.1), and that the payment is
+  public on chain, once for each such output.
 - Every recipient paid more than the debts the bill records explain, and that
   it is so (§6): a refund somebody else attributed to the payer is the one
   thing coverage cannot account for.
@@ -2781,8 +2814,11 @@ for each such participant: a name is on every review that pays its holder
 and says nothing about a change), every participant a
 pending payment is owed to or went to, every recipient the payer chose to pay
 by a lower preference with the wallet's words for it, every recipient paid
-more than the bill's debts explain with the wallet's words for that, the rate
-figure, and each output's ZEC amount and address.
+more than the bill's debts explain with the wallet's words for that, every
+recipient paid at a transparent address with the wallet's words that the
+payment is public (given as `publicWords` / `public_words`, and found once
+for each such output), the rate figure, and each output's ZEC amount and
+address.
 
 **An address or a reference counts as shown** when the text holds it whole,
 or holds its first 10 characters and then stops agreeing with it on a
@@ -2796,6 +2832,14 @@ and reference that it carries must be shown, written and matched as above. A
 `shieldedZec` or `swap` record that lacks one must say so in the wallet's own
 words for a missing figure. A `cash` record carries none of them and needs
 nothing shown.
+
+**The fee shown is a ceiling.** A host that showed the payer a fee MUST
+NOT broadcast a transaction whose fee is above it: it discards the proposal
+and the send is refused before anything leaves the wallet (§14.3), with the
+sentence `feeRaisedProblem` / `fee_raised_problem` gives. A fee at or below
+the one shown is sent. Notes can change between the review and the send, and
+a person confirms the figure they saw (`sendReviewedPaymentRequest` /
+`send_reviewed_payment_request` in both host packages).
 
 **What was shown is what is sent.** Immediately before the wallet is called,
 a host MUST work the request out again from the bill as it holds it then, with
@@ -2969,13 +3013,31 @@ transaction paid this account.
 - Only a transaction mined in a block and not expired is received. A host
   MUST NOT pass one still in the mempool, or one that expired unmined: it may
   never be mined, and confirming a debt against it settles the bill with
-  money that never arrived.
+  money that never arrived. Nor one that did not raise the account's
+  balance: a payment from somebody else spends none of this account's notes,
+  so its balance change is its outputs to this account, and a transaction
+  that also spent from the account is the account's own. A host reading its
+  wallet's history takes a row as received when its mined height is above
+  zero, it is not expired unmined, and its balance change is above zero, with
+  that change as its zatoshi (`isReceived` / `is_received`,
+  `receivedTransactions` / `received_transactions`).
 - A transaction id is the hex of its id in the byte order a send reports it
   and a block explorer shows it, which is the reverse of the order its
   digest is computed in. A wallet that stores ids in digest order MUST reverse
   them first (`txidInSendOrder` / `txid_in_send_order`): a record carries the
   order a send reported, and an id in the other order matches nothing, with
   nothing to say so.
+- **What arrived is read from the wallet's own state.** A host MUST decide
+  that a transaction was received, what it brought and that it was mined from
+  what its wallet has already scanned and decrypted — the chain data it
+  downloads anyway — or from a private information retrieval whose request
+  does not carry the transaction id. It MUST NOT send a transaction id, or
+  anything derived from it one to one, to a server in a request whose answer
+  depends on it — a block explorer, an indexer, a lightwalletd transaction
+  lookup or the relay — and a private lookup that fails MUST NOT fall back to
+  one. The relay and every server between learn nothing of who paid whom. A
+  transaction id MAY leave the device only on the person's own action that
+  says so, such as opening it in an explorer.
 - A record is a candidate when it is to this participant, its method is
   `shieldedZec`, it is not confirmed, and its `reference` names a received
   transaction. Transaction ids are compared with ASCII space, tab, carriage
@@ -3362,6 +3424,48 @@ left before dessert and cannot be handed a code across the table.
   later could plausibly succeed. It MUST NOT be swallowed: a bill works with no
   relay, so a transport that quietly does nothing looks exactly like one that
   is working.
+
+**A push carries work, not a name.** Nothing a relay is sent says who sent
+it, and a relay MUST NOT be asked to count anything by the sender's address.
+What keeps one sender from filling a public relay for everybody is work: the
+body of `POST <origin>/c/<channel>` is `{"blobs":[…],"work":"<nonce>"}`, and
+the nonce is a decimal string of 1 to 20 digits whose SHA-256 over the UTF-8
+of `splitz-relay-work-v1|<channel>|<h>|<nonce>`, where `<h>` is the
+lower-case hex SHA-256 of the concatenated 32-byte SHA-256 digests of the
+push's blobs, each over its UTF-8, in order, has at least
+`bits` leading zero bits (`relayWorkStamp` / `relay_work_stamp`,
+`relayWorkHolds` / `relay_work_holds`). `bits` is the relay's base, plus one
+for every doubling of the 1024-character units the push's blobs fill, rounded
+up (`relayWorkBits` / `relay_work_bits`): 16 at an empty relay for a push of
+up to 1024 characters, 17 up to 2048, 18 up to 4096. A relay's base is 16
+plus up to 8 as its store fills — `16 + ⌊8 × held ÷ capacity⌋` — so filling it
+costs more the fuller it is. A push with too little work, or none, is answered
+`{"error":…,"work":<base>}` with status 428; a client stamps it once more at
+that base, when it is above the one it used and at most 40, and sends it
+again, and a second refusal stands (`HttpSplitsRelay` in both host packages;
+`relayPushBody` and `relayWorkAsked` in the binding). A stamp covers one list
+of blobs on one channel — fixed-length digests, so no other list hashes the
+same — so it buys nothing elsewhere, and repeating it adds
+nothing, since a push is idempotent. Work at the base costs a phone a fraction
+of a second and a desktop proportionally less: it prices a flood, not a
+person, and a relay keeps its store's bound as well.
+
+**Relay traffic takes the wallet's route.** A host MUST send every relay
+request over the network route its wallet uses for its own traffic: over Tor,
+or any other anonymising transport, when the wallet's is on, and direct when
+it is off, with nothing shown about it either way. It MUST NOT be the one path
+that leaves the device in the clear while the wallet's own traffic does not;
+a route that is starting or has failed holds the request rather than sending
+it direct. `HttpSplitsRelay` takes its two calls injected for this, in both
+host packages, and a wallet on the binding makes them itself.
+
+**Sync on a fixed schedule.** A host SHOULD sync every bill it holds — pull,
+then push — on one fixed interval, `relaySyncSeconds` /
+`RELAY_SYNC_SECONDS` (30), whatever is on screen: not faster for the bill a
+person has open, and not at once when they write. A write is pushed at the
+next tick. A relay sees when a channel is read and written; a client that
+polls only the open bill, or pushes the moment something is typed, tells it
+which bill is being looked at and when somebody is at their phone.
 
 ### 15.6 `ZecPrices`
 

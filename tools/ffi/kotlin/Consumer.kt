@@ -273,11 +273,21 @@ fun main(args: Array<String>) {
     val zec = renderAmount(owed.request.payments.single().zatoshi)
     val screen = listOf("Pay Ana $zec ZEC", "to u1ana",
                         "at ${rateFigure(owed.rate)} EUR per ZEC, set by Ana")
-    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "", "")
+    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "", "", "")
     check("a screen showing every fact passes", shown.isEmpty(), "$screen")
+    check("a transparent address is public, a shielded one is not (§9.1)",
+          parseAddress("t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs").transparent && !parseAddress("u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf").transparent,
+          "parseAddress.transparent")
+    check("a relay sync is on a fixed tick; a refusal names the work it asks (§15.5)",
+          relaySyncSeconds() == 30u &&
+              relayWorkAsked("{\"error\":\"not enough work\",\"work\":18}", 16u) == 18u &&
+              relayWorkAsked("{\"error\":\"not enough work\",\"work\":16}", 16u) == null &&
+              relayWorkAsked("{\"error\":\"x\",\"work\":41}", 16u) == null &&
+              relayWorkAsked("{\"ok\":true}", 16u) == null,
+          "${relayWorkAsked("{\"work\":18}", 16u)}")
     val noAddress = checkPayerReview(ben.facts(), billId, ben.entries, owed,
                                      screen.map { if (it == "to u1ana") "to your contact" else it },
-                                     mapOf(), mapOf(), "", "")
+                                     mapOf(), mapOf(), "", "", "")
     check("one without the output's address is told exactly that",
           noAddress == listOf(ReviewFinding(ReviewRule.OUTPUT, "the address Ana is paid at", "u1ana")),
           "$noAddress")
@@ -654,6 +664,17 @@ fun main(args: Array<String>) {
     check("a txid in digest order is reversed (§14.7)",
           txidInSendOrder("00".repeat(31) + "ab") == "ab" + "00".repeat(31) && txidInSendOrder("abc") == null,
           "${txidInSendOrder("00".repeat(31) + "ab")}")
+    val raised = feeRaisedProblem(10000L, 10001L)
+    check("a fee above the one reviewed is refused, the one reviewed is not (§14.2)",
+          raised?.contains("Nothing was sent") == true && feeRaisedProblem(10000L, 10000L) == null,
+          "$raised")
+    val arrived = receivedTransactions(listOf(
+        HistoryTransaction("ab".repeat(32), 7L, false, 5000L),
+        HistoryTransaction("cd".repeat(32), 0L, false, 5000L),
+        HistoryTransaction("ef".repeat(32), 7L, false, -100L)))
+    check("only a mined row raising the balance is received (§14.7)",
+          arrived.size == 1 && arrived[0].txid == "ab".repeat(32) && arrived[0].zatoshi == 5000L,
+          "${arrived.map { it.txid }}")
     check("a typed figure is read in integers (§2.1)",
           parseAmountIn("12.34", "EUR") == 1234L && parseAmountIn("1,000", "KWD") == null &&
               parseMinorUnits("12.5", 2u) == 1250L &&

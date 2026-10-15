@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use std::sync::Mutex;
 
 use crate::error::HostError;
+use crate::relay_work::{relay_work_bits, relay_work_stamp, RELAY_WORK_BASE};
 use crate::transport::HttpTransport;
 use crate::wallet::SplitsRelay;
 
@@ -93,8 +94,10 @@ impl SplitsRelay for InMemorySplitsRelay {
 
 /// A relay backed by an HTTP blob store.
 ///
-/// Two routes under `origin`: `POST /c/<channel>` with `{"blobs":[…]}` adds
-/// blobs, `GET /c/<channel>` returns them. The server stores opaque bytes
+/// Two routes under `origin`: `POST /c/<channel>` with
+/// `{"blobs":[…],"work":"…"}` adds blobs, `GET /c/<channel>` returns them.
+/// `work` is a stamp for those blobs ([`relay_work_stamp`]): what a push
+/// carries in place of anything that names its sender. The server stores opaque bytes
 /// keyed by the channel hash — never the bill id, never plaintext.
 pub struct HttpSplitsRelay<'a> {
     origin: String,
@@ -140,11 +143,20 @@ impl<'a> HttpSplitsRelay<'a> {
         Ok(format!("{origin}/c/{channel}"))
     }
 
+    /// The bytes a body keeps free for its stamp: `,"work":"`, at most 20
+    /// digits, and `"`.
+    pub const WORK_ROOM: usize = 32;
+
     /// The body `POST <origin>/c/<channel>` carries for `blobs`:
-    /// `{"blobs":[…]}`, or `None` when there is nothing to push and no request
-    /// is made. A blob over `MAX_BLOB_CHARS` is refused, not retryable, before
-    /// anything is sent.
-    pub fn push_body(blobs: &[String]) -> Result<Option<String>, HostError> {
+    /// `{"blobs":[…],"work":"…"}`, stamped for a relay asking `base`, or
+    /// `None` when there is nothing to push and no request is made. A blob
+    /// over `MAX_BLOB_CHARS` is refused, not retryable, before anything is
+    /// sent.
+    pub fn push_body(
+        channel: &str,
+        blobs: &[String],
+        base: u32,
+    ) -> Result<Option<String>, HostError> {
         if blobs.is_empty() {
             return Ok(None);
         }
@@ -160,16 +172,24 @@ impl<'a> HttpSplitsRelay<'a> {
                 ));
             }
         }
-        Ok(Some(json!({ "blobs": blobs }).to_string()))
+        Ok(Some(Self::stamped(channel, blobs, base)))
+    }
+
+    /// `{"blobs":[…],"work":"…"}` for `blobs`, stamped at `base`.
+    fn stamped(channel: &str, blobs: &[String], base: u32) -> String {
+        let chars = blobs.iter().map(|b| b.chars().count()).sum();
+        let nonce = relay_work_stamp(channel, blobs, relay_work_bits(chars, base));
+        json!({ "blobs": blobs, "work": nonce }).to_string()
     }
 
     /// `blobs` as the push bodies that carry them, in order, each at most
-    /// `MAX_BODY_BYTES`. Refused as [`Self::push_body`] refuses; every blob is
-    /// then at most `MAX_BLOB_CHARS`, so every body holds at least one.
+    /// `MAX_BODY_BYTES` once stamped. Refused as [`Self::push_body`] refuses;
+    /// every blob is then at most `MAX_BLOB_CHARS`, so every body holds at
+    /// least one.
     pub fn push_bodies(blobs: &[String]) -> Result<Vec<String>, HostError> {
         const OPEN: &str = "{\"blobs\":[";
         const CLOSE: &str = "]}";
-        let empty = OPEN.len() + CLOSE.len();
+        let empty = OPEN.len() + CLOSE.len() + Self::WORK_ROOM;
         let mut bodies = Vec::new();
         let mut batch: Vec<String> = Vec::new();
         let mut size = empty;
@@ -229,6 +249,15 @@ impl<'a> HttpSplitsRelay<'a> {
             .collect())
     }
 
+    /// The base a relay that refused a push asks for now, when its answer
+    /// names one above `done` and no higher than 40 bits: the push is then
+    /// stamped once more at that base. `None` for any other answer.
+    pub fn work_asked(body: &str, done: u32) -> Option<u32> {
+        let asked = Self::decode(body).ok()?.get("work")?.as_u64()?;
+        let asked = u32::try_from(asked).ok()?;
+        (asked > done && asked <= 40).then_some(asked)
+    }
+
     /// Why a request never reached an answer, as §15.5 raises it: retryable.
     fn not_reached(cause: &str) -> HostError {
         relay_error(format!("Could not reach the relay: {cause}"), true)
@@ -251,11 +280,28 @@ impl SplitsRelay for HttpSplitsRelay<'_> {
     fn push(&self, channel: &str, blobs: &[String]) -> Result<(), HostError> {
         let url = Self::channel_url(&self.origin, channel)?;
         for body in Self::push_bodies(blobs)? {
-            let answer = self
-                .transport
-                .post(&url, &body)
-                .map_err(|e| Self::not_reached(&e))?;
-            Self::push_answer(&answer)?;
+            let batch: Vec<String> = Self::decode(&body)?["blobs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|b| b.as_str().map(str::to_owned))
+                .collect();
+            let mut base = RELAY_WORK_BASE;
+            // A relay that asks for more work than was done answers what it
+            // asks for now, and the push is stamped once more for that.
+            loop {
+                let answer = self
+                    .transport
+                    .post(&url, &Self::stamped(channel, &batch, base))
+                    .map_err(|e| Self::not_reached(&e))?;
+                match Self::push_answer(&answer) {
+                    Ok(()) => break,
+                    Err(refused) => match Self::work_asked(&answer, base) {
+                        Some(asked) if base == RELAY_WORK_BASE => base = asked,
+                        _ => return Err(refused),
+                    },
+                }
+            }
         }
         Ok(())
     }

@@ -42,5 +42,10 @@ base64url_decode          # the same
 component_encode          # URL encoding for the relay client; relay_channel_url writes the whole URL
 query_encode              # the same, for query strings the binding's request builders write whole
 send_payment_request      # takes the wallet's read, propose and broadcast as closures, and the binding has no callbacks; a binding wallet calls proposal_problem before building
+send_reviewed_payment_request  # closures, as send_payment_request; a binding wallet calls fee_raised_problem with the built proposal's fee before broadcasting
 currency_exponent         # read inside every price and amount the binding writes; rate_figure and render_amount carry it
 sent_of                   # maps a SplitsWallet's send outcome for WalletBillHost; the binding never broadcasts (host_facts.rs), a binding wallet sends itself and records with payment_entries_for_send
+relay_work_stamp          -> relay_push_body
+relay_work_bits           # read inside relay_push_body, which stamps at the bits a push of its size needs
+relay_work_holds          # the relay's own check; a wallet sends work and never verifies it
+leading_zero_bits         # read inside relay_work_stamp and relay_work_holds

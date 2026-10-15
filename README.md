@@ -83,7 +83,7 @@ Kotlin, Swift and JavaScript use the binding (`rust/splitz-ffi`), packaged by
 | `splitz_host/`, `rust/splitz-host` | the wallet layer: signing, storage, sync, swaps |
 | `rust/splitz-ffi`, `tools/package` | the binding and its packages |
 | `tools/relay` | the relay |
-| `vectors/` | 1016 cases in 24 files, in no particular language |
+| `vectors/` | 1028 cases in 24 files, in no particular language |
 | `tools/` | the checks beyond the test cases |
 
 ## Development
@@ -106,7 +106,7 @@ money on a local chain (`tools/regtest/run.sh prove`, with Docker).
 ## Conformance
 
 An implementation conforms when it reproduces every case in `vectors/` and
-follows §14. `SPEC.md` §12 lists 96 reasons the library refuses something,
+follows §14. `SPEC.md` §12 lists 97 reasons the library refuses something,
 each with a test case except `bill_not_scalar_values`, which each
 implementation tests in its own suite. See `CONFORMANCE.md`.
 

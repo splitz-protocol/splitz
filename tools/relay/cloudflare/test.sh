@@ -52,7 +52,7 @@ origin_test "$py"
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
 (cd "$here" && npx --yes "wrangler@$wrangler" dev --port "$port" --ip 127.0.0.1 \
-  --persist-to "$work/state") >"$work/worker.log" 2>&1 &
+  --persist-to "$work/state" --var LEGACY_UNSTAMPED:0) >"$work/worker.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 120); do
   grep -q "Ready on" "$work/worker.log" && break
@@ -61,13 +61,19 @@ done
 grep -q "Ready on" "$work/worker.log" || { cat "$work/worker.log" >&2; exit 1; }
 echo "== the Worker at http://127.0.0.1:$port"
 origin_test "http://127.0.0.1:$port"
+# With LEGACY_UNSTAMPED off, a push with no work is 428 and names the base.
+unstamped="$(curl -s -o /dev/stdout -w ' %{http_code}' -X POST \
+  --data '{"blobs":["x"]}' "http://127.0.0.1:$port/c/$(printf 'a%.0s' $(seq 64))")"
+echo "unstamped: $unstamped"
+[ "$unstamped" = '{"error":"a push carries work","work":16} 428' ] || exit 1
 pkill -f "wrangler.* dev --port $port" 2>/dev/null || true
 
 # The bounds a public origin adds, with small figures so a run reaches them.
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
 (cd "$here" && npx --yes "wrangler@$wrangler" dev --port "$port" --ip 127.0.0.1 \
   --persist-to "$work/bounded" \
-  --var MAX_SOURCE_CHARS:8192 --var EXPIRE_DAYS:0.00005) >"$work/bounded.log" 2>&1 &
+  --var MAX_SOURCE_CHARS:8192 --var EXPIRE_DAYS:0.00005 \
+  --var LEGACY_UNSTAMPED:1) >"$work/bounded.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 120); do
   grep -q "Ready on" "$work/bounded.log" && break

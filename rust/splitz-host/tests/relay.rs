@@ -222,11 +222,22 @@ fn the_wire_a_foreign_client_speaks_is_the_one_this_client_speaks() {
             ..
         })
     ));
-    assert_eq!(HttpSplitsRelay::push_body(&[]).unwrap(), None);
-    assert_eq!(
-        HttpSplitsRelay::push_body(&["a".to_owned(), "b".to_owned()]).unwrap(),
-        Some(r#"{"blobs":["a","b"]}"#.to_owned())
-    );
+    let channel = "a".repeat(64);
+    assert_eq!(HttpSplitsRelay::push_body(&channel, &[], 16).unwrap(), None);
+    let two = ["a".to_owned(), "b".to_owned()];
+    let body: serde_json::Value = serde_json::from_str(
+        &HttpSplitsRelay::push_body(&channel, &two, 16)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["blobs"], serde_json::json!(["a", "b"]));
+    assert!(splitz_host::relay_work_holds(
+        &channel,
+        &two,
+        body["work"].as_str().unwrap(),
+        16
+    ));
     // Bodies tools/relay/server.py answers with, a refusal's status aside.
     assert!(HttpSplitsRelay::push_answer(r#"{"ok": true}"#).is_ok());
     for refusal in [

@@ -193,4 +193,21 @@ void main() {
     expect(verifyByName(confirmation, key), isTrue);
     expect(verifyByName(confirmation, key, bill: 'another-bill'), isFalse);
   });
+
+  group('an entry no sealed update carries is not written (§11.3)', () {
+    test('signEntry refuses it, signed or not; an ordinary one passes',
+        () async {
+      final ana = FakeHost(me: 'ana');
+      final huge = joinBill(host: ana, name: 'A' * 33000);
+      for (final host in [ana, signing('ana', 'kA')]) {
+        await expectLater(
+          signEntry(host: host, entry: huge, billId: _bill),
+          throwsA(isA<splitz.SplitError>()
+              .having((e) => e.code, 'code', 'sealed_too_large')),
+        );
+      }
+      final join = joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
+      expect(await signed(join, 'kA'), contains('sig'));
+    });
+  });
 }

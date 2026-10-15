@@ -494,3 +494,43 @@ fn the_bills_own_create_still_refuses_a_strangers_key() {
     // a conflict with it.
     assert_eq!(keys.read_bill_key(&bill_id).unwrap(), None);
 }
+
+#[test]
+fn an_entry_no_sealed_update_carries_is_left_out_of_a_push_and_the_rest_are_sent() {
+    let relay = InMemorySplitsRelay::default();
+    let ana = Device::new("ana", "u1ana", 1);
+    let (ana_store, ana_keys) = (ana.store(), ana.keys());
+    let key = ana_keys.ensure_bill_key("placeholder").unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
+    let bill_id = create["id"].as_str().unwrap().to_owned();
+    ana_keys.store_bill_key(&bill_id, &key).unwrap();
+    ana.wallet.tick();
+    let join = join_bill(&ana.host(), Some("Ana"), Some("u1ana"), None, None).unwrap();
+    // A peer's join this device holds and could never have written.
+    let pat = Device::new("pat", "u1pat", 50);
+    let huge = join_bill(&pat.host(), Some(&"P".repeat(33000)), None, None, None).unwrap();
+    assert_eq!(
+        splitz_core::sealed_size_refusal(&huge).unwrap(),
+        Some("sealed_too_large")
+    );
+    ana_store
+        .merge(&bill_id, vec![create.clone(), join.clone(), huge])
+        .unwrap();
+
+    SplitsSync::new(&ana_store, &ana_keys, &relay)
+        .push(&bill_id)
+        .unwrap();
+
+    assert_eq!(relay.fetch(&channel_for_bill(&bill_id)).unwrap().len(), 2);
+    let ben = Device::new("ben", "u1ben", 90);
+    let (ben_store, ben_keys) = (ben.store(), ben.keys());
+    ben_keys.store_bill_key(&bill_id, &key).unwrap();
+    SplitsSync::new(&ben_store, &ben_keys, &relay)
+        .pull(&bill_id)
+        .unwrap();
+    let mut held = ids(&ben_store.read(&bill_id).unwrap());
+    held.sort();
+    let mut want = ids(&[create, join]);
+    want.sort();
+    assert_eq!(held, want);
+}

@@ -22,6 +22,8 @@ const eveLater = 'u1eve5555555555555555555';
 /// address after her first, which [via] can choose (§14.8).
 ({splitz.PayerObligation obligation, splitz.FoldedBill folded}) bill({
   Map<String, int> via = const {},
+  String benTo = ben,
+  String eveSecond = eveLater,
 }) {
   final hosts = {
     for (final id in ['ana', 'ben', 'cat', 'dan', 'eve']) id: FakeHost(me: id),
@@ -66,10 +68,10 @@ const eveLater = 'u1eve5555555555555555555';
       name: 'Eve',
       payouts: [
         {'type': 'zec', 'address': eve},
-        {'type': 'zec', 'address': eveLater},
+        {'type': 'zec', 'address': eveSecond},
       ],
     ),
-    splitz.joinBill(host: at('ben'), name: 'Ben', payTo: ben),
+    splitz.joinBill(host: at('ben'), name: 'Ben', payTo: benTo),
     spent('ben', 8000, 'x1'),
     spent('cat', 6000, 'x2'),
     spent('dan', 4000, 'x3'),
@@ -490,5 +492,70 @@ void main() {
       ).map((f) => (f.rule, f.expected)),
       [(ReviewRule.replacedAddress, 'address changed')],
     );
+  });
+
+  group('a payment public on chain is said to be (§14.2)', () {
+    const t1 = 't1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs';
+    const t3 = 't3JZcvsuaXE6ygokL4XUiZSTrQBUoPYFnXJ';
+    const words = 'public on chain';
+    List<String> publicFindings(
+      splitz.PayerObligation obligation,
+      splitz.FoldedBill folded,
+      List<String> shown, {
+      String publicWords = words,
+    }) => [
+      for (final f in checkPayerReview(
+        obligation: obligation,
+        folded: folded,
+        visibleText: shown,
+        reasonWords: reasons,
+        via: const {'eve': 1},
+        publicWords: publicWords,
+      ))
+        if (f.rule == ReviewRule.publicOutput) f.expected,
+    ];
+
+    test('a transparent output needs its payee and the words', () {
+      final b = bill(via: const {'eve': 1}, eveSecond: t1);
+      expect(b.obligation.request.payments.last.address, t1);
+      expect(
+        publicFindings(b.obligation, b.folded, [...screen, 'Eve', words]),
+        isEmpty,
+      );
+      expect(publicFindings(b.obligation, b.folded, [...screen, 'Eve']), [
+        words,
+      ]);
+      expect(publicFindings(b.obligation, b.folded, [...screen, words]), [
+        'Eve',
+      ]);
+      expect(
+        publicFindings(b.obligation, b.folded, [
+          ...screen,
+          'Eve',
+        ], publicWords: ''),
+        ['public_output'],
+      );
+    });
+
+    test('two public outputs need the words twice', () {
+      final b = bill(via: const {'eve': 1}, eveSecond: t1, benTo: t3);
+      final names = [...screen, 'Ben', 'Eve'];
+      expect(publicFindings(b.obligation, b.folded, [...names, words]), [
+        words,
+        words,
+      ]);
+      expect(
+        publicFindings(b.obligation, b.folded, [...names, words, words]),
+        isEmpty,
+      );
+    });
+
+    test('a shielded or undecoded output needs no warning', () {
+      final b = bill(via: const {'eve': 1});
+      expect(
+        publicFindings(b.obligation, b.folded, screen, publicWords: ''),
+        isEmpty,
+      );
+    });
   });
 }

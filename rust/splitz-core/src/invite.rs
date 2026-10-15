@@ -487,8 +487,14 @@ pub fn decode_payload(text: &str) -> Result<ScannedPayload> {
 
 // --- §11.3 sealing ----------------------------------------------------------
 
-/// The sealed frame version.
-pub const SEALED_VERSION: u8 = 1;
+/// The sealed frame version this crate writes. A reader opens every version
+/// from 1 to this one: 1 seals the bare plaintext, 2 pads it to a bucket
+/// (§11.3).
+pub const SEALED_VERSION: u8 = 2;
+
+/// The plaintext lengths a version 2 frame pads to, in bytes, smallest first
+/// (§11.3). A blob's size then says only which bucket its entry fell in.
+pub const SEALED_BUCKETS: [usize; 7] = [512, 1024, 2048, 4096, 8192, 16384, 32768];
 
 /// XChaCha20-Poly1305 nonce length, in bytes.
 pub const NONCE_BYTES: usize = 24;
@@ -570,6 +576,69 @@ pub fn sealed_nonce(plaintext: &[u8]) -> [u8; NONCE_BYTES] {
     let mut nonce = [0u8; NONCE_BYTES];
     nonce.copy_from_slice(&digest[..NONCE_BYTES]);
     nonce
+}
+
+/// `plaintext` padded for a version 2 frame (§11.3): followed by `0x80` and
+/// then zeros, to the smallest of [`SEALED_BUCKETS`] that holds it and the
+/// `0x80`. Refused with `sealed_too_large` when none does.
+///
+/// Deterministic, so one entry still seals to one blob.
+pub fn pad_sealed(plaintext: &[u8]) -> Result<Vec<u8>> {
+    let need = plaintext.len() + 1;
+    let bucket = SEALED_BUCKETS
+        .iter()
+        .copied()
+        .find(|&b| b >= need)
+        .ok_or_else(|| {
+            SplitError::new(
+                code::SEALED_TOO_LARGE,
+                format!(
+                    "An entry of {} bytes is over the {} a sealed update carries",
+                    plaintext.len(),
+                    SEALED_BUCKETS[SEALED_BUCKETS.len() - 1] - 1
+                ),
+            )
+        })?;
+    let mut padded = Vec::with_capacity(bucket);
+    padded.extend_from_slice(plaintext);
+    padded.push(0x80);
+    padded.resize(bucket, 0);
+    Ok(padded)
+}
+
+/// The plaintext `padded` holds, as [`pad_sealed`] wrote it (§11.3).
+///
+/// Refused with `sealed_malformed` unless its length is one of
+/// [`SEALED_BUCKETS`] and it ends in `0x80` followed only by zeros: one
+/// plaintext has one padding, so a blob padded any other way is not one a
+/// writer produced.
+pub fn unpad_sealed(padded: &[u8]) -> Result<&[u8]> {
+    if !SEALED_BUCKETS.contains(&padded.len()) {
+        return Err(SplitError::new(
+            code::SEALED_MALFORMED,
+            format!(
+                "A padded update of {} bytes is no bucket's length",
+                padded.len()
+            ),
+        ));
+    }
+    let end = padded.iter().rposition(|&b| b != 0);
+    match end {
+        Some(end) if padded[end] == 0x80 => Ok(&padded[..end]),
+        _ => Err(SplitError::new(
+            code::SEALED_MALFORMED,
+            "An update is not padded with 0x80",
+        )),
+    }
+}
+
+/// `sealed_too_large` when `entry` cannot be sealed (§11.3) — its canonical
+/// bytes and the padding marker are over the largest of [`SEALED_BUCKETS`] —
+/// or `None` when it can. A host writes no entry this refuses: it would reach
+/// no other device.
+pub fn sealed_size_refusal(entry: &Value) -> Result<Option<&'static str>> {
+    let len = sealed_plaintext(entry)?.len();
+    Ok((len + 1 > SEALED_BUCKETS[SEALED_BUCKETS.len() - 1]).then_some(code::SEALED_TOO_LARGE))
 }
 
 /// Frames a sealed `body` for a transport (§11.3).

@@ -55,6 +55,15 @@ fn bill() -> (PayerObligation, FoldedBill) {
 }
 
 fn bill_via(via: &BTreeMap<String, i64>) -> (PayerObligation, FoldedBill) {
+    bill_paying(via, BEN, EVE_LATER)
+}
+
+/// [`bill_via`], with Ben's second address and Eve's second payout given.
+fn bill_paying(
+    via: &BTreeMap<String, i64>,
+    ben_to: &str,
+    eve_second: &str,
+) -> (PayerObligation, FoldedBill) {
     let minute = Cell::new(0);
     let host = |me: &'static str| Host {
         me,
@@ -86,11 +95,11 @@ fn bill_via(via: &BTreeMap<String, i64>) -> (PayerObligation, FoldedBill) {
             None,
             Some(vec![
                 json!({"type": "zec", "address": EVE}),
-                json!({"type": "zec", "address": EVE_LATER}),
+                json!({"type": "zec", "address": eve_second}),
             ]),
         )
         .unwrap(),
-        join_bill(&ben, Some("Ben"), Some(BEN), None, None).unwrap(),
+        join_bill(&ben, Some("Ben"), Some(ben_to), None, None).unwrap(),
         spent(&ben, 8000, "x1"),
         spent(&cat, 6000, "x2"),
         spent(&dan, 4000, "x3"),
@@ -153,6 +162,7 @@ fn found(shown: &[String], reasons: &BTreeMap<String, String>) -> Vec<(ReviewRul
         shown,
         reasons,
         &BTreeMap::new(),
+        "",
         "",
         "",
     )
@@ -282,11 +292,20 @@ fn lower_found(
     words: &str,
 ) -> Vec<(ReviewRule, String)> {
     let (obligation, folded) = bill_via(via);
-    check_payer_review(&obligation, &folded, shown, &reasons(), checked, words, "")
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.rule, f.expected))
-        .collect()
+    check_payer_review(
+        &obligation,
+        &folded,
+        shown,
+        &reasons(),
+        checked,
+        words,
+        "",
+        "",
+    )
+    .unwrap()
+    .into_iter()
+    .map(|f| (f.rule, f.expected))
+    .collect()
 }
 
 fn lower_screen() -> Vec<String> {
@@ -524,6 +543,7 @@ fn a_payment_the_bill_does_not_explain_names_who_and_says_so() {
             &BTreeMap::new(),
             "",
             words,
+            "",
         )
         .unwrap()
         .into_iter()
@@ -560,4 +580,63 @@ fn a_change_is_said_once_for_each_payee_whose_address_changed() {
         found(&shown, &reasons()),
         [(ReviewRule::ReplacedAddress, "address changed".to_owned())]
     );
+}
+
+const T1: &str = "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs";
+const T3: &str = "t3JZcvsuaXE6ygokL4XUiZSTrQBUoPYFnXJ";
+const PUBLIC: &str = "public on chain";
+
+fn public_findings(
+    (obligation, folded): &(PayerObligation, FoldedBill),
+    shown: &[&str],
+    words: &str,
+) -> Vec<String> {
+    let shown: Vec<String> = screen()
+        .into_iter()
+        .chain(shown.iter().map(|s| s.to_string()))
+        .collect();
+    check_payer_review(
+        obligation,
+        folded,
+        &shown,
+        &reasons(),
+        &BTreeMap::from([("eve".to_owned(), 1)]),
+        "",
+        "",
+        words,
+    )
+    .unwrap()
+    .into_iter()
+    .filter(|f| f.rule == ReviewRule::PublicOutput)
+    .map(|f| f.expected)
+    .collect()
+}
+
+#[test]
+fn a_transparent_output_needs_its_payee_and_the_words() {
+    let via = BTreeMap::from([("eve".to_owned(), 1)]);
+    let b = bill_paying(&via, BEN, T1);
+    assert_eq!(b.0.request.payments.last().unwrap().address, T1);
+    assert!(public_findings(&b, &["Eve", PUBLIC], PUBLIC).is_empty());
+    assert_eq!(public_findings(&b, &["Eve"], PUBLIC), [PUBLIC]);
+    assert_eq!(public_findings(&b, &[PUBLIC], PUBLIC), ["Eve"]);
+    assert_eq!(public_findings(&b, &["Eve"], ""), ["public_output"]);
+}
+
+#[test]
+fn two_public_outputs_need_the_words_twice() {
+    let via = BTreeMap::from([("eve".to_owned(), 1)]);
+    let b = bill_paying(&via, T3, T1);
+    assert_eq!(
+        public_findings(&b, &["Ben", "Eve", PUBLIC], PUBLIC),
+        [PUBLIC, PUBLIC]
+    );
+    assert!(public_findings(&b, &["Ben", "Eve", PUBLIC, PUBLIC], PUBLIC).is_empty());
+}
+
+#[test]
+fn a_shielded_or_undecoded_output_needs_no_public_warning() {
+    let via = BTreeMap::from([("eve".to_owned(), 1)]);
+    let b = bill_paying(&via, BEN, EVE_LATER);
+    assert!(public_findings(&b, &[], "").is_empty());
 }

@@ -307,12 +307,23 @@ func run(origin: String, downOrigin: String) async throws {
                   "at \(rateFigure(rate: owed!.rate)) EUR per ZEC, set by Ana"]
     let shown = try checkPayerReview(facts: ben.facts(), billId: billId, entries: ben.entries,
                                      obligation: owed!, visibleText: screen, reasonWords: [:],
-                                     via: [:], lowerWords: "", unexplainedWords: "")
+                                     via: [:], lowerWords: "", unexplainedWords: "", publicWords: "")
     check("a screen showing every fact passes", shown.isEmpty, "\(screen)")
+    check("a transparent address is public, a shielded one is not (§9.1)",
+          try parseAddress(address: "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs").transparent
+            && !(try parseAddress(address: "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf").transparent),
+          "parseAddress.transparent")
+    check("a relay sync is on a fixed tick; a refusal names the work it asks (§15.5)",
+          relaySyncSeconds() == 30
+            && relayWorkAsked(body: #"{"error":"not enough work","work":18}"#, done: 16) == 18
+            && relayWorkAsked(body: #"{"error":"not enough work","work":16}"#, done: 16) == nil
+            && relayWorkAsked(body: #"{"error":"x","work":41}"#, done: 16) == nil
+            && relayWorkAsked(body: #"{"ok":true}"#, done: 16) == nil,
+          "\(String(describing: relayWorkAsked(body: #"{"work":18}"#, done: 16)))")
     let noAddress = try checkPayerReview(
         facts: ben.facts(), billId: billId, entries: ben.entries, obligation: owed!,
         visibleText: screen.map { $0 == "to u1ana" ? "to your contact" : $0 }, reasonWords: [:],
-        via: [:], lowerWords: "", unexplainedWords: "")
+        via: [:], lowerWords: "", unexplainedWords: "", publicWords: "")
     check("one without the output's address is told exactly that",
           noAddress == [ReviewFinding(rule: .output, fact: "the address Ana is paid at",
                                       expected: "u1ana")],
@@ -752,6 +763,23 @@ func run(origin: String, downOrigin: String) async throws {
           txidInSendOrder(digestOrderHex: digest) == "ab" + String(repeating: "00", count: 31)
             && txidInSendOrder(digestOrderHex: "abc") == nil,
           txidInSendOrder(digestOrderHex: digest) ?? "nil")
+    let raised = feeRaisedProblem(reviewedFee: 10000, fee: 10001)
+    check("a fee above the one reviewed is refused, the one reviewed is not (§14.2)",
+          (raised?.contains("Nothing was sent") ?? false)
+            && feeRaisedProblem(reviewedFee: 10000, fee: 10000) == nil,
+          raised ?? "nil")
+    let arrived = receivedTransactions(history: [
+        HistoryTransaction(txid: String(repeating: "ab", count: 32), minedHeight: 7,
+                           expiredUnmined: false, balanceDelta: 5000),
+        HistoryTransaction(txid: String(repeating: "cd", count: 32), minedHeight: 0,
+                           expiredUnmined: false, balanceDelta: 5000),
+        HistoryTransaction(txid: String(repeating: "ef", count: 32), minedHeight: 7,
+                           expiredUnmined: false, balanceDelta: -100),
+    ])
+    check("only a mined row raising the balance is received (§14.7)",
+          arrived.count == 1 && arrived[0].txid == String(repeating: "ab", count: 32)
+            && arrived[0].zatoshi == 5000,
+          "\(arrived.map { $0.txid })")
     check("a typed figure is read in integers (§2.1)",
           parseAmountIn(text: "12.34", currency: "EUR") == 1234
             && parseAmountIn(text: "1,000", currency: "KWD") == nil

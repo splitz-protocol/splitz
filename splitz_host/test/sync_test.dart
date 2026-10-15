@@ -434,6 +434,45 @@ void main() {
     expect(pulled.entries.length, 2, reason: 'merged, not filtered');
     expect(pulled.refused, isEmpty);
   });
+
+  group('an entry no sealed update can carry (§11.3)', () {
+    test('is left out of a push, and the rest are still sent', () async {
+      final relay = InMemorySplitsRelay();
+      final ana = Device(FakeWallet(), relay, seed: 1);
+      final key = ana.keys.generateKey();
+      final create = splitz.createBill(
+        host: ana.host,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: 'A' * 43,
+        billKey: key,
+      );
+      final billId = create['id'] as String;
+      await ana.keys.storeBillKey(billId, key);
+      ana.wallet.tick();
+      final join = splitz.joinBill(host: ana.host, name: 'Ana', payTo: 'u1ana');
+      // A peer's join this device holds and could never have written.
+      final peer = WalletBillHost(FakeWallet(id: 'pat', payTo: 'u1pat'));
+      final huge = splitz.joinBill(host: peer, name: 'P' * 33000);
+      expect(
+        protocol.sealedSizeRefusal(huge),
+        protocol.SplitCode.sealedTooLarge,
+      );
+      await ana.store.merge(billId, [create, join, huge]);
+
+      await ana.sync.push(billId);
+
+      final sent = await relay.fetch(SplitsChannel.forBill(billId));
+      expect(sent, hasLength(2));
+      final ben = Device(FakeWallet(id: 'ben', payTo: 'u1ben'), relay, seed: 2);
+      await ben.keys.storeBillKey(billId, key);
+      await ben.sync.pull(billId);
+      expect(
+        {for (final e in await ben.store.read(billId)) e['id']},
+        {create['id'], join['id']},
+      );
+    });
+  });
 }
 
 /// [inner], with every push refused (or, with [refuse] false, counted).

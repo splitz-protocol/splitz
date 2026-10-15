@@ -61,6 +61,9 @@ enum ReviewRule {
   /// Every recipient paid more than the debts the bill records explain (§6).
   unexplained,
 
+  /// Every output to a transparent address: a payment public on chain (§9.1).
+  publicOutput,
+
   /// The rate the request was priced at.
   rate,
 
@@ -120,6 +123,9 @@ const String replacedAddressWords = 'replaced_address';
 /// by one other than their first; a choice for somebody the obligation does
 /// not pay needs nothing shown. [unexplainedWords] are the screen's words for
 /// a payment carrying more than the debts the bill records explain (§6).
+/// [publicWords] are the screen's words that a payment is public on chain,
+/// shown once for each output to a transparent address
+/// ([isTransparentAddress]) beside the name of who it pays.
 /// Findings come in the order of §14.2's list; within a rule, in the order
 /// the obligation or the fold gives the facts.
 List<ReviewFinding> checkPayerReview({
@@ -130,6 +136,7 @@ List<ReviewFinding> checkPayerReview({
   Map<String, int> via = const {},
   String lowerWords = '',
   String unexplainedWords = '',
+  String publicWords = '',
 }) {
   final text = visibleText.join('\n');
   final names = {for (final p in folded.bill.participants) p.id: p.name};
@@ -229,6 +236,31 @@ List<ReviewFinding> checkPayerReview({
     );
   }
 
+  // Said once for each public output, so one warning cannot stand for a
+  // second recipient paid in the open.
+  final payments = obligation.request.payments;
+  final publics = [
+    for (var i = 0; i < payments.length; i++)
+      if (splitz.isTransparentAddress(payments[i].address))
+        obligation.request.recipients[i],
+  ];
+  for (final id in publics) {
+    final who = name(id);
+    need(
+      ReviewRule.publicOutput,
+      'who is paid at a public address',
+      who,
+      text.contains(who),
+    );
+    need(
+      ReviewRule.publicOutput,
+      'that the payment to $who is public',
+      publicWords.isEmpty ? 'public_output' : publicWords,
+      publicWords.isNotEmpty &&
+          publicWords.allMatches(text).length >= publics.length,
+    );
+  }
+
   final figure = rateFigure(obligation.rate);
   need(
     ReviewRule.rate,
@@ -237,7 +269,6 @@ List<ReviewFinding> checkPayerReview({
     _showsNumber(text, figure),
   );
 
-  final payments = obligation.request.payments;
   for (var i = 0; i < payments.length; i++) {
     final p = payments[i];
     final who = name(obligation.request.recipients[i]);

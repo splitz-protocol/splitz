@@ -5,8 +5,8 @@
 Moving the blobs is the wallet's, and this is the smallest server that does
 it — two routes, a dictionary, and no knowledge of what it holds:
 
-    POST /c/<channel>   {"blobs": [...]}  -> {"ok": true}
-    GET  /c/<channel>                     -> {"blobs": [...]}
+    POST /c/<channel>   {"blobs": [...], "work": "<nonce>"}  -> {"ok": true}
+    GET  /c/<channel>                                       -> {"blobs": [...]}
 
 **It cannot read anything it stores.** A channel is SHA-256 of the bill id and
 a blob is ciphertext under a key only the participants hold, so a relay that
@@ -27,6 +27,13 @@ over the first is refused before it is read and the connection closed; a push
 that would cross the second is refused whole. A connection that sends nothing
 for `--idle-timeout` seconds is closed, so a client that opens connections and
 never finishes a request cannot hold every thread.
+
+**A push carries work** (SPEC.md §15.5), as the Worker's does: a decimal
+nonce whose SHA-256 over `splitz-relay-work-v1|<channel>|<h>|<nonce>`, `<h>`
+the hex SHA-256 of every blob's own SHA-256 in order, has `work_bits` leading
+zero bits. Too little,
+or none, is 428 with the base asked now as `work`; `--legacy-unstamped`
+accepts a push with none, as the Worker's `LEGACY_UNSTAMPED` does.
 
 **It authenticates nobody.** Anyone who can reach it can push, so anyone can
 fill it to `MAX_HELD_CHARS`, after which every push is refused with 507 until
@@ -49,6 +56,7 @@ at start rather than loaded in part.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -73,6 +81,39 @@ MAX_BODY_BYTES = 32 * 1024 * 1024
 # Everything held, across every channel. A push that would cross it is refused
 # whole rather than half-stored.
 MAX_HELD_CHARS = 512 * 1024 * 1024
+
+# §15.5's work: the base, the characters one unit pays for, and the nonce.
+WORK_BASE = 16
+WORK_UNIT_CHARS = 1024
+NONCE = re.compile(r"^[0-9]{1,20}$")
+LEGACY_UNSTAMPED = False
+
+
+def work_base(held: int, max_held: int) -> int:
+    """The base at a store holding `held` of `max_held`: up to 8 bits more as
+    it fills."""
+    return WORK_BASE + (8 * held) // max_held
+
+
+def work_bits(chars: int, base: int) -> int:
+    """The leading zero bits a push of `chars` characters needs at `base`."""
+    units = max(1, -(-chars // WORK_UNIT_CHARS))
+    return base + (units - 1).bit_length()
+
+
+def work_done(channel: str, blobs: list[str], nonce: str) -> int:
+    """The leading zero bits of `nonce`'s stamp of `blobs` on `channel`."""
+    inner = hashlib.sha256(
+        b"".join(hashlib.sha256(b.encode()).digest() for b in blobs)).hexdigest()
+    digest = hashlib.sha256(
+        f"splitz-relay-work-v1|{channel}|{inner}|{nonce}".encode()).digest()
+    bits = 0
+    for byte in digest:
+        if byte:
+            return bits + 8 - byte.bit_length()
+        bits += 8
+    return bits
+
 
 # A channel is a hex digest. Anything else is not one, and letting it through
 # would make the store a scratchpad for whoever asked.
@@ -265,6 +306,9 @@ class Relay(BaseHTTPRequestHandler):
                 not isinstance(b, str) for b in blobs
             ):
                 raise ValueError("blobs is a list of strings")
+            work = body.get("work")
+            if "work" in body and (not isinstance(work, str) or not NONCE.match(work)):
+                raise ValueError("work is a decimal nonce")
         except Exception:
             self._send(400, {"error": "not a push"})
             return
@@ -272,7 +316,15 @@ class Relay(BaseHTTPRequestHandler):
             if len(blob) > MAX_BLOB_CHARS:
                 self._send(413, {"error": f"a blob over {MAX_BLOB_CHARS} characters"})
                 return
+        done = -1 if work is None else work_done(channel, blobs, work)
         with LOCK:
+            base = work_base(HELD_CHARS, MAX_HELD_CHARS)
+            if work is None and not LEGACY_UNSTAMPED:
+                self._send(428, {"error": "a push carries work", "work": base})
+                return
+            if work is not None and done < work_bits(sum(len(b) for b in blobs), base):
+                self._send(428, {"error": "not enough work", "work": base})
+                return
             held = CHANNELS.get(channel, [])
             # A peer that pushes what it already pushed is the ordinary case,
             # not an error: sync is idempotent and a relay that grew on every
@@ -303,7 +355,7 @@ class Relay(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global MAX_BODY_BYTES, MAX_HELD_CHARS, STATE_FILE
+    global MAX_BODY_BYTES, MAX_HELD_CHARS, STATE_FILE, LEGACY_UNSTAMPED
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=39300)
     parser.add_argument("--host", default="127.0.0.1")
@@ -311,7 +363,9 @@ def main() -> None:
     parser.add_argument("--max-held", type=int, default=MAX_HELD_CHARS)
     parser.add_argument("--state-file")
     parser.add_argument("--idle-timeout", type=float, default=30.0)
+    parser.add_argument("--legacy-unstamped", action="store_true")
     args = parser.parse_args()
+    LEGACY_UNSTAMPED = args.legacy_unstamped
     # Read by the handler's setup: a connection silent this long is closed.
     Relay.timeout = args.idle_timeout
     MAX_BODY_BYTES, MAX_HELD_CHARS = args.max_body, args.max_held

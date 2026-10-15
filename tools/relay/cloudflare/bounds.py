@@ -1,7 +1,8 @@
 """The Worker's per-address and expiry bounds, against a running Worker
 started with small ones:
 
-    wrangler dev --var MAX_SOURCE_CHARS:8192 --var EXPIRE_DAYS:0.00005
+    wrangler dev --var MAX_SOURCE_CHARS:8192 --var EXPIRE_DAYS:0.00005 \
+        --var LEGACY_UNSTAMPED:1
 
     python3 bounds.py http://127.0.0.1:<port>
 
@@ -17,6 +18,9 @@ import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+from server import work_bits, work_done  # noqa: E402
+
 origin = sys.argv[1]
 run = os.urandom(8).hex()
 
@@ -25,8 +29,21 @@ def channel(name: str) -> str:
     return hashlib.sha256(f"{run}:{name}".encode()).hexdigest()
 
 
-def push(name: str, *blobs: str, source: str = "192.0.2.1") -> int:
-    body = json.dumps({"blobs": list(blobs)}).encode()
+def stamp(name: str, blobs: list, bits: int, exact: bool = False) -> str:
+    """The first nonce from zero with `bits` leading zero bits, or with
+    exactly `bits` when `exact`."""
+    n = 0
+    while not (work_done(channel(name), blobs, str(n)) == bits if exact
+               else work_done(channel(name), blobs, str(n)) >= bits):
+        n += 1
+    return str(n)
+
+
+def push(name: str, *blobs: str, source: str = "192.0.2.1", work=None) -> int:
+    payload = {"blobs": list(blobs)}
+    if work is not None:
+        payload["work"] = work
+    body = json.dumps(payload).encode()
     request = urllib.request.Request(f"{origin}/c/{channel(name)}", data=body, method="POST",
                                      headers={"CF-Connecting-IP": source})
     try:
@@ -65,6 +82,15 @@ expect("an IPv6 address inside its bound",
 expect("another address in the same /64",
        push("g", "f" * 3000, source="2001:DB8:1:2:ffff::9"), 429)
 expect("an address in the next /64", push("g", "f" * 3000, source="2001:db8:1:3::1"), 200)
+# §15.5: a stamped push is held to no address's bound. 192.0.2.1 is past its
+# day's bound above; 3000 characters are three units, 18 bits at base 16.
+three = "h" * 3000
+expect("a stamped push past the address's bound",
+       push("h", three, work=stamp("h", [three], work_bits(3000, 16))), 200)
+expect("a stamp made for other blobs", push("h", "i" * 3000, work=stamp("h", [three], 18)), 428)
+expect("a stamp one bit short",
+       push("j", "j" * 3000, work=stamp("j", ["j" * 3000], 17, exact=True)), 428)
+expect("a stamp that is not a nonce", push("j", "j", work="12a"), 400)
 expect("a channel to re-push", push("e", "x" * 100, "y" * 100, source="192.0.2.3"), 200)
 time.sleep(6)
 # Nothing has run expiry since the sleep. It runs before a push is compared

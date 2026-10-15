@@ -177,4 +177,88 @@ void main() {
       expect(swapAnswer(200, const [0xff, 0xfe, 0x41]), contains('A'));
     });
   });
+
+  group('the fee shown is a ceiling (§14.2)', () {
+    test('a raised fee is refused in words; an equal or lower one is not', () {
+      expect(
+        feeRaisedProblem(reviewedFee: 10000, fee: 15000),
+        'The fee went up from 0.0001 ZEC to 0.00015 ZEC since you reviewed '
+        'this payment. Nothing was sent; review it again.',
+      );
+      expect(feeRaisedProblem(reviewedFee: 10000, fee: 10001), isNotNull);
+      expect(feeRaisedProblem(reviewedFee: 10000, fee: 10000), isNull);
+      expect(feeRaisedProblem(reviewedFee: 10000, fee: 5000), isNull);
+    });
+
+    test('a figure no amount renders is said in zatoshi', () {
+      expect(
+        feeRaisedProblem(reviewedFee: 0, fee: 1),
+        startsWith('The fee went up from 0 zatoshi to 0.00000001 ZEC'),
+      );
+      expect(
+        feeRaisedProblem(reviewedFee: -5, fee: splitz.maxZatoshi + 1),
+        contains('-5 zatoshi to 2100000000000001 zatoshi'),
+      );
+    });
+
+    Future<(WalletSendOutcome, List<String>)> send({
+      required int fee,
+      List<host.ProposedOutput> read = _both,
+      bool discardThrows = false,
+    }) async {
+      final calls = <String>[];
+      final outcome = await sendReviewedPaymentRequest<int>(
+        uri: _request,
+        reviewedFee: 10000,
+        read: () async => read,
+        propose: () async {
+          calls.add('propose');
+          return (7, fee);
+        },
+        discard: (p) async {
+          calls.add('discard $p');
+          if (discardThrows) throw StateError('gone');
+        },
+        broadcast: (p) async {
+          calls.add('broadcast $p');
+          return const WalletSendOutcome(
+            phase: WalletSendPhase.succeeded,
+            txid: 'cd34',
+          );
+        },
+      );
+      return (outcome, calls);
+    }
+
+    test('a raised fee discards the proposal and broadcasts nothing', () async {
+      final (outcome, calls) = await send(fee: 10001);
+      expect(outcome.phase, WalletSendPhase.failed);
+      expect(outcome.error, contains('Nothing was sent'));
+      expect(calls, ['propose', 'discard 7']);
+    });
+
+    test('a discard that raises leaves the refusal standing', () async {
+      final (outcome, calls) = await send(fee: 20000, discardThrows: true);
+      expect(outcome.phase, WalletSendPhase.failed);
+      expect(outcome.error, contains('The fee went up'));
+      expect(calls, ['propose', 'discard 7']);
+    });
+
+    test('the reviewed fee, or less, is broadcast', () async {
+      for (final fee in [10000, 9999, 0]) {
+        final (outcome, calls) = await send(fee: fee);
+        expect(outcome.phase, WalletSendPhase.succeeded, reason: '$fee');
+        expect(calls, ['propose', 'broadcast 7']);
+      }
+    });
+
+    test('a request read differently builds nothing to discard', () async {
+      final (outcome, calls) = await send(
+        fee: 10000,
+        read: const [host.ProposedOutput('u1ana', 7004)],
+      );
+      expect(outcome.phase, WalletSendPhase.failed);
+      expect(calls, isEmpty);
+    });
+  });
 }

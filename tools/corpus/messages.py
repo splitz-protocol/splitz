@@ -99,6 +99,7 @@ MESSAGES = {
     "payload_too_large": "This bill is too big for one code. Share an invite.",
     "sealed_malformed": "An update to this bill is damaged.",
     "sealed_future_version": "An update to this bill needs a newer app.",
+    "sealed_too_large": "This is too long to send. Shorten it.",
     # §8 payment requests
     "zip321_no_payments": "There's nothing to pay.",
     "zip321_too_many_payments": "Too many people to pay at once.",

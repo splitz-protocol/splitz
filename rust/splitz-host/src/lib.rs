@@ -25,6 +25,7 @@ pub mod pending_sends;
 pub mod pricing;
 pub mod refunds;
 pub mod relay;
+pub mod relay_work;
 pub mod removal_plan;
 pub mod sealing;
 pub mod seam_contracts;
@@ -75,6 +76,10 @@ pub use pricing::{
 };
 pub use refunds::{refunds_behind, RefundsBehind};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
+pub use relay_work::{
+    leading_zero_bits, relay_work_bits, relay_work_holds, relay_work_stamp, RELAY_WORK_BASE,
+    RELAY_WORK_UNIT_CHARS,
+};
 pub use removal_plan::{
     expense_correctors, expense_withdrawal_target, plan_merge, plan_removal, removal_entries,
     split_merged, split_without, RemovalBlock, RemovalBlocker, RemovalEdit, RemovalPlan,
@@ -83,7 +88,9 @@ pub use sealing::{Sealing, BLOB_VERSION};
 pub use seam_contracts::{
     check_bill_storage, check_secret_store, check_splits_relay, check_zec_prices, SeamFinding,
 };
-pub use send_request::{proposal_problem, send_payment_request};
+pub use send_request::{
+    fee_raised_problem, proposal_problem, send_payment_request, send_reviewed_payment_request,
+};
 pub use signing::{base64url_decode, base64url_encode, Signer, VerifiedLog, SEED_BYTES};
 pub use split_draft::{DraftItem, SplitDraft, SplitKind};
 pub use store::{BillStore, MergedBill};
@@ -95,7 +102,7 @@ pub use swaps::{
     SwapQuote, SwapSendRefusal, SwapState, SwapStatus, TradableAsset, UnconfiguredSwaps,
     MAX_TOKEN_DECIMALS,
 };
-pub use sync::{SplitsSync, SyncResult};
+pub use sync::{SplitsSync, SyncResult, RELAY_SYNC_SECONDS};
 pub use transport::{component_encode, query_encode, HttpTransport};
 pub use wallet::{
     AccountSecretStore, BillStorage, InMemoryBillStorage, InMemorySecretStore, SecretStore,

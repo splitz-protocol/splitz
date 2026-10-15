@@ -1,6 +1,6 @@
 {
   "description": "SPEC.md §12: the plain-language sentence a host MAY show for each code.",
-  "count": 96,
+  "count": 97,
   "cases": [
     {
       "name": "address_invalid",
@@ -371,6 +371,11 @@
       "name": "sealed_malformed",
       "code": "sealed_malformed",
       "expect": "An update to this bill is damaged."
+    },
+    {
+      "name": "sealed_too_large",
+      "code": "sealed_too_large",
+      "expect": "This is too long to send. Shorten it."
     },
     {
       "name": "self_payment",

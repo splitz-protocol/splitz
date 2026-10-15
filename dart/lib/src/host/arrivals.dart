@@ -43,6 +43,49 @@ String? txidInSendOrder(String digestOrderHex) {
   ].join();
 }
 
+/// One transaction in a wallet's history, as §14.7 reads it.
+class HistoryTransaction {
+  const HistoryTransaction({
+    required this.txid,
+    required this.minedHeight,
+    required this.expiredUnmined,
+    required this.balanceDelta,
+  });
+
+  /// In the order a send reports it: see [txidInSendOrder].
+  final String txid;
+
+  /// The height of the block that mined it; zero or less when it is not
+  /// mined.
+  final int minedHeight;
+
+  /// Whether its expiry height passed without it being mined.
+  final bool expiredUnmined;
+
+  /// What it brought this account less what it took from it, in zatoshi.
+  final int balanceDelta;
+}
+
+/// Whether [row] is a transaction this account received (§14.7): mined, not
+/// expired unmined, and leaving the account with more than it had.
+///
+/// A payment from somebody else spends none of this account's notes, so its
+/// balance change is its outputs to this account; a transaction that also
+/// spent from this account is one of its own, never a payer's.
+bool isReceived(HistoryTransaction row) =>
+    row.minedHeight > 0 && !row.expiredUnmined && row.balanceDelta > 0;
+
+/// Every transaction of [history] that [isReceived] admits, each with its
+/// balance change as the zatoshi it brought, in [history]'s order. Memos are
+/// left unknown; a wallet that reads them adds them.
+List<IncomingTransaction> receivedTransactions(
+  List<HistoryTransaction> history,
+) =>
+    [
+      for (final row in history)
+        if (isReceived(row)) IncomingTransaction(row.txid, row.balanceDelta),
+    ];
+
 /// Money this wallet received in one transaction: the sum of that
 /// transaction's outputs to this account, in zatoshi.
 ///

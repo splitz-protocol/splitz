@@ -102,6 +102,7 @@ abstract final class SplitCode {
   static const payloadTooLarge = 'payload_too_large';
   static const sealedMalformed = 'sealed_malformed';
   static const sealedFutureVersion = 'sealed_future_version';
+  static const sealedTooLarge = 'sealed_too_large';
 
   // §8 payment requests
   static const zip321NoPayments = 'zip321_no_payments';
@@ -233,6 +234,7 @@ const Map<String, String> _plainMessages = {
   'restatement_superseded': 'Someone already wrote this expense again.',
   'sealed_future_version': 'An update to this bill needs a newer app.',
   'sealed_malformed': 'An update to this bill is damaged.',
+  'sealed_too_large': 'This is too long to send. Shorten it.',
   'self_payment': 'You can\'t pay yourself.',
   'swap_missing_reference': 'Add the swap\'s reference to record it.',
   'unauthorized_confirmation': 'Only the person paid can confirm this.',

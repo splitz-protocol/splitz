@@ -186,6 +186,21 @@ pub fn parse_address(text: &str) -> Result<ParsedAddress> {
     })
 }
 
+/// Whether `text` is an address §8.6 decodes as transparent — `p2pkh`,
+/// `p2sh` or `tex` — so that a payment to it is public on chain (§9.1, §14.2).
+///
+/// Only what §8.6 decodes is called transparent: a string it refuses is not,
+/// since nothing is known of it, and every kind §8.6 does not decode that a
+/// reader might is shielded.
+pub fn is_transparent_address(text: &str) -> bool {
+    parse_address(text).is_ok_and(|a| {
+        matches!(
+            a.kind,
+            AddressKind::P2pkh | AddressKind::P2sh | AddressKind::Tex
+        )
+    })
+}
+
 fn polymod(values: impl Iterator<Item = u8>) -> u32 {
     const GEN: [u32; 5] = [
         0x3B6A_57B2,

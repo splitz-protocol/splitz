@@ -5,9 +5,9 @@ use std::cell::Cell;
 use serde_json::Value;
 use splitz_core::compare_utf8;
 use splitz_core::host::{
-    arrivals_for, base64url_no_pad, confirm_payment, create_bill, join_bill, record_payment,
-    set_rate, Arrival, Arrivals, BillHost, BillLog, FoldedBill, IncomingTransaction, Sent,
-    SignEntry, VerifyEntry,
+    arrivals_for, base64url_no_pad, confirm_payment, create_bill, is_received, join_bill,
+    received_transactions, record_payment, set_rate, Arrival, Arrivals, BillHost, BillLog,
+    FoldedBill, HistoryTransaction, IncomingTransaction, Sent, SignEntry, VerifyEntry,
 };
 
 const T1: &str = "aa00000000000000000000000000000000000000000000000000000000000001";
@@ -605,4 +605,35 @@ fn memos_are_read_for_the_transactions_candidates_name_and_no_others() {
         vec![T1.to_owned()]
     );
     assert!(memo_txids(std::slice::from_ref(&folded), "ben").is_empty());
+}
+
+fn history(
+    txid: &str,
+    mined_height: i64,
+    expired_unmined: bool,
+    balance_delta: i64,
+) -> HistoryTransaction {
+    HistoryTransaction {
+        txid: txid.to_owned(),
+        mined_height,
+        expired_unmined,
+        balance_delta,
+    }
+}
+
+#[test]
+fn a_mined_unexpired_row_raising_the_balance_is_received() {
+    let got = received_transactions(&[history(T1, 100, false, 5000), history(T2, 100, false, 1)]);
+    assert_eq!(got, vec![received(T1, 5000), received(T2, 1)]);
+}
+
+#[test]
+fn each_history_exclusion_holds_on_its_own_at_its_boundary() {
+    assert!(!is_received(&history(T1, 0, false, 5000)));
+    assert!(!is_received(&history(T1, -1, false, 5000)));
+    assert!(is_received(&history(T1, 1, false, 5000)));
+    assert!(!is_received(&history(T1, 100, true, 5000)));
+    assert!(!is_received(&history(T1, 100, false, 0)));
+    assert!(!is_received(&history(T1, 100, false, -15000)));
+    assert!(received_transactions(&[history(T1, 0, false, 5), history(T2, 9, true, 5)]).is_empty());
 }

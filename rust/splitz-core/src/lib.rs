@@ -27,8 +27,8 @@ pub mod split;
 pub mod zip321;
 
 pub use address::{
-    parse_address, AddressKind, AddressNetwork, ParsedAddress, TYPECODE_ORCHARD, TYPECODE_P2PKH,
-    TYPECODE_P2SH, TYPECODE_SAPLING,
+    is_transparent_address, parse_address, AddressKind, AddressNetwork, ParsedAddress,
+    TYPECODE_ORCHARD, TYPECODE_P2PKH, TYPECODE_P2SH, TYPECODE_SAPLING,
 };
 pub use allocation::{allocate, allocate_evenly};
 pub use authority::{
@@ -43,12 +43,12 @@ pub use error::{code, describe_code, Result, SplitError};
 pub use instant::canonical_instant;
 pub use invite::{
     bill_key_digest, channel_for, copy_key, create_refuses_key, decode_payload, delta_for,
-    encode_payload, frame_sealed, is_invite_expired, key_fits_bill, parse_invite,
+    encode_payload, frame_sealed, is_invite_expired, key_fits_bill, pad_sealed, parse_invite,
     parse_sealed_frame, render_invite, render_invite_link, sealed_nonce, sealed_plaintext,
-    strip_scan_padding, within_depth, Delta, Invite, ScannedPayload, SealedFrame,
-    BILL_KEY_DIGEST_DOMAIN, BILL_PREFIX, DELTA_PREFIX, INVITE_VERSION, MAX_DOCUMENT_DEPTH,
-    MAX_ENTRY_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP, PAYLOAD_VERSION, SCAN_PADDING,
-    SEALED_VERSION, TAG_BYTES,
+    sealed_size_refusal, strip_scan_padding, unpad_sealed, within_depth, Delta, Invite,
+    ScannedPayload, SealedFrame, BILL_KEY_DIGEST_DOMAIN, BILL_PREFIX, DELTA_PREFIX, INVITE_VERSION,
+    MAX_DOCUMENT_DEPTH, MAX_ENTRY_DEPTH, MAX_INVITE_BILL_ID, NONCE_BYTES, PAYLOAD_CAP,
+    PAYLOAD_VERSION, SCAN_PADDING, SEALED_BUCKETS, SEALED_VERSION, TAG_BYTES,
 };
 pub use log::{
     check_entry, close_digest, confirmation_rule, derive_bill_id, derive_entry_id, fold_log,

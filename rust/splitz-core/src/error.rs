@@ -101,6 +101,7 @@ pub mod code {
     pub const PAYLOAD_TOO_LARGE: &str = "payload_too_large";
     pub const SEALED_MALFORMED: &str = "sealed_malformed";
     pub const SEALED_FUTURE_VERSION: &str = "sealed_future_version";
+    pub const SEALED_TOO_LARGE: &str = "sealed_too_large";
 
     // §8 payment requests
     pub const ZIP321_NO_PAYMENTS: &str = "zip321_no_payments";
@@ -355,6 +356,7 @@ const PLAIN_MESSAGES: &[(&str, &str)] = &[
         "An update to this bill needs a newer app.",
     ),
     ("sealed_malformed", "An update to this bill is damaged."),
+    ("sealed_too_large", "This is too long to send. Shorten it."),
     ("self_payment", "You can't pay yourself."),
     (
         "swap_missing_reference",
