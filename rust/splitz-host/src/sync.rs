@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 
 use serde_json::Value;
-use splitz_core::{sealed_size_refusal, SetAside};
+use splitz_core::{code, parse_sealed_frame, sealed_size_refusal, SetAside};
 
 use crate::error::{HostError, Result, SyncFailure};
 use crate::keys::SplitsKeys;
@@ -24,7 +24,16 @@ pub struct SyncResult {
     /// Counted rather than ignored. A channel where every blob is unopenable
     /// is a key that is wrong, and that looks identical to a quiet relay
     /// unless somebody is counting.
+    ///
+    /// Not counted here: a blob in a later frame format, which is `too_new`.
     pub unopenable: usize,
+    /// Blobs in the channel written in a frame format later than this build
+    /// reads (§11.3, `sealed_future_version`): somebody on the bill runs a
+    /// newer app, and this one needs an update to see what they wrote.
+    pub too_new: usize,
+    /// Every blob the channel returned, opened or not: what
+    /// [`SplitsSync::push_except`] need not send again.
+    pub channel: BTreeSet<String>,
 }
 
 /// The seconds between one sync of every held bill and the next (§15.5).
@@ -67,8 +76,8 @@ impl<'a> SplitsSync<'a> {
     /// is an entry it holds. Both directions merge by content, so running this
     /// twice, or on two devices at once, converges.
     pub fn sync(&self, bill_id: &str) -> Result<SyncResult> {
-        let (result, fetched) = self.pull_blobs(bill_id)?;
-        self.push_except(bill_id, &fetched)?;
+        let result = self.pull(bill_id)?;
+        self.push_except(bill_id, &result.channel)?;
         Ok(result)
     }
 
@@ -87,8 +96,8 @@ impl<'a> SplitsSync<'a> {
     }
 
     /// [`Self::push`], leaving out the blobs in `held` — what the channel is
-    /// known to hold.
-    fn push_except(&self, bill_id: &str, held: &BTreeSet<String>) -> Result<Vec<Value>> {
+    /// known to hold, as a [`SyncResult::channel`] gives it.
+    pub fn push_except(&self, bill_id: &str, held: &BTreeSet<String>) -> Result<Vec<Value>> {
         let entries = self.store.read(bill_id)?;
         if entries.is_empty() {
             return Ok(entries);
@@ -123,18 +132,26 @@ impl<'a> SplitsSync<'a> {
     /// hold different bills. §10.7 decides authorship over the whole log at
     /// fold time, where the answer is the same on every device and a locally
     /// written entry faces exactly the rules a synced one does.
+    ///
+    /// A pull alone carries no work and sends nothing, so a host can pull every
+    /// bill before it pushes any: a slow push then never holds back what the
+    /// others wrote.
     pub fn pull(&self, bill_id: &str) -> Result<SyncResult> {
-        Ok(self.pull_blobs(bill_id)?.0)
-    }
-
-    /// [`Self::pull`], and the blobs the channel returned.
-    fn pull_blobs(&self, bill_id: &str) -> Result<(SyncResult, BTreeSet<String>)> {
         let key = self.require_key(bill_id)?;
         let blobs = self.relay.fetch(&channel_for_bill(bill_id))?;
 
         let mut unopenable = 0;
+        let mut too_new = 0;
         let mut entries = Vec::new();
         for blob in &blobs {
+            // A frame from a later format is not a wrong key: the person needs
+            // an update, not a new invite (§11.3).
+            if let Err(e) = parse_sealed_frame(blob) {
+                if e.code == code::SEALED_FUTURE_VERSION {
+                    too_new += 1;
+                    continue;
+                }
+            }
             match Sealing.open(blob, &key) {
                 Ok(entry) => entries.push(entry),
                 // A foreign or altered blob is skipped rather than failing the
@@ -160,14 +177,13 @@ impl<'a> SplitsSync<'a> {
             });
         }
         let merged = self.store.merge(bill_id, entries)?;
-        Ok((
-            SyncResult {
-                entries: merged.entries,
-                refused: merged.refused,
-                unopenable,
-            },
-            blobs.into_iter().collect(),
-        ))
+        Ok(SyncResult {
+            entries: merged.entries,
+            refused: merged.refused,
+            unopenable,
+            too_new,
+            channel: blobs.into_iter().collect(),
+        })
     }
 
     fn require_key(&self, bill_id: &str) -> Result<String> {

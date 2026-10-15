@@ -924,7 +924,8 @@ never by rewriting the order (§14.8).
 this order: the new payout first, then every payout the record already
 declares that the new one does not replace, in its declared order. A new payout
 replaces every declared payout of its own `type`, and a `swap` only those of
-the same `asset` (compared case-insensitively; `chain` does not distinguish).
+the same `asset` (compared with ASCII letters folded to one case and every
+other character as it is; `chain` does not distinguish).
 A record that declares no payouts declares its `payTo` as one `zec` payout for
 this purpose, and one with neither declares nothing. `rankedPayouts` /
 `ranked_payouts` takes a participant and the new payout and returns that list.
@@ -933,9 +934,12 @@ this purpose, and one with neither declares nothing. `rankedPayouts` /
 §8.6 decodes as `p2pkh`, `p2sh` or `tex` is **transparent**
 (`isTransparentAddress` / `is_transparent_address`): a payment to it, its
 amount and its sender's transparent inputs are public on chain, and it can
-carry no memo (§8.3), so §14.7 cannot tie it to a bill. Every other `zec`
-payout is shielded for this purpose, including an address §8.6 refuses,
-since nothing is known of it. A host MUST NOT declare a transparent payout
+carry no memo (§8.3), so §14.7 cannot tie it to a bill. So is a Unified
+Address §8.6 refuses — a valid Bech32m string under a Unified Address prefix
+whose receivers §8.6 does not admit — since a wallet that reads more of ZIP
+316 pays a transparent receiver held beside a typecode §8.6 does not know,
+and nothing shows it is private. Every other `zec` payout is shielded for this
+purpose; a string that is no address at all is neither. A host MUST NOT declare a transparent payout
 unless the person chose it, and MUST tell them, when they do, that payments
 to it are public. In the list it writes, a transparent `zec` payout replaces
 only a transparent one and a shielded `zec` payout only a shielded one, and a
@@ -1287,6 +1291,12 @@ refused with `bill_type_error`. §9.5 leaves `v` out of the id, so a copy carryi
 value keeps the honest entry's id, and one whose `v` is not an integer would
 reach the canonical encoding that §10.2's merge and order compare — which
 refuses it — and take every batch it travels in down with it.
+
+**An entry MUST fit a sealed update**, checked after §2.2's numbers and
+refused with `sealed_too_large`: its canonical bytes and §11.3's padding
+marker are at most 32768. An entry over it can reach a device only through a
+scanned payload or an older frame, and never leaves it again, so a device that
+counted it would hold a bill nobody it syncs with can.
 
 **The payload MUST be an object, and every id inside it MUST be a string**,
 refused with `bill_type_error`. §10.1 is the only gate between a peer's JSON
@@ -2565,18 +2575,23 @@ blobs and a relay keyed by content holds both. Neither can detect it alone:
 each opens its own perfectly.
 
 **The padding.** A version 2 frame seals the plaintext followed by one `0x80`
-byte and then zero bytes, to the smallest of 512, 1024, 2048, 4096, 8192,
-16384 and 32768 bytes that holds both (`padSealed` / `pad_sealed`). A blob's
-size then says which bucket its entry fell in and not how long it is: a join,
-a payment and a small expense look alike. An entry whose canonical bytes and
-the marker are over 32768 is refused with `sealed_too_large`
-(`sealedSizeRefusal` / `sealed_size_refusal`), and a host MUST NOT write one:
-`signEntry` / `sign_entry` refuses it, since sealed it reaches no other
-device. A push leaves out an entry that cannot be sealed and sends the rest,
-so one such entry from a peer never holds back the others. A reader opens a
-version 2 plaintext only when its length is a bucket's and it ends in `0x80`
-and then only zeros (`unpadSealed` / `unpad_sealed`); anything else is
-`sealed_malformed`, because one plaintext has one padding.
+byte and then zero bytes, to the smallest of 1024, 2048, 4096, 8192, 16384
+and 32768 bytes that holds both (`padSealed` / `pad_sealed`). A blob's size
+then says which bucket its entry fell in and not how long it is: a join, a
+payment record, a confirmation and a small expense all fall in the first, and
+look alike. An entry whose canonical bytes and the marker are over 32768 is
+refused with `sealed_too_large` (`sealedSizeRefusal` /
+`sealed_size_refusal`): a host MUST NOT write one — `signEntry` /
+`sign_entry` refuses it, since sealed it reaches no other device — and
+§10.1 sets one aside wherever it arrives from, so no device counts an entry it
+could never pass on. A new expense — an `addExpense` with no `targetId` — is
+refused the same way once it leaves less than 1024 bytes under that bound
+(`restatementRoom` / `RESTATEMENT_ROOM`), so the restatement that may later
+replace it (§10.8) still seals. A push leaves out an entry that cannot be
+sealed and sends the rest. A reader opens a version 2 plaintext only when it
+ends in `0x80` and then only zeros and its length is the smallest bucket that
+holds what precedes the zeros (`unpadSealed` / `unpad_sealed`); anything else
+is `sealed_malformed`, because one plaintext has one padding.
 
 **The nonce** is `SHA-256(plaintext)` truncated to 24 bytes, over the padded
 bytes in a version 2 frame. Derived rather than random, and padding is
@@ -2602,7 +2617,11 @@ The version written is **2**; a reader opens versions 1 and 2, and version
 `sealed_future_version` rather than guess, and one below 1, an unparseable
 body, or a frame too short to hold a nonce and a tag with `sealed_malformed`.
 **A version of zero is a malformed frame and not a future format:** telling
-somebody their app is too old sends them to an update that will not help.
+somebody their app is too old sends them to an update that will not help. A
+sync counts a blob in a later format apart from one that does not open
+(`SyncResult.tooNew` / `too_new`; `OpenedBlobs.too_new` in the binding), so a
+person is told their app needs an update rather than that somebody holds a
+different key.
 
 **The channel** a bill's blobs are pushed to and pulled from is the bill id's
 SHA-256, lower-case hex. A digest rather than the id itself, because the id is
@@ -2678,7 +2697,12 @@ a blob this device holds that will not seal or open, before any peer's
 content is read (`SealingException`; `Sealing`); and a fault in the host
 itself (`UnansweredSignatureQuestion`, and `SeedDriverException` in
 development builds). `SwapRefused` / `SwapRefused` carries a typed refusal,
-which a host words.
+which a host words. So do `NamedSendRefusal` and `OwnPaymentWithdrawal`, the
+same names in both hosts. A transaction the wallet built that is not the one
+the person reviewed — outputs it read differently, or a higher fee
+(`proposalProblem`, `feeRaisedProblem`; `proposal_problem`,
+`fee_raised_problem`) — is answered in a sentence: it refuses what the
+wallet did, not what the person asked for.
 
 `vectors/messages.json` gives one plain-language sentence per code, which a
 host MAY show as it stands. Both implementations return it from
@@ -2780,7 +2804,8 @@ nothing to omit.
 - Every debt with a payment recorded and not yet confirmed (§10.5).
 - Every recipient paid by a preference other than their first (§14.8).
 - Every output to a transparent address (§9.1), and that the payment is
-  public on chain, once for each such output.
+  public on chain, once for each such output — every output of the request
+  handed to the wallet, a swap's deposit (§14.10) as much as a debt's.
 - Every recipient paid more than the debts the bill records explain, and that
   it is so (§6): a refund somebody else attributed to the payer is the one
   thing coverage cannot account for.
@@ -2817,8 +2842,9 @@ by a lower preference with the wallet's words for it, every recipient paid
 more than the bill's debts explain with the wallet's words for that, every
 recipient paid at a transparent address with the wallet's words that the
 payment is public (given as `publicWords` / `public_words`, and found once
-for each such output), the rate figure, and each output's ZEC amount and
-address.
+for each such output), every transparent address in `deposits` — the outputs
+the request pays beyond the obligation, as a swap's deposit — with those
+words once more, the rate figure, and each output's ZEC amount and address.
 
 **An address or a reference counts as shown** when the text holds it whole,
 or holds its first 10 characters and then stops agreeing with it on a
@@ -3244,8 +3270,12 @@ MUST let the creator confirm a payment whose payee states no `identityKey`
 and is bound to no key (§10.7), written as that payee and unsigned, as their
 `joinBill` was — the fold admits it as it admits any unbound author's entry.
 It MUST NOT offer this to anybody but the creator, nor for a payee who
-states or has bound a key, nor for a payment the creator made: a payer who
-confirms their own payment asserts twice that they paid it (§10.5). `confirmerFor` / `confirmer_for` answer who writes
+states or has bound a key. That includes a payment the creator made to the
+added name: the creator then vouches for both sides, which a confirmation
+exists to prevent between two people who each hold a key, but the added name
+holds none and anybody on the bill can write as them unsigned (§10.7), so
+refusing the creator would stop only an honest host and leave the bill
+unsettled for good. `confirmerFor` / `confirmer_for` answer who writes
 a confirmation of a payment, and `awaitingConfirmationFor` /
 `awaiting_confirmation_for` list what a device may confirm;
 `confirm_payment_for_entry` and `awaiting_my_confirmation` in the binding.
@@ -3425,8 +3455,28 @@ left before dessert and cannot be handed a code across the table.
   relay, so a transport that quietly does nothing looks exactly like one that
   is working.
 
+**The exchange.** A relay is reached at an origin, and a channel at
+`<origin>/c/<channel>`. `GET` answers `{"blobs":[…]}`, every blob the
+channel holds. `POST` takes `{"blobs":[…],"work":"<nonce>"}` and answers
+`{"ok":true}` once every blob is held; anything else is answered
+`{"error":"<words>"}`, and `{"error":…,"work":<base>}` when it lacks work
+(below). A client reads the body whatever the HTTP status — 400 for a body
+that is not a push, 404 for a path that is not a channel, 413 for a body
+or a blob over its bound, 428 for too little work, 507 for a full store — and
+treats any answer but `{"ok":true}` as a refusal, transient. A blob is a
+§11.3 frame: base64url with no padding, so each character is one byte, and at
+most 65,536 of them; a body is at most 32 MiB, and a client splits a push
+that would be larger into several (`HttpSplitsRelay` in both host packages).
+A relay refuses a blob that is not base64url, so every relay counts a push's
+characters alike.
+
 **A push carries work, not a name.** Nothing a relay is sent says who sent
 it, and a relay MUST NOT be asked to count anything by the sender's address.
+A relay that also serves clients written before work was required MAY take
+their unstamped pushes, and only those, under a per-address bound of its own
+(`LEGACY_UNSTAMPED` in `tools/relay/cloudflare`, `--legacy-unstamped` in
+`tools/relay/server.py`); it counts nothing for a stamped push, and a client
+of this version always stamps.
 What keeps one sender from filling a public relay for everybody is work: the
 body of `POST <origin>/c/<channel>` is `{"blobs":[…],"work":"<nonce>"}`, and
 the nonce is a decimal string of 1 to 20 digits whose SHA-256 over the UTF-8
@@ -3441,7 +3491,8 @@ up to 1024 characters, 17 up to 2048, 18 up to 4096. A relay's base is 16
 plus up to 8 as its store fills — `16 + ⌊8 × held ÷ capacity⌋` — so filling it
 costs more the fuller it is. A push with too little work, or none, is answered
 `{"error":…,"work":<base>}` with status 428; a client stamps it once more at
-that base, when it is above the one it used and at most 40, and sends it
+that base, when it is above the one it used and at most 24 — the most a
+relay asks — and sends it
 again, and a second refusal stands (`HttpSplitsRelay` in both host packages;
 `relayPushBody` and `relayWorkAsked` in the binding). A stamp covers one list
 of blobs on one channel — fixed-length digests, so no other list hashes the
@@ -3459,13 +3510,27 @@ a route that is starting or has failed holds the request rather than sending
 it direct. `HttpSplitsRelay` takes its two calls injected for this, in both
 host packages, and a wallet on the binding makes them itself.
 
-**Sync on a fixed schedule.** A host SHOULD sync every bill it holds — pull,
-then push — on one fixed interval, `relaySyncSeconds` /
-`RELAY_SYNC_SECONDS` (30), whatever is on screen: not faster for the bill a
-person has open, and not at once when they write. A write is pushed at the
-next tick. A relay sees when a channel is read and written; a client that
-polls only the open bill, or pushes the moment something is typed, tells it
-which bill is being looked at and when somebody is at their phone.
+**Sync on a fixed schedule.** A host SHOULD sync every bill it holds on one
+fixed interval, `relaySyncSeconds` / `RELAY_SYNC_SECONDS` (30), for as long
+as it runs and whatever is on screen: not faster for the bill a person has
+open, not only while a bill is open, and not at once when they write. Each
+tick pulls every bill before it pushes any, so a push still working its stamp
+never holds back what the others wrote (`SplitsSync.pull` returns the blobs
+the channel held, which `push` then leaves out). A write is pushed at the next
+tick, and a host SHOULD push once more when its wallet leaves the foreground,
+so a write made just before is not left for a tick that may not come. A
+relay sees when a channel is read and written; a client that polls only the
+open bill, or pushes the moment something is typed, tells it which bill is
+being looked at and when somebody is at their phone.
+
+**Pull before a write that moves money.** A host MUST pull a bill's channel
+before it withdraws a payment record and before it sends, and decide the
+write on what that pull merged: a payee's confirmation already on the relay
+but not yet pulled would otherwise let the payment be withdrawn and asked for
+again. When the channel cannot be read, a withdrawal is refused; a send goes
+ahead, since the chain, not the relay, is what it needs. The pull names the
+bill to the relay at the moment money moves, which the payment itself shows
+the chain moments later.
 
 ### 15.6 `ZecPrices`
 

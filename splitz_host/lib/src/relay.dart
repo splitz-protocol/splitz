@@ -220,7 +220,10 @@ class HttpSplitsRelay implements SplitsRelay {
         final decoded = _decode(body);
         if (decoded['ok'] == true) break;
         final asked = decoded['work'];
-        if (attempt == 0 && asked is int && asked > base && asked <= 40) {
+        if (attempt == 0 &&
+            asked is int &&
+            asked > base &&
+            asked <= relayWorkMaxBase) {
           base = asked;
           continue;
         }

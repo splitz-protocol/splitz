@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use serde_json::{json, Value};
 use splitz_host::{
     leading_zero_bits, relay_work_bits, relay_work_holds, relay_work_stamp, HttpSplitsRelay,
-    HttpTransport, SplitsRelay,
+    HttpTransport, SplitsRelay, RELAY_WORK_MAX_BASE,
 };
 
 const CHANNEL: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -107,11 +107,31 @@ fn a_push_is_stamped_once_more_at_the_base_a_refusal_asks() {
 }
 
 #[test]
-fn a_second_refusal_stands_and_an_ask_past_40_bits_is_not_worked_for() {
+fn a_second_refusal_stands_and_an_ask_past_the_most_a_relay_asks_is_not_worked_for() {
     let (ok, seen) = pushed(vec![18, 40]);
     assert!(!ok);
     assert_eq!(seen.len(), 2);
-    let (ok, seen) = pushed(vec![41]);
-    assert!(!ok);
-    assert_eq!(seen.len(), 1);
+    for ask in [RELAY_WORK_MAX_BASE + 1, 40, 41] {
+        let (ok, seen) = pushed(vec![ask]);
+        assert!(!ok, "{ask}");
+        assert_eq!(seen.len(), 1, "{ask}");
+    }
+}
+
+#[test]
+fn the_most_a_relay_asks_is_read_and_one_more_is_not() {
+    assert_eq!(RELAY_WORK_MAX_BASE, 24);
+    let ask = |n: u32| HttpSplitsRelay::work_asked(&format!("{{\"work\":{n}}}"), 16);
+    assert_eq!(ask(24), Some(24));
+    assert_eq!(ask(25), None);
+    assert_eq!(ask(16), None, "not above what was done");
+}
+
+#[test]
+fn a_push_body_for_a_base_past_the_most_a_relay_asks_is_refused() {
+    let body = |base: u32| HttpSplitsRelay::push_body(CHANNEL, &blobs(&["x"]), base);
+    assert!(body(RELAY_WORK_MAX_BASE + 1).is_err());
+    assert!(body(u32::MAX).is_err());
+    assert!(body(16).unwrap().is_some());
+    assert_eq!(relay_work_bits(1 << 20, u32::MAX), u32::MAX, "saturates");
 }

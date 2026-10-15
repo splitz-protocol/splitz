@@ -108,3 +108,4 @@ rust::BINANCE_ZEC_SYMBOL       # `binanceZecSymbol`.
 rust::binance_price_url        # `BinanceZecPrices.request`: Rust lifts it to the crate as it does `coingecko_price_url`.
 rust::coinbase_price_url       # `CoinbaseZecPrices.request`: the same.
 shape::fold_verified takes 5 in dart, 4 in rust   # Dart takes an optional `SplitsSigner` to verify with, so a caller holding one reuses it; Rust verifies through the module's own functions and has no signer object to pass. The four shared parameters are the same.
+dart::equals_ignoring_ascii_case  # `src/ascii.dart`, not exported: the one fold §9.1 and §15.7 compare an asset or chain with, which Rust writes as `str::eq_ignore_ascii_case`.

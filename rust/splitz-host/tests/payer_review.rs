@@ -165,6 +165,7 @@ fn found(shown: &[String], reasons: &BTreeMap<String, String>) -> Vec<(ReviewRul
         "",
         "",
         "",
+        &[],
     )
     .unwrap()
     .into_iter()
@@ -301,6 +302,7 @@ fn lower_found(
         words,
         "",
         "",
+        &[],
     )
     .unwrap()
     .into_iter()
@@ -544,6 +546,7 @@ fn a_payment_the_bill_does_not_explain_names_who_and_says_so() {
             "",
             words,
             "",
+            &[],
         )
         .unwrap()
         .into_iter()
@@ -604,6 +607,7 @@ fn public_findings(
         "",
         "",
         words,
+        &[],
     )
     .unwrap()
     .into_iter()
@@ -640,3 +644,78 @@ fn a_shielded_or_undecoded_output_needs_no_public_warning() {
     let b = bill_paying(&via, BEN, EVE_LATER);
     assert!(public_findings(&b, &[], "").is_empty());
 }
+
+/// The deposit a swap quote names, from `tools/contracts/fixtures/quote.json`.
+const DEPOSIT_T1: &str = "t1eEvd4gkYDW8vUSbDxTe9VtarYFNdoB49q";
+
+fn deposit_findings(shown: &[&str], deposits: &[&str]) -> Vec<String> {
+    let via = BTreeMap::from([("eve".to_owned(), 1)]);
+    let (obligation, folded) = bill_paying(&via, BEN, EVE_LATER);
+    let shown: Vec<String> = screen()
+        .into_iter()
+        .chain(shown.iter().map(|s| s.to_string()))
+        .collect();
+    let deposits: Vec<String> = deposits.iter().map(|d| d.to_string()).collect();
+    check_payer_review(
+        &obligation,
+        &folded,
+        &shown,
+        &reasons(),
+        &via,
+        "",
+        "",
+        PUBLIC,
+        &deposits,
+    )
+    .unwrap()
+    .into_iter()
+    .filter(|f| f.rule == ReviewRule::PublicOutput)
+    .map(|f| f.expected)
+    .collect()
+}
+
+#[test]
+fn a_transparent_swap_deposit_needs_its_address_and_the_words() {
+    assert_eq!(deposit_findings(&[], &[DEPOSIT_T1]), [DEPOSIT_T1, PUBLIC]);
+    assert_eq!(deposit_findings(&[DEPOSIT_T1], &[DEPOSIT_T1]), [PUBLIC]);
+    assert!(deposit_findings(&[DEPOSIT_T1, PUBLIC], &[DEPOSIT_T1]).is_empty());
+}
+
+#[test]
+fn a_transparent_deposit_beside_a_transparent_payee_needs_the_words_twice() {
+    let via = BTreeMap::from([("eve".to_owned(), 1)]);
+    let b = bill_paying(&via, BEN, T1);
+    let review = |shown: &[&str]| -> Vec<String> {
+        let shown: Vec<String> = screen()
+            .into_iter()
+            .chain(shown.iter().map(|s| s.to_string()))
+            .collect();
+        check_payer_review(
+            &b.0,
+            &b.1,
+            &shown,
+            &reasons(),
+            &via,
+            "",
+            "",
+            PUBLIC,
+            &[DEPOSIT_T1.to_owned()],
+        )
+        .unwrap()
+        .into_iter()
+        .filter(|f| f.rule == ReviewRule::PublicOutput)
+        .map(|f| f.expected)
+        .collect()
+    };
+    assert_eq!(review(&["Eve", DEPOSIT_T1, PUBLIC]), [PUBLIC, PUBLIC]);
+    assert!(review(&["Eve", DEPOSIT_T1, PUBLIC, PUBLIC]).is_empty());
+}
+
+#[test]
+fn a_shielded_deposit_needs_no_public_warning() {
+    assert!(deposit_findings(&[], &[SHIELDED_UNIFIED]).is_empty());
+    assert!(deposit_findings(&[], &[]).is_empty());
+}
+
+/// A Unified Address §8.6 decodes, with a shielded receiver.
+const SHIELDED_UNIFIED: &str = "u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0";

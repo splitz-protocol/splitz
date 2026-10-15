@@ -54,6 +54,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const WORK_BASE = 16;
 const WORK_UNIT_CHARS = 1024;
 const NONCE = /^[0-9]{1,20}$/;
+// A blob is a sealed frame, base64url with no padding (§11.3): anything else
+// is no client's, and a character then counts the same in every relay.
+const BLOB = /^[A-Za-z0-9_-]+$/;
 
 // The leading zero bits a push of `chars` characters needs at a store holding
 // `held` of `maxHeld`.
@@ -217,7 +220,9 @@ export class Relay extends DurableObject {
     let work;
     try {
       ({ blobs, work } = JSON.parse(raw || "{}"));
-      if (!Array.isArray(blobs) || blobs.some((b) => typeof b !== "string")) throw new Error();
+      if (!Array.isArray(blobs) || blobs.some((b) => typeof b !== "string" || !BLOB.test(b))) {
+        throw new Error();
+      }
       if (work !== undefined && (typeof work !== "string" || !NONCE.test(work))) throw new Error();
     } catch {
       return answer(400, { error: "not a push" });

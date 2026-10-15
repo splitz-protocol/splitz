@@ -265,19 +265,27 @@ def seal_cases():
     # Section 11.3's buckets, at and either side of a boundary. `{"n":"x…"}`
     # is 8 bytes of JSON around the string, and the marker takes one more.
     for name, length in [
-        ("fills_the_first_bucket", 511),
-        ("one_over_the_first_bucket", 512),
+        ("fills_the_first_bucket", 1023),
+        ("one_over_the_first_bucket", 1024),
         ("fills_the_largest_bucket", 32767),
         ("one_over_the_largest_bucket", 32768),
     ]:
         out.append(seal_case(name, {"n": "x" * (length - 8)}))
     for name, padded in [
-        ("a_padded_plaintext_opens", b"{}" + b"\x80" + b"\x00" * 509),
-        ("padding_that_is_only_the_marker", b"{" + b"\x00" * 510 + b"\x80"),
-        ("a_length_no_bucket_has", b"{}" + b"\x80" + b"\x00" * 508),
-        ("no_marker_before_the_zeros", b"{}" + b"\x00" * 510),
-        ("a_marker_followed_by_a_byte", b"{}" + b"\x80" + b"\x00" * 508 + b"\x01"),
-        ("all_zeros", b"\x00" * 512),
+        ("a_padded_plaintext_opens", b"{}" + b"\x80" + b"\x00" * 1021),
+        ("padding_that_is_only_the_marker", b"{" + b"\x00" * 1022 + b"\x80"),
+        ("a_length_no_bucket_has", b"{}" + b"\x80" + b"\x00" * 1020),
+        ("no_marker_before_the_zeros", b"{}" + b"\x00" * 1022),
+        ("a_marker_followed_by_a_byte", b"{}" + b"\x80" + b"\x00" * 1020 + b"\x01"),
+        ("all_zeros", b"\x00" * 1024),
+        # One plaintext has one padding: a bucket past the smallest that
+        # holds it is refused, and the smallest one exactly full opens.
+        ("padded_past_the_smallest_bucket", b"{}" + b"\x80" + b"\x00" * 2045),
+        ("a_full_bucket_opens", b"{\"n\":\"" + b"x" * 1015 + b"\"}" + b"\x80"),
+        ("one_byte_over_a_bucket_pads_to_the_next",
+         b"{\"n\":\"" + b"x" * 1016 + b"\"}" + b"\x80" + b"\x00" * 1023),
+        ("one_byte_over_a_bucket_left_in_it",
+         b"{\"n\":\"" + b"x" * 1016 + b"\"}" + b"\x80"),
     ]:
         case = {"name": name, "padded": b64url(padded)}
         try:

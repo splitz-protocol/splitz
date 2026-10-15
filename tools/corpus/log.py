@@ -829,8 +829,26 @@ def at_depth(total):
     return e
 
 
+def at_size(total):
+    """An expense whose canonical encoding is `total` bytes, its id derived
+    (§10.1, §11.3)."""
+    for pad in range(total, 0, -1):
+        e = {"v": 1, "author": "ana", "kind": "addExpense", "at": AT(3),
+             "expense": {"id": "ana:x1", "paidBy": "ana", "amount": 1, "at": AT(3),
+                         "split": {"type": "equal", "among": ["ana"]},
+                         "note": "x" * pad}}
+        e["id"] = derive_entry_id(e)
+        if len(canonical_json(e).encode("utf-8")) == total:
+            return e
+    raise ValueError(total)
+
+
 ENTRY_CASES = [
     ("a_create_entry_derives_its_id", C),
+    # §10.1, §11.3: an entry a sealed update carries, and one byte past it,
+    # which reaches no other device and so moves nobody's balance.
+    ("an_entry_a_sealed_update_carries", at_size(32767)),
+    ("an_entry_one_byte_over_what_a_sealed_update_carries", at_size(32768)),
     # §10.1. A signature is a string or absent: `null` would sort above every
     # string and win every merge it entered.
     ("a_signature_that_is_not_a_string_is_refused", dict(J_ANA, sig=None)),

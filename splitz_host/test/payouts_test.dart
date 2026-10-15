@@ -186,4 +186,51 @@ void main() {
       expect(ranked([t1, _zecA], ua), ['u1l8', 't1Hs']);
     });
   });
+
+  group('an asset or a chain is compared by ASCII case alone', () {
+    Payout swap(String asset, String chain) =>
+        Payout(type: 'swap', asset: asset, chain: chain, address: '0x$asset');
+    test('a payout replaces one whose asset differs only in ASCII case', () {
+      expect(
+        _keys(
+          rankedPayouts(
+            _who(payouts: [swap('usdc', 'eth')]),
+            swap('USDC', 'sol'),
+          ),
+        ),
+        ['swap:USDC:0xUSDC'],
+      );
+    });
+    test('no other fold: ß is not SS, ﬁ is not FI', () {
+      for (final (held, next) in [('ß', 'SS'), ('ﬁ', 'FI'), ('é', 'É')]) {
+        expect(
+          _keys(
+            rankedPayouts(
+              _who(payouts: [swap(held, 'eth')]),
+              swap(next, 'eth'),
+            ),
+          ),
+          ['swap:$next:0x$next', 'swap:$held:0x$held'],
+          reason: held,
+        );
+      }
+    });
+    test('a quoted asset answers its payout by ASCII case alone', () {
+      const asset = TradableAsset(
+        assetId: 'a',
+        symbol: 'USDC',
+        chain: 'base',
+        decimals: 6,
+      );
+      expect(asset.answers('usdc', 'BASE'), isTrue);
+      const odd = TradableAsset(
+        assetId: 'b',
+        symbol: 'ÜSD',
+        chain: 'base',
+        decimals: 6,
+      );
+      expect(odd.answers('üsd', 'base'), isFalse);
+      expect(odd.answers('ÜSD', 'base'), isTrue);
+    });
+  });
 }

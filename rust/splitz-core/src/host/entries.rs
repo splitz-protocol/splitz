@@ -523,7 +523,9 @@ pub fn void_entry(host: &dyn BillHost, target_id: &str, not_before: Option<&str>
 /// `createBill` entry's bill is its own id.
 ///
 /// Refused with `sealed_too_large` when the entry it returns cannot be sealed
-/// (§11.3): written, it would stay on this device and reach no other.
+/// (§11.3): written, it would stay on this device and reach no other. A new
+/// expense — an `addExpense` with no `targetId` — is refused once it leaves
+/// less than [`RESTATEMENT_ROOM`] under the largest bucket.
 pub fn sign_entry(host: &dyn BillHost, entry: &Value, bill_id: &str) -> Result<Value> {
     let signed = match host.signer() {
         None => entry.clone(),
@@ -543,8 +545,26 @@ pub fn sign_entry(host: &dyn BillHost, entry: &Value, bill_id: &str) -> Result<V
             "This entry is too large to seal (§11.3)",
         ));
     }
+    let new_expense = signed.get("kind").and_then(Value::as_str) == Some("addExpense")
+        && signed.get("targetId").is_none();
+    if new_expense
+        && crate::invite::sealed_plaintext(&signed)?.len() + 1
+            > crate::invite::SEALED_BUCKETS[crate::invite::SEALED_BUCKETS.len() - 1]
+                - RESTATEMENT_ROOM
+    {
+        return Err(SplitError::new(
+            crate::error::code::SEALED_TOO_LARGE,
+            "This expense leaves no room for the restatement that may replace it",
+        ));
+    }
     Ok(signed)
 }
+
+/// The bytes a new expense leaves under the largest bucket (§11.3) for the
+/// restatement that may later replace it (§10.8): a `targetId`, a `basis`,
+/// and a split naming somebody else. Without it an expense could be written
+/// that its author or the creator could never correct or take somebody off.
+pub const RESTATEMENT_ROOM: usize = 1024;
 
 /// Fills in the members every entry carries and derives §9.5's id.
 ///

@@ -14,6 +14,7 @@ import 'errors.dart';
 import 'instant.dart';
 import 'money.dart';
 import 'ordering.dart';
+import 'payload.dart' show sealedSizeRefusal;
 import 'serialization.dart';
 import 'sha256.dart';
 import 'split.dart';
@@ -272,6 +273,12 @@ Map<String, dynamic> checkEntry(Object? raw) {
   checkScalarValues(entry);
   // §2.2 and §9.3, at entry ingress, before any member is read.
   _checkNumbers(entry);
+
+  // §10.1, §11.3. An entry no sealed update carries reaches no other device:
+  // one device counting it would hold a bill nobody it syncs with can.
+  if (sealedSizeRefusal(entry) case final code?) {
+    raise(code, 'An entry is over what a sealed update carries');
+  }
 
   final carried = [
     for (final p in _payloadNames)

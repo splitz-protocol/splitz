@@ -311,6 +311,52 @@ fn blobs_sealed_under_a_key_the_bill_did_not_commit_to_are_not_kept() {
 }
 
 #[test]
+fn an_entry_no_bucket_holds_is_left_out_of_a_push_and_the_rest_are_sealed() {
+    // §11.3: a peer's oversized entry can arrive through an older frame; one
+    // entry must not stop every other being pushed.
+    let own = new_bill_key(RandomBytes { bytes: vec![7; 32] }).unwrap();
+    let small = serde_json::json!({"v": 1, "id": "e1"}).to_string();
+    let at_cap = |len: usize| serde_json::json!({"v": 1, "id": "e2", "pad": "x".repeat(len)});
+    let oversized = at_cap(40_000).to_string();
+    let blobs = splitz_ffi::blobs_to_push(vec![small.clone(), oversized], own.clone()).unwrap();
+    assert_eq!(blobs.len(), 1);
+    // The largest entry a bucket holds is still sealed.
+    let fits = (1..40_000)
+        .rev()
+        .map(at_cap)
+        .find(|e| matches!(splitz_core::sealed_size_refusal(e), Ok(None)))
+        .unwrap()
+        .to_string();
+    let blobs = splitz_ffi::blobs_to_push(vec![small, fits], own).unwrap();
+    assert_eq!(blobs.len(), 2);
+}
+
+#[test]
+fn a_blob_in_a_later_frame_format_is_counted_as_too_new() {
+    let own = new_bill_key(RandomBytes { bytes: vec![7; 32] }).unwrap();
+    let entry = serde_json::json!({"v": 1, "id": "e1"}).to_string();
+    let blob = splitz_ffi::blobs_to_push(vec![entry], own.clone())
+        .unwrap()
+        .remove(0);
+    let with_version = |v: u8| {
+        let mut bytes = splitz_core::zip321::unbase64url(&blob).unwrap();
+        bytes[0] = v;
+        splitz_core::zip321::base64url(&bytes)
+    };
+    let opened = splitz_ffi::open_blobs(
+        vec![
+            blob.clone(),
+            with_version(splitz_core::SEALED_VERSION + 1),
+            with_version(0),
+        ],
+        "bill".into(),
+        own,
+    );
+    assert_eq!(opened.entries.len(), 1);
+    assert_eq!((opened.too_new, opened.unopenable), (1, 1));
+}
+
+#[test]
 fn a_create_that_only_states_the_bill_id_does_not_make_its_key_foreign() {
     // §9.4: only the bill's own create, whose id derives, speaks for the key.
     // Anybody holding the key can seal a create stating the bill's id with

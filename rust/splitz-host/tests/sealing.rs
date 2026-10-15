@@ -164,15 +164,15 @@ fn a_blob_is_as_long_as_its_bucket_not_its_entry() {
     let key = a_key(3);
     assert_eq!(
         sealed_bytes(&Sealing.seal(&an_entry("Ana"), &key).unwrap()),
-        512
-    );
-    assert_eq!(
-        sealed_bytes(&Sealing.seal(&an_entry(&"A".repeat(40)), &key).unwrap()),
-        512
+        1024
     );
     assert_eq!(
         sealed_bytes(&Sealing.seal(&an_entry(&"A".repeat(600)), &key).unwrap()),
         1024
+    );
+    assert_eq!(
+        sealed_bytes(&Sealing.seal(&an_entry(&"A".repeat(1200)), &key).unwrap()),
+        2048
     );
     assert_eq!(
         base64url_decode(&Sealing.seal(&an_entry("Ana"), &key).unwrap()).unwrap()[0],
@@ -194,10 +194,14 @@ fn a_version_2_blob_padded_any_other_way_is_refused() {
     let plain = splitz_core::sealed_plaintext(&an_entry("Ana")).unwrap();
     let mut short = plain.clone();
     short.push(0x80);
-    short.resize(510, 0);
+    short.resize(1022, 0);
     let mut no_marker = plain.clone();
-    no_marker.resize(512, 0);
-    for clear in [plain.clone(), short, no_marker] {
+    no_marker.resize(1024, 0);
+    // One plaintext has one padding: not a bucket past the smallest.
+    let mut past = plain.clone();
+    past.push(0x80);
+    past.resize(2048, 0);
+    for clear in [plain.clone(), short, no_marker, past] {
         assert!(
             Sealing.open(&seal_raw(2, &clear, &key), &key).is_err(),
             "{}",

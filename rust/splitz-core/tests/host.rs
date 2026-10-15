@@ -15,11 +15,13 @@ use std::collections::BTreeSet;
 use splitz_core::host::{
     accept_scan, add_expense, authored_id, base64url_no_pad, close_for, confirm_payment,
     create_bill, delta_for, invite_for, join_bill, obligation_for, read_scan, record_payment,
-    record_send, reopen_for, request_stands, set_rate, settle, settle_refusal, shareable_bill,
-    sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent, SignEntry, VerifyEntry,
+    record_send, reopen_for, request_stands, restate_expense, set_rate, settle, settle_refusal,
+    shareable_bill, sign_entry, void_entry, BillHost, BillLog, Scanned, SendResult, Sent,
+    SignEntry, VerifyEntry, RESTATEMENT_ROOM,
 };
 use splitz_core::{
-    check_entry, net_balances, participant_id, sha256_hex, signing_message, Delta, Invite,
+    check_entry, net_balances, participant_id, sealed_plaintext, sha256_hex, signing_message,
+    Delta, Invite, SEALED_BUCKETS,
 };
 
 // --- a wallet that does nothing ---------------------------------------------
@@ -1314,4 +1316,44 @@ fn sign_entry_refuses_an_entry_no_sealed_update_carries_signed_or_not() {
         .unwrap()
         .get("sig")
         .is_some());
+}
+
+#[test]
+fn a_new_expense_leaves_room_for_its_restatement_which_still_signs() {
+    let ana = FakeHost::new("ana");
+    let split = |among: &[&str]| json!({"type": "equal", "among": among});
+    let expense = |pad: usize| {
+        add_expense(
+            &FakeHost::new("ana"),
+            "x1",
+            "ana",
+            3000,
+            split(&["ana", "ben", "cai"]),
+            Some(&"x".repeat(pad)),
+        )
+        .unwrap()
+    };
+    let cap = SEALED_BUCKETS[SEALED_BUCKETS.len() - 1] - 1 - RESTATEMENT_ROOM;
+    let base = sealed_plaintext(&expense(0)).unwrap().len();
+    let fits = expense(cap - base);
+    assert_eq!(sealed_plaintext(&fits).unwrap().len(), cap);
+    sign_entry(&ana, &fits, TEST_BILL).unwrap();
+    let err = sign_entry(&ana, &expense(cap - base + 1), TEST_BILL).unwrap_err();
+    assert_eq!(err.code, "sealed_too_large");
+    // The creator restates the largest expense written, taking Cai off.
+    let restated = restate_expense(
+        &FakeHost::new("ana"),
+        fits["id"].as_str().unwrap(),
+        None,
+        "x1",
+        "ana",
+        3000,
+        split(&["ana", "ben"]),
+        Some(&"x".repeat(cap - base)),
+    )
+    .unwrap();
+    sign_entry(&ana, &restated, TEST_BILL).unwrap();
+    // Only a new expense is held to the room: a join that long still signs.
+    let join = join_bill(&ana, Some(&"A".repeat(cap + 200)), None, None, None).unwrap();
+    sign_entry(&ana, &join, TEST_BILL).unwrap();
 }

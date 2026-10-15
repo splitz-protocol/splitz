@@ -36,7 +36,7 @@ const int sealedVersion = 2;
 
 /// The plaintext lengths a version 2 frame pads to, in bytes, smallest first
 /// (§11.3). A blob's size then says only which bucket its entry fell in.
-const List<int> sealedBuckets = [512, 1024, 2048, 4096, 8192, 16384, 32768];
+const List<int> sealedBuckets = [1024, 2048, 4096, 8192, 16384, 32768];
 
 /// XChaCha20-Poly1305 nonce length, in bytes.
 const int nonceBytes = 24;
@@ -348,10 +348,10 @@ List<int> padSealed(List<int> plaintext) {
 
 /// The plaintext [padded] holds, as [padSealed] wrote it (§11.3).
 ///
-/// Refused with `sealed_malformed` unless its length is one of
-/// [sealedBuckets] and it ends in `0x80` followed only by zeros: one
-/// plaintext has one padding, so a blob padded any other way is not one a
-/// writer produced.
+/// Refused with `sealed_malformed` unless it ends in `0x80` followed only by
+/// zeros and its length is the smallest of [sealedBuckets] that holds what
+/// precedes them: one plaintext has one padding, so a blob padded any other
+/// way is not one a writer produced.
 List<int> unpadSealed(List<int> padded) {
   if (!sealedBuckets.contains(padded.length)) {
     raise(SplitCode.sealedMalformed,
@@ -363,6 +363,10 @@ List<int> unpadSealed(List<int> padded) {
   }
   if (end == 0 || padded[end - 1] != 0x80) {
     raise(SplitCode.sealedMalformed, 'An update is not padded with 0x80');
+  }
+  if (sealedBuckets.firstWhere((b) => b >= end) != padded.length) {
+    raise(SplitCode.sealedMalformed,
+        'An update is padded past the smallest bucket that holds it');
   }
   return padded.sublist(0, end - 1);
 }

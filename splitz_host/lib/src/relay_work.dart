@@ -10,6 +10,10 @@ import 'package:crypto/crypto.dart' as crypto;
 /// relay's load add to it.
 const int relayWorkBase = 16;
 
+/// The largest base a relay asks for: [relayWorkBase] and 8 bits more as its
+/// store fills (§15.5). An ask above it is refused rather than worked for.
+const int relayWorkMaxBase = relayWorkBase + 8;
+
 /// The characters of blob one unit of work pays for.
 const int relayWorkUnitChars = 1024;
 

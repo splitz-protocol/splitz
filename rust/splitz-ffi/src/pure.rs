@@ -1272,8 +1272,8 @@ pub fn relay_channel_url(origin: String, channel: String) -> Result<String> {
 /// The JSON body of `POST <origin>/c/<channel>`, `{"blobs":[…],"work":"…"}`,
 /// stamped (§15.5) for a relay asking `base` leading zero bits — 16, or what
 /// `relay_work_asked` read from a refusal — or `None` when `blobs` is empty
-/// and no request is made. A blob over 65536 characters is refused, not
-/// transient, before anything is sent. The stamp takes about 2^`base` hashes
+/// and no request is made. A blob over 65536 characters, or a `base` above
+/// 24, is refused, not transient, before anything is sent. The stamp takes about 2^`base` hashes
 /// and more for a large push, so call it off the thread that draws.
 #[uniffi::export]
 pub fn relay_push_body(channel: String, blobs: Vec<String>, base: u32) -> Result<Option<String>> {
@@ -1290,7 +1290,8 @@ pub fn relay_sync_seconds() -> u32 {
 }
 
 /// The base a relay that refused a push asks for now, read from the body it
-/// answered with, when it is above `done` and at most 40; `None` otherwise.
+/// answered with, when it is above `done` and at most 24, the most a relay
+/// asks (§15.5); `None` otherwise.
 /// A wallet stamps the push once more at that base (`relay_push_body`) and
 /// sends it again; a second refusal stands.
 #[uniffi::export]
@@ -1322,11 +1323,18 @@ pub fn relay_fetch_answer(body: String) -> Result<Vec<String>> {
 /// with this device's key on the next push. A blob is keyed by its content,
 /// so pushing the whole log every time is safe: a relay stores each entry
 /// once however often it is sent.
+///
+/// An entry no bucket holds (§11.3, `sealed_too_large`) is left out and the
+/// rest are still sealed: a peer's can arrive through an older frame, and one
+/// entry must not hold back every other this device has to send.
 #[uniffi::export]
 pub fn blobs_to_push(entries: Vec<String>, bill_key: String) -> Result<Vec<String>> {
     let entries = parse_entries(&entries)?;
     let mut blobs = Vec::with_capacity(entries.len());
     for entry in &entries {
+        if matches!(splitz_core::sealed_size_refusal(entry), Ok(Some(_))) {
+            continue;
+        }
         blobs.push(Sealing.seal(entry, &bill_key)?);
     }
     Ok(blobs)
@@ -1338,8 +1346,13 @@ pub struct OpenedBlobs {
     pub entries: Vec<String>,
     /// Counted rather than ignored. A channel where every blob is unopenable
     /// is a key that is wrong, and that looks identical to a quiet relay
-    /// unless somebody counts.
+    /// unless somebody counts. A blob in a later frame format is `too_new`,
+    /// not this.
     pub unopenable: u32,
+    /// Blobs in a frame format later than this build reads (§11.3,
+    /// `sealed_future_version`): somebody on the bill runs a newer app, and
+    /// this one needs an update to see what they wrote.
+    pub too_new: u32,
     /// The bill's own create opened under this key and commits to another
     /// (§9.4, `invite_key_mismatch`): the key is not this bill's, so nothing
     /// opened is kept and every blob counts as unopenable.
@@ -1357,8 +1370,15 @@ pub struct OpenedBlobs {
 pub fn open_blobs(blobs: Vec<String>, bill_id: String, bill_key: String) -> OpenedBlobs {
     let mut entries = Vec::new();
     let mut unopenable = 0;
+    let mut too_new = 0;
     let mut foreign_key = false;
     for blob in &blobs {
+        if let Err(e) = splitz_core::parse_sealed_frame(blob) {
+            if e.code == splitz_core::code::SEALED_FUTURE_VERSION {
+                too_new += 1;
+                continue;
+            }
+        }
         match Sealing.open(blob, &bill_key) {
             Ok(entry) => {
                 // §9.4: `bill_id`'s own create opened under this key that
@@ -1378,12 +1398,14 @@ pub fn open_blobs(blobs: Vec<String>, bill_id: String, bill_key: String) -> Open
         return OpenedBlobs {
             entries: Vec::new(),
             unopenable: u32::try_from(blobs.len()).unwrap_or(u32::MAX),
+            too_new: 0,
             foreign_key,
         };
     }
     OpenedBlobs {
         entries,
         unopenable,
+        too_new,
         foreign_key,
     }
 }
@@ -2140,7 +2162,9 @@ pub fn rate_figure(rate: ffi::ExchangeRate) -> String {
 /// than the bill's debts explain (§6), and `public_words` its words that a
 /// payment is public on chain, shown once for each output to a transparent
 /// address (`parse_address`'s `transparent`); empty words are a finding
-/// when one is.
+/// when one is. `deposits` are the addresses the request handed to the
+/// wallet pays beyond `obligation` — a swap's deposit (§14.10) — and each
+/// transparent one is shown, with the same words once more.
 ///
 /// The strings are joined with a line break and each fact is looked for as a
 /// case-sensitive substring: an amount as [`render_amount`] writes it with no
@@ -2165,6 +2189,7 @@ pub fn check_payer_review(
     lower_words: String,
     unexplained_words: String,
     public_words: String,
+    deposits: Vec<String>,
 ) -> Result<Vec<ffi::ReviewFinding>> {
     let obligation = payer_obligation(&obligation)?;
     let folded = folded_bill(&facts, &bill_id, &entries)?;
@@ -2179,6 +2204,7 @@ pub fn check_payer_review(
         &lower_words,
         &unexplained_words,
         &public_words,
+        &deposits,
     )?;
     Ok(found.into_iter().map(review_finding).collect())
 }

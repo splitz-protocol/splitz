@@ -85,7 +85,10 @@ MAX_HELD_CHARS = 512 * 1024 * 1024
 # §15.5's work: the base, the characters one unit pays for, and the nonce.
 WORK_BASE = 16
 WORK_UNIT_CHARS = 1024
-NONCE = re.compile(r"^[0-9]{1,20}$")
+NONCE = re.compile(r"[0-9]{1,20}")
+# A blob is a sealed frame, base64url with no padding (§11.3): anything else
+# is no client's, and a character then counts the same in every relay.
+BLOB = re.compile(r"[A-Za-z0-9_-]+")
 LEGACY_UNSTAMPED = False
 
 
@@ -117,7 +120,7 @@ def work_done(channel: str, blobs: list[str], nonce: str) -> int:
 
 # A channel is a hex digest. Anything else is not one, and letting it through
 # would make the store a scratchpad for whoever asked.
-CHANNEL = re.compile(r"^[0-9a-f]{64}$")
+CHANNEL = re.compile(r"[0-9a-f]{64}")
 
 CHANNELS: "OrderedDict[str, list[str]]" = OrderedDict()
 HELD_CHARS = 0
@@ -139,7 +142,7 @@ def load_state(path: str) -> None:
         raise SystemExit(f"{path}: not an object of channels")
     held = 0
     for channel, blobs in loaded.items():
-        if not CHANNEL.match(channel):
+        if not CHANNEL.fullmatch(channel):
             raise SystemExit(f"{path}: {channel[:16]!r} is not a channel")
         if not isinstance(blobs, list) or any(
             not isinstance(b, str) or len(b) > MAX_BLOB_CHARS for b in blobs
@@ -242,7 +245,7 @@ class Relay(BaseHTTPRequestHandler):
 
     def _channel(self) -> str | None:
         parts = self.path.strip("/").split("/")
-        if len(parts) != 2 or parts[0] != "c" or not CHANNEL.match(parts[1]):
+        if len(parts) != 2 or parts[0] != "c" or not CHANNEL.fullmatch(parts[1]):
             return None
         return parts[1]
 
@@ -303,11 +306,11 @@ class Relay(BaseHTTPRequestHandler):
             body = json.loads(raw or b"{}")
             blobs = body["blobs"]
             if not isinstance(blobs, list) or any(
-                not isinstance(b, str) for b in blobs
+                not isinstance(b, str) or not BLOB.fullmatch(b) for b in blobs
             ):
-                raise ValueError("blobs is a list of strings")
+                raise ValueError("blobs is a list of base64url strings")
             work = body.get("work")
-            if "work" in body and (not isinstance(work, str) or not NONCE.match(work)):
+            if "work" in body and (not isinstance(work, str) or not NONCE.fullmatch(work)):
                 raise ValueError("work is a decimal nonce")
         except Exception:
             self._send(400, {"error": "not a push"})

@@ -147,14 +147,14 @@ void main() {
 
     test('a blob is as long as its bucket, not its entry', () async {
       final key = keys.generateKey();
-      expect(sealedBytes(await sealing.seal(anEntry(), key)), 512);
-      expect(
-        sealedBytes(await sealing.seal(anEntry(name: 'A' * 40), key)),
-        512,
-      );
+      expect(sealedBytes(await sealing.seal(anEntry(), key)), 1024);
       expect(
         sealedBytes(await sealing.seal(anEntry(name: 'A' * 600), key)),
         1024,
+      );
+      expect(
+        sealedBytes(await sealing.seal(anEntry(name: 'A' * 1200), key)),
+        2048,
       );
       expect(SplitsSigner.decode(await sealing.seal(anEntry(), key))[0], 2);
     });
@@ -171,8 +171,10 @@ void main() {
       final plain = protocol.sealedPlaintext(anEntry());
       for (final clear in [
         plain,
-        [...plain, 0x80, ...List.filled(510 - plain.length, 0)],
-        [...plain, ...List.filled(512 - plain.length, 0)],
+        [...plain, 0x80, ...List.filled(1022 - plain.length, 0)],
+        [...plain, ...List.filled(1024 - plain.length, 0)],
+        // One plaintext has one padding: not a bucket past the smallest.
+        [...plain, 0x80, ...List.filled(2047 - plain.length, 0)],
       ]) {
         await expectLater(
           () async => sealing.open(await sealRaw(2, clear, key), key),

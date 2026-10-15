@@ -99,7 +99,7 @@ pub struct TradableAsset {
 }
 
 impl TradableAsset {
-    /// Whether this is what `symbol` on `chain` asked for, ignoring case.
+    /// Whether this is what `symbol` on `chain` asked for, ignoring ASCII case.
     ///
     /// Both halves must match. A payout naming `USDC` on `base` is not
     /// satisfied by `USDC` on any other chain.

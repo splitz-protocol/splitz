@@ -209,5 +209,52 @@ void main() {
       final join = joinBill(host: ana, name: 'Ana', payTo: 'u1ana');
       expect(await signed(join, 'kA'), contains('sig'));
     });
+
+    test('a new expense leaves room for its restatement, which still signs',
+        () async {
+      final ana = FakeHost(me: 'ana');
+      Map<String, dynamic> expense(int pad) => addExpense(
+            host: FakeHost(me: 'ana'),
+            expenseId: 'x1',
+            paidBy: 'ana',
+            amount: 3000,
+            split: {
+              'type': 'equal',
+              'among': ['ana', 'ben', 'cai'],
+            },
+            description: 'x' * pad,
+          );
+      final cap = splitz.sealedBuckets.last - 1 - restatementRoom;
+      final base = splitz.sealedPlaintext(expense(0)).length;
+      final fits = expense(cap - base);
+      expect(splitz.sealedPlaintext(fits).length, cap);
+      await signEntry(host: ana, entry: fits, billId: _bill);
+      await expectLater(
+        signEntry(host: ana, entry: expense(cap - base + 1), billId: _bill),
+        throwsA(isA<splitz.SplitError>()
+            .having((e) => e.code, 'code', 'sealed_too_large')),
+      );
+      // The creator restates the largest expense written, taking Cai off.
+      final restated = restateExpense(
+        host: FakeHost(me: 'ana'),
+        targetId: fits['id'] as String,
+        basis: null,
+        expenseId: 'x1',
+        paidBy: 'ana',
+        amount: 3000,
+        split: {
+          'type': 'equal',
+          'among': ['ana', 'ben'],
+        },
+        description: 'x' * (cap - base),
+      );
+      await signEntry(host: ana, entry: restated, billId: _bill);
+      // Only a new expense is held to the room: a join that long still signs.
+      await signEntry(
+        host: ana,
+        entry: joinBill(host: ana, name: 'A' * (cap + 200)),
+        billId: _bill,
+      );
+    });
   });
 }

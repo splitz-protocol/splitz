@@ -1273,8 +1273,8 @@ fn nobody_else_confirms_for_somebody_added() {
     assert!(awaiting_confirmation_for(&folded, "cai").is_empty());
 }
 
-/// The creator paid Josh, whom they added: a payment the creator would then
-/// confirm themselves.
+/// The creator paid Josh, whom they added: nobody but the creator can confirm
+/// it, Josh holding no key.
 fn the_creator_paid_josh() -> Bill {
     let mut b = Bill::new();
     b.join("josh");
@@ -1285,14 +1285,19 @@ fn the_creator_paid_josh() -> Bill {
 }
 
 #[test]
-fn the_creator_does_not_confirm_a_payment_they_made() {
+fn the_creator_confirms_a_payment_they_made_to_somebody_they_added() {
     let folded = the_creator_paid_josh().fold();
     let pay = &folded.bill.payments[0];
     assert_eq!(pay.from, "ana");
-    assert_eq!(confirmer_for(&folded, pay, "ana"), None);
-    assert!(awaiting_confirmation_for(&folded, "ana").is_empty());
-    // Josh, on a device of his own under this id, still confirms it.
-    assert_eq!(confirmer_for(&folded, pay, "josh").as_deref(), Some("josh"));
+    assert_eq!(confirmer_for(&folded, pay, "ana").as_deref(), Some("josh"));
+    assert_eq!(
+        awaiting_confirmation_for(&folded, "ana")
+            .iter()
+            .map(|p| p.id.as_str())
+            .collect::<Vec<_>>(),
+        [pay.id.as_str()]
+    );
+    assert_eq!(confirmer_for(&folded, pay, "cai"), None);
 }
 
 #[test]

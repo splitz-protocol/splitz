@@ -91,6 +91,10 @@ expect("a stamp made for other blobs", push("h", "i" * 3000, work=stamp("h", [th
 expect("a stamp one bit short",
        push("j", "j" * 3000, work=stamp("j", ["j" * 3000], 17, exact=True)), 428)
 expect("a stamp that is not a nonce", push("j", "j", work="12a"), 400)
+expect("a nonce with a trailing newline", push("j", "j", work=stamp("j", ["j"], 16) + "\n"), 400)
+for junk in ("a=", "a b", "\u00e9", ""):
+    expect(f"a blob that is not base64url ({junk!r})",
+           push("k", junk, work=stamp("k", [junk], 16)), 400)
 expect("a channel to re-push", push("e", "x" * 100, "y" * 100, source="192.0.2.3"), 200)
 time.sleep(6)
 # Nothing has run expiry since the sleep. It runs before a push is compared

@@ -140,7 +140,7 @@ void main() {
     expect(awaitingConfirmationFor(f, 'cai'), isEmpty);
   });
 
-  test('the creator does not confirm a payment they made', () {
+  test('the creator confirms a payment they made to somebody they added', () {
     final b = _Bill();
     b.write(
       'ana',
@@ -155,10 +155,49 @@ void main() {
     final f = b.fold();
     final pay = f.bill.payments.single;
     expect(pay.from, 'ana');
+    expect(confirmerFor(f, pay, 'ana'), 'josh');
+    expect(awaitingConfirmationFor(f, 'ana').map((p) => p.id), [pay.id]);
+    b.write(
+      'josh',
+      (h) => entries.confirmPayment(
+        host: h,
+        paymentId: pay.id,
+        method: 'recipientConfirmed',
+        record: f.paymentDigests[pay.id]!,
+      ),
+    );
+    final after = b.fold();
+    expect(after.setAside, isEmpty);
+    expect(after.bill.confirmedPayments, [pay.id]);
+    expect(awaitingConfirmationFor(after, 'ana'), isEmpty);
+  });
+
+  test('the creator does not confirm a payment they made to somebody with '
+      'a key', () {
+    final b = _Bill();
+    b.write(
+      _jo,
+      (h) => entries.joinBill(
+        host: h,
+        name: 'Jo',
+        payTo: 'u1jo',
+        identityKey: fakeKey('jo'),
+      ),
+    );
+    b.write(
+      'ana',
+      (h) => entries.recordPayment(
+        host: h,
+        paymentId: 'tx5:$_jo',
+        to: _jo,
+        amount: 700,
+        method: 'cash',
+      ),
+    );
+    final f = b.fold();
+    final pay = f.bill.payments.single;
     expect(confirmerFor(f, pay, 'ana'), isNull);
-    expect(awaitingConfirmationFor(f, 'ana'), isEmpty);
-    // Josh, on a device of his own under this id, still confirms it.
-    expect(confirmerFor(f, pay, 'josh'), 'josh');
+    expect(confirmerFor(f, pay, _jo), _jo);
   });
 
   test('the creator does not confirm for somebody who joined with a key', () {

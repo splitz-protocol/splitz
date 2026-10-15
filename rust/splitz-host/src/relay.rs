@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use std::sync::Mutex;
 
 use crate::error::HostError;
-use crate::relay_work::{relay_work_bits, relay_work_stamp, RELAY_WORK_BASE};
+use crate::relay_work::{relay_work_bits, relay_work_stamp, RELAY_WORK_BASE, RELAY_WORK_MAX_BASE};
 use crate::transport::HttpTransport;
 use crate::wallet::SplitsRelay;
 
@@ -160,6 +160,12 @@ impl<'a> HttpSplitsRelay<'a> {
         if blobs.is_empty() {
             return Ok(None);
         }
+        if base > RELAY_WORK_MAX_BASE {
+            return Err(relay_error(
+                format!("A relay asks for at most {RELAY_WORK_MAX_BASE} bits, not {base}"),
+                false,
+            ));
+        }
         for blob in blobs {
             let chars = blob.chars().count();
             if chars > Self::MAX_BLOB_CHARS {
@@ -250,12 +256,12 @@ impl<'a> HttpSplitsRelay<'a> {
     }
 
     /// The base a relay that refused a push asks for now, when its answer
-    /// names one above `done` and no higher than 40 bits: the push is then
+    /// names one above `done` and no higher than [`RELAY_WORK_MAX_BASE`]: the push is then
     /// stamped once more at that base. `None` for any other answer.
     pub fn work_asked(body: &str, done: u32) -> Option<u32> {
         let asked = Self::decode(body).ok()?.get("work")?.as_u64()?;
         let asked = u32::try_from(asked).ok()?;
-        (asked > done && asked <= 40).then_some(asked)
+        (asked > done && asked <= RELAY_WORK_MAX_BASE).then_some(asked)
     }
 
     /// Why a request never reached an answer, as §15.5 raises it: retryable.

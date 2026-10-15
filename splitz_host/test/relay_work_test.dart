@@ -1,5 +1,7 @@
 /// §15.5's work: the stamp every implementation finds, and a push stamped
 /// again when the relay asks for more.
+// A stamp at the most a relay asks is about 2^24 hashes.
+@Timeout(Duration(minutes: 5))
 library;
 
 import 'dart:convert';
@@ -96,13 +98,37 @@ void main() {
       expect(seen, hasLength(2));
     });
 
-    test('an ask past 40 bits is not worked for', () async {
-      final (r, seen) = relay([41]);
-      await expectLater(
-        r.push(_channel, ['x']),
-        throwsA(isA<SplitsRelayException>()),
+    for (final ask in [relayWorkMaxBase + 1, 40, 41]) {
+      test(
+        'an ask of $ask, past the most a relay asks, is not worked for',
+        () async {
+          final (r, seen) = relay([ask]);
+          await expectLater(
+            r.push(_channel, ['x']),
+            throwsA(isA<SplitsRelayException>()),
+          );
+          expect(seen, hasLength(1));
+        },
       );
-      expect(seen, hasLength(1));
+    }
+
+    test('the most a relay asks is the base and 8 bits for a full store', () {
+      expect(relayWorkMaxBase, 24);
+    });
+
+    test('an ask of exactly the most a relay asks is worked for', () async {
+      final (r, seen) = relay([relayWorkMaxBase, relayWorkMaxBase]);
+      await r.push(_channel, ['x']);
+      expect(seen, hasLength(2));
+      expect(
+        relayWorkHolds(
+          _channel,
+          ['x'],
+          seen.last['work'] as String,
+          relayWorkMaxBase,
+        ),
+        isTrue,
+      );
     });
   });
 }

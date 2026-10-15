@@ -31,7 +31,7 @@ CASES = HERE / "coinbase_cases.json"
 FIXTURE = HERE / "fixtures" / "coinbase_rates.json"
 LIVE = "https://api.coinbase.com/v2/exchange-rates?currency=ZEC"
 MAX = 2**53 - 1
-DECIMAL = re.compile(r"^[0-9]+(\.[0-9]+)?$")
+DECIMAL = re.compile(r"[0-9]+(\.[0-9]+)?")
 
 
 def exponents() -> dict[str, int]:
@@ -65,7 +65,7 @@ def read(body: str, currency: str):
     raw = rates.get(currency.upper())
     if raw is None:
         return None
-    if not isinstance(raw, str) or not DECIMAL.match(raw):
+    if not isinstance(raw, str) or not DECIMAL.fullmatch(raw):
         return "malformed"
     return scale(raw, exponent)
 

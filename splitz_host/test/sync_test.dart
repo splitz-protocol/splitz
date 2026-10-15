@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:test/test.dart';
@@ -313,6 +314,60 @@ void main() {
     final pulled = await ana.sync.pull(billId);
     expect(pulled.unopenable, 1, reason: 'counted, so a wrong key is visible');
     expect(pulled.entries.length, 1, reason: 'the bill itself is unaffected');
+  });
+
+  group('a blob in a frame format this build does not read (§11.3)', () {
+    // The bill's own blob, its version byte rewritten.
+    Future<(Device, String, SyncResult)> pulledWith(int version) async {
+      final relay = InMemorySplitsRelay();
+      final ana = Device(FakeWallet(), relay);
+      final create = splitz.createBill(
+        host: ana.host,
+        name: 'Dinner',
+        currency: 'EUR',
+        creatorKey: 'A' * 43,
+      );
+      final billId = create['id'] as String;
+      await ana.keys.storeBillKey(billId, ana.keys.generateKey());
+      await ana.store.merge(billId, [create]);
+      await ana.sync.push(billId);
+      final channel = SplitsChannel.forBill(billId);
+      final blob = (await relay.fetch(channel)).single;
+      final bytes = base64Url.decode(base64Url.normalize(blob));
+      bytes[0] = version;
+      final other = base64Url.encode(bytes).replaceAll('=', '');
+      await relay.push(channel, [other]);
+      return (ana, other, await ana.sync.pull(billId));
+    }
+
+    test('is counted as too new, not as a wrong key', () async {
+      final (_, _, pulled) = await pulledWith(protocol.sealedVersion + 1);
+      expect(pulled.tooNew, 1);
+      expect(pulled.unopenable, 0);
+      expect(pulled.entries.length, 1);
+    });
+
+    test('the largest version byte is too new as well', () async {
+      final (_, _, pulled) = await pulledWith(255);
+      expect((pulled.tooNew, pulled.unopenable), (1, 0));
+    });
+
+    test('a version of zero is malformed, so it is unopenable', () async {
+      final (_, _, pulled) = await pulledWith(0);
+      expect((pulled.tooNew, pulled.unopenable), (0, 1));
+    });
+
+    test('a v1 frame of the same bytes is read as v1, not too new', () async {
+      final (_, _, pulled) = await pulledWith(1);
+      // Its plaintext is padded, which v1 is not, so it fails to decode.
+      expect((pulled.tooNew, pulled.unopenable), (0, 1));
+    });
+
+    test('every blob the channel returned is in channel', () async {
+      final (_, other, pulled) = await pulledWith(protocol.sealedVersion + 1);
+      expect(pulled.channel, hasLength(2));
+      expect(pulled.channel, contains(other));
+    });
   });
 
   test('the channel is the bill id\'s hash, never the id', () {

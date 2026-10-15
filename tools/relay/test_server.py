@@ -173,6 +173,9 @@ def a_push_carries_enough_work():
     assert server.work_bits(1025, 16) == 17 and server.work_bits(2049, 16) == 18
     assert server.work_base(0, 512) == 16 and server.work_base(256, 512) == 20
     assert server.work_base(511, 512) == 23
+    assert server.NONCE.fullmatch("568171") and not server.NONCE.fullmatch("568171\n")
+    assert server.CHANNEL.fullmatch(CH) and not server.CHANNEL.fullmatch(CH + "\n")
+    assert server.BLOB.fullmatch("AZaz09-_") and not server.BLOB.fullmatch("AZ=")
     here = os.path.dirname(os.path.abspath(__file__))
 
     def post(origin, body):
@@ -202,6 +205,11 @@ def a_push_carries_enough_work():
             assert post(origin, {"blobs": ["x"], "work": "abc"})[0] == 400
             assert post(origin, {"blobs": ["x"], "work": 127719})[0] == 400
             assert post(origin, {"blobs": ["x"], "work": None})[0] == 400
+            # A nonce or a channel is read whole: a trailing newline is not one.
+            assert post(origin, {"blobs": ["x"], "work": stamp(CH, ["x"], 16) + "\n"})[0] == 400
+            # A blob is base64url with no padding; anything else is no client's.
+            for junk in ("a=", "a b", "é", "\U0001F600", ""):
+                assert post(origin, {"blobs": [junk], "work": stamp(CH, [junk], 16)})[0] == 400, junk
             assert post(origin, {"blobs": ["x"], "work": stamp(CH, ["x"], 16)}) == (
                 200, {"ok": True})
             big = ["b" * 2049]

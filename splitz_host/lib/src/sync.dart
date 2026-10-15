@@ -78,8 +78,8 @@ class SplitsSync {
   /// an entry it holds. Both directions merge by content, so running this
   /// twice, or on two devices at once, converges.
   Future<SyncResult> sync(String billId) async {
-    final (result, fetched) = await _pull(billId);
-    await push(billId, held: fetched);
+    final result = await pull(billId);
+    await push(billId, held: result.channel);
     return result;
   }
 
@@ -130,16 +130,28 @@ class SplitsSync {
   /// different bills. §10.7 decides authorship over the whole log at fold time,
   /// where the answer is the same on every device and a locally written entry
   /// faces exactly the rules a synced one does.
-  Future<SyncResult> pull(String billId) async => (await _pull(billId)).$1;
-
-  /// [pull], and the blobs the channel returned.
-  Future<(SyncResult, Set<String>)> _pull(String billId) async {
+  ///
+  /// A pull alone carries no work and sends nothing, so a host can pull every
+  /// bill before it pushes any: a slow push then never holds back what the
+  /// others wrote. [SyncResult.channel] is what to pass [push] as `held`.
+  Future<SyncResult> pull(String billId) async {
     final key = await _requireKey(billId);
     final blobs = await _relay.fetch(SplitsChannel.forBill(billId));
 
     var unopenable = 0;
+    var tooNew = 0;
     final entries = <Map<String, dynamic>>[];
     for (final blob in blobs) {
+      // A frame from a later format is not a wrong key: the person needs an
+      // update, not a new invite (§11.3).
+      try {
+        protocol.parseSealedFrame(blob);
+      } on protocol.SplitError catch (e) {
+        if (e.code == protocol.SplitCode.sealedFutureVersion) {
+          tooNew++;
+          continue;
+        }
+      }
       try {
         entries.add(await _sealing.open(blob, key));
       } on SealingException {
@@ -169,13 +181,12 @@ class SplitsSync {
         kind: SyncFailure.forgotten,
       );
     }
-    return (
-      SyncResult(
-        entries: merged.entries,
-        refused: merged.refused,
-        unopenable: unopenable,
-      ),
-      blobs.toSet(),
+    return SyncResult(
+      entries: merged.entries,
+      refused: merged.refused,
+      unopenable: unopenable,
+      tooNew: tooNew,
+      channel: blobs.toSet(),
     );
   }
 
@@ -207,6 +218,8 @@ class SyncResult {
     required this.entries,
     required this.refused,
     required this.unopenable,
+    this.tooNew = 0,
+    this.channel = const {},
   });
 
   /// The merged log, in the order §10.2 puts it.
@@ -220,7 +233,18 @@ class SyncResult {
   /// Counted rather than ignored. A channel where every blob is unopenable is
   /// a key that is wrong, and that looks identical to a quiet relay unless
   /// somebody is counting.
+  ///
+  /// Not counted here: a blob in a later frame format, which is [tooNew].
   final int unopenable;
+
+  /// Blobs in the channel written in a frame format later than this build
+  /// reads (§11.3, `sealed_future_version`): somebody on the bill runs a newer
+  /// app, and this one needs an update to see what they wrote.
+  final int tooNew;
+
+  /// Every blob the channel returned, opened or not: what [SplitsSync.push]
+  /// need not send again.
+  final Set<String> channel;
 }
 
 /// Why a bill could not be synced, for a wallet to put in its own words.

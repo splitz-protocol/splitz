@@ -78,7 +78,7 @@ pub use refunds::{refunds_behind, RefundsBehind};
 pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
 pub use relay_work::{
     leading_zero_bits, relay_work_bits, relay_work_holds, relay_work_stamp, RELAY_WORK_BASE,
-    RELAY_WORK_UNIT_CHARS,
+    RELAY_WORK_MAX_BASE, RELAY_WORK_UNIT_CHARS,
 };
 pub use removal_plan::{
     expense_correctors, expense_withdrawal_target, plan_merge, plan_removal, removal_entries,

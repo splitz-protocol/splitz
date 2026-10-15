@@ -186,19 +186,23 @@ pub fn parse_address(text: &str) -> Result<ParsedAddress> {
     })
 }
 
-/// Whether `text` is an address §8.6 decodes as transparent — `p2pkh`,
-/// `p2sh` or `tex` — so that a payment to it is public on chain (§9.1, §14.2).
+/// Whether a payment to `text` is treated as public on chain (§9.1, §14.2):
+/// an address §8.6 decodes as `p2pkh`, `p2sh` or `tex`, or a Unified Address
+/// — a Bech32m string under a Unified Address prefix — whose receivers §8.6
+/// does not admit.
 ///
-/// Only what §8.6 decodes is called transparent: a string it refuses is not,
-/// since nothing is known of it, and every kind §8.6 does not decode that a
-/// reader might is shielded.
+/// The second is what a wallet reading more of ZIP 316 than §8.6 pays to a
+/// transparent receiver: one held beside a typecode §8.6 does not know, with
+/// no Sapling or Orchard receiver. Nothing shows it is private, so it is not
+/// presented as private. A string that is no address at all is not.
 pub fn is_transparent_address(text: &str) -> bool {
-    parse_address(text).is_ok_and(|a| {
-        matches!(
+    match parse_address(text) {
+        Ok(a) => matches!(
             a.kind,
             AddressKind::P2pkh | AddressKind::P2sh | AddressKind::Tex
-        )
-    })
+        ),
+        Err(_) => bech32_decode(text, &UNIFIED_HRPS, BECH32M_CONST).is_some(),
+    }
 }
 
 fn polymod(values: impl Iterator<Item = u8>) -> u32 {

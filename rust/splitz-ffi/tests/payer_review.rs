@@ -167,6 +167,7 @@ fn a_screen_that_shows_every_fact_passes_and_one_missing_is_named() {
             String::new(),
             String::new(),
             String::new(),
+            Vec::new(),
         )
         .unwrap()
     };
@@ -218,6 +219,7 @@ fn an_obligation_the_binding_did_not_write_is_refused() {
             String::new(),
             String::new(),
             String::new(),
+            Vec::new(),
         )
     };
     let host = |r: Result<Vec<ReviewFinding>, SplitzError>| match r {
@@ -306,6 +308,7 @@ fn a_recipient_paid_by_a_lower_preference_is_checked() {
             lower.to_owned(),
             String::new(),
             String::new(),
+            Vec::new(),
         )
         .unwrap()
     };

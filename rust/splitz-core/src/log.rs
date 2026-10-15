@@ -274,6 +274,15 @@ pub fn check_entry(entry: &Value) -> Result<()> {
     // becomes a `Value`.
     check_numbers(entry)?;
 
+    // §10.1, §11.3. An entry no sealed update carries reaches no other device:
+    // one device counting it would hold a bill nobody it syncs with can.
+    if let Some(code) = crate::invite::sealed_size_refusal(entry)? {
+        return Err(SplitError::new(
+            code,
+            "An entry is over what a sealed update carries",
+        ));
+    }
+
     let carried: Vec<&str> = PAYLOAD_NAMES
         .iter()
         .copied()

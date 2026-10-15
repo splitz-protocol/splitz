@@ -116,7 +116,10 @@ pub const REPLACED_ADDRESS_WORDS: &str = "replaced_address";
 /// words for a payment carrying more than the debts the bill records explain
 /// (§6), and `public_words` its words that a payment is public on chain,
 /// shown once for each output to a transparent address
-/// ([`is_transparent_address`]) beside the name of who it pays. Findings come
+/// ([`is_transparent_address`]) beside the name of who it pays. `deposits`
+/// are the addresses the request handed to the wallet pays beyond
+/// `obligation` — a swap's deposit (§14.10) — and each transparent one is
+/// shown, with the same words once more. Findings come
 /// in the order of §14.2's list; within a rule, in the order the obligation
 /// or the fold gives the facts. Refused only for an output whose zatoshi §8.1
 /// cannot render, which no rendered obligation carries.
@@ -130,6 +133,7 @@ pub fn check_payer_review(
     lower_words: &str,
     unexplained_words: &str,
     public_words: &str,
+    deposits: &[String],
 ) -> splitz_core::Result<Vec<ReviewFinding>> {
     let text = visible_text.join("\n");
     let names: BTreeMap<&str, &str> = folded
@@ -281,6 +285,19 @@ pub fn check_payer_review(
         .filter(|(payment, _)| is_transparent_address(&payment.address))
         .map(|(_, to)| to)
         .collect();
+    let public_deposits: Vec<&String> = deposits
+        .iter()
+        .filter(|d| is_transparent_address(d))
+        .collect();
+    let said = !public_words.is_empty()
+        && text.matches(public_words).count() >= publics.len() + public_deposits.len();
+    let words = || {
+        if public_words.is_empty() {
+            "public_output".to_owned()
+        } else {
+            public_words.to_owned()
+        }
+    };
     for to in &publics {
         let who = name(to);
         let shown = text.contains(&who);
@@ -293,12 +310,22 @@ pub fn check_payer_review(
         need(
             ReviewRule::PublicOutput,
             format!("that the payment to {who} is public"),
-            if public_words.is_empty() {
-                "public_output".to_owned()
-            } else {
-                public_words.to_owned()
-            },
-            !public_words.is_empty() && text.matches(public_words).count() >= publics.len(),
+            words(),
+            said,
+        );
+    }
+    for address in &public_deposits {
+        need(
+            ReviewRule::PublicOutput,
+            "the deposit paid at a public address".to_owned(),
+            (*address).clone(),
+            shows_address(&text, address),
+        );
+        need(
+            ReviewRule::PublicOutput,
+            format!("that the deposit to {address} is public"),
+            words(),
+            said,
         );
     }
 

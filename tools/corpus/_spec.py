@@ -1132,7 +1132,7 @@ SEALED_VERSION = 2
 NONCE_BYTES = 24
 TAG_BYTES = 16
 # Section 11.3. The plaintext lengths a version 2 frame pads to.
-SEALED_BUCKETS = (512, 1024, 2048, 4096, 8192, 16384, 32768)
+SEALED_BUCKETS = (1024, 2048, 4096, 8192, 16384, 32768)
 
 
 def pad_sealed(plaintext):
@@ -1146,11 +1146,14 @@ def pad_sealed(plaintext):
 
 
 def unpad_sealed(padded):
-    """Section 11.3. Only a bucket's length, ending 0x80 then zeros, opens."""
+    """Section 11.3. Only the smallest bucket's length that holds the
+    plaintext and 0x80, ending 0x80 then zeros, opens."""
     if len(padded) not in SEALED_BUCKETS:
         raise Refused("sealed_malformed")
     stripped = padded.rstrip(b"\x00")
     if not stripped or stripped[-1] != 0x80:
+        raise Refused("sealed_malformed")
+    if next(b for b in SEALED_BUCKETS if b >= len(stripped)) != len(padded):
         raise Refused("sealed_malformed")
     return stripped[:-1]
 
@@ -2036,6 +2039,11 @@ def check_entry(entry):
     _check_scalar_values(entry)
     # Section 2.2 and 9.3, at entry ingress, before any member is read.
     _check_numbers(entry)
+    # Sections 10.1 and 11.3. An entry no sealed update carries reaches no
+    # other device: one device counting it would hold a bill nobody it syncs
+    # with can.
+    if len(canonical_json(entry).encode("utf-8")) + 1 > SEALED_BUCKETS[-1]:
+        raise Refused("sealed_too_large")
 
     carried = [p for p in PAYLOADS if p in entry]
     if len(carried) > 1:

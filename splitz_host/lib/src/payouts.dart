@@ -5,6 +5,8 @@ import 'package:splitz_core/host.dart' show Payout;
 import 'package:splitz_core/splitz_core.dart'
     show Participant, isTransparentAddress;
 
+import 'ascii.dart';
+
 /// [first], then every payout [who] declares that it does not take the place
 /// of, in their declared order — except that a transparent Zcash payout is
 /// never put ahead of a shielded one.
@@ -32,8 +34,7 @@ List<Payout> rankedPayouts(Participant who, Payout first) {
   bool replaced(Payout p) =>
       p.type == first.type &&
       switch (p.type) {
-        'swap' =>
-          (p.asset ?? '').toUpperCase() == (first.asset ?? '').toUpperCase(),
+        'swap' => equalsIgnoringAsciiCase(p.asset ?? '', first.asset ?? ''),
         'zec' => public(p) == public(first),
         _ => true,
       };

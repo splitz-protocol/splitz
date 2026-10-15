@@ -565,8 +565,44 @@ void main(List<String> args) {
     '',
     '',
     '',
+    const [],
   );
   check('a screen showing every fact passes', shown.isEmpty, '$screen');
+  // A swap's deposit the request also pays: transparent, so depositSaid (§14.2).
+  const quotedDeposit = 't1eEvd4gkYDW8vUSbDxTe9VtarYFNdoB49q';
+  final depositUnsaid = checkPayerReview(
+    ben.facts(),
+    billId,
+    ben.entries,
+    owed,
+    screen,
+    const {},
+    const {},
+    '',
+    '',
+    'public on chain',
+    const [quotedDeposit],
+  );
+  final depositSaid = checkPayerReview(
+    ben.facts(),
+    billId,
+    ben.entries,
+    owed,
+    [...screen, 'to $quotedDeposit', 'public on chain'],
+    const {},
+    const {},
+    '',
+    '',
+    'public on chain',
+    const [quotedDeposit],
+  );
+  check(
+    'a transparent swap deposit not said to be public is a finding',
+    depositUnsaid.length == 2 &&
+        depositUnsaid.every((f) => f.rule == ReviewRule.publicOutput) &&
+        depositSaid.isEmpty,
+    '$depositUnsaid $depositSaid',
+  );
   check(
     'a transparent address is public, a shielded one is not (§9.1)',
     parseAddress('t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs').transparent &&
@@ -581,6 +617,8 @@ void main(List<String> args) {
         relayWorkAsked('{"error":"not enough work","work":18}', 16) == 18 &&
         relayWorkAsked('{"error":"not enough work","work":16}', 16) == null &&
         relayWorkAsked('{"error":"x","work":41}', 16) == null &&
+        relayWorkAsked('{"error":"x","work":24}', 16) == 24 &&
+        relayWorkAsked('{"error":"x","work":25}', 16) == null &&
         relayWorkAsked('{"ok":true}', 16) == null,
     '${relayWorkAsked('{"work":18}', 16)}',
   );
@@ -595,6 +633,7 @@ void main(List<String> args) {
     '',
     '',
     '',
+    const [],
   );
   check(
     'one without the output\'s address is told exactly that',

@@ -273,8 +273,18 @@ fun main(args: Array<String>) {
     val zec = renderAmount(owed.request.payments.single().zatoshi)
     val screen = listOf("Pay Ana $zec ZEC", "to u1ana",
                         "at ${rateFigure(owed.rate)} EUR per ZEC, set by Ana")
-    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "", "", "")
+    val shown = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(), "", "", "", listOf())
     check("a screen showing every fact passes", shown.isEmpty(), "$screen")
+    // A swap's deposit the request also pays: transparent, so depositSaid (§14.2).
+    val quotedDeposit = "t1eEvd4gkYDW8vUSbDxTe9VtarYFNdoB49q"
+    val depositUnsaid = checkPayerReview(ben.facts(), billId, ben.entries, owed, screen, mapOf(), mapOf(),
+                                  "", "", "public on chain", listOf(quotedDeposit))
+    val depositSaid = checkPayerReview(ben.facts(), billId, ben.entries, owed,
+                                screen + listOf("to $quotedDeposit", "public on chain"), mapOf(), mapOf(),
+                                "", "", "public on chain", listOf(quotedDeposit))
+    check("a transparent swap deposit not said to be public is a finding",
+          depositUnsaid.size == 2 && depositUnsaid.all { it.rule == ReviewRule.PUBLIC_OUTPUT } && depositSaid.isEmpty(),
+          "$depositUnsaid $depositSaid")
     check("a transparent address is public, a shielded one is not (§9.1)",
           parseAddress("t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs").transparent && !parseAddress("u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf").transparent,
           "parseAddress.transparent")
@@ -283,11 +293,13 @@ fun main(args: Array<String>) {
               relayWorkAsked("{\"error\":\"not enough work\",\"work\":18}", 16u) == 18u &&
               relayWorkAsked("{\"error\":\"not enough work\",\"work\":16}", 16u) == null &&
               relayWorkAsked("{\"error\":\"x\",\"work\":41}", 16u) == null &&
+              relayWorkAsked("{\"error\":\"x\",\"work\":24}", 16u) == 24u &&
+              relayWorkAsked("{\"error\":\"x\",\"work\":25}", 16u) == null &&
               relayWorkAsked("{\"ok\":true}", 16u) == null,
           "${relayWorkAsked("{\"work\":18}", 16u)}")
     val noAddress = checkPayerReview(ben.facts(), billId, ben.entries, owed,
                                      screen.map { if (it == "to u1ana") "to your contact" else it },
-                                     mapOf(), mapOf(), "", "", "")
+                                     mapOf(), mapOf(), "", "", "", listOf())
     check("one without the output's address is told exactly that",
           noAddress == listOf(ReviewFinding(ReviewRule.OUTPUT, "the address Ana is paid at", "u1ana")),
           "$noAddress")

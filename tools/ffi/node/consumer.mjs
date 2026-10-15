@@ -287,8 +287,17 @@ console.log("ben's review screen shows what §14.2 says it must");
 const zec = splitz.render_amount(owed.request.payments[0].zatoshi);
 const screen = [`Pay Ana ${zec} ZEC`, "to u1ana",
                 `at ${splitz.rate_figure(owed.rate)} EUR per ZEC, set by Ana`];
-const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "", "", "");
+const shown = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(), "", "", "", []);
 check("a screen showing every fact passes", shown.length === 0, JSON.stringify(screen));
+// A swap's deposit the request also pays: transparent, so depositSaid (§14.2).
+const quotedDeposit = "t1eEvd4gkYDW8vUSbDxTe9VtarYFNdoB49q";
+const depositUnsaid = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed, screen, new Map(), new Map(),
+    "", "", "public on chain", [quotedDeposit]);
+const depositSaid = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed,
+    [...screen, `to ${quotedDeposit}`, "public on chain"], new Map(), new Map(), "", "", "public on chain", [quotedDeposit]);
+check("a transparent swap deposit not said to be public is a finding",
+      depositUnsaid.length === 2 && depositUnsaid.every((f) => f.rule === splitz.ReviewRule.PublicOutput) && depositSaid.length === 0,
+      JSON.stringify([depositUnsaid, depositSaid]));
 check("a transparent address is public, a shielded one is not (§9.1)",
       splitz.parse_address("t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs").transparent && !splitz.parse_address("u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf").transparent,
       "parse_address.transparent");
@@ -297,10 +306,12 @@ check("a relay sync is on a fixed tick; a refusal names the work it asks (§15.5
         splitz.relay_work_asked('{"error":"not enough work","work":18}', 16) === 18 &&
         splitz.relay_work_asked('{"error":"not enough work","work":16}', 16) === undefined &&
         splitz.relay_work_asked('{"error":"x","work":41}', 16) === undefined &&
+        splitz.relay_work_asked('{"error":"x","work":24}', 16) === 24 &&
+        splitz.relay_work_asked('{"error":"x","work":25}', 16) === undefined &&
         splitz.relay_work_asked('{"ok":true}', 16) === undefined,
       `${splitz.relay_work_asked('{"work":18}', 16)}`);
 const noAddress = splitz.check_payer_review(ben.facts(), billId, ben.entries, owed,
-    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "", "", "");
+    screen.map((line) => (line === "to u1ana" ? "to your contact" : line)), new Map(), new Map(), "", "", "", []);
 check("one without the output's address is told exactly that",
       noAddress.length === 1 && noAddress[0].rule === splitz.ReviewRule.Output &&
         noAddress[0].fact === "the address Ana is paid at" && noAddress[0].expected === "u1ana",

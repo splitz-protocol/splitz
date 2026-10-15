@@ -32,7 +32,7 @@ FIXTURE = HERE / "fixtures" / "binance_ticker.json"
 LIVE = "https://data-api.binance.vision/api/v3/ticker/price?symbol=ZECUSDC"
 SYMBOL = "ZECUSDC"
 MAX = 2**53 - 1
-DECIMAL = re.compile(r"^[0-9]+(\.[0-9]+)?$")
+DECIMAL = re.compile(r"[0-9]+(\.[0-9]+)?")
 
 
 def read(body: str, currency: str):
@@ -44,7 +44,7 @@ def read(body: str, currency: str):
     if not isinstance(decoded, dict) or decoded.get("symbol") != SYMBOL:
         return "malformed"
     raw = decoded.get("price")
-    if not isinstance(raw, str) or not DECIMAL.match(raw):
+    if not isinstance(raw, str) or not DECIMAL.fullmatch(raw):
         return "malformed"
     if currency != "USD":
         return None

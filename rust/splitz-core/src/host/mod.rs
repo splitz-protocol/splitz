@@ -35,7 +35,7 @@ pub use entries::{
     add_expense, amend_entry, amend_expense, authored_id, base64url_no_pad, check_written_payment,
     check_written_payout, close_bill, confirm_payment, create_bill, join_bill, record_payment,
     restate_expense, set_rate, sign_entry, void_entry, CREATOR_KEY_BYTES, ENTRY_VERSION,
-    NONCE_BYTES,
+    NONCE_BYTES, RESTATEMENT_ROOM,
 };
 pub use host::{BillHost, SendResult, Sent, SignEntry, VerifyEntry};
 pub use lanes::{lane_for, SettleLane};

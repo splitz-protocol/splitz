@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'package:splitz_core/host.dart' as host;
 import 'package:splitz_core/splitz_core.dart' as protocol;
 
+import 'ascii.dart';
 import 'pending_sends.dart';
 import 'relay.dart' show JsonGet, JsonPost;
 import 'swap_watch.dart';
@@ -119,13 +120,13 @@ class TradableAsset {
   /// How many base units make one whole token, as a power of ten.
   final int decimals;
 
-  /// Whether this is what [symbol] on [chain] asked for, ignoring case.
+  /// Whether this is what [symbol] on [chain] asked for, ignoring ASCII case.
   ///
   /// Both halves must match. A payout naming `USDC` on `base` is not
   /// satisfied by `USDC` on any other chain.
   bool answers(String wantedSymbol, String wantedChain) =>
-      symbol.toLowerCase() == wantedSymbol.toLowerCase() &&
-      chain.toLowerCase() == wantedChain.toLowerCase();
+      equalsIgnoringAsciiCase(symbol, wantedSymbol) &&
+      equalsIgnoringAsciiCase(chain, wantedChain);
 }
 
 /// Where to send ZEC, and what the recipient gets for it.

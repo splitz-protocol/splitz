@@ -239,6 +239,53 @@ fn a_blob_from_another_bill_is_skipped_not_fatal() {
     assert_eq!(result.entries.len(), 1);
 }
 
+/// The bill's own blob with its version byte rewritten to `version`, pushed
+/// beside it, and what a pull then reports.
+fn pulled_with_version(version: u8) -> (String, splitz_host::SyncResult) {
+    let relay = InMemorySplitsRelay::default();
+    let ana = Device::new("ana", "u1ana", 1);
+    let (store, keys) = (ana.store(), ana.keys());
+    let key = keys.ensure_bill_key("placeholder").unwrap();
+    let create = create_bill(&ana.host(), "Dinner", "EUR", "equal", &"A".repeat(43), None).unwrap();
+    let bill_id = create["id"].as_str().unwrap().to_owned();
+    keys.store_bill_key(&bill_id, &key).unwrap();
+    store.merge(&bill_id, vec![create]).unwrap();
+    let sync = SplitsSync::new(&store, &keys, &relay);
+    sync.push(&bill_id).unwrap();
+    let channel = channel_for_bill(&bill_id);
+    let blob = relay.fetch(&channel).unwrap().remove(0);
+    let mut bytes = splitz_core::zip321::unbase64url(&blob).unwrap();
+    bytes[0] = version;
+    let other = splitz_core::zip321::base64url(&bytes);
+    relay.push(&channel, std::slice::from_ref(&other)).unwrap();
+    (other, sync.pull(&bill_id).unwrap())
+}
+
+#[test]
+fn a_blob_in_a_later_frame_format_is_too_new_not_a_wrong_key() {
+    let (_, pulled) = pulled_with_version(splitz_core::SEALED_VERSION + 1);
+    assert_eq!((pulled.too_new, pulled.unopenable), (1, 0));
+    assert_eq!(pulled.entries.len(), 1);
+    let (_, pulled) = pulled_with_version(255);
+    assert_eq!((pulled.too_new, pulled.unopenable), (1, 0));
+}
+
+#[test]
+fn a_frame_of_version_zero_or_one_is_not_too_new() {
+    // Zero is malformed; one is read as v1, and its padded plaintext fails.
+    for version in [0, 1] {
+        let (_, pulled) = pulled_with_version(version);
+        assert_eq!((pulled.too_new, pulled.unopenable), (0, 1), "v{version}");
+    }
+}
+
+#[test]
+fn a_pull_lists_every_blob_the_channel_returned() {
+    let (other, pulled) = pulled_with_version(splitz_core::SEALED_VERSION + 1);
+    assert_eq!(pulled.channel.len(), 2);
+    assert!(pulled.channel.contains(&other));
+}
+
 #[test]
 fn the_channel_is_the_bill_ids_hash_never_the_id() {
     let channel = channel_for_bill("a-bill-id");

@@ -372,13 +372,16 @@ fn event(
 /// who never joins from a device of their own, or who joined under a key of
 /// their own and so under another id, never settles.
 ///
-/// Never the payer: a creator who paid somebody they added would otherwise
-/// settle the debt by asserting twice that they paid it.
+/// That includes a payment the creator made to them. The creator then vouches
+/// for both sides, which a confirmation exists to prevent between two people
+/// who each hold a key; somebody added by hand holds none, and anybody on the
+/// bill can write as them unsigned (§10.7), so refusing the creator would stop
+/// only an honest host, and leave the bill unsettled for good.
 pub fn confirmer_for(folded: &FoldedBill, payment: &PaymentRecord, me: &str) -> Option<String> {
     if payment.to == me {
         return Some(me.to_owned());
     }
-    if me != folded.creator_id || payment.from == me {
+    if me != folded.creator_id {
         return None;
     }
     let payee = folded.bill.participant(&payment.to)?;

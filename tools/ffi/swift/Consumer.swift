@@ -307,8 +307,21 @@ func run(origin: String, downOrigin: String) async throws {
                   "at \(rateFigure(rate: owed!.rate)) EUR per ZEC, set by Ana"]
     let shown = try checkPayerReview(facts: ben.facts(), billId: billId, entries: ben.entries,
                                      obligation: owed!, visibleText: screen, reasonWords: [:],
-                                     via: [:], lowerWords: "", unexplainedWords: "", publicWords: "")
+                                     via: [:], lowerWords: "", unexplainedWords: "", publicWords: "", deposits: [])
     check("a screen showing every fact passes", shown.isEmpty, "\(screen)")
+    // A swap's deposit the request also pays: transparent, so depositSaid (§14.2).
+    let quotedDeposit = "t1eEvd4gkYDW8vUSbDxTe9VtarYFNdoB49q"
+    let depositUnsaid = try checkPayerReview(
+        facts: ben.facts(), billId: billId, entries: ben.entries, obligation: owed!,
+        visibleText: screen, reasonWords: [:], via: [:], lowerWords: "", unexplainedWords: "",
+        publicWords: "public on chain", deposits: [quotedDeposit])
+    let depositSaid = try checkPayerReview(
+        facts: ben.facts(), billId: billId, entries: ben.entries, obligation: owed!,
+        visibleText: screen + ["to \(quotedDeposit)", "public on chain"], reasonWords: [:], via: [:],
+        lowerWords: "", unexplainedWords: "", publicWords: "public on chain", deposits: [quotedDeposit])
+    check("a transparent swap deposit not said to be public is a finding",
+          depositUnsaid.count == 2 && depositUnsaid.allSatisfy { $0.rule == .publicOutput } && depositSaid.isEmpty,
+          "\(depositUnsaid) \(depositSaid)")
     check("a transparent address is public, a shielded one is not (§9.1)",
           try parseAddress(address: "t1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs").transparent
             && !(try parseAddress(address: "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf").transparent),
@@ -318,12 +331,14 @@ func run(origin: String, downOrigin: String) async throws {
             && relayWorkAsked(body: #"{"error":"not enough work","work":18}"#, done: 16) == 18
             && relayWorkAsked(body: #"{"error":"not enough work","work":16}"#, done: 16) == nil
             && relayWorkAsked(body: #"{"error":"x","work":41}"#, done: 16) == nil
+            && relayWorkAsked(body: #"{"error":"x","work":24}"#, done: 16) == 24
+            && relayWorkAsked(body: #"{"error":"x","work":25}"#, done: 16) == nil
             && relayWorkAsked(body: #"{"ok":true}"#, done: 16) == nil,
           "\(String(describing: relayWorkAsked(body: #"{"work":18}"#, done: 16)))")
     let noAddress = try checkPayerReview(
         facts: ben.facts(), billId: billId, entries: ben.entries, obligation: owed!,
         visibleText: screen.map { $0 == "to u1ana" ? "to your contact" : $0 }, reasonWords: [:],
-        via: [:], lowerWords: "", unexplainedWords: "", publicWords: "")
+        via: [:], lowerWords: "", unexplainedWords: "", publicWords: "", deposits: [])
     check("one without the output's address is told exactly that",
           noAddress == [ReviewFinding(rule: .output, fact: "the address Ana is paid at",
                                       expected: "u1ana")],

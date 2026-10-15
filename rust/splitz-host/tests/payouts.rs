@@ -236,3 +236,25 @@ fn an_address_section_8_6_does_not_decode_is_not_taken_for_transparent() {
         ["u1l8", "t1Hs"]
     );
 }
+
+#[test]
+fn an_asset_is_compared_by_ascii_case_alone() {
+    let swap_of = |asset: &str| swap(asset, "eth", &format!("0x{asset}"));
+    assert_eq!(
+        keys(&ranked_payouts(
+            &who(None, vec![swap_of("usdc")]),
+            &swap_of("USDC")
+        )),
+        keys(&[swap_of("USDC")])
+    );
+    for (held, next) in [("ß", "SS"), ("ﬁ", "FI"), ("é", "É")] {
+        assert_eq!(
+            keys(&ranked_payouts(
+                &who(None, vec![swap_of(held)]),
+                &swap_of(next)
+            )),
+            keys(&[swap_of(next), swap_of(held)]),
+            "{held}"
+        );
+    }
+}

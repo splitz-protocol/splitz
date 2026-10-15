@@ -896,18 +896,28 @@ Blobs are what `blobsToPush` returns, and what `fetch` returns goes to
 anything that names the sender: `relayPushBody(channel, blobs, base)` finds it,
 which takes about 2^16 hashes for an ordinary push, so call it off the thread
 that draws. A relay that wants more answers with the base it asks for;
-`relayWorkAsked(answer, 16)` reads it, and the push is stamped once more at
-that base and sent again. The binding's `relayChannelUrl`, `relayPushBody`,
+`relayWorkAsked(answer, 16)` reads it when it is at most 24, the most a relay
+asks, and the push is stamped once more at that base and sent again. A blob is
+base64url with no padding, and a relay refuses any other. The binding's `relayChannelUrl`, `relayPushBody`,
 `relayWorkAsked`, `relayPushAnswer` and `relayFetchAnswer` decide the URL, the
 body and what an answer means, so every client — and `splitz_host`'s
 `HttpSplitsRelay` — refuses alike. A client written for another network route
 calls those five directly, and sends them over the route the wallet's own
 traffic takes (§15.5): over Tor when the wallet's Tor is on.
 
-Sync every bill the device holds every `relaySyncSeconds()` (30) seconds,
-whatever is on screen, and push a write at the next tick rather than at once:
-a relay that sees one bill polled faster, or a push the moment something is
-typed, learns which bill is open and when somebody is at their phone.
+Sync every bill the device holds every `relaySyncSeconds()` (30) seconds for
+as long as your wallet runs, whatever is on screen, and push a write at the
+next tick rather than at once: a relay that sees one bill polled faster, polled
+only while it is open, or a push the moment something is typed, learns which
+bill is open and when somebody is at their phone. Pull every bill before
+pushing any, so a push still stamping never holds back what the others wrote —
+`SplitsSync.pull` returns the blobs the channel held as `channel`, which
+`push(billId, held: channel)` leaves out — and push once more when your wallet
+leaves the foreground. Before withdrawing a payment record or sending, pull
+that bill first and decide on what it merged; refuse the withdrawal when the
+channel cannot be read (§15.5). A blob written by a newer version of this
+format is counted in `tooNew` / `too_new`, not `unopenable`: tell the person to
+update their app, not that a key is wrong.
 
 Every failure is the binding's host error (`SplitzException.Host`,
 `SplitzError.Host`, `SplitzErrorHost`) with `transient` saying whether a retry
@@ -922,7 +932,7 @@ could succeed:
 
 The Kotlin client blocks, so on Android it runs off the main thread. It uses
 `HttpURLConnection`, which API 21 carries; a wallet that sends its traffic over
-another route writes its own client over the four functions above. The Swift
+another route writes its own client over the five functions above. The Swift
 client uses the `URLSession` it is given, and the JavaScript one the `fetch` it
 is given, the global one of Node 18 and later by default.
 
@@ -1119,13 +1129,27 @@ differs, too little to spend, a reader or builder that raised — comes back as
 steps; your broadcast's own outcome is returned as it is. The binding carries
 `proposal_problem` for a wallet that runs the steps itself.
 
+When your review showed a fee, send with `sendReviewedPaymentRequest(uri:,
+reviewedFee:, read:, propose:, discard:, broadcast:)` /
+`send_reviewed_payment_request` instead: the fee shown is a ceiling (§14.2),
+so a proposal whose fee came out higher is handed to your `discard`, never
+broadcast, and the send is `failed` with `feeRaisedProblem` /
+`fee_raised_problem`'s sentence. The binding carries `fee_raised_problem` for
+a wallet that runs the steps itself.
+
 **Read a swap provider's HTTP answer by its status first.** `swapAnswer(status,
 bodyBytes)` / `swap_answer` returns the body of a 2xx or 3xx and refuses a 4xx
 or 5xx with the provider's own `message`, transient for a 5xx; an error body
 parsed as a quote reads an error object as a price.
 
-**A payment you received can be confirmed from what arrived.**
-`arrivalsFor(bills, me, received)` / `arrivals_for` matches the transactions
+**A payment you received can be confirmed from what arrived.** Build
+`received` from your wallet's own history with `receivedTransactions(history)`
+/ `received_transactions`: each row a `HistoryTransaction` — its txid, the
+height that mined it, whether it expired unmined, and its balance change — and
+only a mined, unexpired transaction that raised the balance counts
+(`isReceived`, §14.7). Read it from the wallet's own store; never look a txid
+up on a server that would learn it. `arrivalsFor(bills, me, received)` /
+`arrivals_for` matches the transactions
 your wallet received against the unconfirmed ZEC records to you, across every
 bill at once, so one transaction is evidence once (§14.7). Show the payee each
 `arrived` record — its ZEC, its rate, its reference — and on their word write
@@ -1189,11 +1213,12 @@ is paid an unexplained part is a finding. `publicWords` are your words that a
 payment is public on chain: every output to a transparent address
 (`isTransparentAddress` in the host packages, `parseAddress(address).transparent`
 on the binding; §9.1) needs its payee's name and those words, once for each
-such output.
+such output. Pass a combined send's swap deposit as `deposits`: a transparent
+one needs its address and those words once more (§14.2, §14.10).
 
 A wallet on the binding runs the same check with `checkPayerReview(facts,
 billId, entries, obligation, visibleText, reasonWords, via, lowerWords,
-unexplainedWords, publicWords)`: the
+unexplainedWords, publicWords, deposits)`: the
 bill crosses as its entries, as it does for `obligationOf`, and `obligation` is
 the one `obligationOf` or `obligationVia` gave. `renderAmount` and
 `rateFigure` write the figures. An

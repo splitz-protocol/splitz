@@ -36,10 +36,11 @@ pub fn ranked_payouts(who: &Participant, first: &Payout) -> Vec<Payout> {
     let replaced = |p: &Payout| {
         p.kind == first.kind
             && match p.kind.as_str() {
-                "swap" => {
-                    p.asset.as_deref().unwrap_or("").to_uppercase()
-                        == first.asset.as_deref().unwrap_or("").to_uppercase()
-                }
+                "swap" => p
+                    .asset
+                    .as_deref()
+                    .unwrap_or("")
+                    .eq_ignore_ascii_case(first.asset.as_deref().unwrap_or("")),
                 "zec" => public(p) == public(first),
                 _ => true,
             }

@@ -483,7 +483,9 @@ Map<String, dynamic> _sealed(
 /// `createBill` entry's bill is its own id.
 ///
 /// Refused with `sealed_too_large` when the entry it returns cannot be sealed
-/// (§11.3): written, it would stay on this device and reach no other.
+/// (§11.3): written, it would stay on this device and reach no other. A new
+/// expense — an `addExpense` with no `targetId` — is refused once it leaves
+/// less than [restatementRoom] under the largest bucket.
 Future<Map<String, dynamic>> signEntry({
   required BillHost host,
   required Map<String, dynamic> entry,
@@ -499,8 +501,23 @@ Future<Map<String, dynamic>> signEntry({
   if (splitz.sealedSizeRefusal(signed) case final code?) {
     splitz.raise(code, 'This entry is too large to seal (§11.3)');
   }
+  if (signed['kind'] == 'addExpense' &&
+      !signed.containsKey('targetId') &&
+      splitz.sealedPlaintext(signed).length + 1 >
+          splitz.sealedBuckets.last - restatementRoom) {
+    splitz.raise(
+      splitz.SplitCode.sealedTooLarge,
+      'This expense leaves no room for the restatement that may replace it',
+    );
+  }
   return signed;
 }
+
+/// The bytes a new expense leaves under the largest bucket (§11.3) for the
+/// restatement that may later replace it (§10.8): a `targetId`, a `basis`,
+/// and a split naming somebody else. Without it an expense could be written
+/// that its author or the creator could never correct or take somebody off.
+const int restatementRoom = 1024;
 
 /// Unpadded base64url, the encoding every key, nonce and id in the protocol
 /// uses (§9.4).

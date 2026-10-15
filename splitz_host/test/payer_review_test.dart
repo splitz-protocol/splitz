@@ -498,11 +498,17 @@ void main() {
     const t1 = 't1Hsc1LR8yKnbbe3twRp88p6vFfC5t7DLbs';
     const t3 = 't3JZcvsuaXE6ygokL4XUiZSTrQBUoPYFnXJ';
     const words = 'public on chain';
+    // The deposit a swap quote names, from tools/contracts/fixtures/quote.json.
+    const deposit = 't1eEvd4gkYDW8vUSbDxTe9VtarYFNdoB49q';
+    const shieldedUnified =
+        'u1ddnjsdcpm36r6aq79n3s68shjweksnmwtdltrh046s8m6xcws9ygyawalxx8n6hg6'
+        'vegk0wh8zjnafxgh6msppjsljvyt0ynece3lvm0';
     List<String> publicFindings(
       splitz.PayerObligation obligation,
       splitz.FoldedBill folded,
       List<String> shown, {
       String publicWords = words,
+      List<String> deposits = const [],
     }) => [
       for (final f in checkPayerReview(
         obligation: obligation,
@@ -511,9 +517,50 @@ void main() {
         reasonWords: reasons,
         via: const {'eve': 1},
         publicWords: publicWords,
+        deposits: deposits,
       ))
         if (f.rule == ReviewRule.publicOutput) f.expected,
     ];
+
+    test('a transparent swap deposit needs its address and the words', () {
+      final b = bill(via: const {'eve': 1});
+      List<String> found(List<String> shown) => publicFindings(
+        b.obligation,
+        b.folded,
+        [...screen, ...shown],
+        deposits: const [deposit],
+      );
+      expect(found([]), [deposit, words]);
+      expect(found([deposit]), [words]);
+      expect(found([deposit, words]), isEmpty);
+    });
+
+    test('a transparent deposit beside a transparent payee needs the words '
+        'twice', () {
+      final b = bill(via: const {'eve': 1}, eveSecond: t1);
+      List<String> found(List<String> shown) => publicFindings(
+        b.obligation,
+        b.folded,
+        [...screen, 'Eve', deposit, ...shown],
+        deposits: const [deposit],
+      );
+      expect(found([words]), [words, words]);
+      expect(found([words, words]), isEmpty);
+    });
+
+    test('a shielded deposit needs no warning', () {
+      final b = bill(via: const {'eve': 1});
+      expect(
+        publicFindings(
+          b.obligation,
+          b.folded,
+          screen,
+          publicWords: '',
+          deposits: const [shieldedUnified],
+        ),
+        isEmpty,
+      );
+    });
 
     test('a transparent output needs its payee and the words', () {
       final b = bill(via: const {'eve': 1}, eveSecond: t1);

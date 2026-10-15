@@ -125,7 +125,10 @@ const String replacedAddressWords = 'replaced_address';
 /// a payment carrying more than the debts the bill records explain (§6).
 /// [publicWords] are the screen's words that a payment is public on chain,
 /// shown once for each output to a transparent address
-/// ([isTransparentAddress]) beside the name of who it pays.
+/// ([isTransparentAddress]) beside the name of who it pays. [deposits] are
+/// the addresses the request handed to the wallet pays beyond [obligation] —
+/// a swap's deposit (§14.10) — and each transparent one is shown, with the
+/// same words once more.
 /// Findings come in the order of §14.2's list; within a rule, in the order
 /// the obligation or the fold gives the facts.
 List<ReviewFinding> checkPayerReview({
@@ -137,6 +140,7 @@ List<ReviewFinding> checkPayerReview({
   String lowerWords = '',
   String unexplainedWords = '',
   String publicWords = '',
+  List<String> deposits = const [],
 }) {
   final text = visibleText.join('\n');
   final names = {for (final p in folded.bill.participants) p.id: p.name};
@@ -244,6 +248,14 @@ List<ReviewFinding> checkPayerReview({
       if (splitz.isTransparentAddress(payments[i].address))
         obligation.request.recipients[i],
   ];
+  final publicDeposits = [
+    for (final d in deposits)
+      if (splitz.isTransparentAddress(d)) d,
+  ];
+  final said =
+      publicWords.isNotEmpty &&
+      publicWords.allMatches(text).length >=
+          publics.length + publicDeposits.length;
   for (final id in publics) {
     final who = name(id);
     need(
@@ -256,8 +268,21 @@ List<ReviewFinding> checkPayerReview({
       ReviewRule.publicOutput,
       'that the payment to $who is public',
       publicWords.isEmpty ? 'public_output' : publicWords,
-      publicWords.isNotEmpty &&
-          publicWords.allMatches(text).length >= publics.length,
+      said,
+    );
+  }
+  for (final address in publicDeposits) {
+    need(
+      ReviewRule.publicOutput,
+      'the deposit paid at a public address',
+      address,
+      _showsAddress(text, address),
+    );
+    need(
+      ReviewRule.publicOutput,
+      'that the deposit to $address is public',
+      publicWords.isEmpty ? 'public_output' : publicWords,
+      said,
     );
   }
 
