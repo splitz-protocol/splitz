@@ -222,8 +222,34 @@ def a_push_carries_enough_work():
             relay.stderr.close()
 
 
+
+def a_page_holds_blobs_up_to_its_bound():
+    """§15.5: blobs while each costs its characters plus 3, at most
+    PAGE_BYTES, and at least one."""
+    edge = server.PAGE_BYTES
+    try:
+        server.PAGE_BYTES = 16
+        blobs = ["aaaa", "bbbbbbbbbb", "cc", "dddddd"]  # cost 7, 13, 5, 9
+        assert server.page(blobs, 0) == {"blobs": ["aaaa"], "next": 1}
+        assert server.page(blobs, 1) == {"blobs": ["bbbbbbbbbb"], "next": 2}
+        assert server.page(blobs, 2) == {"blobs": ["cc", "dddddd"]}
+        assert server.page(blobs, 4) == {"blobs": []}
+        assert server.page(blobs, 99) == {"blobs": []}
+        # Exactly the bound fits; one byte over starts a new page.
+        assert server.page(["a" * 5, "b" * 5], 0) == {"blobs": ["a" * 5, "b" * 5]}
+        assert server.page(["a" * 5, "b" * 6], 0) == {"blobs": ["a" * 5], "next": 1}
+        # A blob alone over the bound is still a page of one.
+        assert server.page(["z" * 40, "y"], 0) == {"blobs": ["z" * 40], "next": 1}
+    finally:
+        server.PAGE_BYTES = edge
+    # At the real bound, 127 blobs at the blob ceiling fit and a 128th does not.
+    full = ["x" * server.MAX_BLOB_CHARS] * 128
+    assert server.page(full, 0)["next"] == 127
+
+
 if __name__ == "__main__":
     for test in (
+        a_page_holds_blobs_up_to_its_bound,
         a_push_carries_enough_work,
         a_stop_during_a_save_keeps_every_push,
         a_failed_save_is_tried_again,

@@ -7,6 +7,7 @@ it — two routes, a dictionary, and no knowledge of what it holds:
 
     POST /c/<channel>   {"blobs": [...], "work": "<nonce>"}  -> {"ok": true}
     GET  /c/<channel>                                       -> {"blobs": [...]}
+    GET  /c/<channel>?from=<n>                   -> {"blobs": [...], "next": <m>}
 
 **It cannot read anything it stores.** A channel is SHA-256 of the bill id and
 a blob is ciphertext under a key only the participants hold, so a relay that
@@ -67,6 +68,7 @@ import threading
 import time
 from collections import OrderedDict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
 
 # Mirrored from `HttpSplitsRelay.maxBlobChars`. A bound only one side keeps is
 # not a bound: a client that refuses to send one this long should not be able
@@ -77,6 +79,15 @@ MAX_BLOB_CHARS = 64 * 1024
 # the largest bill the relay carries: 512 blobs at the blob ceiling, tens of
 # thousands at an ordinary entry's size.
 MAX_BODY_BYTES = 32 * 1024 * 1024
+
+# One page of a fetch (SPEC.md §15.5): a page takes blobs while each one's
+# characters plus 3, its quotes and a comma, total at most this, and always at
+# least one. Mirrored by the Worker. `--page-bytes` lowers it, so a test reaches
+# a page's edge without pushing 8 MiB; a client follows `next` and never needs
+# to know it.
+PAGE_BYTES = 8 * 1024 * 1024
+MAX_PAGE_BYTES = PAGE_BYTES
+PAGE_FROM = re.compile(r"[0-9]{1,20}")
 
 # Everything held, across every channel. A push that would cross it is refused
 # whole rather than half-stored.
@@ -90,6 +101,24 @@ NONCE = re.compile(r"[0-9]{1,20}")
 # is no client's, and a character then counts the same in every relay.
 BLOB = re.compile(r"[A-Za-z0-9_-]+")
 LEGACY_UNSTAMPED = False
+
+
+def page(blobs: list[str], start: int) -> dict:
+    """The page of `blobs` from index `start`, as §15.5 answers it."""
+    taken: list[str] = []
+    size = 0
+    end = start
+    while end < len(blobs):
+        cost = len(blobs[end]) + 3
+        if taken and size + cost > PAGE_BYTES:
+            break
+        taken.append(blobs[end])
+        size += cost
+        end += 1
+    answer: dict = {"blobs": taken}
+    if end < len(blobs):
+        answer["next"] = end
+    return answer
 
 
 def work_base(held: int, max_held: int) -> int:
@@ -244,7 +273,7 @@ class Relay(BaseHTTPRequestHandler):
             pass
 
     def _channel(self) -> str | None:
-        parts = self.path.strip("/").split("/")
+        parts = urlsplit(self.path).path.strip("/").split("/")
         if len(parts) != 2 or parts[0] != "c" or not CHANNEL.fullmatch(parts[1]):
             return None
         return parts[1]
@@ -254,9 +283,17 @@ class Relay(BaseHTTPRequestHandler):
         if channel is None:
             self._send(404, {"error": "not a channel"})
             return
+        query = parse_qs(urlsplit(self.path).query, keep_blank_values=True)
         with LOCK:
             blobs = list(CHANNELS.get(channel, []))
-        self._send(200, {"blobs": blobs})
+        if "from" not in query:
+            self._send(200, {"blobs": blobs})
+            return
+        given = query["from"]
+        if len(given) != 1 or not PAGE_FROM.fullmatch(given[0]):
+            self._send(400, {"error": "not a page"})
+            return
+        self._send(200, page(blobs, int(given[0])))
 
     def _read_body(self) -> bytes:
         """The request body, however the client framed it, or `TooLarge`.
@@ -358,7 +395,7 @@ class Relay(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global MAX_BODY_BYTES, MAX_HELD_CHARS, STATE_FILE, LEGACY_UNSTAMPED
+    global MAX_BODY_BYTES, MAX_HELD_CHARS, STATE_FILE, LEGACY_UNSTAMPED, PAGE_BYTES
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=39300)
     parser.add_argument("--host", default="127.0.0.1")
@@ -367,7 +404,11 @@ def main() -> None:
     parser.add_argument("--state-file")
     parser.add_argument("--idle-timeout", type=float, default=30.0)
     parser.add_argument("--legacy-unstamped", action="store_true")
+    parser.add_argument("--page-bytes", type=int, default=PAGE_BYTES)
     args = parser.parse_args()
+    if not 1 <= args.page_bytes <= MAX_PAGE_BYTES:
+        parser.error(f"--page-bytes is 1 to {MAX_PAGE_BYTES}")
+    PAGE_BYTES = args.page_bytes
     LEGACY_UNSTAMPED = args.legacy_unstamped
     # Read by the handler's setup: a connection silent this long is closed.
     Relay.timeout = args.idle_timeout

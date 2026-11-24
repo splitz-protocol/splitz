@@ -101,6 +101,17 @@ class InMemorySplitsRelay implements SplitsRelay {
       List.unmodifiable(_channels[channel] ?? const <String>{});
 }
 
+/// One page of a channel, as `GET <origin>/c/<channel>?from=<n>` answers it
+/// (SPEC.md §15.5).
+class RelayPage {
+  const RelayPage(this.blobs, this.next);
+
+  final List<String> blobs;
+
+  /// The index the next page starts at, or null on the last page.
+  final int? next;
+}
+
 /// Posts a JSON body and returns the response body.
 typedef JsonPost = Future<String> Function(Uri url, String body);
 
@@ -152,6 +163,56 @@ class HttpSplitsRelay implements SplitsRelay {
   /// The bytes a body keeps free for its stamp: `,"work":"`, at most 20
   /// digits, and `"`.
   static const int workRoom = 32;
+
+  /// The most pages one fetch reads. A relay holds at most 512 MiB of blob
+  /// characters, a page at least 8 MiB of characters-plus-3, and a blob is at
+  /// least one character: 512 MiB × 4 ÷ 8 MiB. A relay still answering a
+  /// `next` past it is refused rather than read without end.
+  static const int maxPages = 256;
+
+  /// `<origin>/c/<channel>?from=<from>`: the page of [channel] starting at
+  /// blob [from]. Refused, not retryable, for an origin carrying a query or a
+  /// fragment.
+  static Uri pageUrl(Uri origin, String channel, int from) {
+    if (origin.hasQuery || origin.hasFragment) {
+      throw const SplitsRelayException(
+        'A relay origin carries no query and no fragment',
+        isTransient: false,
+      );
+    }
+    return origin.replace(
+      path: '${origin.path}/c/$channel',
+      queryParameters: {'from': '$from'},
+    );
+  }
+
+  /// Reads the relay's answer to the page starting at [from], whatever its
+  /// HTTP status. An answer without a list of blobs, or with a `next` that
+  /// is not [from] plus the one or more blobs it carries, is refused, and
+  /// retryable.
+  static RelayPage fetchPage(String body, int from) {
+    final decoded = _decode(body);
+    final blobs = decoded['blobs'];
+    if (blobs is! List) {
+      throw const SplitsRelayException('The relay answered without a channel');
+    }
+    final next = decoded['next'];
+    if (next != null &&
+        (next is! int || blobs.isEmpty || next != from + blobs.length)) {
+      throw SplitsRelayException(
+        'The relay answered a page from $from with ${blobs.length} blob(s) '
+        'and next $next',
+      );
+    }
+    // Everything here was written by somebody else and is opened under the
+    // bill key afterwards. A non-string is dropped rather than cast: a cast
+    // that fails throws a type error from inside a sync loop, and this is
+    // reached by talking to a server nobody here runs.
+    return RelayPage([
+      for (final blob in blobs)
+        if (blob is String) blob,
+    ], next as int?);
+  }
 
   /// [blobs] as the push bodies that carry them, in order, each at most
   /// [maxBodyBytes] once stamped. Every blob is at most [maxBlobChars], so
@@ -234,27 +295,29 @@ class HttpSplitsRelay implements SplitsRelay {
 
   @override
   Future<List<String>> fetch(String channel) async {
-    final String body;
-    try {
-      body = await _get(_channelUrl(channel));
-    } on Object catch (e) {
-      throw SplitsRelayException('Could not reach the relay: $e');
+    final held = <String>[];
+    var from = 0;
+    for (var pages = 0; ; pages++) {
+      if (pages == maxPages) {
+        throw const SplitsRelayException(
+          'The relay answered more than $maxPages pages',
+        );
+      }
+      final String body;
+      try {
+        body = await _get(pageUrl(origin, channel, from));
+      } on Object catch (e) {
+        throw SplitsRelayException('Could not reach the relay: $e');
+      }
+      final page = fetchPage(body, from);
+      held.addAll(page.blobs);
+      final next = page.next;
+      if (next == null) return held;
+      from = next;
     }
-    final blobs = _decode(body)['blobs'];
-    if (blobs is! List) {
-      throw const SplitsRelayException('The relay answered without a channel');
-    }
-    // Everything here was written by somebody else and is opened under the
-    // bill key afterwards. A non-string is dropped rather than cast: a cast
-    // that fails throws a type error from inside a sync loop, and this is
-    // reached by talking to a server nobody here runs.
-    return [
-      for (final blob in blobs)
-        if (blob is String) blob,
-    ];
   }
 
-  Map<String, dynamic> _decode(String body) {
+  static Map<String, dynamic> _decode(String body) {
     final Object? decoded;
     try {
       decoded = jsonDecode(body);

@@ -75,6 +75,66 @@ void main() {
     });
   }, skip: skip);
 
+  test('answers a page from where it is asked to start', () async {
+    final channel = channelForRun(run, 'from');
+    final work = await relayWorkStamp(channel, ['a', 'b'], relayWorkBase);
+    await raw(
+      'POST',
+      '/c/$channel',
+      jsonEncode({
+        'blobs': ['a', 'b'],
+        'work': work,
+      }),
+    );
+    expect((await raw('GET', '/c/$channel?from=1')).$2, {
+      'blobs': ['b'],
+    });
+    expect((await raw('GET', '/c/$channel?from=9')).$2, {'blobs': <String>[]});
+    for (final from in ['x', '-1', '', '1&from=2', '1' * 21]) {
+      final (status, refused) = await raw('GET', '/c/$channel?from=$from');
+      expect(status, 400, reason: 'from=$from');
+      expect(refused, {'error': 'not a page'}, reason: 'from=$from');
+    }
+  }, skip: skip);
+
+  // Set by tools/relay/cloudflare/test.sh, which starts both local relays
+  // with 16-byte pages; a relay of unknown page size skips it.
+  final pageBytes = Platform.environment['SPLITZ_RELAY_PAGE_BYTES'];
+  test(
+    'breaks a channel into 16-byte pages and a fetch reads them all',
+    () async {
+      final channel = channelForRun(run, 'pages');
+      const blobs = ['aaaa', 'bbbbbbbbbb', 'ccccc', 'ddddd', 'e'];
+      final work = await relayWorkStamp(channel, blobs, relayWorkBase);
+      await raw(
+        'POST',
+        '/c/$channel',
+        jsonEncode({'blobs': blobs, 'work': work}),
+      );
+      // Each blob costs its characters plus 3: 7, 13, 8, 8 and 4. The third
+      // page is exactly 16.
+      expect((await raw('GET', '/c/$channel?from=0')).$2, {
+        'blobs': ['aaaa'],
+        'next': 1,
+      });
+      expect((await raw('GET', '/c/$channel?from=1')).$2, {
+        'blobs': ['bbbbbbbbbb'],
+        'next': 2,
+      });
+      expect((await raw('GET', '/c/$channel?from=2')).$2, {
+        'blobs': ['ccccc', 'ddddd'],
+        'next': 4,
+      });
+      expect((await raw('GET', '/c/$channel?from=4')).$2, {
+        'blobs': ['e'],
+      });
+      // Without `from`, every blob in one answer.
+      expect((await raw('GET', '/c/$channel')).$2, {'blobs': blobs});
+      expect(await relay().fetch(channel), blobs);
+    },
+    skip: skip ?? (pageBytes == '16' ? null : 'needs 16-byte pages'),
+  );
+
   test('refuses what server.py refuses, with the same status', () async {
     final channel = channelForRun(run, 'refusals');
     expect((await raw('GET', '/c/not-a-digest')).$1, 404);

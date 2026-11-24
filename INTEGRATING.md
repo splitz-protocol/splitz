@@ -891,18 +891,21 @@ package in module `SplitzFFI`, the npm package from its entry point. Sources are
 The channel is `channelForBill(billId)` (`channel_for_bill` in JavaScript).
 Blobs are what `blobsToPush` returns, and what `fetch` returns goes to
 `openBlobs`. The wire is `POST <origin>/c/<channel>` with
-`{"blobs":[…],"work":"<nonce>"}` and `GET <origin>/c/<channel>`, as
-`tools/relay/server.py` serves it. `work` is SPEC.md §15.5's stamp, in place of
+`{"blobs":[…],"work":"<nonce>"}` and `GET <origin>/c/<channel>?from=<n>`, as
+`tools/relay/server.py` serves it. A fetch is read a page at a time: ask
+`relayPageUrl(origin, channel, 0)`, read the answer with
+`relayFetchPage(answer, 0)`, and ask again from its `next` until a page has
+none, giving up after `relayMaxPages()` pages. `work` is SPEC.md §15.5's stamp, in place of
 anything that names the sender: `relayPushBody(channel, blobs, base)` finds it,
 which takes about 2^16 hashes for an ordinary push, so call it off the thread
 that draws. A relay that wants more answers with the base it asks for;
 `relayWorkAsked(answer, 16)` reads it when it is at most 24, the most a relay
 asks, and the push is stamped once more at that base and sent again. A blob is
 base64url with no padding, and a relay refuses any other. The binding's `relayChannelUrl`, `relayPushBody`,
-`relayWorkAsked`, `relayPushAnswer` and `relayFetchAnswer` decide the URL, the
-body and what an answer means, so every client — and `splitz_host`'s
-`HttpSplitsRelay` — refuses alike. A client written for another network route
-calls those five directly, and sends them over the route the wallet's own
+`relayWorkAsked`, `relayPushAnswer`, `relayPageUrl` and `relayFetchPage` decide
+the URL, the body and what an answer means, so every client — and
+`splitz_host`'s `HttpSplitsRelay` — refuses alike. A client written for another
+network route calls those six directly, and sends them over the route the wallet's own
 traffic takes (§15.5): over Tor when the wallet's Tor is on.
 
 Sync every bill the device holds every `relaySyncSeconds()` (30) seconds for

@@ -1306,12 +1306,53 @@ pub fn relay_push_answer(body: String) -> Result<()> {
     Ok(splitz_host::HttpSplitsRelay::push_answer(&body)?)
 }
 
-/// The blobs in the body the relay answered a fetch with, whatever the HTTP
-/// status. An answer that is not `{"blobs":[…]}` is refused, transient; a
-/// non-string inside the list is dropped.
+/// The URL of one page of `channel`, `<origin>/c/<channel>?from=<from>`
+/// (§15.5). A fetch asks for `from` 0, then for each page's `next` until a
+/// page has none, and gives up after `relay_max_pages` pages. An origin
+/// carrying a query or a fragment is refused, not transient.
 #[uniffi::export]
-pub fn relay_fetch_answer(body: String) -> Result<Vec<String>> {
-    Ok(splitz_host::HttpSplitsRelay::fetch_answer(&body)?)
+pub fn relay_page_url(origin: String, channel: String, from: u32) -> Result<String> {
+    Ok(splitz_host::HttpSplitsRelay::page_url(
+        &origin,
+        &channel,
+        u64::from(from),
+    )?)
+}
+
+/// The most pages one fetch reads before it gives up (§15.5).
+#[uniffi::export]
+pub fn relay_max_pages() -> u32 {
+    splitz_host::HttpSplitsRelay::MAX_PAGES
+}
+
+/// One page of a channel: its blobs, and where the next page starts, or
+/// `None` on the last. An index is a `u32`: `relay_max_pages` pages of at
+/// least one blob each hold far fewer.
+#[derive(uniffi::Record, Debug, Clone, PartialEq, Eq)]
+pub struct RelayPage {
+    pub blobs: Vec<String>,
+    pub next: Option<u32>,
+}
+
+/// The page in the body the relay answered `relay_page_url(…, from)` with,
+/// whatever the HTTP status. An answer that is not `{"blobs":[…]}`, or whose
+/// `next` is not `from` plus the one or more blobs it carries, is refused,
+/// transient, and so is a `next` past `u32::MAX`; a non-string inside the
+/// list is dropped.
+#[uniffi::export]
+pub fn relay_fetch_page(body: String, from: u32) -> Result<RelayPage> {
+    let page = splitz_host::HttpSplitsRelay::fetch_page(&body, u64::from(from))?;
+    let next = match page.next {
+        None => None,
+        Some(n) => Some(u32::try_from(n).map_err(|_| SplitzError::Host {
+            detail: format!("The relay answered a next page at {n}"),
+            transient: true,
+        })?),
+    };
+    Ok(RelayPage {
+        blobs: page.blobs,
+        next,
+    })
 }
 
 /// Every entry this device holds, sealed under the bill key as it is held —

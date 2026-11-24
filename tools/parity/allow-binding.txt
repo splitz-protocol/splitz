@@ -35,7 +35,7 @@ creator_rate_missing      # fold_entries carries creator_id and rate_author, and
 rate_far_from_live        # rate_percent_off carries the figure, and the 5 a host compares it with is stated beside it
 check_bill_storage        # takes the wallet's storage as a trait object; the binding has no callbacks, and a binding wallet's storage is its own code
 check_secret_store        # the same, over the wallet's keychain
-check_splits_relay        # the same, over the relay client; the relay's answers are checked by relay_push_answer and relay_fetch_answer
+check_splits_relay        # the same, over the relay client; the relay's answers are checked by relay_push_answer and relay_fetch_page
 check_zec_prices          # the same, over the price source; the binding's price readers are pure and checked by their own cases
 base64url_encode          # encoding the platform already has; keys and seeds cross as the base64url strings the binding writes
 base64url_decode          # the same

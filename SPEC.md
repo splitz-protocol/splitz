@@ -3445,7 +3445,8 @@ left before dessert and cannot be handed a code across the table.
   from which it can learn who owes whom.
 - `push` MUST be idempotent: pushing a blob a channel already holds changes
   nothing, so a retry after a dropped connection cannot create a duplicate.
-- `fetch` MUST answer with every blob the channel currently holds. The caller
+- `fetch` MUST answer with every blob the channel currently holds, across
+  every page it is read in (below). The caller
   merges by entry id and §10.2's merge is idempotent, so returning blobs the
   caller already has is harmless — a relay has no caller identity to key
   per-caller state on and MUST NOT be asked to keep any.
@@ -3469,6 +3470,23 @@ most 65,536 of them; a body is at most 32 MiB, and a client splits a push
 that would be larger into several (`HttpSplitsRelay` in both host packages).
 A relay refuses a blob that is not base64url, so every relay counts a push's
 characters alike.
+
+**A fetch is read in pages.** `GET <origin>/c/<channel>?from=<n>` answers one
+page: the channel's blobs in the order they first arrived, starting at the
+`n`th (0-based), as `{"blobs":[…],"next":<m>}`. A page takes blobs in order
+while each one's characters plus 3 — its quotes and a comma — total at most
+8,388,608 (8 MiB), and always takes at least one when any remain, so an answer
+is at most 8,388,648 bytes however large the channel grows. `next` is the
+index after the page's last blob, and is absent from the last page; `from`
+past the end answers no blobs and no `next`. `n` is 1 to 20 decimal digits,
+and anything else is answered 400. A client reads from `from=0` until an
+answer has no `next`, and refuses, transiently, an answer whose `next` is not
+`n` plus the number of blobs it carries (`HttpSplitsRelay` in both host
+packages; `relayPageUrl` and `relayFetchPage` in the binding). A channel only
+grows, or is dropped whole, so an index names the same blob on every read. A
+`GET` without `from` answers every blob, as one page with no `next`, and a
+relay that ignores the query answers so too, which a client reads as the
+whole channel.
 
 **A push carries work, not a name.** Nothing a relay is sent says who sent
 it, and a relay MUST NOT be asked to count anything by the sender's address.

@@ -92,6 +92,15 @@ impl SplitsRelay for InMemorySplitsRelay {
     }
 }
 
+/// One page of a channel, as `GET <origin>/c/<channel>?from=<n>` answers it
+/// (SPEC.md §15.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayPage {
+    pub blobs: Vec<String>,
+    /// The index the next page starts at, or `None` on the last page.
+    pub next: Option<u64>,
+}
+
 /// A relay backed by an HTTP blob store.
 ///
 /// Two routes under `origin`: `POST /c/<channel>` with
@@ -146,6 +155,22 @@ impl<'a> HttpSplitsRelay<'a> {
     /// The bytes a body keeps free for its stamp: `,"work":"`, at most 20
     /// digits, and `"`.
     pub const WORK_ROOM: usize = 32;
+
+    /// The most pages one fetch reads. A relay holds at most 512 MiB of blob
+    /// characters, a page at least 8 MiB of characters-plus-3, and a blob is
+    /// at least one character: 512 MiB × 4 ÷ 8 MiB. A relay still answering a
+    /// `next` past it is refused rather than read without end.
+    pub const MAX_PAGES: u32 = 256;
+
+    /// `<origin>/c/<channel>?from=<from>`: the page of `channel` starting at
+    /// blob `from`. Refused, not retryable, for an origin carrying a query or
+    /// a fragment.
+    pub fn page_url(origin: &str, channel: &str, from: u64) -> Result<String, HostError> {
+        Ok(format!(
+            "{}?from={from}",
+            Self::channel_url(origin, channel)?
+        ))
+    }
 
     /// The body `POST <origin>/c/<channel>` carries for `blobs`:
     /// `{"blobs":[…],"work":"…"}`, stamped for a relay asking `base`, or
@@ -239,20 +264,43 @@ impl<'a> HttpSplitsRelay<'a> {
         Ok(())
     }
 
-    /// Reads the relay's answer to a fetch, whatever its HTTP status: the
-    /// blobs of `{"blobs":[…]}`. An answer without that list is refused, and
+    /// Reads the relay's answer to the page starting at `from`, whatever its
+    /// HTTP status. An answer without a list of blobs, or with a `next` that
+    /// is not `from` plus the one or more blobs it carries, is refused, and
     /// retryable.
-    pub fn fetch_answer(body: &str) -> Result<Vec<String>, HostError> {
-        let Some(Value::Array(blobs)) = Self::decode(body)?.get("blobs").cloned() else {
+    pub fn fetch_page(body: &str, from: u64) -> Result<RelayPage, HostError> {
+        let decoded = Self::decode(body)?;
+        let Some(Value::Array(blobs)) = decoded.get("blobs").cloned() else {
             return Err(relay_error("The relay answered without a channel", true));
+        };
+        let next = match decoded.get("next") {
+            None | Some(Value::Null) => None,
+            Some(given) => {
+                let follows = given.as_u64().filter(|&n| {
+                    !blobs.is_empty() && Some(n) == from.checked_add(blobs.len() as u64)
+                });
+                let Some(n) = follows else {
+                    return Err(relay_error(
+                        format!(
+                            "The relay answered a page from {from} with {} blob(s) and next {given}",
+                            blobs.len()
+                        ),
+                        true,
+                    ));
+                };
+                Some(n)
+            }
         };
         // Everything here was written by somebody else and is opened under the
         // bill key afterwards. A non-string is dropped rather than refused: it
         // is reached by talking to a server nobody here runs.
-        Ok(blobs
-            .into_iter()
-            .filter_map(|b| b.as_str().map(str::to_owned))
-            .collect())
+        Ok(RelayPage {
+            blobs: blobs
+                .into_iter()
+                .filter_map(|b| b.as_str().map(str::to_owned))
+                .collect(),
+            next,
+        })
     }
 
     /// The base a relay that refused a push asks for now, when its answer
@@ -313,10 +361,23 @@ impl SplitsRelay for HttpSplitsRelay<'_> {
     }
 
     fn fetch(&self, channel: &str) -> Result<Vec<String>, HostError> {
-        let answer = self
-            .transport
-            .get(&Self::channel_url(&self.origin, channel)?)
-            .map_err(|e| Self::not_reached(&e))?;
-        Self::fetch_answer(&answer)
+        let mut held = Vec::new();
+        let mut from = 0;
+        for _ in 0..Self::MAX_PAGES {
+            let answer = self
+                .transport
+                .get(&Self::page_url(&self.origin, channel, from)?)
+                .map_err(|e| Self::not_reached(&e))?;
+            let page = Self::fetch_page(&answer, from)?;
+            held.extend(page.blobs);
+            match page.next {
+                None => return Ok(held),
+                Some(next) => from = next,
+            }
+        }
+        Err(relay_error(
+            format!("The relay answered more than {} pages", Self::MAX_PAGES),
+            true,
+        ))
     }
 }

@@ -75,7 +75,9 @@ pub use pricing::{
     RATE_WARNING_PERCENT,
 };
 pub use refunds::{refunds_behind, RefundsBehind};
-pub use relay::{channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, UnconfiguredSplitsRelay};
+pub use relay::{
+    channel_for_bill, HttpSplitsRelay, InMemorySplitsRelay, RelayPage, UnconfiguredSplitsRelay,
+};
 pub use relay_work::{
     leading_zero_bits, relay_work_bits, relay_work_holds, relay_work_stamp, RELAY_WORK_BASE,
     RELAY_WORK_MAX_BASE, RELAY_WORK_UNIT_CHARS,

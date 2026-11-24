@@ -3,6 +3,7 @@
 //
 //     POST /c/<channel>   {"blobs": [...], "work": "<nonce>"}  -> {"ok": true}
 //     GET  /c/<channel>                                       -> {"blobs": [...]}
+//     GET  /c/<channel>?from=<n>                   -> {"blobs": [...], "next": <m>}
 //
 // The same two routes, answers and bounds as tools/relay/server.py: a channel
 // is 64 lower-case hex digits, a blob at most MAX_BLOB_CHARS, a body at most
@@ -49,6 +50,12 @@ import { DurableObject } from "cloudflare:workers";
 
 const MAX_BLOB_CHARS = 64 * 1024;
 const MAX_BODY_BYTES = 32 * 1024 * 1024;
+// One page of a fetch (SPEC.md §15.5): blobs while each one's characters plus
+// 3, its quotes and a comma, total at most this, and always at least one.
+// The PAGE_BYTES var lowers it, so a test reaches a page's edge without
+// pushing 8 MiB; a client follows `next` and never needs to know it.
+const PAGE_BYTES = 8 * 1024 * 1024;
+const PAGE_FROM = /^[0-9]{1,20}$/;
 const CHANNEL = /^[0-9a-f]{64}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WORK_BASE = 16;
@@ -57,6 +64,21 @@ const NONCE = /^[0-9]{1,20}$/;
 // A blob is a sealed frame, base64url with no padding (§11.3): anything else
 // is no client's, and a character then counts the same in every relay.
 const BLOB = /^[A-Za-z0-9_-]+$/;
+
+// The page of `blobs` from index `start`, as §15.5 answers it.
+export const page = (blobs, start, pageBytes = PAGE_BYTES) => {
+  const taken = [];
+  let size = 0;
+  let end = start;
+  while (end < blobs.length) {
+    const cost = blobs[end].length + 3;
+    if (taken.length > 0 && size + cost > pageBytes) break;
+    taken.push(blobs[end]);
+    size += cost;
+    end += 1;
+  }
+  return end < blobs.length ? { blobs: taken, next: end } : { blobs: taken };
+};
 
 // The leading zero bits a push of `chars` characters needs at a store holding
 // `held` of `maxHeld`.
@@ -112,12 +134,17 @@ const answer = (status, payload) =>
 
 export default {
   async fetch(request, env) {
-    const parts = new URL(request.url).pathname.replace(/^\/+|\/+$/g, "").split("/");
+    const url = new URL(request.url);
+    const parts = url.pathname.replace(/^\/+|\/+$/g, "").split("/");
     if (parts.length !== 2 || parts[0] !== "c" || !CHANNEL.test(parts[1])) {
       return answer(404, { error: "not a channel" });
     }
     if (request.method !== "GET" && request.method !== "POST") {
       return answer(405, { error: "GET or POST" });
+    }
+    const from = url.searchParams.getAll("from");
+    if (request.method === "GET" && from.length > 0 && (from.length !== 1 || !PAGE_FROM.test(from[0]))) {
+      return answer(400, { error: "not a page" });
     }
     const declared = Number(request.headers.get("Content-Length") ?? "0");
     if (declared > MAX_BODY_BYTES) {
@@ -132,6 +159,7 @@ export default {
       request.method === "POST" ? await request.text() : "",
       source,
       Date.now(),
+      request.method === "GET" && from.length === 1 ? Number(from[0]) : null,
     );
   },
 };
@@ -144,6 +172,8 @@ export class Relay extends DurableObject {
     this.maxSource = Number(env.MAX_SOURCE_CHARS ?? 64 * 1024 * 1024);
     this.expireMs = Number(env.EXPIRE_DAYS ?? 180) * DAY_MS;
     this.legacy = env.LEGACY_UNSTAMPED === "1";
+    const pageBytes = Number(env.PAGE_BYTES ?? PAGE_BYTES);
+    this.pageBytes = pageBytes >= 1 && pageBytes <= PAGE_BYTES ? pageBytes : PAGE_BYTES;
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS blobs (" +
         "seq INTEGER PRIMARY KEY AUTOINCREMENT, channel TEXT NOT NULL, blob TEXT NOT NULL, " +
@@ -207,11 +237,12 @@ export class Relay extends DurableObject {
     return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${row.salt}|${sourceOf(source)}`)));
   }
 
-  async handle(method, channel, raw, source = "", now = Date.now()) {
+  async handle(method, channel, raw, source = "", now = Date.now(), from = null) {
     if (method === "GET") {
       this.expire(now);
       const rows = this.sql.exec("SELECT blob FROM blobs WHERE channel = ? ORDER BY seq", channel).toArray();
-      return answer(200, { blobs: rows.map((r) => r.blob) });
+      const blobs = rows.map((r) => r.blob);
+      return answer(200, from === null ? { blobs } : page(blobs, from, this.pageBytes));
     }
     if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) {
       return answer(413, { error: `a body over ${MAX_BODY_BYTES} bytes` });

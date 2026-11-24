@@ -1,10 +1,10 @@
 // A SPEC.md §15.5 relay over HTTP: `POST <origin>/c/<channel>` with
-// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>` returns every blob
-// the channel holds.
+// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>?from=<n>` returns
+// the channel's blobs a page at a time.
 //
 // The library decides what goes on the wire and what an answer means
 // (`relay_channel_url`, `relay_push_body`, `relay_work_asked`,
-// `relay_push_answer`, `relay_fetch_answer`); this class moves the bytes with the `fetch` it is
+// `relay_push_answer`, `relay_page_url`, `relay_fetch_page`); this class moves the bytes with the `fetch` it is
 // given, the global one of Node 18 and later by default. An answer is read
 // whatever its HTTP status: the body says whether the relay took a push.
 //
@@ -16,7 +16,9 @@
 import {
   SplitzErrorHost,
   relay_channel_url,
-  relay_fetch_answer,
+  relay_fetch_page,
+  relay_max_pages,
+  relay_page_url,
   relay_push_answer,
   relay_push_body,
   relay_work_asked,
@@ -53,10 +55,19 @@ export class SplitzRelay {
   }
 
   /// Every blob `channel` currently holds, including ones the caller already
-  /// has; merging them is idempotent.
+  /// has; merging them is idempotent. Read a page at a time (§15.5), from
+  /// the first until a page names no next.
   async fetch(channel) {
-    const url = relay_channel_url(this.origin, channel);
-    return relay_fetch_answer(await this._exchange("GET", url, undefined));
+    const held = [];
+    let from = 0;
+    for (let pages = 0; pages < relay_max_pages(); pages++) {
+      const url = relay_page_url(this.origin, channel, from);
+      const page = relay_fetch_page(await this._exchange("GET", url, undefined), from);
+      held.push(...page.blobs);
+      if (page.next === undefined) return held;
+      from = page.next;
+    }
+    throw new SplitzErrorHost(`The relay answered more than ${relay_max_pages()} pages`, true);
   }
 
   async _exchange(method, url, body) {

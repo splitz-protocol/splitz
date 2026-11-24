@@ -6,12 +6,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /// A SPEC.md §15.5 relay over HTTP: `POST <origin>/c/<channel>` with
-/// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>` returns every blob
-/// the channel holds.
+/// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>?from=<n>` returns
+/// the channel's blobs a page at a time.
 ///
 /// The library decides what goes on the wire and what an answer means
 /// (`relayChannelUrl`, `relayPushBody`, `relayWorkAsked`, `relayPushAnswer`,
-/// `relayFetchAnswer`); this class moves the bytes with `HttpURLConnection`,
+/// `relayPageUrl`, `relayFetchPage`); this class moves the bytes with `HttpURLConnection`,
 /// which every JVM and every Android API level carries. An answer is read
 /// whatever its HTTP status: the body says whether the relay took a push.
 ///
@@ -48,9 +48,18 @@ class SplitzRelay(
     }
 
     /// Every blob `channel` currently holds, including ones the caller
-    /// already has; merging them is idempotent.
-    fun fetch(channel: String): List<String> =
-        relayFetchAnswer(exchange("GET", relayChannelUrl(origin, channel), null))
+    /// already has; merging them is idempotent. Read a page at a time
+    /// (§15.5), from the first until a page names no next.
+    fun fetch(channel: String): List<String> {
+        val held = mutableListOf<String>()
+        var from = 0u
+        repeat(relayMaxPages().toInt()) {
+            val page = relayFetchPage(exchange("GET", relayPageUrl(origin, channel, from), null), from)
+            held.addAll(page.blobs)
+            from = page.next ?: return held
+        }
+        throw SplitzException.Host("The relay answered more than ${relayMaxPages()} pages", true)
+    }
 
     private fun exchange(method: String, url: String, body: String?): String {
         var connection: HttpURLConnection? = null

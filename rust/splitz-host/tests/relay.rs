@@ -17,8 +17,11 @@ struct FakeServer {
 }
 
 impl FakeServer {
+    /// The channel a URL names. A page's `?from=` is ignored, so this
+    /// answers every blob at once, as a relay that does not page.
     fn channel_of(url: &str) -> String {
-        url.rsplit("/c/").next().unwrap_or_default().to_owned()
+        let path = url.split('?').next().unwrap_or_default();
+        path.rsplit("/c/").next().unwrap_or_default().to_owned()
     }
 }
 
@@ -257,7 +260,9 @@ fn the_wire_a_foreign_client_speaks_is_the_one_this_client_speaks() {
         );
     }
     assert_eq!(
-        HttpSplitsRelay::fetch_answer(r#"{"blobs": ["a", 7, "b"]}"#).unwrap(),
+        HttpSplitsRelay::fetch_page(r#"{"blobs": ["a", 7, "b"]}"#, 0)
+            .unwrap()
+            .blobs,
         vec!["a".to_owned(), "b".to_owned()]
     );
 }

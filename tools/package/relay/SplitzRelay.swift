@@ -1,12 +1,12 @@
 import Foundation
 
 /// A SPEC.md §15.5 relay over HTTP: `POST <origin>/c/<channel>` with
-/// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>` returns every blob
-/// the channel holds.
+/// `{"blobs":[…],"work":"…"}` adds blobs, `GET <origin>/c/<channel>?from=<n>` returns
+/// the channel's blobs a page at a time.
 ///
 /// The library decides what goes on the wire and what an answer means
 /// (`relayChannelUrl`, `relayPushBody`, `relayWorkAsked`, `relayPushAnswer`,
-/// `relayFetchAnswer`); this class moves the bytes with the `URLSession` it is
+/// `relayPageUrl`, `relayFetchPage`); this class moves the bytes with the `URLSession` it is
 /// given. An answer is read whatever its HTTP status: the body says whether
 /// the relay took a push.
 ///
@@ -44,10 +44,21 @@ public final class SplitzRelay {
     }
 
     /// Every blob `channel` currently holds, including ones the caller
-    /// already has; merging them is idempotent.
+    /// already has; merging them is idempotent. Read a page at a time
+    /// (§15.5), from the first until a page names no next.
     public func fetch(channel: String) async throws -> [String] {
-        let url = try relayChannelUrl(origin: origin, channel: channel)
-        return try relayFetchAnswer(body: try await exchange(method: "GET", url: url, body: nil))
+        var held: [String] = []
+        var from: UInt32 = 0
+        for _ in 0..<relayMaxPages() {
+            let url = try relayPageUrl(origin: origin, channel: channel, from: from)
+            let page = try relayFetchPage(
+                body: try await exchange(method: "GET", url: url, body: nil), from: from)
+            held.append(contentsOf: page.blobs)
+            guard let next = page.next else { return held }
+            from = next
+        }
+        throw SplitzError.Host(
+            detail: "The relay answered more than \(relayMaxPages()) pages", transient: true)
     }
 
     private func exchange(method: String, url: String, body: String?) async throws -> String {

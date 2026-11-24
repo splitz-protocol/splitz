@@ -30,8 +30,12 @@ stop() {
 }
 trap stop EXIT
 
+# Both local relays answer 16-byte pages, so every fetch the test makes spans
+# pages and the two are held to the same page edges.
+page=16
 origin_test() {
-  (cd "$root/splitz_host" && SPLITZ_RELAY_ORIGIN="$1" dart test test/relay_origin_test.dart)
+  (cd "$root/splitz_host" && SPLITZ_RELAY_ORIGIN="$1" SPLITZ_RELAY_PAGE_BYTES="${2:-}" \
+    dart test test/relay_origin_test.dart)
 }
 
 if [ -n "${SPLITZ_RELAY_ORIGIN:-}" ]; then
@@ -40,7 +44,7 @@ if [ -n "${SPLITZ_RELAY_ORIGIN:-}" ]; then
   exit 0
 fi
 
-python3 "$root/tools/relay/server.py" --port 0 >"$work/py.log" 2>&1 &
+python3 "$root/tools/relay/server.py" --port 0 --page-bytes "$page" >"$work/py.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 50); do
   py="$(sed -n 's#^relay on \(http://127\.0\.0\.1:[0-9]*\)$#\1#p' "$work/py.log")"
@@ -48,11 +52,11 @@ for _ in $(seq 50); do
   sleep 0.1
 done
 echo "== server.py at $py"
-origin_test "$py"
+origin_test "$py" "$page"
 
 port="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')"
 (cd "$here" && npx --yes "wrangler@$wrangler" dev --port "$port" --ip 127.0.0.1 \
-  --persist-to "$work/state" --var LEGACY_UNSTAMPED:0) >"$work/worker.log" 2>&1 &
+  --persist-to "$work/state" --var LEGACY_UNSTAMPED:0 --var "PAGE_BYTES:$page") >"$work/worker.log" 2>&1 &
 pids+=($!)
 for _ in $(seq 120); do
   grep -q "Ready on" "$work/worker.log" && break
@@ -60,7 +64,7 @@ for _ in $(seq 120); do
 done
 grep -q "Ready on" "$work/worker.log" || { cat "$work/worker.log" >&2; exit 1; }
 echo "== the Worker at http://127.0.0.1:$port"
-origin_test "http://127.0.0.1:$port"
+origin_test "http://127.0.0.1:$port" "$page"
 # With LEGACY_UNSTAMPED off, a push with no work is 428 and names the base.
 unstamped="$(curl -s -o /dev/stdout -w ' %{http_code}' -X POST \
   --data '{"blobs":["x"]}' "http://127.0.0.1:$port/c/$(printf 'a%.0s' $(seq 64))")"
